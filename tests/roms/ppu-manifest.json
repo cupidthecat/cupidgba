@@ -1,0 +1,14 @@
+{
+  "path": "ppu/status-irq-dma/status-irq-dma.gba",
+  "sha256": "c441a13a5ffe5eabcfa9b392a53e5ead1e1c7d731c4f0b3a3334ee3650f59ed4",
+  "cases": [
+    {"name": "status", "option": 0, "frames": 1600, "external_frames": 1900,
+     "lines": ["HBLANK=0: PASS 144", "HBLANK=1: PASS 1151", "VMATCH=1: PASS 145", "VBLANK=0: PASS 144", "VBLANK=1: PASS 144", "congratulations!"]},
+    {"name": "vcount", "option": 1, "frames": 300, "external_frames": 600,
+     "lines": ["VCOUNT INC: PASS 144", "congratulations!"]},
+    {"name": "irq", "option": 2, "frames": 1400, "external_frames": 1700,
+     "lines": ["HBLANK: PASS 1153", "VBLANK: PASS 146", "VMATCH: PASS 147", "congratulations!"]},
+    {"name": "dma", "option": 3, "frames": 45, "external_frames": 330,
+     "lines": ["HBLANK DMA: PASS 1137", "VBLANK DMA: PASS 1362", "VIDEO DMA: PASS 22069"]}
+  ]
+}

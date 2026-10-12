@@ -23,6 +23,8 @@ static bool screenshot(const struct CupidGBA* gba, const char* path) {
 }
 
 int main(int argc, char** argv) {
+    struct KeyEvent { uint64_t frame; uint16_t keys; } keyEvents[64];
+    unsigned keyEventCount = 0, nextKeyEvent = 0;
     const char* rom = NULL;
     const char* bios = NULL;
     const char* output = NULL;
@@ -41,7 +43,13 @@ int main(int argc, char** argv) {
         else if (!strcmp(argv[i], "--terminal-address") && i + 1 < argc) {
             if (!number(argv[++i], &terminalAddress) || terminalAddress > UINT32_MAX) return 2;
         }
-        else if (!strcmp(argv[i], "--frames") && i + 1 < argc) {
+        else if (!strcmp(argv[i], "--key-event") && i + 2 < argc) {
+            uint64_t frame, keys;
+            if (keyEventCount == 64 || !number(argv[++i], &frame) ||
+                !number(argv[++i], &keys) || keys > 0x3FF ||
+                (keyEventCount && frame < keyEvents[keyEventCount - 1].frame)) return 2;
+            keyEvents[keyEventCount++] = (struct KeyEvent){frame, (uint16_t)keys};
+        } else if (!strcmp(argv[i], "--frames") && i + 1 < argc) {
             if (!number(argv[++i], &frames) || !frames || frames > 100000) return 2;
             cycleLimit = frames * UINT64_C(280896) + UINT64_C(280896) * 300;
         } else if (!strcmp(argv[i], "--steps") && i + 1 < argc) {
@@ -52,7 +60,7 @@ int main(int argc, char** argv) {
             expectedRegister = (int)index;
         } else if (argv[i][0] != '-' && !rom) rom = argv[i];
         else {
-            fprintf(stderr, "Usage: %s ROM [--bios FILE] [--frames N] [--steps N] [--screenshot FILE.ppm] [--dump-vram FILE] [--dump-io FILE] [--dump-ewram FILE] [--expect-loop-register N] [--terminal-address ADDRESS]\n", argv[0]);
+            fprintf(stderr, "Usage: %s ROM [--bios FILE] [--frames N] [--steps N] [--key-event FRAME MASK] [--screenshot FILE.ppm] [--dump-vram FILE] [--dump-io FILE] [--dump-ewram FILE] [--expect-loop-register N] [--terminal-address ADDRESS]\n", argv[0]);
             return 2;
         }
     }
@@ -73,6 +81,10 @@ int main(int argc, char** argv) {
             gba->cpu.prefetch[0] == UINT32_C(0xEAFFFFFE)) {
             terminal = true;
             break;
+        }
+        while (nextKeyEvent < keyEventCount && keyEvents[nextKeyEvent].frame <= completed) {
+            gba->keysActive = keyEvents[nextKeyEvent++].keys;
+            cupid_gba_test_keypad_irq(gba);
         }
         cupid_gba_step(gba);
         steps++;

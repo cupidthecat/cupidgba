@@ -75,12 +75,13 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
 
     case REG_DISPSTAT:
         /**
-         * Only bits 3-7 and bits 8-15 (VCount target) are writable.
+         * IRQ enables and the VCOUNT target are writable; bits 6-7 are unused.
          * Bits 0-2 (VBlank/HBlank/VCount flags) are read-only.
          */
-        value = (gba->video.dispstat & 0x0007) | (value & 0xFFF8);
+        value = (gba->video.dispstat & 0x0007) | (value & 0xFF38);
         gba->video.dispstat = value;
-        break;
+        cupid_video_update_match(&gba->video);
+        return;
 
     case REG_VCOUNT:
         /** Read-only; ignore writes. */

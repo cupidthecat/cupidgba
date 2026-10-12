@@ -83,7 +83,8 @@ the private harness records results outside the tested buffers. These data
 checks cover immediate and blanking transfers across several memory regions.
 They do not measure every arbitration or display-request edge.
 
-Display-request timing, frame polarity, configuration changes at its window
+The basic display-request phase is covered by the status/IRQ/DMA ROM described
+in [display timing](video-timing.md). Frame polarity, configuration changes at its window
 edges, Game Pak DRQ, reserved source-control mode 3, and same-cycle IF
 assertion/acknowledgement ordering still need hardware evidence. Source-control
 mode 3 currently uses a fixed source. The

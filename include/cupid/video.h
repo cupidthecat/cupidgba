@@ -16,8 +16,8 @@ struct CupidGBA;
 #define GBA_SCREEN_HEIGHT  160
 
 /** @name Video Timing Constants */
-#define VIDEO_HDRAW_LENGTH     1008        /**< Cycles per scanline (visible) */
-#define VIDEO_HBLANK_LENGTH    224         /**< Cycles per HBlank */
+#define VIDEO_HDRAW_LENGTH     1007        /**< Clocks before HBlank is asserted */
+#define VIDEO_HBLANK_LENGTH    225         /**< Clocks until the next scanline */
 #define VIDEO_HORIZONTAL_LENGTH (VIDEO_HDRAW_LENGTH + VIDEO_HBLANK_LENGTH)  /**< 1232 */
 
 #define VIDEO_HBLANK_PIXELS    68          /**< Pixels in HBlank */
@@ -274,6 +274,9 @@ struct CupidVideo {
 
     /** Timing (event-driven) */
     struct CupidTimingEvent event;  /**< Single event; callback alternates _startHdraw/_startHblank */
+    struct CupidTimingEvent matchEvent; /**< VCOUNT match updates one clock after line start */
+    struct CupidTimingEvent displayEvent; /**< Display DMA request after the line transition */
+    bool displayDmaLatched;
     uint32_t frameCounter;
 
     /** Scanline compositing buffers (software renderer) */
@@ -292,6 +295,7 @@ struct CupidVideo {
 void cupid_video_init(struct CupidVideo* video, struct CupidGBA* gba);
 void cupid_video_reset(struct CupidVideo* video);
 void cupid_video_skip_bios(struct CupidVideo* video);
+void cupid_video_update_match(struct CupidVideo* video);
 void cupid_video_deinit(struct CupidVideo* video);
 
 /** Called when IO registers are written */

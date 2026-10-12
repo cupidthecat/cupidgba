@@ -73,6 +73,22 @@ results including its 41-clock duration. They use the same console observer and
 reject incomplete or failed results. Setting `CUPID_TEST_BIOS` also registers
 these four external-BIOS checks in CTest.
 
+The display status ROM has four interactive menus. Its observer selects each
+with button events and requires all twelve original status, VCOUNT, IF and DMA
+observations:
+
+```sh
+python3 tests/roms/check_ppu.py --fetch --directory .local-research/test-roms
+python3 tests/roms/check_ppu.py --directory .local-research/test-roms \
+  --runner build/cupidgba-headless --test status
+```
+
+The other cases are `vcount`, `irq` and `dma`. Omit `--test` to run all four;
+add `--bios` for the external path. Their frame budgets include the original
+cycle sweeps and, with an external BIOS, startup. The default instruction limit
+is unchanged. `CUPID_TEST_ROM_DIR` registers all four checks, and `CUPID_TEST_BIOS`
+adds the external comparisons. See [display timing](../hardware/video-timing.md).
+
 The optional locally built count-up/IRQ suite has a separate observer:
 
 ```sh
@@ -152,6 +168,10 @@ native 240x160 framebuffer, written as a binary PPM file. Step and emulated-cycl
 budgets bound execution; `--expect-loop-register` reports the result register
 at an ARM branch to itself. `--terminal-address` restricts that observation to
 a specific instruction address.
+`--key-event FRAME MASK` changes the pressed-button mask at a completed frame
+boundary. Repeat it in frame order to provide a deterministic input sequence;
+a zero mask releases all buttons. This uses the same key state and keypad IRQ
+path as the frontend.
 `--dump-vram FILE` and `--dump-io FILE` write raw observer snapshots for test
 result inspection.
 `--dump-ewram FILE` provides the result counters and failure log for the local

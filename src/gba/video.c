@@ -6,8 +6,8 @@
  * _startHblank and _startHdraw via the cycle-accurate timing scheduler.
  *
  * Timing overview:
- * - Hdraw phase: 1008 cycles
- * - HBlank phase: 224 cycles
+ * - HBlank flag asserts 1007 clocks after line start
+ * - The next line starts 225 clocks later
  * - Total per scanline: 1232 cycles
  * - Visible lines: 0-159
  * - VBlank lines: 160-227
@@ -21,6 +21,8 @@
  */
 static void _startHblank(struct CupidTiming* timing, void* context, uint32_t cyclesLate);
 static void _startHdraw(struct CupidTiming* timing, void* context, uint32_t cyclesLate);
+static void _updateMatch(struct CupidTiming* timing, void* context, uint32_t cyclesLate);
+static void _requestDisplay(struct CupidTiming* timing, void* context, uint32_t cyclesLate);
 
 /**
  * @brief OBJ sprite sizes indexed by [shape * 4 + size][width, height].
@@ -46,15 +48,22 @@ void cupid_video_init(struct CupidVideo* video, struct CupidGBA* gba) {
     video->event.priority = 8;    /** Event priority. */
     video->event.callback = NULL; /** Set during reset. */
     video->event.next     = NULL;
+    video->matchEvent = (struct CupidTimingEvent){.context = video,
+        .callback = _updateMatch, .name = "GBA VCOUNT match", .priority = 8};
+    video->displayEvent = (struct CupidTimingEvent){.context = video,
+        .callback = _requestDisplay, .name = "GBA display DMA", .priority = 8};
 }
 
 void cupid_video_reset(struct CupidVideo* video) {
     struct CupidGBA* gba = video->gba;
+    cupid_timing_deschedule(&gba->timing, &video->matchEvent);
+    cupid_timing_deschedule(&gba->timing, &video->displayEvent);
 
     video->dispcnt = 0;
     video->dispstat = 0;
     video->vcount = 0;
     video->frameCounter = 0;
+    video->displayDmaLatched = false;
 
     memset(video->bg, 0, sizeof(video->bg));
     memset(&video->blend, 0, sizeof(video->blend));
@@ -76,6 +85,7 @@ void cupid_video_reset(struct CupidVideo* video) {
      */
     video->event.callback = _startHblank;
     cupid_timing_schedule(&gba->timing, &video->event, VIDEO_HDRAW_LENGTH);
+    cupid_timing_schedule(&gba->timing, &video->matchEvent, 1);
 }
 
 /**
@@ -125,11 +135,10 @@ static void _startHblank(struct CupidTiming* timing, void* context, uint32_t cyc
     if (video->vcount < VIDEO_VDRAW_LINES) {
         cupid_dma_run_hblank(gba, -(int32_t)cyclesLate);
     }
-    cupid_dma_run_display(gba);
 
     /** Raise HBlank IRQ when enabled. */
     if (video->dispstat & 0x0010) {
-        cupid_raise_irq(gba, IRQ_HBLANK, cyclesLate);
+        cupid_raise_irq_at(gba, IRQ_HBLANK, cupid_timing_global_time(timing) + 1);
     }
 
     /** Write updated DISPSTAT back to IO mirror. */
@@ -148,6 +157,12 @@ static void _startHdraw(struct CupidTiming* timing, void* context, uint32_t cycl
     cupid_timing_schedule(timing, &video->event,
                           VIDEO_HDRAW_LENGTH);
 
+    /* The display request mode is latched during the blanking interval. */
+    if (video->vcount == 162) {
+        struct CupidDMA* dma = &gba->memory.dma[3];
+        video->displayDmaLatched = dma->enable && dma->timing == DMA_TIMING_CUSTOM;
+    }
+
     /** Advance vcount and wrap 227 to 0. */
     ++video->vcount;
     if (video->vcount >= VIDEO_VERTICAL_TOTAL) {
@@ -160,15 +175,13 @@ static void _startHdraw(struct CupidTiming* timing, void* context, uint32_t cycl
     /** Clear HBlank flag. */
     video->dispstat &= ~0x0002;
 
-    /** Perform VCounter match check. */
-    uint8_t vcTarget = (video->dispstat >> 8) & 0xFF;
-    if (video->vcount == vcTarget) {
-        video->dispstat |= 0x0004;  /** VCounter match flag. */
-        if (video->dispstat & 0x0020) {
-            cupid_raise_irq(gba, IRQ_VCOUNT, cyclesLate);
+    cupid_timing_schedule(timing, &video->matchEvent, 1);
+    if (video->displayDmaLatched) {
+        if (video->vcount == 162) {
+            cupid_dma_write_cnt(gba, 3, gba->memory.dma[3].reg & 0x7FFF);
+        } else if (video->vcount >= 2 && video->vcount < 162) {
+            cupid_timing_schedule(timing, &video->displayEvent, 3);
         }
-    } else {
-        video->dispstat &= ~0x0004;
     }
 
     /** Per-scanline actions. */
@@ -187,7 +200,7 @@ static void _startHdraw(struct CupidTiming* timing, void* context, uint32_t cycl
 
         /** Raise VBlank IRQ when enabled. */
         if (video->dispstat & 0x0008) {
-            cupid_raise_irq(gba, IRQ_VBLANK, cyclesLate);
+            cupid_raise_irq_at(gba, IRQ_VBLANK, cupid_timing_global_time(timing) + 1);
         }
 
         /** Signal frame complete. */
@@ -201,6 +214,30 @@ static void _startHdraw(struct CupidTiming* timing, void* context, uint32_t cycl
 
     /** Write updated DISPSTAT back to IO mirror. */
     gba->memory.io[REG_DISPSTAT >> 1] = video->dispstat;
+}
+
+void cupid_video_update_match(struct CupidVideo* video) {
+    bool previous = (video->dispstat & 4) != 0;
+    bool match = video->vcount == (video->dispstat >> 8);
+    video->dispstat = (video->dispstat & ~4u) | (match ? 4 : 0);
+    video->gba->memory.io[REG_DISPSTAT >> 1] = video->dispstat;
+    if (match && !previous && (video->dispstat & 0x20)) {
+        cupid_raise_irq_at(video->gba, IRQ_VCOUNT,
+            cupid_timing_global_time(&video->gba->timing) + 1);
+    }
+}
+
+static void _updateMatch(struct CupidTiming* timing, void* context, uint32_t cyclesLate) {
+    (void)timing;
+    (void)cyclesLate;
+    cupid_video_update_match(context);
+}
+
+static void _requestDisplay(struct CupidTiming* timing, void* context, uint32_t cyclesLate) {
+    (void)timing;
+    (void)cyclesLate;
+    struct CupidVideo* video = context;
+    cupid_dma_run_display(video->gba);
 }
 
 /**
