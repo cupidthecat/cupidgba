@@ -139,6 +139,20 @@ requires its pinned digest, the terminal instruction, R12=0, 2020/2020 observati
 and zero logged failures. Both paths pass. See
 [prefetch](../hardware/prefetch.md) for coverage and unresolved edges.
 
+The local I/O register-read suite checks all 130 original source expectations:
+
+```sh
+python3 tests/roms/check_io_suite.py --runner build/cupidgba-headless \
+  --rom /path/to/io-read-suite.gba --bios /path/to/gba-bios.bin
+```
+
+The observer requires the pinned input checksum, terminal R12=0, 130/130 results,
+all 130 per-case flags, a complete EWRAM snapshot and no logged failures. Omit
+`--bios` for the built-in path. Set `CUPID_IO_SUITE_ROM` in CMake to register the
+local suite; `CUPID_TEST_BIOS` adds the external path. Native `gba.io` checks
+register state and CPU bus reads at each width, ARM/Thumb prefetch, DMA handover
+and FIFO reset readback. See [I/O registers](../hardware/io-registers.md).
+
 The local BIOS math suite checks 615 register observations across 123 inputs:
 
 ```sh
