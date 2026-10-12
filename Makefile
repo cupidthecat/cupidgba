@@ -2,7 +2,7 @@
 # GBA emulator in C with SDL2
 
 CC      = gcc
-CFLAGS  = -std=c11 -Wall -Wextra -O2 -g -Iinclude
+CFLAGS  = -std=c11 -Wall -Wextra -Werror -O2 -g -Iinclude -MMD -MP
 LDFLAGS = $(shell pkg-config --libs sdl2) -lm
 SDLCFLAGS = $(shell pkg-config --cflags sdl2)
 CFLAGS += $(SDLCFLAGS)
@@ -22,10 +22,11 @@ SRC_PLATFORM = src/platform/main.c src/platform/audio.c src/platform/input.c
 
 SRCS = $(SRC_ARM) $(SRC_GBA) $(SRC_CORE) $(SRC_RENDER) $(SRC_PLATFORM)
 OBJS = $(SRCS:.c=.o)
+DEPS = $(OBJS:.o=.d)
 
 TARGET = cupidgba
 
-.PHONY: all clean
+.PHONY: all clean test
 
 all: $(TARGET)
 
@@ -36,4 +37,11 @@ $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
-	rm -f $(OBJS) $(TARGET)
+	rm -f $(OBJS) $(DEPS) $(TARGET)
+
+test:
+	cmake -S . -B build-test -DCUPID_BUILD_FRONTEND=OFF
+	cmake --build build-test
+	ctest --test-dir build-test --output-on-failure
+
+-include $(DEPS)

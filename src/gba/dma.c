@@ -210,7 +210,7 @@ void cupid_dma_transfer(struct CupidGBA* gba, int ch) {
  */
 void cupid_dma_run(struct CupidGBA* gba, enum CupidDMATiming timing) {
     for (int i = 0; i < 4; i++) {
-        if (gba->memory.dma[i].enable && gba->memory.dma[i].timing == timing) {
+        if (gba->memory.dma[i].enable && gba->memory.dma[i].timing == (int)timing) {
             cupid_dma_transfer(gba, i);
         }
     }

@@ -1,3 +1,8 @@
+/* Copyright (c) 2013-2016 Jeffrey Pfau
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /**
  * @file memory.c
  * @brief GBA memory bus: init, load, store, region switching, ROM/BIOS loading.
@@ -193,7 +198,7 @@ static uint8_t _deadbeef[4] = { 0x10, 0xB7, 0x10, 0xE7 };
  * During DMA (or the instruction right after DMA starts), returns gba->bus,
  * which holds the last value driven by DMA or the pipeline.
  */
-static uint32_t CupidLoadBad(struct CupidARM* cpu) {
+uint32_t cupid_memory_open_bus(struct CupidARM* cpu) {
     struct CupidGBA* gba = cpu->master;
     uint32_t value = 0;
     if (gba->performingDMA ||
@@ -306,7 +311,7 @@ void cupid_memory_set_active_region(struct CupidARM* cpu, uint32_t address) {
         if ((address & (GBA_SIZE_ROM - 1)) < memory->romSize) {
             break;
         }
-        /** Fall through. */
+        /* fall through */
     default:
         cpu->memory.accessSource = CUPID_ACCESS_UNKNOWN;
         memory->activeRegion = -1;
@@ -349,7 +354,7 @@ uint32_t cupid_memory_load32(struct CupidARM* cpu, uint32_t address, int* cycleC
                 value = memory->biosPrefetch;
             }
         } else {
-            value = CupidLoadBad(cpu);
+            value = cupid_memory_open_bus(cpu);
         }
         break;
     case GBA_REGION_EWRAM:
@@ -410,7 +415,7 @@ uint32_t cupid_memory_load32(struct CupidARM* cpu, uint32_t address, int* cycleC
         value |= value << 16;
         break;
     default:
-        value = CupidLoadBad(cpu);
+        value = cupid_memory_open_bus(cpu);
         break;
     }
 
@@ -443,7 +448,7 @@ uint32_t cupid_memory_load16(struct CupidARM* cpu, uint32_t address, int* cycleC
                 value = (memory->biosPrefetch >> ((address & 2) * 8)) & 0xFFFF;
             }
         } else {
-            value = (CupidLoadBad(cpu) >> ((address & 2) * 8)) & 0xFFFF;
+            value = (cupid_memory_open_bus(cpu) >> ((address & 2) * 8)) & 0xFFFF;
         }
         break;
     case GBA_REGION_EWRAM:
@@ -499,7 +504,7 @@ uint32_t cupid_memory_load16(struct CupidARM* cpu, uint32_t address, int* cycleC
         value |= value << 8;
         break;
     default:
-        value = (CupidLoadBad(cpu) >> ((address & 2) * 8)) & 0xFFFF;
+        value = (cupid_memory_open_bus(cpu) >> ((address & 2) * 8)) & 0xFFFF;
         break;
     }
 
@@ -537,7 +542,7 @@ uint32_t cupid_memory_load8(struct CupidARM* cpu, uint32_t address, int* cycleCo
                 value = (memory->biosPrefetch >> ((address & 3) * 8)) & 0xFF;
             }
         } else {
-            value = (CupidLoadBad(cpu) >> ((address & 3) * 8)) & 0xFF;
+            value = (cupid_memory_open_bus(cpu) >> ((address & 3) * 8)) & 0xFF;
         }
         break;
     case GBA_REGION_EWRAM:
@@ -594,7 +599,7 @@ uint32_t cupid_memory_load8(struct CupidARM* cpu, uint32_t address, int* cycleCo
         value &= 0xFF;
         break;
     default:
-        value = (CupidLoadBad(cpu) >> ((address & 3) * 8)) & 0xFF;
+        value = (cupid_memory_open_bus(cpu) >> ((address & 3) * 8)) & 0xFF;
         break;
     }
 
@@ -740,18 +745,8 @@ void cupid_memory_store8(struct CupidARM* cpu, uint32_t address, int8_t value, i
         ((int8_t*)memory->iwram)[address & (GBA_SIZE_IWRAM - 1)] = value;
         break;
     case GBA_REGION_IO:
-        /** 8-bit IO writes are merged into a 16-bit register write. */
-    {
-        uint32_t offset = address & GBA_OFFSET_MASK;
-        uint16_t old = memory->io[offset >> 1];
-        if (offset & 1) {
-            old = (old & 0x00FF) | ((uint16_t)(uint8_t)value << 8);
-        } else {
-            old = (old & 0xFF00) | (uint8_t)value;
-        }
-        cupid_io_write(gba, offset & ~1u, old);
+        cupid_io_write8(gba, address & GBA_OFFSET_MASK, (uint8_t)value);
         break;
-    }
     case GBA_REGION_PALETTE:
         /** 8-bit writes duplicate byte to both halves of the halfword. */
         cupid_memory_store16(cpu, address & ~1, ((uint8_t)value) | ((uint8_t)value << 8), cycleCounter);
@@ -990,36 +985,17 @@ uint32_t cupid_memory_load_multiple(struct CupidARM* cpu, uint32_t address,
                                     int mask, enum CupidLSMDirection direction,
                                     int* cycleCounter)
 {
-    int offset = 4;
-    int popcount = 0;
-
-    if (direction & LSM_D) {
-        offset = -4;
-        popcount = popcount16(mask);
-        address -= (uint32_t)((popcount << 2) - 4);
-    }
-
-    if (direction & LSM_B) {
-        address += (uint32_t)offset;
-    }
-
-    uint32_t addressMisalign = address & 0x3;
+    unsigned count = mask ? (unsigned)popcount16(mask) : 16;
+    uint32_t writeback = direction & LSM_D ? address - count * 4 : address + count * 4;
+    if (direction & LSM_D) address = writeback;
+    if ((direction & LSM_B) != ((direction & LSM_D) >> 1)) address += 4;
     address &= 0xFFFFFFFC;
 
     int region = address >> GBA_BASE_OFFSET;
     int wait = 0;
 
-    /**
-     * Empty register list: load PC+4/6 into address, then advance 64 bytes
-     * (undocumented ARM7TDMI behavior).
-     */
-    if (!mask) {
-        uint32_t val = cpu->gprs[ARM_PC] +
-            (cpu->executionMode == MODE_ARM ? WORD_SIZE_ARM : WORD_SIZE_THUMB);
-        cpu->gprs[ARM_PC] = val;
-        wait += 1;
-        address += 64;
-    }
+    /* An empty list transfers PC, with writeback for sixteen registers. */
+    if (!mask) mask = 1 << ARM_PC;
 
     for (int i = 0; i < 16; i++) {
         if (!(mask & (1 << i))) continue;
@@ -1040,55 +1016,30 @@ uint32_t cupid_memory_load_multiple(struct CupidARM* cpu, uint32_t address,
         *cycleCounter += wait;
     }
 
-    if (direction & LSM_B) {
-        address -= (uint32_t)offset;
-    }
-    if (direction & LSM_D) {
-        address -= (uint32_t)((popcount << 2) + 4);
-    }
-
-    return address | addressMisalign;
+    return writeback;
 }
 
 uint32_t cupid_memory_store_multiple(struct CupidARM* cpu, uint32_t address,
                                      int mask, enum CupidLSMDirection direction,
                                      int* cycleCounter)
 {
-    int offset = 4;
-    int popcount = 0;
-
-    if (direction & LSM_D) {
-        offset = -4;
-        popcount = popcount16(mask);
-        address -= (uint32_t)((popcount << 2) - 4);
-    }
-
-    if (direction & LSM_B) {
-        address += (uint32_t)offset;
-    }
-
-    uint32_t addressMisalign = address & 0x3;
+    unsigned count = mask ? (unsigned)popcount16(mask) : 16;
+    uint32_t writeback = direction & LSM_D ? address - count * 4 : address + count * 4;
+    if (direction & LSM_D) address = writeback;
+    if ((direction & LSM_B) != ((direction & LSM_D) >> 1)) address += 4;
     address &= 0xFFFFFFFC;
 
     int region = address >> GBA_BASE_OFFSET;
     int wait = 0;
 
-    /** Empty register list (undocumented). */
-    if (!mask) {
-        int32_t val = (int32_t)(cpu->gprs[ARM_PC] +
-            (cpu->executionMode == MODE_ARM ? WORD_SIZE_ARM : WORD_SIZE_THUMB));
-        int w = 0;
-        cupid_memory_store32(cpu, address, val, &w);
-        wait += w;
-        address += 64;
-    }
+    if (!mask) mask = 1 << ARM_PC;
 
     for (int i = 0; i < 16; i++) {
         if (!(mask & (1 << i))) continue;
         int32_t val = cpu->gprs[i];
         /** PC is stored as PC+12 in ARM mode (current + 2 instructions). */
         if (i == ARM_PC) {
-            val += WORD_SIZE_ARM;
+            val = (uint32_t)val + (cpu->executionMode == MODE_ARM ? WORD_SIZE_ARM : WORD_SIZE_THUMB);
         }
         int w = 0;
         cupid_memory_store32(cpu, address, val, &w);
@@ -1103,14 +1054,7 @@ uint32_t cupid_memory_store_multiple(struct CupidARM* cpu, uint32_t address,
         *cycleCounter += wait;
     }
 
-    if (direction & LSM_B) {
-        address -= (uint32_t)offset;
-    }
-    if (direction & LSM_D) {
-        address -= (uint32_t)((popcount << 2) + 4);
-    }
-
-    return address | addressMisalign;
+    return writeback;
 }
 
 /**

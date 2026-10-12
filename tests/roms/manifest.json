@@ -1,0 +1,27 @@
+{
+  "repository": "https://github.com/jsmolka/gba-tests",
+  "revision": "a7113b67e63f83a9b321696ddd7042ccfad6c881",
+  "roms": [
+    {
+      "name": "arm",
+      "path": "arm/arm.gba",
+      "register": 12,
+      "terminal_address": "0x08001ec4",
+      "sha256": "77ee88662552bdc885c1080c0172ff119d54db791bd73b21808cf1ff1fe5b40e"
+    },
+    {
+      "name": "thumb",
+      "path": "thumb/thumb.gba",
+      "register": 7,
+      "terminal_address": "0x08000aac",
+      "sha256": "b5cb2291df4ab314b31c598acd9bff2ccfa0b38efff29daadfe97422ce369b67"
+    },
+    {
+      "name": "memory",
+      "path": "memory/memory.gba",
+      "register": 12,
+      "terminal_address": "0x080004c8",
+      "sha256": "21024fb6aae6343f5f0466dd54e3149de1fbeb23f78e7d85a015c983684d2f87"
+    }
+  ]
+}

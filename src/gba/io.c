@@ -1,3 +1,8 @@
+/* Copyright (c) 2013-2015 Jeffrey Pfau
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /**
  * @file io.c
  * @brief GBA IO register read and write dispatch.
@@ -9,6 +14,11 @@
  */
 
 #include "cupid/gba.h"
+
+static int32_t affine_high(int32_t previous, uint16_t high) {
+    uint32_t raw = ((uint32_t)previous & 0xFFFFu) | ((uint32_t)(high & 0x0FFFu) << 16);
+    return (int32_t)(raw ^ 0x08000000u) - 0x08000000;
+}
 
 /**
  * @brief Initialize IO registers and shadow state.
@@ -55,7 +65,8 @@ void cupid_io_init(struct CupidGBA* gba) {
  * storage for read-only or self-managed registers.
  */
 void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
-    addr &= 0x3FE;
+    if (addr >= GBA_SIZE_IO) return;
+    addr &= ~1u;
 
     switch (addr) {
     /** VIDEO 0x000-0x056. */
@@ -105,9 +116,7 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
         gba->video.bg[2].sx = gba->video.bg[2].refx;
         break;
     case REG_BG2X_HI:
-        gba->video.bg[2].refx = (gba->video.bg[2].refx & 0x0000FFFF) | (value << 16);
-        gba->video.bg[2].refx <<= 4;
-        gba->video.bg[2].refx >>= 4;
+        gba->video.bg[2].refx = affine_high(gba->video.bg[2].refx, value);
         gba->video.bg[2].sx = gba->video.bg[2].refx;
         break;
     case REG_BG2Y_LO:
@@ -115,9 +124,7 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
         gba->video.bg[2].sy = gba->video.bg[2].refy;
         break;
     case REG_BG2Y_HI:
-        gba->video.bg[2].refy = (gba->video.bg[2].refy & 0x0000FFFF) | (value << 16);
-        gba->video.bg[2].refy <<= 4;
-        gba->video.bg[2].refy >>= 4;
+        gba->video.bg[2].refy = affine_high(gba->video.bg[2].refy, value);
         gba->video.bg[2].sy = gba->video.bg[2].refy;
         break;
 
@@ -131,9 +138,7 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
         gba->video.bg[3].sx = gba->video.bg[3].refx;
         break;
     case REG_BG3X_HI:
-        gba->video.bg[3].refx = (gba->video.bg[3].refx & 0x0000FFFF) | (value << 16);
-        gba->video.bg[3].refx <<= 4;
-        gba->video.bg[3].refx >>= 4;
+        gba->video.bg[3].refx = affine_high(gba->video.bg[3].refx, value);
         gba->video.bg[3].sx = gba->video.bg[3].refx;
         break;
     case REG_BG3Y_LO:
@@ -141,9 +146,7 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
         gba->video.bg[3].sy = gba->video.bg[3].refy;
         break;
     case REG_BG3Y_HI:
-        gba->video.bg[3].refy = (gba->video.bg[3].refy & 0x0000FFFF) | (value << 16);
-        gba->video.bg[3].refy <<= 4;
-        gba->video.bg[3].refy >>= 4;
+        gba->video.bg[3].refy = affine_high(gba->video.bg[3].refy, value);
         gba->video.bg[3].sy = gba->video.bg[3].refy;
         break;
 
@@ -426,7 +429,7 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
  * not be merged.
  */
 void cupid_io_write8(struct CupidGBA* gba, uint32_t addr, uint8_t value) {
-    addr &= 0x3FF;
+    if (addr >= GBA_SIZE_IO) return;
 
     /** HALTCNT is at odd byte 0x301; entering halt or stop. */
     if (addr == (REG_HALTCNT & 0x3FF)) {
@@ -454,7 +457,10 @@ void cupid_io_write8(struct CupidGBA* gba, uint32_t addr, uint8_t value) {
  * @brief Read a 16-bit IO register.
  */
 uint16_t cupid_io_read(struct CupidGBA* gba, uint32_t addr) {
-    addr &= 0x3FE;
+    if (addr >= GBA_SIZE_IO) {
+        return (uint16_t)(cupid_memory_open_bus(&gba->cpu) >> ((addr & 2) * 8));
+    }
+    addr &= ~1u;
 
     switch (addr) {
     /** Video. */

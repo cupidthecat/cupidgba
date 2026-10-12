@@ -1,3 +1,8 @@
+/* Copyright (c) 2013-2014 Jeffrey Pfau
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /** @file isa-arm.c
  * @brief ARM instruction set implementation using macro-generated function tables.
  *
@@ -30,7 +35,7 @@ static inline void _shiftLSL(struct CupidARM* cpu, uint32_t opcode) {
 			cpu->shifterOperand = shiftVal;
 			cpu->shifterCarryOut = cpu->cpsr.c;
 		} else if (shift < 32) {
-			cpu->shifterOperand = shiftVal << shift;
+			cpu->shifterOperand = (uint32_t)shiftVal << shift;
 			cpu->shifterCarryOut = (shiftVal >> (32 - shift)) & 1;
 		} else if (shift == 32) {
 			cpu->shifterOperand = 0;
@@ -45,7 +50,7 @@ static inline void _shiftLSL(struct CupidARM* cpu, uint32_t opcode) {
 			cpu->shifterOperand = cpu->gprs[rm];
 			cpu->shifterCarryOut = cpu->cpsr.c;
 		} else {
-			cpu->shifterOperand = cpu->gprs[rm] << immediate;
+			cpu->shifterOperand = (uint32_t)cpu->gprs[rm] << immediate;
 			cpu->shifterCarryOut = (cpu->gprs[rm] >> (32 - immediate)) & 1;
 		}
 	}
@@ -112,7 +117,7 @@ static inline void _shiftASR(struct CupidARM* cpu, uint32_t opcode) {
 			cpu->shifterCarryOut = (cpu->gprs[rm] >> (immediate - 1)) & 1;
 		} else {
 			cpu->shifterCarryOut = ARM_SIGN(cpu->gprs[rm]);
-			cpu->shifterOperand = cpu->shifterCarryOut;
+			cpu->shifterOperand = cpu->shifterCarryOut ? (int32_t)UINT32_MAX : 0;
 		}
 	}
 }
@@ -143,7 +148,7 @@ static inline void _shiftROR(struct CupidARM* cpu, uint32_t opcode) {
 			cpu->shifterCarryOut = (cpu->gprs[rm] >> (immediate - 1)) & 1;
 		} else {
 			/** RRX */
-			cpu->shifterOperand = (cpu->cpsr.c << 31) | (((uint32_t) cpu->gprs[rm]) >> 1);
+			cpu->shifterOperand = ((uint32_t)cpu->cpsr.c << 31) | (((uint32_t) cpu->gprs[rm]) >> 1);
 			cpu->shifterCarryOut = cpu->gprs[rm] & 0x00000001;
 		}
 	}
@@ -229,10 +234,10 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM* cpu, int32_t d) {
 #define ADDR_MODE_2_I_TEST (opcode & 0x00000F80)
 #define ADDR_MODE_2_I      ((opcode & 0x00000F80) >> 7)
 #define ADDR_MODE_2_ADDRESS (address)
-#define ADDR_MODE_2_RN     (cpu->gprs[rn])
-#define ADDR_MODE_2_RM     (cpu->gprs[rm])
+#define ADDR_MODE_2_RN     ((uint32_t)cpu->gprs[rn])
+#define ADDR_MODE_2_RM     ((uint32_t)cpu->gprs[rm])
 #define ADDR_MODE_2_IMMEDIATE (opcode & 0x00000FFF)
-#define ADDR_MODE_2_INDEX(U_OP, M) (cpu->gprs[rn] U_OP M)
+#define ADDR_MODE_2_INDEX(U_OP, M) ((uint32_t)cpu->gprs[rn] U_OP (uint32_t)(M))
 #define ADDR_MODE_2_WRITEBACK(ADDR) \
 	cpu->gprs[rn] = ADDR; \
 	if (UNLIKELY(rn == ARM_PC)) { \
@@ -244,10 +249,10 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM* cpu, int32_t d) {
 #define ADDR_MODE_2_WRITEBACK_PRE_LOAD(WB) WB
 #define ADDR_MODE_2_WRITEBACK_POST_LOAD(WB)
 
-#define ADDR_MODE_2_LSL (cpu->gprs[rm] << ADDR_MODE_2_I)
+#define ADDR_MODE_2_LSL ((uint32_t)cpu->gprs[rm] << ADDR_MODE_2_I)
 #define ADDR_MODE_2_LSR (ADDR_MODE_2_I_TEST ? ((uint32_t) cpu->gprs[rm]) >> ADDR_MODE_2_I : 0)
 #define ADDR_MODE_2_ASR (ADDR_MODE_2_I_TEST ? ((int32_t) cpu->gprs[rm]) >> ADDR_MODE_2_I : ((int32_t) cpu->gprs[rm]) >> 31)
-#define ADDR_MODE_2_ROR (ADDR_MODE_2_I_TEST ? ROR(cpu->gprs[rm], ADDR_MODE_2_I) : (cpu->cpsr.c << 31) | (((uint32_t) cpu->gprs[rm]) >> 1))
+#define ADDR_MODE_2_ROR (ADDR_MODE_2_I_TEST ? ROR(cpu->gprs[rm], ADDR_MODE_2_I) : ((uint32_t)cpu->cpsr.c << 31) | (((uint32_t) cpu->gprs[rm]) >> 1))
 
 /** Addressing mode 3 — Halfword/signed load/store */
 #define ADDR_MODE_3_ADDRESS ADDR_MODE_2_ADDRESS
@@ -445,6 +450,13 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM* cpu, int32_t d) {
 
 #define ARM_MS_POST_store cupid_arm_set_priv_mode(cpu, privilegeMode);
 
+#define ARM_BLOCK_PRE_load(DIRECTION)
+#define ARM_BLOCK_PRE_store(DIRECTION) \
+	if ((opcode & 0x00200000) && (rs & (1 << rn)) && (rs & ((1 << rn) - 1))) { \
+		unsigned bytes = (unsigned)__builtin_popcount((unsigned)rs) * 4; \
+		cpu->gprs[rn] = (LSM_ ## DIRECTION & LSM_D) ? address - bytes : address + bytes; \
+	}
+
 #define ARM_MS_POST_load \
 	if (!(rs & 0x8000) && rs) { \
 		cupid_arm_set_priv_mode(cpu, privilegeMode); \
@@ -459,6 +471,7 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM* cpu, int32_t d) {
 		int rs = opcode & 0x0000FFFF; \
 		uint32_t address = cpu->gprs[rn]; \
 		S_PRE; \
+		ARM_BLOCK_PRE_ ## LS(DIRECTION); \
 		address = cpu->memory. LS ## Multiple(cpu, address, rs, LSM_ ## DIRECTION, &currentCycles); \
 		WRITEBACK; \
 		S_POST; \
@@ -490,10 +503,10 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM* cpu, int32_t d) {
 /** @name ALU */
 
 DEFINE_ALU_INSTRUCTION_ARM(ADD, ARM_ADDITION_S(n, cpu->shifterOperand, cpu->gprs[rd]),
-	cpu->gprs[rd] = n + cpu->shifterOperand;)
+	cpu->gprs[rd] = (uint32_t)n + (uint32_t)cpu->shifterOperand;)
 
 DEFINE_ALU_INSTRUCTION_ARM(ADC, ARM_ADDITION_S(n, cpu->shifterOperand, cpu->gprs[rd]),
-	cpu->gprs[rd] = n + cpu->shifterOperand + cpu->cpsr.c;)
+	cpu->gprs[rd] = (uint32_t)n + (uint32_t)cpu->shifterOperand + cpu->cpsr.c;)
 
 DEFINE_ALU_INSTRUCTION_ARM(AND, ARM_NEUTRAL_S(n, cpu->shifterOperand, cpu->gprs[rd]),
 	cpu->gprs[rd] = n & cpu->shifterOperand;)
@@ -502,10 +515,10 @@ DEFINE_ALU_INSTRUCTION_ARM(BIC, ARM_NEUTRAL_S(n, cpu->shifterOperand, cpu->gprs[
 	cpu->gprs[rd] = n & ~cpu->shifterOperand;)
 
 DEFINE_ALU_INSTRUCTION_S_ONLY_ARM(CMN, ARM_ADDITION_S(n, cpu->shifterOperand, aluOut),
-	int32_t aluOut = n + cpu->shifterOperand;)
+	int32_t aluOut = (uint32_t)n + (uint32_t)cpu->shifterOperand;)
 
 DEFINE_ALU_INSTRUCTION_S_ONLY_ARM(CMP, ARM_SUBTRACTION_S(n, cpu->shifterOperand, aluOut),
-	int32_t aluOut = n - cpu->shifterOperand;)
+	int32_t aluOut = (uint32_t)n - (uint32_t)cpu->shifterOperand;)
 
 DEFINE_ALU_INSTRUCTION_ARM(EOR, ARM_NEUTRAL_S(n, cpu->shifterOperand, cpu->gprs[rd]),
 	cpu->gprs[rd] = n ^ cpu->shifterOperand;)
@@ -520,16 +533,16 @@ DEFINE_ALU_INSTRUCTION_ARM(ORR, ARM_NEUTRAL_S(n, cpu->shifterOperand, cpu->gprs[
 	cpu->gprs[rd] = n | cpu->shifterOperand;)
 
 DEFINE_ALU_INSTRUCTION_ARM(RSB, ARM_SUBTRACTION_S(cpu->shifterOperand, n, cpu->gprs[rd]),
-	cpu->gprs[rd] = cpu->shifterOperand - n;)
+	cpu->gprs[rd] = (uint32_t)cpu->shifterOperand - (uint32_t)n;)
 
 DEFINE_ALU_INSTRUCTION_ARM(RSC, ARM_SUBTRACTION_CARRY_S(cpu->shifterOperand, n, cpu->gprs[rd], !cpu->cpsr.c),
-	cpu->gprs[rd] = cpu->shifterOperand - n - !cpu->cpsr.c;)
+	cpu->gprs[rd] = (uint32_t)cpu->shifterOperand - (uint32_t)n - !cpu->cpsr.c;)
 
 DEFINE_ALU_INSTRUCTION_ARM(SBC, ARM_SUBTRACTION_CARRY_S(n, cpu->shifterOperand, cpu->gprs[rd], !cpu->cpsr.c),
-	cpu->gprs[rd] = n - cpu->shifterOperand - !cpu->cpsr.c;)
+	cpu->gprs[rd] = (uint32_t)n - (uint32_t)cpu->shifterOperand - !cpu->cpsr.c;)
 
 DEFINE_ALU_INSTRUCTION_ARM(SUB, ARM_SUBTRACTION_S(n, cpu->shifterOperand, cpu->gprs[rd]),
-	cpu->gprs[rd] = n - cpu->shifterOperand;)
+	cpu->gprs[rd] = (uint32_t)n - (uint32_t)cpu->shifterOperand;)
 
 DEFINE_ALU_INSTRUCTION_S_ONLY_ARM(TEQ, ARM_NEUTRAL_S(n, cpu->shifterOperand, aluOut),
 	int32_t aluOut = n ^ cpu->shifterOperand;)
@@ -540,11 +553,11 @@ DEFINE_ALU_INSTRUCTION_S_ONLY_ARM(TST, ARM_NEUTRAL_S(n, cpu->shifterOperand, alu
 /** @name Multiply */
 
 DEFINE_MULTIPLY_INSTRUCTION_ARM(MUL,
-	cpu->gprs[rd] = cpu->gprs[rm] * cpu->gprs[rs],
+	cpu->gprs[rd] = (uint32_t)cpu->gprs[rm] * (uint32_t)cpu->gprs[rs],
 	ARM_NEUTRAL_S(cpu->gprs[rm], cpu->gprs[rs], cpu->gprs[rd]), S)
 
 DEFINE_MULTIPLY_INSTRUCTION_2_ARM(MLA,
-	cpu->gprs[rdHi] = cpu->gprs[rm] * cpu->gprs[rs] + cpu->gprs[rd],
+	cpu->gprs[rdHi] = (uint32_t)cpu->gprs[rm] * (uint32_t)cpu->gprs[rs] + cpu->gprs[rd],
 	ARM_NEUTRAL_S(, , cpu->gprs[rdHi]), S, 1)
 
 DEFINE_MULTIPLY_INSTRUCTION_2_ARM(UMULL,
@@ -568,7 +581,7 @@ DEFINE_MULTIPLY_INSTRUCTION_2_ARM(SMULL,
 
 DEFINE_MULTIPLY_INSTRUCTION_2_ARM(SMLAL,
 	int64_t d = ((int64_t) cpu->gprs[rm]) * ((int64_t) cpu->gprs[rs]) + ((uint32_t) cpu->gprs[rd]);
-	int32_t dHi = cpu->gprs[rdHi] + (d >> 32);
+	uint32_t dHi = (uint32_t)cpu->gprs[rdHi] + (uint32_t)(d >> 32);
 	cpu->gprs[rd] = d;
 	cpu->gprs[rdHi] = dHi;,
 	ARM_NEUTRAL_HI_S(cpu->gprs[rd], dHi), S, 2)

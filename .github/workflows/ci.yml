@@ -1,0 +1,78 @@
+name: build-and-test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Linux (${{ matrix.compiler }}, ${{ matrix.mode }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: gcc
+            mode: Release
+            sanitizers: 'OFF'
+          - compiler: clang
+            mode: Debug
+            sanitizers: 'ON'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SDL2
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev lld
+      - name: Verify replacement BIOS source
+        if: matrix.compiler == 'clang'
+        run: |
+          mkdir -p .local-research
+          clang --target=arm-none-eabi -march=armv4t -fuse-ld=lld -nostdlib \
+            '-Wl,-Ttext=0,--image-base=0,--oformat=binary,-e,0' \
+            src/gba/bios/hle-bios.s -o .local-research/hle-rebuilt.bin
+          python3 tests/bios/verify_hle.py .local-research/hle-rebuilt.bin
+      - name: Fetch verified test inputs
+        run: python3 tests/roms/check_rom.py --fetch --directory .local-research/test-roms
+      - name: Configure
+        run: >-
+          cmake -S . -B build -DCMAKE_C_COMPILER=${{ matrix.compiler }}
+          -DCMAKE_BUILD_TYPE=${{ matrix.mode }} -DCUPID_SANITIZERS=${{ matrix.sanitizers }}
+          -DCUPID_TEST_ROM_DIR=${{ github.workspace }}/.local-research/test-roms
+      - name: Build
+        run: cmake --build build --parallel 2
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: Verify Makefile build
+        if: matrix.compiler == 'gcc'
+        run: make --jobs=2
+
+  windows:
+    name: Windows (GCC, SDL2)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-SDL2
+            mingw-w64-ucrt-x86_64-python
+      - name: Fetch verified test inputs
+        run: python tests/roms/check_rom.py --fetch --directory .local-research/test-roms
+      - name: Configure
+        run: >-
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DCUPID_TEST_ROM_DIR="$(pwd)/.local-research/test-roms"
+      - name: Build
+        run: cmake --build build --parallel 2
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
