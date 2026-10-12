@@ -83,6 +83,11 @@ if(BUILD_TESTING)
     add_test(NAME gba.prefetch COMMAND test_prefetch)
     set_tests_properties(gba.prefetch PROPERTIES TIMEOUT 10)
 
+    add_executable(test_video tests/gba/test_video.c)
+    target_link_libraries(test_video PRIVATE cupid_core)
+    add_test(NAME gba.video COMMAND test_video)
+    set_tests_properties(gba.video PROPERTIES TIMEOUT 10)
+
     add_executable(test_cpu tests/arm/test_cpu.c)
     target_link_libraries(test_cpu PRIVATE cupid_core)
     add_test(NAME arm.cpu COMMAND test_cpu)
@@ -130,6 +135,20 @@ if(BUILD_TESTING)
                     --directory ${CUPID_TEST_ROM_DIR} --bios ${CUPID_TEST_BIOS}
                     --runner $<TARGET_FILE:cupidgba-headless> --test ${case})
                 set_tests_properties(rom.${case}-external PROPERTIES TIMEOUT 50)
+            endif()
+        endforeach()
+        foreach(case status vcount irq dma)
+            add_test(NAME rom.ppu-${case} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_ppu.py
+                --directory ${CUPID_TEST_ROM_DIR} --runner $<TARGET_FILE:cupidgba-headless>
+                --test ${case})
+            set_tests_properties(rom.ppu-${case} PROPERTIES TIMEOUT 130)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.ppu-${case}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_ppu.py
+                    --directory ${CUPID_TEST_ROM_DIR} --runner $<TARGET_FILE:cupidgba-headless>
+                    --bios ${CUPID_TEST_BIOS} --test ${case})
+                set_tests_properties(rom.ppu-${case}-external PROPERTIES TIMEOUT 130)
             endif()
         endforeach()
     endif()
