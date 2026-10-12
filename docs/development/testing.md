@@ -11,11 +11,12 @@ and audio synchronization. Checks remain enabled in release builds.
 Interrupt regressions cover register visibility, byte masks and acknowledgements,
 successive IRQ line changes, HALT wake-up with IME clear, the CPU's sampled
 CPSR mask, Thumb exception return, ARM/Thumb MMIO access widths, DMA completion
-bits for all four channels, and late
-dispatch across clock wrap.
+bits for all four channels, and late dispatch across clock wrap.
 CPU regressions check block-transfer bus costs and the final load internal cycle.
 BIOS regressions check LZ77 backreferences with bytes whose high bit is set
-through both byte and halfword output paths.
+through both byte and halfword output paths. They also execute ARM/Thumb
+interrupt waits, check ready-flag consumption and register preservation,
+and distinguish a matching interrupt from an unrelated HALT wake-up.
 
 ```sh
 cmake -S . -B build -DCUPID_BUILD_FRONTEND=OFF
@@ -69,9 +70,10 @@ and counter observations inside ARM loops. Local source revisions, compiler
 settings and the build recipe stay with the ignored research checkout.
 
 This suite passes with the external BIOS. The built-in BIOS path currently
-passes 721/936 count-up results and 90/90 IRQ results on the same input;
+passes 828/936 count-up results and 90/90 IRQ results on the same input;
 its interrupt-wait behavior and divided-clock observations need further work.
 The passing external-BIOS result does not establish built-in BIOS parity.
+See [BIOS execution](../hardware/bios.md) for the wait-loop behavior and limits.
 
 To run another authorized input for a fixed number of frames:
 

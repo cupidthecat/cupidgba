@@ -163,34 +163,6 @@ static void _Halt(struct CupidGBA* gba) {
 }
 
 /**
- * @brief SWI 0x04: IntrWait.
- *
- * R0 = discard old flags, R1 = interrupt mask.
- * The HLE stub halts and loops checking the BIOS IF mirror. For HLE, we
- * halt and let the CPU resume on any matching IRQ.
- */
-static void _IntrWait(struct CupidGBA* gba) {
-    uint32_t flags = gba->cpu.gprs[1];
-
-    if (gba->cpu.gprs[0]) {
-        /** Discard matching bits from BIOS IF mirror at 0x03FFFFF8 */
-        uint16_t* biosIF = (uint16_t*)(gba->memory.iwram + GBA_SIZE_IWRAM - 8);
-        *biosIF &= ~flags;
-    }
-
-    cupid_gba_halt(gba);
-}
-
-/**
- * @brief SWI 0x05: VBlankIntrWait.
- */
-static void _VBlankIntrWait(struct CupidGBA* gba) {
-    gba->cpu.gprs[0] = 1;
-    gba->cpu.gprs[1] = 1;  /** VBlank IRQ bit */
-    _IntrWait(gba);
-}
-
-/**
  * @brief SWI 0x06: Div (r0 / r1), SWI 0x07: DivArm (r1 / r0).
  *
  * Returns r0=quot, r1=rem, r3=abs(quot).
@@ -756,10 +728,11 @@ void cupid_bios_swi(struct CupidGBA* gba, uint8_t comment) {
     switch (comment) {
     case 0x00: _SoftReset(gba); break;
     case 0x01: _RegisterRamReset(gba); break;
-    case 0x02: _Halt(gba); break;
+    case 0x02: case 0x04: case 0x05:
+        /* Execute the replacement BIOS wait loop through the CPU pipeline. */
+        cupid_arm_raise_swi(&gba->cpu);
+        break;
     case 0x03: _Halt(gba); break;  /** Stop -- treat as halt */
-    case 0x04: _IntrWait(gba); break;
-    case 0x05: _VBlankIntrWait(gba); break;
     case 0x06: _Div(gba, (int32_t)gba->cpu.gprs[0], (int32_t)gba->cpu.gprs[1]); break;
     case 0x07: _Div(gba, (int32_t)gba->cpu.gprs[1], (int32_t)gba->cpu.gprs[0]); break;
     case 0x08: _Sqrt(gba); break;

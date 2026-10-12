@@ -189,8 +189,8 @@ strb   r0, [r12, #0x301]
 @ Check which interrupts were acknowledged
 strb   r0, [r12, #0x208]
 ldrh   r3, [r12, #-8]
-ands   r3, r1
-eorne  r3, r1
+tst    r3, r1
+bicne  r3, r1
 strhne r3, [r12, #-8]
 strb   r2, [r12, #0x208]
 beq    0b
