@@ -13,6 +13,10 @@ successive IRQ line changes, HALT wake-up with IME clear, the CPU's sampled
 CPSR mask, Thumb exception return, ARM/Thumb MMIO access widths, DMA completion
 bits for all four channels, and late dispatch across clock wrap.
 CPU regressions check block-transfer bus costs and the final load internal cycle.
+DMA regressions check read/write phase boundaries, priority and preemption,
+CPU bus stalls, internal-cycle overlap, swap locking, masks, maximum counts,
+address stepping, repeat reloads, cancellation, FIFO requests, timed I/O and
+clock wrap. They compare late dispatch with advancing one clock at a time.
 BIOS regressions check LZ77 backreferences with bytes whose high bit is set
 through both byte and halfword output paths. They also execute ARM/Thumb
 interrupt waits, check ready-flag consumption and register preservation,
@@ -30,7 +34,7 @@ ctest --test-dir build --output-on-failure
 Use `-DCUPID_SANITIZERS=ON -DCMAKE_BUILD_TYPE=Debug` on Linux with GCC or Clang
 to run address and undefined behavior checks. Compiler warnings are errors.
 
-The optional ROM checks use pinned manifests of CPU, memory, and hardware timer tests.
+The optional ROM checks use pinned manifests of CPU, memory, timer and DMA tests.
 Fetch the inputs, then configure their location:
 
 ```sh
@@ -57,6 +61,12 @@ The observer allows 400 frames with an external BIOS to include its startup
 animation, and 20 frames with the built-in path. Both runs require the same
 complete visible results.
 
+Four hardware DMA ROMs require ten assertions: immediate sampling at 20 clocks,
+two 88-clock burst-restart cases, four latch cases, and three cartridge-crossover
+results including its 41-clock duration. They use the same console observer and
+reject incomplete or failed results. Setting `CUPID_TEST_BIOS` also registers
+these four external-BIOS checks in CTest.
+
 The optional locally built count-up/IRQ suite has a separate observer:
 
 ```sh
@@ -79,6 +89,21 @@ These results establish the tested wait and timer interactions and do not
 establish complete BIOS parity.
 See [BIOS execution](../hardware/bios.md) for the wait-loop behavior and limits.
 
+The optional local DMA transfer suite has its own observer:
+
+```sh
+python3 tests/roms/check_dma_suite.py --runner build/cupidgba-headless \
+  --rom /path/to/dma-suite.gba --bios /path/to/gba-bios.bin
+```
+
+It requires the pinned input digest, terminal instruction, R12=0, exactly
+1244/1244 results and no logged failures. Set `CUPID_DMA_SUITE_ROM` to include
+the built-in path in CTest and `CUPID_TEST_BIOS` to add the external path.
+The private harness leaves the original tests and expected values unchanged.
+Both paths pass. This suite checks transfer data; the four hardware ROMs check
+the listed timings and latches. See [DMA and bus ownership](../hardware/dma.md)
+for the behavior and remaining limits.
+
 To run another authorized input for a fixed number of frames:
 
 ```sh
@@ -97,6 +122,6 @@ result inspection.
 timer suite observer.
 
 Passing these checks establishes the listed cases. They do not cover every CPU
-encoding, exact bus cycles, DMA arbitration, every timer/IRQ interaction, raster
+encoding, every bus or arbitration edge, every timer/IRQ interaction, raster
 effects, audio fidelity, cartridge peripherals, save persistence, or link
 behavior. Those require further regressions and hardware-backed evidence.

@@ -8,6 +8,7 @@ option(CUPID_BUILD_FRONTEND "Build the SDL2 frontend" ON)
 option(CUPID_SANITIZERS "Enable address and undefined behavior sanitizers" OFF)
 set(CUPID_TEST_ROM_DIR "" CACHE PATH "Directory containing checksum-verified external test ROMs")
 set(CUPID_TIMER_SUITE_ROM "" CACHE FILEPATH "Locally built timer and IRQ suite ROM")
+set(CUPID_DMA_SUITE_ROM "" CACHE FILEPATH "Locally built DMA transfer suite ROM")
 set(CUPID_TEST_BIOS "" CACHE FILEPATH "External BIOS for local hardware suite checks")
 
 add_library(cupid_build_options INTERFACE)
@@ -23,7 +24,7 @@ endif()
 add_library(cupid_core STATIC
     src/arm/arm.c src/arm/isa-arm.c src/arm/isa-thumb.c
     src/core/timing.c
-    src/gba/gba.c src/gba/memory.c src/gba/io.c src/gba/irq.c src/gba/video.c
+    src/gba/gba.c src/gba/memory.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
     src/gba/audio.c src/gba/dma.c src/gba/timer.c src/gba/bios.c
     src/gba/hle-bios.c src/gba/savedata.c
     src/gba/render/software.c src/gba/render/composite.c
@@ -70,6 +71,11 @@ if(BUILD_TESTING)
     add_test(NAME gba.irq COMMAND test_irq)
     set_tests_properties(gba.irq PROPERTIES TIMEOUT 10)
 
+    add_executable(test_dma tests/gba/test_dma.c)
+    target_link_libraries(test_dma PRIVATE cupid_core)
+    add_test(NAME gba.dma COMMAND test_dma)
+    set_tests_properties(gba.dma PROPERTIES TIMEOUT 10)
+
     add_executable(test_cpu tests/arm/test_cpu.c)
     target_link_libraries(test_cpu PRIVATE cupid_core)
     add_test(NAME arm.cpu COMMAND test_cpu)
@@ -94,13 +100,36 @@ if(BUILD_TESTING)
                 --runner $<TARGET_FILE:cupidgba-headless> --test ${case})
             set_tests_properties(rom.${case} PROPERTIES TIMEOUT 50)
         endforeach()
-        foreach(case timer-reload timer-start-stop timer-tick-before-reload)
+        foreach(case timer-reload timer-start-stop timer-tick-before-reload
+                     dma-start-delay dma-nonseq dma-latch dma-burst)
             add_test(NAME rom.${case} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_console.py
                 --directory ${CUPID_TEST_ROM_DIR}
                 --runner $<TARGET_FILE:cupidgba-headless> --test ${case})
             set_tests_properties(rom.${case} PROPERTIES TIMEOUT 50)
+            if(CUPID_TEST_BIOS AND case MATCHES "^dma-")
+                add_test(NAME rom.${case}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_console.py
+                    --directory ${CUPID_TEST_ROM_DIR} --bios ${CUPID_TEST_BIOS}
+                    --runner $<TARGET_FILE:cupidgba-headless> --test ${case})
+                set_tests_properties(rom.${case}-external PROPERTIES TIMEOUT 50)
+            endif()
         endforeach()
+    endif()
+
+    if(CUPID_DMA_SUITE_ROM)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        add_test(NAME rom.dma-suite COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_dma_suite.py
+            --rom ${CUPID_DMA_SUITE_ROM} --runner $<TARGET_FILE:cupidgba-headless>)
+        set_tests_properties(rom.dma-suite PROPERTIES TIMEOUT 100)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME rom.dma-suite-external COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_dma_suite.py
+                --rom ${CUPID_DMA_SUITE_ROM} --bios ${CUPID_TEST_BIOS}
+                --runner $<TARGET_FILE:cupidgba-headless>)
+            set_tests_properties(rom.dma-suite-external PROPERTIES TIMEOUT 100)
+        endif()
     endif()
 
     if(CUPID_TIMER_SUITE_ROM)

@@ -13,6 +13,7 @@ struct CupidIRQLineChange {
 struct CupidIRQRegisterWrite {
     struct CupidGBA* gba;
     uint16_t ie;
+    uint16_t ifSet, ifClear;
     bool ime;
     struct CupidTimingEvent event;
 };

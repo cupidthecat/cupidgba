@@ -147,6 +147,11 @@ struct CupidARMMemory {
 
     /** Set the active memory region for prefetch (called on branch) */
     void (*setActiveRegion)(struct CupidARM* cpu, uint32_t addr);
+    void (*fetch)(struct CupidARM* cpu, unsigned width, bool sequential);
+    void (*finish)(struct CupidARM* cpu);
+    void (*lock)(struct CupidARM* cpu, bool locked);
+    bool timed;             /**< CPU execution advances individual bus phases */
+    bool dataSequential;
 
     /** Current access source for timing/debug */
     enum CupidAccessSource accessSource;

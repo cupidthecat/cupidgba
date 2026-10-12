@@ -9,6 +9,7 @@ struct Fixture {
     unsigned count;
     unsigned order[16];
     uint32_t late[16];
+    uint64_t time[16];
 };
 
 struct Context {
@@ -23,12 +24,14 @@ static void callback(struct CupidTiming* timing, void* opaque, uint32_t late) {
     struct Fixture* fixture = context->fixture;
     CHECK(fixture->count < 16);
     fixture->order[fixture->count] = context->id;
-    fixture->late[fixture->count++] = late;
+    fixture->late[fixture->count] = late;
+    fixture->time[fixture->count++] = cupid_timing_global_time(timing);
+    CHECK((uint32_t)cupid_timing_current_time(timing) == timing->masterCycles - late);
     if (context->interrupt) {
         cupid_timing_interrupt(timing);
     }
     if (context->reschedule) {
-        cupid_timing_schedule(timing, context->reschedule, -2);
+        cupid_timing_schedule(timing, context->reschedule, 2);
     }
 }
 
@@ -82,10 +85,13 @@ static void callback_queue_changes(void) {
     a.reschedule = &inserted;
     cupid_timing_schedule(&f.timing, &first, 10);
     cupid_timing_schedule(&f.timing, &second, 11);
-    CHECK(cupid_timing_tick(&f.timing, 12) == INT32_MAX);
+    CHECK(cupid_timing_tick(&f.timing, 14) == INT32_MAX);
     CHECK(f.count == 3);
-    CHECK(f.order[0] == 0 && f.order[1] == 2 && f.order[2] == 1);
-    CHECK(f.late[1] == 2 && f.late[2] == 1);
+    CHECK(f.order[0] == 0 && f.order[1] == 1 && f.order[2] == 2);
+    /* Relative scheduling inside a late callback uses its original deadline. */
+    CHECK(f.time[0] == 10 && f.time[1] == 11 && f.time[2] == 12);
+    CHECK(f.late[0] == 4 && f.late[1] == 3 && f.late[2] == 2);
+    CHECK(!f.timing.inCallback && cupid_timing_global_time(&f.timing) == 14);
 }
 
 static void relative_and_absolute_time(void) {

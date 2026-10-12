@@ -107,11 +107,11 @@ static void _startHblank(struct CupidTiming* timing, void* context, uint32_t cyc
 
     /**
      * Schedule _startHdraw after VIDEO_HBLANK_LENGTH.
-     * Subtract cyclesLate to compensate for late firing.
+     * Relative scheduling uses the event's original timestamp.
      */
     video->event.callback = _startHdraw;
     cupid_timing_schedule(timing, &video->event,
-                          VIDEO_HBLANK_LENGTH - (int32_t)cyclesLate);
+                          VIDEO_HBLANK_LENGTH);
 
     /** Set HBlank flag in DISPSTAT. */
     video->dispstat |= 0x0002;
@@ -125,6 +125,7 @@ static void _startHblank(struct CupidTiming* timing, void* context, uint32_t cyc
     if (video->vcount < VIDEO_VDRAW_LINES) {
         cupid_dma_run_hblank(gba, -(int32_t)cyclesLate);
     }
+    cupid_dma_run_display(gba);
 
     /** Raise HBlank IRQ when enabled. */
     if (video->dispstat & 0x0010) {
@@ -145,7 +146,7 @@ static void _startHdraw(struct CupidTiming* timing, void* context, uint32_t cycl
     /** Schedule _startHblank after VIDEO_HDRAW_LENGTH. */
     video->event.callback = _startHblank;
     cupid_timing_schedule(timing, &video->event,
-                          VIDEO_HDRAW_LENGTH - (int32_t)cyclesLate);
+                          VIDEO_HDRAW_LENGTH);
 
     /** Advance vcount and wrap 227 to 0. */
     ++video->vcount;
