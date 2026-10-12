@@ -11,11 +11,15 @@ and audio synchronization. Checks remain enabled in release builds.
 Interrupt regressions cover register visibility, byte masks and acknowledgements,
 successive IRQ line changes, HALT wake-up with IME clear, the CPU's sampled
 CPSR mask, Thumb exception return, ARM/Thumb MMIO access widths, DMA completion
-bits for all four channels, and late
-dispatch across clock wrap.
+bits for all four channels, and late dispatch across clock wrap.
 CPU regressions check block-transfer bus costs and the final load internal cycle.
 BIOS regressions check LZ77 backreferences with bytes whose high bit is set
-through both byte and halfword output paths.
+through both byte and halfword output paths. They also execute ARM/Thumb
+interrupt waits, check ready-flag consumption and register preservation,
+and distinguish a matching interrupt from an unrelated HALT wake-up.
+The wait cases also cover IRQ callers, their saved exception state, both saved
+CPSR IRQ masks and either initial IME value. They check the returned request
+in R0 and the cleared R3 alongside the preserved registers.
 
 ```sh
 cmake -S . -B build -DCUPID_BUILD_FRONTEND=OFF
@@ -62,16 +66,18 @@ python3 tests/roms/check_timer_suite.py --runner build/cupidgba-headless \
 
 The observer requires the pinned input digest, the terminal instruction,
 R12=0, exactly 936/936 count-up results and 90/90 IRQ results, and no logged
-failures. Set `CUPID_TIMER_SUITE_ROM` and `CUPID_TEST_BIOS` when configuring
-CMake to include it in CTest. Neither input is committed or required by hosted
+failures. Set `CUPID_TIMER_SUITE_ROM` when configuring CMake to include the
+built-in path in CTest. Set `CUPID_TEST_BIOS` to add the external-BIOS suite
+and native wait comparisons. Neither input is committed or required by hosted
 CI. The suite checks divided clocks, interrupt handlers, BIOS interrupt waits,
 and counter observations inside ARM loops. Local source revisions, compiler
 settings and the build recipe stay with the ignored research checkout.
 
-This suite passes with the external BIOS. The built-in BIOS path currently
-passes 721/936 count-up results and 90/90 IRQ results on the same input;
-its interrupt-wait behavior and divided-clock observations need further work.
-The passing external-BIOS result does not establish built-in BIOS parity.
+Both BIOS paths pass 936/936 count-up results and 90/90 IRQ results on the same
+input. Omit `--bios` from the command above to check the built-in path.
+These results establish the tested wait and timer interactions and do not
+establish complete BIOS parity.
+See [BIOS execution](../hardware/bios.md) for the wait-loop behavior and limits.
 
 To run another authorized input for a fixed number of frames:
 

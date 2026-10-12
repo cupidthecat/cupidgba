@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check a locally built timer and IRQ suite with an external BIOS."""
+"""Check a locally built timer and IRQ suite with either BIOS path."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse
 import hashlib
@@ -27,19 +27,21 @@ def verify_results(data):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rom", type=Path, required=True)
-    parser.add_argument("--bios", type=Path, required=True)
+    parser.add_argument("--bios", type=Path)
     parser.add_argument("--runner", type=Path, required=True)
     args = parser.parse_args()
     if hashlib.sha256(args.rom.read_bytes()).hexdigest() != ROM_SHA256:
         raise SystemExit("Timer suite input checksum mismatch")
-    if args.bios.stat().st_size != 0x4000:
+    if args.bios and args.bios.stat().st_size != 0x4000:
         raise SystemExit("The external BIOS must be 16 KiB")
     with tempfile.TemporaryDirectory(prefix="cupidgba-timer-") as directory:
         snapshot = Path(directory) / "ewram.bin"
         command = [str(args.runner.resolve()), str(args.rom.resolve()),
-                   "--bios", str(args.bios.resolve()), "--frames", "1000",
+                   "--frames", "1000",
                    "--steps", "60000000", "--expect-loop-register", "12",
                    "--terminal-address", TERMINAL, "--dump-ewram", str(snapshot)]
+        if args.bios:
+            command += ["--bios", str(args.bios.resolve())]
         subprocess.run(command, check=True, timeout=90)
         verify_results(snapshot.read_bytes())
     print("PASS timer count-up and IRQ suite")
