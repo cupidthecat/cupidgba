@@ -45,8 +45,15 @@ void cupid_bus_fetch(struct CupidARM* cpu, uint32_t address, unsigned width, boo
     }
     gba->memory.fetchNonseq = false;
     unsigned cycles = cupid_prefetch_fetch(gba, address, width, wait + 1);
-    cupid_bus_advance(cpu, cycles, true);
+    if (region >= GBA_REGION_PALETTE && region <= GBA_REGION_OAM) {
+        unsigned beats = width == 4 && region != GBA_REGION_OAM ? 2 : 1;
+        for (unsigned i = 0; i < beats; i++) {
+            cupid_bus_advance(cpu, 1, true);
+            while (cupid_video_memory_busy(&gba->video, address)) cupid_bus_advance(cpu, 1, true);
+        }
+    } else cupid_bus_advance(cpu, cycles, true);
     cupid_prefetch_finish_fetch(gba);
+    if (region == GBA_REGION_VRAM) cupid_memory_refresh_vram_fetch(cpu, address);
     /* The caller reads the opcode before releasing ownership of the bus. */
     gba->memory.lastWasDMA = false;
 }

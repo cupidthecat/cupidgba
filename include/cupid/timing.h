@@ -36,6 +36,8 @@ struct CupidTiming {
     uint32_t masterCycles;               /**< Current absolute master counter */
     bool inCallback;                     /**< Time queries use the active event's deadline */
     uint64_t callbackCycles;             /**< Timestamp of the event being dispatched */
+    void* clockContext;
+    void (*syncClock)(void* context, uint64_t time); /**< Clocked devices observe the completed tick */
     int32_t* relativeCycles;             /**< → cpu->cycles (elapsed since last tick) */
     int32_t* nextEvent;                  /**< → cpu->nextEvent (next deadline) */
 };

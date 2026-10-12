@@ -10,6 +10,8 @@ struct Fixture {
     unsigned order[16];
     uint32_t late[16];
     uint64_t time[16];
+    unsigned syncCount, syncEvents;
+    uint64_t syncTime;
 };
 
 struct Context {
@@ -144,6 +146,30 @@ static void clear_resets_deadlines(void) {
     CHECK(cupid_timing_global_time(&f.timing) == 0);
 }
 
+static void observe_clock(void* context, uint64_t time) {
+    struct Fixture* f = context;
+    f->syncCount++;
+    f->syncTime = time;
+    f->syncEvents = f->count;
+}
+
+static void clock_observer_runs_after_due_callbacks_without_a_deadline(void) {
+    struct Fixture f;
+    init(&f);
+    f.timing.clockContext = &f;
+    f.timing.syncClock = observe_clock;
+    struct Context context = {&f, 0, NULL, false};
+    struct CupidTimingEvent e = event(&context, 0);
+    cupid_timing_schedule(&f.timing, &e, 10);
+    CHECK(cupid_timing_tick(&f.timing, 14) == INT32_MAX);
+    CHECK(f.time[0] == 10 && f.syncTime == 14 && f.syncCount == 1 && f.syncEvents == 1);
+    CHECK(cupid_timing_tick(&f.timing, 2) == INT32_MAX);
+    CHECK(f.syncTime == 16 && f.syncCount == 2);
+    cupid_timing_clear(&f.timing);
+    CHECK(cupid_timing_tick(&f.timing, 3) == INT32_MAX);
+    CHECK(f.syncTime == 3 && f.syncCount == 3);
+}
+
 int main(void) {
     RUN(priority_and_lateness);
     RUN(reschedule_and_cancel);
@@ -151,5 +177,6 @@ int main(void) {
     RUN(relative_and_absolute_time);
     RUN(clock_wrap);
     RUN(clear_resets_deadlines);
+    RUN(clock_observer_runs_after_due_callbacks_without_a_deadline);
     return 0;
 }

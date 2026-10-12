@@ -38,6 +38,8 @@ jobs:
           python3 tests/roms/check_rom.py --fetch --directory .local-research/test-roms
           python3 tests/roms/check_console.py --fetch --directory .local-research/test-roms
           python3 tests/roms/check_ppu.py --fetch --directory .local-research/test-roms
+          python3 tests/roms/check_ppu_access.py --fetch --directory .local-research/test-roms
+          python3 tests/roms/check_raster.py --fetch --directory .local-research/test-roms
       - name: Configure
         run: >-
           cmake -S . -B build -DCMAKE_C_COMPILER=${{ matrix.compiler }}
@@ -74,6 +76,8 @@ jobs:
           python tests/roms/check_rom.py --fetch --directory .local-research/test-roms
           python tests/roms/check_console.py --fetch --directory .local-research/test-roms
           python tests/roms/check_ppu.py --fetch --directory .local-research/test-roms
+          python tests/roms/check_ppu_access.py --fetch --directory .local-research/test-roms
+          python tests/roms/check_raster.py --fetch --directory .local-research/test-roms
       - name: Configure
         run: >-
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release

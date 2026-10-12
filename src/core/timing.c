@@ -25,6 +25,8 @@ void cupid_timing_init(struct CupidTiming* timing, int32_t* relativeCycles,
                        int32_t* nextEvent) {
     timing->relativeCycles = relativeCycles;
     timing->nextEvent = nextEvent;
+    timing->clockContext = NULL;
+    timing->syncClock = NULL;
     cupid_timing_clear(timing);
 }
 
@@ -119,6 +121,7 @@ int32_t cupid_timing_tick(struct CupidTiming* timing, int32_t cycles) {
         timing->inCallback = wasInCallback;
         timing->callbackCycles = previousCallback;
     }
+    if (timing->syncClock) timing->syncClock(timing->clockContext, timing->globalCycles);
     /* The CPU compares its relative accumulator against this breakpoint. */
     *timing->nextEvent = deadline(timing);
     return *timing->nextEvent;

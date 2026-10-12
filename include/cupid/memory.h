@@ -156,6 +156,8 @@ struct CupidDMA {
     bool     transferWord;
     bool     externalSeen;
     uint32_t accessAddress;  /**< Address sampled by the current bus phase */
+    unsigned displayBeat;   /**< Low/high half of a 32-bit display-memory transfer */
+    uint16_t displayLow;
 };
 
 /**
@@ -316,6 +318,7 @@ void     cupid_memory_store32(struct CupidARM* cpu, uint32_t addr, int32_t val, 
 void     cupid_memory_store16(struct CupidARM* cpu, uint32_t addr, int16_t val, int* cyc);
 void     cupid_memory_store8(struct CupidARM* cpu, uint32_t addr, int8_t val, int* cyc);
 void     cupid_memory_set_active_region(struct CupidARM* cpu, uint32_t addr);
+void     cupid_memory_refresh_vram_fetch(struct CupidARM* cpu, uint32_t addr);
 
 /** Block transfer (LDM/STM) */
 uint32_t cupid_memory_load_multiple(struct CupidARM* cpu, uint32_t addr, int mask,

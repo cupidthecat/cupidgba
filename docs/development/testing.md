@@ -36,6 +36,9 @@ ctest --test-dir build --output-on-failure
 
 Use `-DCUPID_SANITIZERS=ON -DCMAKE_BUILD_TYPE=Debug` on Linux with GCC or Clang
 to run address and undefined behavior checks. Compiler warnings are errors.
+Debug sanitizer builds retain symbols and use `-O1` to keep the clocked renderer
+within the hardware observers' existing deadlines. Both sanitizers and fatal
+error reporting remain enabled.
 
 The optional ROM checks use pinned manifests of CPU, memory, timer and DMA tests.
 Fetch the inputs, then configure their location:
@@ -63,9 +66,11 @@ It rejects a FAIL line or an incomplete result. It does not modify the ROM,
 counter values, or expected results. These checks use the replacement BIOS;
 `check_console.py --bios /path/to/gba-bios.bin` can run the same checks with
 an external dump.
-The observer allows 400 frames with an external BIOS to include its startup
-animation, and 20 frames with the built-in path. Both runs require the same
-complete visible results.
+The timer and DMA observers allow 400 frames with an external BIOS to include
+its startup animation, and 20 frames with the built-in path. The VRAM-mirror
+case uses 120 built-in frames for its two CRC loops and the same 400 external
+frames. Both paths require all ten original mirror/CRC results. Subprocess and
+CTest deadlines are unchanged.
 
 Four hardware DMA ROMs require ten assertions: immediate sampling at 20 clocks,
 two 88-clock burst-restart cases, four latch cases, and three cartridge-crossover
@@ -88,6 +93,30 @@ add `--bios` for the external path. Their frame budgets include the original
 cycle sweeps and, with an external BIOS, startup. The default instruction limit
 is unchanged. `CUPID_TEST_ROM_DIR` registers all four checks, and `CUPID_TEST_BIOS`
 adds the external comparisons. See [display timing](../hardware/video-timing.md).
+
+The native renderer tests advance the actual fetch and merge pipeline. They
+cover all six display modes, OBJ, windows, mosaic, effects, affine and display
+latches, writes between stages, CPU/DMA bus beats, blanking and clock wrap.
+The optional raster and access observers use unchanged inputs and source-derived
+expectations rather than hashes of hardware photographs:
+
+```sh
+python3 tests/roms/check_raster.py --fetch --directory .local-research/test-roms
+python3 tests/roms/check_ppu_access.py --fetch --directory .local-research/test-roms
+python3 tests/roms/check_raster.py --directory .local-research/test-roms \
+  --runner build/cupidgba-headless
+python3 tests/roms/check_ppu_access.py --directory .local-research/test-roms \
+  --runner build/cupidgba-headless
+```
+
+The access sweep selects bitmap mode and requires all 1231 SRAM observations,
+including 243 occupied slots. Its 1500-frame budget covers the original
+per-frame samples; the default step limit remains unchanged. `--dump-save`
+exports the runner's save-memory snapshot and fails if no save data exists.
+The three raster cases check 20,592 green-swap pixels, 38,400 affine-step pixels
+and 2,816 sprite/mosaic pixels. `--bios` repeats these raster checks through the
+external path. See [pixel rendering](../hardware/pixel-pipeline.md) for the
+timing derivation and the remaining hardware qualification boundaries.
 
 The optional locally built count-up/IRQ suite has a separate observer:
 
