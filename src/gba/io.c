@@ -87,8 +87,8 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
         /** Read-only; ignore writes. */
         return;
 
-    case REG_BG0CNT: gba->video.bg[0].cnt = value; break;
-    case REG_BG1CNT: gba->video.bg[1].cnt = value; break;
+    case REG_BG0CNT: value &= 0xDFFF; gba->video.bg[0].cnt = value; break;
+    case REG_BG1CNT: value &= 0xDFFF; gba->video.bg[1].cnt = value; break;
     case REG_BG2CNT: gba->video.bg[2].cnt = value; break;
     case REG_BG3CNT: gba->video.bg[3].cnt = value; break;
 
@@ -163,16 +163,16 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
         gba->video.win.v[1][0] = value >> 8;
         gba->video.win.v[1][1] = value & 0xFF;
         break;
-    case REG_WININ:  gba->video.win.winin = value;  break;
-    case REG_WINOUT: gba->video.win.winout = value; break;
+    case REG_WININ:  value &= 0x3F3F; gba->video.win.winin = value;  break;
+    case REG_WINOUT: value &= 0x3F3F; gba->video.win.winout = value; break;
 
     /** Mosaic (write-only). */
     case REG_MOSAIC:
         break;
 
     /** Blending. */
-    case REG_BLDCNT:   gba->video.blend.bldcnt = value;   break;
-    case REG_BLDALPHA: gba->video.blend.bldalpha = value;  break;
+    case REG_BLDCNT:   value &= 0x3FFF; gba->video.blend.bldcnt = value;   break;
+    case REG_BLDALPHA: value &= 0x1F1F; gba->video.blend.bldalpha = value;  break;
     case REG_BLDY:     gba->video.blend.bldy = value;      break;
 
     /** AUDIO 0x060-0x0A6. */
@@ -183,7 +183,7 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
     case REG_SOUNDCNT_L:  case REG_SOUNDCNT_H:  case REG_SOUNDCNT_X:
     case REG_SOUNDBIAS:
         cupid_audio_write_register(&gba->audio, addr, value);
-        break;
+        return;
 
     /** Wave RAM; store raw and let audio handle it. */
     case REG_WAVE_RAM0_LO: case REG_WAVE_RAM0_HI:
@@ -495,10 +495,10 @@ uint16_t cupid_io_read(struct CupidGBA* gba, uint32_t addr) {
     case REG_WAVE_RAM3_LO: case REG_WAVE_RAM3_HI:
         return gba->memory.io[addr >> 1];
 
-    /** FIFO is write-only; reads return 0. */
+    /** FIFO is write-only and exposes the existing bus value. */
     case REG_FIFO_A_LO: case REG_FIFO_A_HI:
     case REG_FIFO_B_LO: case REG_FIFO_B_HI:
-        return 0;
+        return (uint16_t)(cupid_memory_open_bus(&gba->cpu) >> ((addr & 2) * 8));
 
     /** DMA. */
     /** DMA SAD/DAD are write-only. */
@@ -510,7 +510,7 @@ uint16_t cupid_io_read(struct CupidGBA* gba, uint32_t addr) {
     case REG_DMA2DAD_LO: case REG_DMA2DAD_HI:
     case REG_DMA3SAD_LO: case REG_DMA3SAD_HI:
     case REG_DMA3DAD_LO: case REG_DMA3DAD_HI:
-        return 0;
+        return (uint16_t)(cupid_memory_open_bus(&gba->cpu) >> ((addr & 2) * 8));
 
     /** DMA CNT_LO is write-only; reads return 0. */
     case REG_DMA0CNT_LO: case REG_DMA1CNT_LO:
@@ -576,13 +576,7 @@ uint16_t cupid_io_read(struct CupidGBA* gba, uint32_t addr) {
         return 0;
 
     default:
-        /**
-         * Unknown register; return whatever is in the IO array.
-         * Addresses above REG_MAX with no special handling return 0.
-         */
-        if (addr >= REG_MAX) {
-            return 0;
-        }
-        return gba->memory.io[addr >> 1];
+        /** Unmapped I/O does not drive the bus. */
+        return (uint16_t)(cupid_memory_open_bus(&gba->cpu) >> ((addr & 2) * 8));
     }
 }
