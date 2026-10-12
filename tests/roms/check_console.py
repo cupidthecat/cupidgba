@@ -8,7 +8,7 @@ from pathlib import Path
 import struct
 import subprocess
 import tempfile
-import urllib.request
+from fetch_inputs import download_verified
 
 
 def console_text(vram, io):
@@ -44,7 +44,7 @@ def main():
         if args.fetch:
             url = (f'{manifest["repository"]}/raw/commit/{manifest["revision"]}/'
                    f'{case["path"]}')
-            data = urllib.request.urlopen(url, timeout=30).read()
+            data = download_verified(url, case["sha256"])
         else:
             data = path.read_bytes()
         if hashlib.sha256(data).hexdigest() != case["sha256"]:

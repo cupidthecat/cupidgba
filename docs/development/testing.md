@@ -49,6 +49,9 @@ Each input's SHA-256 digest must match the manifest. The runner must reach the
 ROM's specified terminal branch and observe zero in its result register. A
 timeout, mismatched input, crash, or nonzero test number fails the check. The
 runner uses the same CPU and GBA core as the SDL2 application.
+The downloader retries a connection failure, truncated response or transient
+server error at most twice. A changed payload or missing input fails immediately.
+Transport retries do not change input digests or test expectations.
 
 The three hardware timer ROMs check reload timing, start/stop timing, and
 overflow before the enable reload. The observer reads their visible console

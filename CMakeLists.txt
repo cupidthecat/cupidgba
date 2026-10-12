@@ -93,6 +93,9 @@ if(BUILD_TESTING)
 
     if(CUPID_TEST_ROM_DIR)
         find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        add_test(NAME rom.input-download COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_fetch_inputs.py)
+        set_tests_properties(rom.input-download PROPERTIES TIMEOUT 10)
         foreach(case arm thumb memory)
             add_test(NAME rom.${case} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rom.py
