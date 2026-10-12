@@ -1,8 +1,3 @@
-/* Copyright (c) 2013-2015 Jeffrey Pfau
- *
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /**
  * @file io.c
  * @brief GBA IO register read and write dispatch.
@@ -307,21 +302,17 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
     case REG_TM3CNT_L: cupid_timer_write_reload(gba, 3, value); return;
 
     case REG_TM0CNT_H:
-        value &= 0x00C7;
         cupid_timer_write_control(gba, 0, value);
-        break;
+        return;
     case REG_TM1CNT_H:
-        value &= 0x00C7;
         cupid_timer_write_control(gba, 1, value);
-        break;
+        return;
     case REG_TM2CNT_H:
-        value &= 0x00C7;
         cupid_timer_write_control(gba, 2, value);
-        break;
+        return;
     case REG_TM3CNT_H:
-        value &= 0x00C7;
         cupid_timer_write_control(gba, 3, value);
-        break;
+        return;
 
     /** SIO 0x120-0x15A. */
     case REG_SIOCNT:
@@ -357,23 +348,8 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
         return;  /** already stored */
 
     /** INTERRUPTS and SYSTEM 0x200-0x301. */
-    case REG_IE:
-        gba->ie = value;
-        gba->memory.io[REG_IE >> 1] = value;
-        cupid_test_irq(gba, 0);
-        return;
-
-    case REG_IF:
-        /** Writing 1 to IF bits acknowledges (clears) them. */
-        gba->irqf &= ~value;
-        gba->memory.io[REG_IF >> 1] = gba->irqf;
-        cupid_test_irq(gba, 0);
-        return;
-
-    case REG_IME:
-        gba->ime = value & 1;
-        gba->memory.io[REG_IME >> 1] = gba->ime;
-        cupid_test_irq(gba, 0);
+    case REG_IE: case REG_IF: case REG_IME:
+        cupid_irq_write(gba, addr, value);
         return;
 
     case REG_WAITCNT:
@@ -430,6 +406,15 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
  */
 void cupid_io_write8(struct CupidGBA* gba, uint32_t addr, uint8_t value) {
     if (addr >= GBA_SIZE_IO) return;
+    if (addr >= REG_TM0CNT_L && addr <= REG_TM3CNT_H + 1) {
+        cupid_timer_write_byte(gba, (addr - REG_TM0CNT_L) >> 2, addr & 3, value);
+        return;
+    }
+
+    if ((addr >= REG_IE && addr <= REG_IF + 1) || (addr >= REG_IME && addr <= REG_IME + 1)) {
+        cupid_irq_write8(gba, addr, value);
+        return;
+    }
 
     /** HALTCNT is at odd byte 0x301; entering halt or stop. */
     if (addr == (REG_HALTCNT & 0x3FF)) {
@@ -598,31 +583,5 @@ uint16_t cupid_io_read(struct CupidGBA* gba, uint32_t addr) {
             return 0;
         }
         return gba->memory.io[addr >> 1];
-    }
-}
-
-/**
- * @brief IRQ helpers.
- */
-
-/**
- * @brief Raise an IRQ by setting the IF bit and testing scheduling.
- */
-void cupid_raise_irq(struct CupidGBA* gba, enum CupidIRQ irq, uint32_t cyclesLate) {
-    gba->irqf |= irq;
-    gba->memory.io[REG_IF >> 1] = gba->irqf;
-
-    cupid_test_irq(gba, cyclesLate);
-}
-
-/**
- * @brief Schedule the IRQ timing event when IE and IF overlap.
- */
-void cupid_test_irq(struct CupidGBA* gba, uint32_t cyclesLate) {
-    if (gba->ie & gba->irqf) {
-        if (!cupid_timing_is_scheduled(&gba->timing, &gba->irqEvent)) {
-            cupid_timing_schedule(&gba->timing, &gba->irqEvent,
-                                  GBA_IRQ_DELAY - cyclesLate);
-        }
     }
 }

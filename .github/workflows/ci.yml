@@ -34,7 +34,9 @@ jobs:
             src/gba/bios/hle-bios.s -o .local-research/hle-rebuilt.bin
           python3 tests/bios/verify_hle.py .local-research/hle-rebuilt.bin
       - name: Fetch verified test inputs
-        run: python3 tests/roms/check_rom.py --fetch --directory .local-research/test-roms
+        run: |
+          python3 tests/roms/check_rom.py --fetch --directory .local-research/test-roms
+          python3 tests/roms/check_console.py --fetch --directory .local-research/test-roms
       - name: Configure
         run: >-
           cmake -S . -B build -DCMAKE_C_COMPILER=${{ matrix.compiler }}
@@ -67,7 +69,9 @@ jobs:
             mingw-w64-ucrt-x86_64-SDL2
             mingw-w64-ucrt-x86_64-python
       - name: Fetch verified test inputs
-        run: python tests/roms/check_rom.py --fetch --directory .local-research/test-roms
+        run: |
+          python tests/roms/check_rom.py --fetch --directory .local-research/test-roms
+          python tests/roms/check_console.py --fetch --directory .local-research/test-roms
       - name: Configure
         run: >-
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release

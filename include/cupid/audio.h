@@ -1,8 +1,3 @@
-/* Copyright (c) 2013-2016 Jeffrey Pfau
- *
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /**
  * @file audio.h
  * @brief GBA audio: 4 PSG channels + 2 DMA FIFO channels.
@@ -92,7 +87,7 @@ struct CupidAudioSquareChannel {
     struct CupidAudioSweep sweep;
     struct CupidAudioEnvelope envelope;
     struct CupidAudioSquareControl control;
-    int32_t lastUpdate;   /**< Absolute timestamp of last run */
+    uint64_t lastUpdate;  /**< Cycles since power-on at last run */
     uint8_t index;        /**< Duty cycle position (0-7) */
     int8_t sample;        /**< Current output sample (0..15) */
 };
@@ -116,7 +111,7 @@ struct CupidAudioWaveChannel {
         uint32_t wavedata32[8]; /**< 8 x 32-bit = 64 nybble samples */
         uint8_t  wavedata8[32]; /**< Byte-addressable view */
     };
-    int32_t nextUpdate;   /**< Absolute timestamp of next wave step */
+    uint64_t nextUpdate;  /**< Cycles since power-on at next wave step */
 };
 
 /** Noise channel (ch4) */
@@ -132,7 +127,7 @@ struct CupidAudioNoiseChannel {
     uint32_t lfsr;
     int nSamples;         /**< Accumulated samples for coalescence */
     int samples;          /**< Accumulated positive samples x volume */
-    uint32_t lastEvent;   /**< Absolute timestamp of last noise step */
+    uint64_t lastEvent;   /**< Cycles since power-on at last noise step */
 
     int8_t sample;
 };
@@ -171,6 +166,7 @@ struct CupidAudioFIFO {
     uint32_t internalSample;
     int internalRemaining;
     int dmaSource;
+    int8_t latchedSample;            /**< Most recent timer-selected byte */
     int8_t samples[GBA_MAX_SAMPLES]; /**< Per-sub-sample output */
 };
 
@@ -200,7 +196,7 @@ struct CupidAudio {
 
     /** Sub-sampling state */
     int32_t sampleInterval;  /**< Cycles per sub-sample (default 512) */
-    int32_t lastSample;      /**< Absolute timestamp of current window start */
+    uint64_t lastSample;     /**< Cycles since power-on at current window start */
     int sampleIndex;         /**< Next sub-sample index within window */
 
     struct CupidStereoSample currentSamples[GBA_MAX_SAMPLES];
@@ -224,8 +220,8 @@ void cupid_audio_init(struct CupidAudio* audio, struct CupidGBA* gba);
 void cupid_audio_reset(struct CupidAudio* audio);
 void cupid_audio_tick(struct CupidAudio* audio, int32_t cycles);
 
-void cupid_audio_timer_overflow(struct CupidAudio* audio, int timer);
-void cupid_audio_sample_fifo(struct CupidAudio* audio, int fifoId);
+void cupid_audio_timer_overflow(struct CupidAudio* audio, int timer, uint64_t timestamp);
+void cupid_audio_sample_fifo(struct CupidAudio* audio, int fifoId, uint64_t timestamp);
 
 void cupid_audio_write_register(struct CupidAudio* audio, uint32_t addr, uint16_t val);
 uint16_t cupid_audio_read_register(struct CupidAudio* audio, uint32_t addr);
@@ -235,9 +231,9 @@ void cupid_audio_fifo_reset(struct CupidAudioFIFO* fifo);
 void cupid_audio_schedule_fifo_dma(struct CupidAudio* audio, int dmaNumber,
                                    struct CupidDMA* dma);
 
-void cupid_audio_sample(struct CupidAudio* audio, int32_t timestamp);
+void cupid_audio_sample(struct CupidAudio* audio, uint64_t timestamp);
 
-void cupid_audio_psg_run(struct CupidAudioPSG* psg, int32_t timestamp, int channels);
+void cupid_audio_psg_run(struct CupidAudioPSG* psg, uint64_t timestamp, int channels);
 void cupid_audio_psg_sample(struct CupidAudioPSG* psg, int16_t* left, int16_t* right);
 void cupid_audio_psg_frame_step(struct CupidAudioPSG* psg);
 

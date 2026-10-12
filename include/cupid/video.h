@@ -46,7 +46,7 @@ enum CupidObjMode {
     OBJ_MODE_NORMAL          = 0,
     OBJ_MODE_SEMITRANSPARENT = 1,
     OBJ_MODE_OBJWIN          = 2,
-    OBJ_MODE_HIDDEN          = 3   /**< mGBA calls this OBJ_MODE_STEREO / forbidden */
+    OBJ_MODE_HIDDEN          = 3   /**< Prohibited object mode; the object is hidden. */
 };
 
 /** OBJ shapes (Attr0 bits 14-15) */

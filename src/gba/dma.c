@@ -10,12 +10,58 @@
  */
 static const int DMA_OFFSET[] = { 1, -1, 0, 1 };
 
+static void dma_transfer_at(struct CupidGBA* gba, int ch, uint64_t timestamp);
+
+static void fifo_refill(struct CupidTiming* timing, struct CupidGBA* gba, int ch, uint32_t late) {
+    struct CupidDMA* dma = &gba->memory.dma[ch];
+    if (!dma->enable || dma->timing != DMA_TIMING_CUSTOM) return;
+    uint64_t when = timing->globalCycles - late;
+    if (when < dma->busyUntil) {
+        cupid_timing_schedule_absolute(timing, &dma->fifoEvent, (int32_t)(uint32_t)dma->busyUntil);
+        return;
+    }
+    dma->nextCount = 4;
+    dma_transfer_at(gba, ch, when);
+}
+
+static void irq_callback(struct CupidTiming* timing, void* context, uint32_t late) {
+    struct CupidDMA* dma = context;
+    cupid_raise_irq_at(dma->gba, IRQ_DMA0 << dma->id, timing->globalCycles - late);
+}
+
+static void fifo1_callback(struct CupidTiming* timing, void* context, uint32_t late) {
+    fifo_refill(timing, context, 1, late);
+}
+
+static void fifo2_callback(struct CupidTiming* timing, void* context, uint32_t late) {
+    fifo_refill(timing, context, 2, late);
+}
+
+void cupid_dma_request_fifo(struct CupidGBA* gba, int ch, uint64_t timestamp) {
+    if (ch < 1 || ch > 2) return;
+    struct CupidDMA* dma = &gba->memory.dma[ch];
+    if (dma->enable && dma->timing == DMA_TIMING_CUSTOM &&
+        !cupid_timing_is_scheduled(&gba->timing, &dma->fifoEvent)) {
+        cupid_timing_schedule_absolute(&gba->timing, &dma->fifoEvent,
+            (int32_t)(uint32_t)(timestamp + 2));
+    }
+}
+
 /**
  * @brief Initialize DMA channel state.
  */
 void cupid_dma_init(struct CupidGBA* gba) {
     for (int i = 0; i < 4; i++) {
         memset(&gba->memory.dma[i], 0, sizeof(struct CupidDMA));
+        gba->memory.dma[i].gba = gba;
+        gba->memory.dma[i].id = (unsigned)i;
+        gba->memory.dma[i].irqEvent = (struct CupidTimingEvent){.context = &gba->memory.dma[i],
+            .callback = irq_callback, .name = "DMA completion interrupt", .priority = 0};
+        if (i == 1 || i == 2) {
+            gba->memory.dma[i].fifoEvent = (struct CupidTimingEvent){.context = gba,
+                .callback = i == 1 ? fifo1_callback : fifo2_callback,
+                .name = "FIFO DMA refill", .priority = 0};
+        }
     }
 }
 
@@ -24,6 +70,9 @@ void cupid_dma_init(struct CupidGBA* gba) {
  */
 void cupid_dma_reset(struct CupidGBA* gba) {
     for (int i = 0; i < 4; i++) {
+        cupid_timing_deschedule(&gba->timing, &gba->memory.dma[i].fifoEvent);
+        cupid_timing_deschedule(&gba->timing, &gba->memory.dma[i].irqEvent);
+        gba->memory.dma[i].busyUntil = 0;
         gba->memory.dma[i].enable = false;
         gba->memory.dma[i].source = 0;
         gba->memory.dma[i].dest = 0;
@@ -105,6 +154,7 @@ void cupid_dma_write_cnt(struct CupidGBA* gba, int ch, uint16_t value) {
 
     if (!dma->enable) {
         /** DMA disabled. */
+        cupid_timing_deschedule(&gba->timing, &dma->fifoEvent);
         dma->nextCount = 0;
     }
 }
@@ -113,6 +163,10 @@ void cupid_dma_write_cnt(struct CupidGBA* gba, int ch, uint16_t value) {
  * @brief Execute a DMA transfer for a channel.
  */
 void cupid_dma_transfer(struct CupidGBA* gba, int ch) {
+    dma_transfer_at(gba, ch, cupid_timing_global_time(&gba->timing));
+}
+
+static void dma_transfer_at(struct CupidGBA* gba, int ch, uint64_t timestamp) {
     struct CupidDMA* dma = &gba->memory.dma[ch];
     if (!dma->enable) return;
 
@@ -192,6 +246,10 @@ void cupid_dma_transfer(struct CupidGBA* gba, int ch) {
         if (dma->nextCount == 0) {
             dma->nextCount = (ch == 3) ? 0x10000 : 0x4000;
         }
+        if ((ch == 1 || ch == 2) && dma->timing == DMA_TIMING_CUSTOM &&
+            (dma->dest == GBA_BASE_IO + REG_FIFO_A_LO || dma->dest == GBA_BASE_IO + REG_FIFO_B_LO)) {
+            dma->nextCount = 4;
+        }
         if (dma->destControl == 3) {
             dma->nextDest = dma->dest;
         }
@@ -200,8 +258,10 @@ void cupid_dma_transfer(struct CupidGBA* gba, int ch) {
     }
 
     /** Fire IRQ if requested. */
+    dma->busyUntil = timestamp + count * 2;
     if (dma->doIrq) {
-        cupid_raise_irq(gba, IRQ_DMA0 + ch, 0);
+        cupid_timing_schedule_absolute(&gba->timing, &dma->irqEvent,
+            (int32_t)(uint32_t)dma->busyUntil);
     }
 }
 

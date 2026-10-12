@@ -1,8 +1,3 @@
-/* Copyright (c) 2013-2016 Jeffrey Pfau
- *
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /**
  * @file gba.h
  * @brief Top-level GBA system struct and main emulation loop.
@@ -20,16 +15,12 @@
 #include "cupid/timer.h"
 #include "cupid/timing.h"
 #include "cupid/io.h"
+#include "cupid/irq.h"
 #include "cupid/bios.h"
 #include "cupid/render.h"
 
 /** @name GBA Clock */
 #define GBA_ARM7TDMI_FREQUENCY 0x1000000U  /**< 16,777,216 Hz */
-
-/**
- * Cycles between IE&IF becoming non-zero and the CPU actually vectoring.
- */
-#define GBA_IRQ_DELAY 7
 
 /**
  * @name GBA IRQ Bit Positions
@@ -84,8 +75,7 @@ struct CupidGBA {
     /** DMA state (>= 0 while a DMA transfer is in progress) */
     int performingDMA;
 
-    /** IRQ event (scheduled with GBA_IRQ_DELAY after IE & IF become non-zero) */
-    struct CupidTimingEvent irqEvent;
+    struct CupidIRQState irq;
 
     /** Interrupt state (stored in IO but mirrored here for fast access) */
     uint16_t ime;        /**< Master interrupt enable */

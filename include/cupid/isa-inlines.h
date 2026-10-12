@@ -1,8 +1,3 @@
-/* Copyright (c) 2013-2014 Jeffrey Pfau
- *
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /**
  * @file isa-inlines.h
  * @brief Shared inline helpers and macros for ARM/Thumb ISA implementations.
@@ -89,6 +84,7 @@ static inline int32_t CupidARMWritePC(struct CupidARM* cpu) {
 	pc += WORD_SIZE_ARM;
 	LOAD_32(cpu->prefetch[1], pc & cpu->memory.activeMask, cpu->memory.activeRegion);
 	cpu->gprs[ARM_PC] = pc;
+	cpu->irqDisableLatch = cpu->cpsr.i;
 	return 2 + (int)cpu->memory.activeNonseqCycles32 + (int)cpu->memory.activeSeqCycles32;
 }
 
@@ -99,6 +95,7 @@ static inline int32_t CupidThumbWritePC(struct CupidARM* cpu) {
 	pc += WORD_SIZE_THUMB;
 	LOAD_16(cpu->prefetch[1], pc & cpu->memory.activeMask, cpu->memory.activeRegion);
 	cpu->gprs[ARM_PC] = pc;
+	cpu->irqDisableLatch = cpu->cpsr.i;
 	return 2 + (int)cpu->memory.activeNonseqCycles16 + (int)cpu->memory.activeSeqCycles16;
 }
 

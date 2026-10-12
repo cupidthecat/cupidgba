@@ -1,8 +1,3 @@
-# Copyright (c) 2013-2014 Jeffrey Pfau
-#
-# This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #define nop andeq r0, r0
 
 @ Fixed ARM offsets are covered by tests/bios/verify_hle.py.
@@ -45,7 +40,7 @@ stmfd  sp!, {r11}
 and    r11, #0x80
 orr    r11, #0x1F
 msr    cpsr_c, r11
-swieq  0xF00000  @ Special mGBA-internal call to load the stall count into r11
+swieq  0xF00000  @ CupidGBA internal call to load the stall count into r11
 stmfd  sp!, {r2, lr}
 cmp    r12, #0
 nop

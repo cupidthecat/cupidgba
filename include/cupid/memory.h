@@ -1,8 +1,3 @@
-/* Copyright (c) 2013-2016 Jeffrey Pfau
- *
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /**
  * @file memory.h
  * @brief GBA memory map and bus definitions.
@@ -131,6 +126,11 @@ enum CupidDMATiming {
 #define DMA_REG_SET_WIDTH(r, v)  (((r) & ~(1 << 10)) | (((v) & 1) << 10))
 
 struct CupidDMA {
+    struct CupidGBA* gba;
+    unsigned id;
+    uint64_t busyUntil;
+    struct CupidTimingEvent fifoEvent; /**< Pending timer-driven refill request */
+    struct CupidTimingEvent irqEvent;
     uint16_t reg;            /**< Raw DMA control register (CNT_HI) */
 
     uint32_t source;         /**< Latched SAD (masked on write) */
@@ -318,6 +318,7 @@ void cupid_dma_service(struct CupidGBA* gba, int ch, struct CupidDMA* dma);
 void cupid_dma_run_hblank(struct CupidGBA* gba, int32_t cycles);
 void cupid_dma_run_vblank(struct CupidGBA* gba, int32_t cycles);
 void cupid_dma_transfer(struct CupidGBA* gba, int ch);
+void cupid_dma_request_fifo(struct CupidGBA* gba, int ch, uint64_t timestamp);
 
 /** @name Waitstate Control */
 void cupid_memory_update_waitstates(struct CupidGBA* gba, uint16_t waitcnt);

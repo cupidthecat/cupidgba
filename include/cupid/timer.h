@@ -1,8 +1,3 @@
-/* Copyright (c) 2013-2016 Jeffrey Pfau
- *
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /**
  * @file timer.h
  * @brief GBA hardware timers (4 channels), event-driven via CupidTiming.
@@ -21,31 +16,32 @@ struct CupidGBA;
 
 /** @name Timer Channel */
 struct CupidTimer {
-    uint16_t reload;                   /**< TIMERxCNT_L latch (written by game) */
-    int32_t lastEvent;                 /**< masterCycles of last counter sync */
-    struct CupidTimingEvent event;     /**< Overflow callback in timing queue */
-
-    /** Decoded fields from TIMERxCNT_H */
-    int prescaleBits;                  /**< 0, 6, 8, or 10 */
-    bool countUp;                      /**< Cascade from previous timer */
-    bool doIrq;                        /**< Raise IRQ on overflow */
-    bool enable;
+    struct CupidGBA* gba;
+    unsigned id;
+    uint16_t reload;                   /**< Accepted reload latch, separate from counter */
+    uint16_t pendingReload;
+    uint16_t control;
+    uint16_t pendingControl;
+    uint16_t counter;                  /**< Counter at epoch, or frozen counter */
+    uint64_t epoch;                    /**< Prescaler origin since power-on */
+    unsigned prescaleBits;
+    bool running;                     /**< Independent clock is active */
+    struct CupidTimingEvent event;
+    struct CupidTimingEvent reloadEvent;
+    struct CupidTimingEvent controlEvent;
 };
 
 /** @name API */
 void cupid_timer_init(struct CupidGBA* gba);
 
-/** Sync the running counter into memory.io[] and reschedule the event */
-void cupid_timer_update_register(struct CupidGBA* gba, int timer,
-                                 int32_t cyclesLate);
-
-/** Called when TIMERxCNT_L is written (updates reload latch only) */
+/** Bus writes are accepted one cycle later. */
 void cupid_timer_write_reload(struct CupidGBA* gba, int ch, uint16_t val);
+void cupid_timer_write_byte(struct CupidGBA* gba, unsigned ch, unsigned byte, uint8_t val);
 
 /** Called when TIMERxCNT_H is written */
 void cupid_timer_write_control(struct CupidGBA* gba, int ch, uint16_t val);
 
-/** Read the current counter value (syncs before returning) */
+/** Read the counter at the current emulated time without changing its phase. */
 uint16_t cupid_timer_read_counter(struct CupidGBA* gba, int ch);
 
 #endif /* CUPID_TIMER_H */

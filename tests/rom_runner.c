@@ -26,12 +26,18 @@ int main(int argc, char** argv) {
     const char* rom = NULL;
     const char* bios = NULL;
     const char* output = NULL;
+    const char* vramOutput = NULL;
+    const char* ioOutput = NULL;
+    const char* ewramOutput = NULL;
     uint64_t frames = 120, cycleLimit = UINT64_C(280896) * 120, stepLimit = 50000000;
     uint64_t terminalAddress = 0;
     int expectedRegister = -1;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--bios") && i + 1 < argc) bios = argv[++i];
         else if (!strcmp(argv[i], "--screenshot") && i + 1 < argc) output = argv[++i];
+        else if (!strcmp(argv[i], "--dump-vram") && i + 1 < argc) vramOutput = argv[++i];
+        else if (!strcmp(argv[i], "--dump-io") && i + 1 < argc) ioOutput = argv[++i];
+        else if (!strcmp(argv[i], "--dump-ewram") && i + 1 < argc) ewramOutput = argv[++i];
         else if (!strcmp(argv[i], "--terminal-address") && i + 1 < argc) {
             if (!number(argv[++i], &terminalAddress) || terminalAddress > UINT32_MAX) return 2;
         }
@@ -46,7 +52,7 @@ int main(int argc, char** argv) {
             expectedRegister = (int)index;
         } else if (argv[i][0] != '-' && !rom) rom = argv[i];
         else {
-            fprintf(stderr, "Usage: %s ROM [--bios FILE] [--frames N] [--steps N] [--screenshot FILE.ppm] [--expect-loop-register N] [--terminal-address ADDRESS]\n", argv[0]);
+            fprintf(stderr, "Usage: %s ROM [--bios FILE] [--frames N] [--steps N] [--screenshot FILE.ppm] [--dump-vram FILE] [--dump-io FILE] [--dump-ewram FILE] [--expect-loop-register N] [--terminal-address ADDRESS]\n", argv[0]);
             return 2;
         }
     }
@@ -81,6 +87,16 @@ int main(int argc, char** argv) {
         result = terminal && !value ? 0 : 1;
     } else result = completed == frames ? 0 : 1;
     if (output && !screenshot(gba, output)) { perror(output); result = 2; }
+    const char* dumpPaths[] = {vramOutput, ioOutput, ewramOutput};
+    const void* dumpData[] = {gba->video.vram, gba->memory.io, gba->memory.ewram};
+    const size_t dumpSizes[] = {GBA_SIZE_VRAM, sizeof(gba->memory.io), GBA_SIZE_EWRAM};
+    for (unsigned i = 0; i < 3; i++) {
+        if (!dumpPaths[i]) continue;
+        FILE* file = fopen(dumpPaths[i], "wb");
+        if (!file) { perror(dumpPaths[i]); result = 2; continue; }
+        bool written = fwrite(dumpData[i], 1, dumpSizes[i], file) == dumpSizes[i];
+        if (fclose(file) != 0 || !written) result = 2;
+    }
 cleanup:
     cupid_gba_destroy(gba);
     free(gba);

@@ -672,3 +672,66 @@ may consider it more useful to permit linking proprietary applications with
 the library.  If this is what you want to do, use the GNU Lesser General
 Public License instead of this License.  But first, please read
 <https://www.gnu.org/licenses/why-not-lgpl.html>.
+
+CupidGBA source notices
+=======================
+
+The notices below apply to the listed source files. The GNU GPL text
+above is preserved verbatim. This section records the source notices
+separately from file headers.
+
+Copyright (c) 2013-2014 Jeffrey Pfau
+  include/cupid/arm.h
+  include/cupid/emitter-inlines.h
+  include/cupid/emitter-thumb.h
+  include/cupid/isa-inlines.h
+  src/arm/arm.c
+  src/arm/isa-arm.c
+  src/arm/isa-thumb.c
+  src/gba/bios/hle-bios.s
+
+Copyright (c) 2013-2015 Jeffrey Pfau
+  src/gba/bios.c
+  src/gba/gba.c
+  src/gba/hle-bios.c
+  src/gba/io.c
+  src/gba/savedata.c
+  src/gba/video.c
+
+Copyright (c) 2013-2016 Jeffrey Pfau
+  include/cupid/audio.h
+  include/cupid/gba.h
+  include/cupid/memory.h
+  include/cupid/timer.h
+  include/cupid/timing.h
+  src/core/timing.c
+  src/gba/audio.c
+  src/gba/irq.c
+  src/gba/memory.c
+
+Copyright (c) 2013-2018 Jeffrey Pfau
+  src/gba/timer.c
+
+Copyright (c) 2013-2024 Jeffrey Pfau
+  include/cupid/emitter-arm.h
+
+Copyright 2025 Aaron Balke (BSD-3-Clause)
+  src/gba/irq.c
+  src/gba/timer.c
+
+Copyright 2026 Mireille Meyer, Gloria Goertz (BSD-2-Clause)
+  src/gba/irq.c
+  src/gba/timer.c
+
+The source files listed under the 2013 copyright notices are subject
+to the following notice:
+
+This Source Code Form is subject to the terms of the Mozilla Public
+License, v. 2.0. If a copy of the MPL was not distributed with this
+file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+The full MPL text is in docs/legal/licenses/MPL-2.0.txt.
+
+The BSD-2-Clause and BSD-3-Clause notices for src/gba/irq.c and
+src/gba/timer.c are in docs/legal/licenses/timer-BSD-2-Clause.txt and
+docs/legal/licenses/timer-BSD-3-Clause.txt respectively.

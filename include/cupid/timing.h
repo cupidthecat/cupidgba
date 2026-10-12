@@ -1,8 +1,3 @@
-/* Copyright (c) 2013-2016 Jeffrey Pfau
- *
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /**
  * @file timing.h
  * @brief Sorted linked-list priority queue for cycle-accurate event scheduling.
@@ -39,6 +34,7 @@ struct CupidTiming {
 
     uint64_t globalCycles;               /**< Total cycles since power-on */
     uint32_t masterCycles;               /**< Current absolute master counter */
+    bool inCallback;                     /**< Relative CPU stalls are outside callback time */
     int32_t* relativeCycles;             /**< → cpu->cycles (elapsed since last tick) */
     int32_t* nextEvent;                  /**< → cpu->nextEvent (next deadline) */
 };
