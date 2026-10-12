@@ -5,6 +5,10 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #define nop andeq r0, r0
 
+@ ARM immediate offsets, checked against the labels below.
+.equ SWI_TABLE_OFFSET, 0xD4
+.equ STALL_CALL_OFFSET, 0x348
+
 .text
 hle_start:
 
@@ -32,9 +36,9 @@ moveq  sp, #0x04000000
 subeq  sp, #0x20
 stmfd  sp!, {r11, r12, lr}
 ldrb   r12, [lr, #-2]
-mov    r11, #(swiTable - hle_start)
+mov    r11, #SWI_TABLE_OFFSET
 ldr    r12, [r11, r12, lsl #2]
-mov    r11, #(StallCall - hle_start)
+mov    r11, #STALL_CALL_OFFSET
 cmp    r11, r12
 mrs    r11, spsr
 stmfd  sp!, {r11}
@@ -399,3 +403,10 @@ movs  pc, lr
 .word 0xE129F000
 
 .ltorg
+
+.if (swiTable - hle_start) != SWI_TABLE_OFFSET
+.error "SWI table offset changed"
+.endif
+.if (StallCall - hle_start) != STALL_CALL_OFFSET
+.error "Stall call offset changed"
+.endif
