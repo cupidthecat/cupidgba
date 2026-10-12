@@ -25,8 +25,8 @@ prescalers, all four channels, clock-source changes, cascades, wraps of the
 
 A locally built suite with an external BIOS also passes 936 count-up
 assertions and 90 timer-IRQ assertions. It exercises divided clocks, tight and
-loose ARM polling loops, and repeated interrupts. The built-in BIOS path fails
-108 of those count-up assertions; see the separate result in the testing guide.
+loose ARM polling loops, and repeated interrupts. The built-in BIOS path
+passes the same assertions; see the result protocols in the testing guide.
 
 MMIO accesses synchronize peripheral events at the end of the data-bus cycle.
 [Interrupt timing](interrupts.md) describes register acceptance and CPU sampling.

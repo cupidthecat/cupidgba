@@ -1,8 +1,8 @@
 #define nop andeq r0, r0
 
 @ Fixed ARM offsets are covered by tests/bios/verify_hle.py.
-.equ SWI_TABLE_OFFSET, 0xD4
-.equ STALL_CALL_OFFSET, 0x348
+.equ SWI_TABLE_OFFSET, 0xCC
+.equ STALL_CALL_OFFSET, 0x340
 
 .text
 hle_start:
@@ -39,6 +39,7 @@ mrs    r11, spsr
 stmfd  sp!, {r11}
 and    r11, #0x80
 orr    r11, #0x1F
+@ Keep the dispatch condition for the internal stall-count request.
 msr    cpsr_c, r11
 swieq  0xF00000  @ CupidGBA internal call to load the stall count into r11
 stmfd  sp!, {r2, lr}
@@ -51,11 +52,9 @@ nop
 nop
 movne  lr, pc
 bxne   r12
-nop
-nop
-nop
 ldmfd  sp!, {r2, lr}
-msr    cpsr, #0x93
+mov    r12, #0xD3
+msr    cpsr, r12
 ldmfd  sp!, {r11}
 msr    spsr, r11
 ldmfd  sp!, {r11, r12, lr}
@@ -172,29 +171,29 @@ VBlankIntrWait:
 mov    r0, #1
 mov    r1, #1
 IntrWait:
-stmfd  sp!, {r2-r3, lr}
-mov    r12, #0x04000000
-@ See if we want to return immediately
+stmfd  sp!, {r4, lr}
+mov    r3, #0
+mov    r4, #1
+@ Discard a previously recorded matching request when R0 is nonzero.
 cmp    r0, #0
-mov    r0, #0
-mov    r2, #1
-beq    1f
-ldrh   r3, [r12, #-8]
-bic    r3, r1
-strh   r3, [r12, #-8]
-@ Halt
+blne   waitFlags
+@ Recheck the mirror after each wake-up. An unrelated IRQ keeps the wait active.
 0:
-strb   r0, [r12, #0x301]
-1:
-@ Check which interrupts were acknowledged
-strb   r0, [r12, #0x208]
-ldrh   r3, [r12, #-8]
-tst    r3, r1
-bicne  r3, r1
-strhne r3, [r12, #-8]
-strb   r2, [r12, #0x208]
+strb   r3, [r12, #0x301]
+bl     waitFlags
 beq    0b
-ldmfd  sp!, {r2-r3, pc}
+ldmfd  sp!, {r4, lr}
+bx     lr
+
+waitFlags:
+mov    r12, #0x04000000
+strb   r3, [r12, #0x208]
+ldrh   r2, [r12, #-8]
+ands   r0, r2, r1
+bicne  r2, r1
+strhne r2, [r12, #-8]
+strb   r4, [r12, #0x208]
+bx     lr
 
 CpuSet:
 stmfd  sp!, {r4, r5, lr}

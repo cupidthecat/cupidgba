@@ -80,6 +80,11 @@ if(BUILD_TESTING)
     add_test(NAME gba.bios COMMAND test_bios)
     set_tests_properties(gba.bios PROPERTIES TIMEOUT 10)
 
+    if(CUPID_TEST_BIOS)
+        add_test(NAME gba.bios-external COMMAND test_bios --external-bios-waits ${CUPID_TEST_BIOS})
+        set_tests_properties(gba.bios-external PROPERTIES TIMEOUT 10)
+    endif()
+
     if(CUPID_TEST_ROM_DIR)
         find_package(Python3 REQUIRED COMPONENTS Interpreter)
         foreach(case arm thumb memory)
@@ -99,14 +104,18 @@ if(BUILD_TESTING)
     endif()
 
     if(CUPID_TIMER_SUITE_ROM)
-        if(NOT CUPID_TEST_BIOS)
-            message(FATAL_ERROR "CUPID_TIMER_SUITE_ROM requires CUPID_TEST_BIOS")
-        endif()
         find_package(Python3 REQUIRED COMPONENTS Interpreter)
         add_test(NAME rom.timer-suite COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_timer_suite.py
-            --rom ${CUPID_TIMER_SUITE_ROM} --bios ${CUPID_TEST_BIOS}
+            --rom ${CUPID_TIMER_SUITE_ROM}
             --runner $<TARGET_FILE:cupidgba-headless>)
         set_tests_properties(rom.timer-suite PROPERTIES TIMEOUT 100)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME rom.timer-suite-external COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_timer_suite.py
+                --rom ${CUPID_TIMER_SUITE_ROM} --bios ${CUPID_TEST_BIOS}
+                --runner $<TARGET_FILE:cupidgba-headless>)
+            set_tests_properties(rom.timer-suite-external PROPERTIES TIMEOUT 100)
+        endif()
     endif()
 endif()
