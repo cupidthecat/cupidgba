@@ -243,7 +243,19 @@ extern const char GBA_ROM_WAITSTATES[4];       /**< { 4, 3, 2, 8 } */
 extern const char GBA_ROM_WAITSTATES_SEQ[6];   /**< { 2, 1, 4, 1, 8, 1 } */
 
 /** @name GBA Memory */
+struct CupidPrefetch {
+    uint64_t epoch;           /**< Last clock accounted for by the fetch unit */
+    uint32_t head, tail;      /**< Oldest cached and next in-flight addresses */
+    uint32_t address;         /**< Current CPU fetch address */
+    unsigned count, width;   /**< Buffered instructions and bytes per instruction */
+    unsigned duty, remaining; /**< Full and remaining cartridge access clocks */
+    unsigned fetchKind;
+    bool active, busy;        /**< Engaged stream and occupied Game Pak bus */
+    bool disabled;            /**< Pending burst restart after WAITCNT disable */
+};
+
 struct CupidMemory {
+    struct CupidPrefetch prefetchUnit;
     /** Main memory buffers (uint8_t* for direct byte access) */
     uint8_t* bios;               /**< 16 KiB BIOS (loaded externally) */
     uint8_t* ewram;              /**< 256 KiB external work RAM */
@@ -327,12 +339,18 @@ void cupid_dma_transfer(struct CupidGBA* gba, int ch);
 void cupid_dma_request_fifo(struct CupidGBA* gba, int ch, uint64_t timestamp);
 void cupid_dma_kick(struct CupidGBA* gba, uint64_t timestamp);
 void cupid_dma_run_display(struct CupidGBA* gba);
-void cupid_bus_fetch(struct CupidARM* cpu, unsigned width, bool sequential);
+void cupid_bus_fetch(struct CupidARM* cpu, uint32_t address, unsigned width, bool sequential);
 void cupid_bus_finish(struct CupidARM* cpu);
 void cupid_bus_wait(struct CupidARM* cpu);
 void cupid_bus_advance(struct CupidARM* cpu, unsigned cycles, bool occupied);
 void cupid_bus_release(struct CupidARM* cpu);
 void cupid_bus_lock(struct CupidARM* cpu, bool locked);
+void cupid_prefetch_update(struct CupidGBA* gba, uint64_t timestamp);
+unsigned cupid_prefetch_fetch(struct CupidGBA* gba, uint32_t address, unsigned width,
+                              unsigned cycles);
+void cupid_prefetch_finish_fetch(struct CupidGBA* gba);
+unsigned cupid_prefetch_before_data(struct CupidGBA* gba, uint32_t address);
+void cupid_prefetch_after_data(struct CupidGBA* gba);
 
 /** @name Waitstate Control */
 void cupid_memory_update_waitstates(struct CupidGBA* gba, uint16_t waitcnt);

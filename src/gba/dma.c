@@ -26,7 +26,8 @@ static void phase_at(struct CupidGBA* gba, enum DMAPhase phase, uint64_t when) {
 static unsigned access_cycles(struct CupidMemory* memory, struct CupidDMA* dma,
                               uint32_t address, bool read) {
     dma->accessAddress = address;
-    if (read && address < GBA_BASE_EWRAM) return 1;
+    unsigned penalty = cupid_prefetch_before_data(dma->gba, address);
+    if (read && address < GBA_BASE_EWRAM) return 1 + penalty;
     unsigned region = address >> GBA_BASE_OFFSET;
     bool sequential = true;
     if (address >= GBA_BASE_ROM0 && !dma->externalSeen) {
@@ -45,7 +46,7 @@ static unsigned access_cycles(struct CupidMemory* memory, struct CupidDMA* dma,
     }
     bool word = dma->transferWord && region != GBA_REGION_SRAM &&
                 region != GBA_REGION_SRAM_MIRROR;
-    return 1 + (unsigned)(word
+    return 1 + penalty + (unsigned)(word
         ? (sequential ? memory->waitstatesSeq32[region] : memory->waitstatesNonseq32[region])
         : (sequential ? memory->waitstatesSeq16[region] : memory->waitstatesNonseq16[region]));
 }
@@ -180,9 +181,11 @@ static void phase_callback(struct CupidTiming* timing, void* context, uint32_t l
         if (!dma->enable) {
             read_next(gba, when);
         } else if (memory->dmaPhase == DMA_READ) {
+            cupid_prefetch_after_data(gba);
             read_value(gba, dma);
             phase_at(gba, DMA_WRITE, when + access_cycles(memory, dma, dma->nextDest, false));
         } else if (memory->dmaPhase == DMA_WRITE) {
+            cupid_prefetch_after_data(gba);
             write_value(gba, dma);
             dma->nextSource += (uint32_t)dma->sourceOffset;
             dma->nextDest += (uint32_t)dma->destOffset;

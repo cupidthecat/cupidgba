@@ -86,7 +86,8 @@ They do not measure every arbitration or display-request edge.
 Display-request timing, frame polarity, configuration changes at its window
 edges, Game Pak DRQ, reserved source-control mode 3, and same-cycle IF
 assertion/acknowledgement ordering still need hardware evidence. Source-control
-mode 3 currently uses a fixed source. The bus also lacks the Game Pak prefetch
-queue and PPU contention timing. EEPROM serial paths remain available, but
+mode 3 currently uses a fixed source. The
+[Game Pak prefetch queue](prefetch.md) now shares CPU/DMA bus clocks; PPU
+contention timing remains incomplete. EEPROM serial paths remain available, but
 their full width/size/peripheral behavior needs separate cartridge tests.
 See [testing](../development/testing.md) for the reproducible checks.

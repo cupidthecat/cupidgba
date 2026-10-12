@@ -184,7 +184,8 @@ void cupid_arm_raise_irq(struct CupidARM* cpu) {
 void cupid_arm_take_irq(struct CupidARM* cpu) {
 	/* IRQ entry discards one instruction fetch before refilling the vector. */
 	if (cpu->memory.timed) {
-		cpu->memory.fetch(cpu, cpu->executionMode == MODE_ARM ? WORD_SIZE_ARM : WORD_SIZE_THUMB, true);
+		unsigned width = cpu->executionMode == MODE_ARM ? WORD_SIZE_ARM : WORD_SIZE_THUMB;
+		cpu->memory.fetch(cpu, (uint32_t)cpu->gprs[ARM_PC] + width, width, true);
 		cpu->memory.finish(cpu);
 	} else {
 		cpu->cycles += 1 + (cpu->executionMode == MODE_ARM
@@ -259,7 +260,7 @@ static inline void cupid_arm_step_inline(struct CupidARM* cpu) {
 	uint32_t opcode = cpu->prefetch[0];
 	cpu->prefetch[0] = cpu->prefetch[1];
 	cpu->gprs[ARM_PC] += WORD_SIZE_ARM;
-	if (cpu->memory.timed) cpu->memory.fetch(cpu, WORD_SIZE_ARM, true);
+	if (cpu->memory.timed) cpu->memory.fetch(cpu, (uint32_t)cpu->gprs[ARM_PC], WORD_SIZE_ARM, true);
 	LOAD_32(cpu->prefetch[1], cpu->gprs[ARM_PC] & cpu->memory.activeMask, cpu->memory.activeRegion);
 	if (cpu->memory.timed) cpu->memory.finish(cpu);
 	cpu->memory.dataSequential = false;
@@ -293,7 +294,7 @@ static inline void cupid_thumb_step_inline(struct CupidARM* cpu) {
 	uint32_t opcode = cpu->prefetch[0];
 	cpu->prefetch[0] = cpu->prefetch[1];
 	cpu->gprs[ARM_PC] += WORD_SIZE_THUMB;
-	if (cpu->memory.timed) cpu->memory.fetch(cpu, WORD_SIZE_THUMB, true);
+	if (cpu->memory.timed) cpu->memory.fetch(cpu, (uint32_t)cpu->gprs[ARM_PC], WORD_SIZE_THUMB, true);
 	LOAD_16(cpu->prefetch[1], cpu->gprs[ARM_PC] & cpu->memory.activeMask, cpu->memory.activeRegion);
 	if (cpu->memory.timed) cpu->memory.finish(cpu);
 	cpu->memory.dataSequential = false;
