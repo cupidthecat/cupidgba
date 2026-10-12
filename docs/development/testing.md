@@ -109,9 +109,15 @@ python3 tests/roms/check_ppu_access.py --directory .local-research/test-roms \
   --runner build/cupidgba-headless
 ```
 
-The access sweep selects bitmap mode and requires all 1231 SRAM observations,
-including 243 occupied slots. Its 1500-frame budget covers the original
-per-frame samples; the default step limit remains unchanged. `--dump-save`
+The access observer runs ten menu selections: bitmap, 4-bit and 8-bit text,
+single and paired affine backgrounds, three palette cases, and sprite OAM and
+texture VRAM. Each selection requires all 1231 SRAM observations, including
+the expected occupied slots. Use `--test bitmap`, `--test text-4`,
+`--test text-8`, `--test affine-2`, `--test affine-both`,
+`--test palette-single`, `--test palette-direct`, `--test palette-alpha`,
+`--test object-oam` or `--test object-vram` to select one case. CTest registers
+each separately. Each 1500-frame budget covers the original per-frame samples;
+the default step limit and per-case timeout remain unchanged. `--dump-save`
 exports the runner's save-memory snapshot and fails if no save data exists.
 The three raster cases check 20,592 green-swap pixels, 38,400 affine-step pixels
 and 2,816 sprite/mosaic pixels. `--bios` repeats these raster checks through the

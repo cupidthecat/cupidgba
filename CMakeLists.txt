@@ -154,10 +154,13 @@ if(BUILD_TESTING)
                 set_tests_properties(rom.ppu-${case}-external PROPERTIES TIMEOUT 130)
             endif()
         endforeach()
-        add_test(NAME rom.ppu-access-bitmap COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_ppu_access.py
-            --directory ${CUPID_TEST_ROM_DIR} --runner $<TARGET_FILE:cupidgba-headless>)
-        set_tests_properties(rom.ppu-access-bitmap PROPERTIES TIMEOUT 130)
+        foreach(case bitmap text-4 text-8 affine-2 affine-both palette-single
+                     palette-direct palette-alpha object-oam object-vram)
+            add_test(NAME rom.ppu-access-${case} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_ppu_access.py
+                --directory ${CUPID_TEST_ROM_DIR} --runner $<TARGET_FILE:cupidgba-headless> --test ${case})
+            set_tests_properties(rom.ppu-access-${case} PROPERTIES TIMEOUT 130)
+        endforeach()
         foreach(case green-swap affine-line-step sprite-mosaic)
             add_test(NAME rom.raster-${case} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_raster.py

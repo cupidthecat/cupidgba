@@ -65,12 +65,30 @@ affine OBJ, OBJ windows, rectangular windows, mosaic, effects, forced blank,
 per-beat CPU/DMA writes and late dispatch across clock wrap.
 
 The unchanged VRAM-mirror ROM passes all ten original register and CRC
-expectations with either BIOS path. The unchanged bitmap access sweep records
-1231 stall observations in SRAM. Its source-derived map requires 243 occupied
-slots, at offsets 173 through 1141 with stride four. The emitted IRQ probe's
-fixed lead maps bitmap fetch clocks 35 through 1003 into those offsets. This
-map is also reproduced by a pinned diagnostic run. It is a reproducible source
-qualification, not a newly captured hardware trace.
+expectations with either BIOS path. Ten selections of the unchanged access
+probe each record 1231 stall observations in SRAM. Their maps require these
+occupied CPU bus clocks within the probed line:
+
+| Selection | Occupied clocks | Count |
+| --- | --- | --- |
+| Bitmap mode 3 | 35 through 1003, every four clocks | 243 |
+| One 4-bit text BG, horizontal scroll zero | Tile bases 32 through 992, every 32 clocks; offsets 0, 4, 20 | 93 |
+| One 8-bit text BG, horizontal scroll zero | Same tile bases; offsets 0, 4, 12, 20, 28 | 155 |
+| Affine BG2 | 34 through 1006, clocks congruent to 2 or 3 modulo 4 | 487 |
+| Affine BG2 and BG3 | Every clock from 32 through 1006 | 975 |
+| One palette lookup | 47 through 1003, every four clocks | 240 |
+| Direct bitmap color, no effects | None | 0 |
+| Direct bitmap color with backdrop alpha | 49 through 1005, every four clocks | 240 |
+| Three normal objects, OAM | 41, 43, 45, 59, 61, 75, 77; then 91 through 337, every two clocks | 131 |
+| Three normal objects, texture VRAM | 45 through 91, every two clocks | 24 |
+
+The emitted IRQ probe's fixed lead adds 138 to these clocks to locate the SRAM
+observations. Palette, OAM and OBJ clocks include their one-clock acceptance
+phase. Text fetches extend into HBlank for the final tile. The object scene uses
+three 16-by-16, 4-bit objects and disables the remaining entries; OAM scanning
+continues after their texture fetches finish. All 12,310 observations match the
+source-derived maps and a pinned diagnostic run. This qualification does not
+include a newly captured hardware trace.
 
 Three unchanged raster ROMs have explicit pixel checks:
 
@@ -91,7 +109,7 @@ The exact BG reference-DMA column and the first few pixels after display-latch
 changes still differ between diagnostic implementations and need targeted
 hardware qualification. Fractional effect rounding, color bit 15, prohibited
 OBJ shapes/modes, precise mosaic changes at counter boundaries, and reset or
-BIOS-skipped phases also remain open. The bitmap sweep does not qualify every
-text, affine, palette or OBJ contention pattern. These limits remain under
+BIOS-skipped phases also remain open. The ten selections do not qualify every
+scroll phase, layer combination, OBJ mode or contention pattern. These limits remain under
 [issue 16](https://github.com/cupidthecat/cupidgba/issues/16) and the complete
 PPU audit under [issue 1](https://github.com/cupidthecat/cupidgba/issues/1).
