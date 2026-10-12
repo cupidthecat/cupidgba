@@ -27,8 +27,8 @@ track a pending burst restart when prefetch is disabled.
 
 ## Validation
 
-The complete locally built timing suite passes 2020/2020 observations with an
-external BIOS, up from 1392/2020 before prefetch. It exercises ARM and Thumb,
+The complete locally built timing suite passes 2020/2020 observations with
+both BIOS paths. It exercises ARM and Thumb,
 eight ROM wait-state/prefetch combinations, RAM execution, loads/stores, block
 transfers, multiplies, shifts, branches, SWIs and DMA timings. Original source
 tests and expected values are unchanged. The observer requires the pinned
@@ -40,14 +40,13 @@ halfword arbitration, width changes, disable/restart behavior, configured
 wait states, uncached page boundaries and DMA/timer/IRQ equivalence between
 late dispatch and advancing one clock at a time.
 
-The built-in BIOS path passes 1880/2020 observations. Its remaining 140 failures
-are the twenty configurations of each of seven firmware timing cases:
-Division, Division 2, Sqrt, Sqrt 2, Sqrt 3, ArcTan and CpuSet. They remain failed
-results; the complete external-BIOS check does not accept partial counts.
+The firmware timing cases execute the built-in math and copy routines through
+the timed CPU. See [BIOS execution](bios.md) for their coverage. Both complete
+timing checks require all observations to pass.
 
 Full-buffer backpressure, mid-stream WAITCNT changes and prefetched page-boundary
 edges need more hardware captures. The current disable/drain behavior has
 native regression coverage but is not fully qualified on hardware. PPU bus
-contention, cartridge peripheral reads used as instructions, and replacement
-BIOS timing require further work. Passing this matrix does not establish
+contention, cartridge peripheral reads used as instructions, and remaining
+BIOS services require further work. Passing this matrix does not establish
 complete GBA bus or firmware accuracy.

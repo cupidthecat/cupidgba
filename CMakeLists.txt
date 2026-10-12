@@ -10,6 +10,7 @@ set(CUPID_TEST_ROM_DIR "" CACHE PATH "Directory containing checksum-verified ext
 set(CUPID_TIMER_SUITE_ROM "" CACHE FILEPATH "Locally built timer and IRQ suite ROM")
 set(CUPID_DMA_SUITE_ROM "" CACHE FILEPATH "Locally built DMA transfer suite ROM")
 set(CUPID_BUS_SUITE_ROM "" CACHE FILEPATH "Locally built CPU and bus timing suite ROM")
+set(CUPID_BIOS_MATH_SUITE_ROM "" CACHE FILEPATH "Locally built BIOS math register suite ROM")
 set(CUPID_TEST_BIOS "" CACHE FILEPATH "External BIOS for local hardware suite checks")
 
 add_library(cupid_build_options INTERFACE)
@@ -92,9 +93,16 @@ if(BUILD_TESTING)
     add_test(NAME gba.bios COMMAND test_bios)
     set_tests_properties(gba.bios PROPERTIES TIMEOUT 10)
 
+    add_executable(test_bios_math_copy tests/bios/test_math_copy.c)
+    target_link_libraries(test_bios_math_copy PRIVATE cupid_core)
+    add_test(NAME gba.bios-math-copy COMMAND test_bios_math_copy)
+    set_tests_properties(gba.bios-math-copy PROPERTIES TIMEOUT 10)
+
     if(CUPID_TEST_BIOS)
         add_test(NAME gba.bios-external COMMAND test_bios --external-bios-waits ${CUPID_TEST_BIOS})
         set_tests_properties(gba.bios-external PROPERTIES TIMEOUT 10)
+        add_test(NAME gba.bios-math-copy-external COMMAND test_bios_math_copy --external-bios ${CUPID_TEST_BIOS})
+        set_tests_properties(gba.bios-math-copy-external PROPERTIES TIMEOUT 10)
     endif()
 
     if(CUPID_TEST_ROM_DIR)
@@ -127,15 +135,35 @@ if(BUILD_TESTING)
     endif()
 
     if(CUPID_BUS_SUITE_ROM)
-        if(NOT CUPID_TEST_BIOS)
-            message(FATAL_ERROR "CUPID_BUS_SUITE_ROM requires CUPID_TEST_BIOS for the firmware timing cases")
-        endif()
         find_package(Python3 REQUIRED COMPONENTS Interpreter)
-        add_test(NAME rom.bus-suite-external COMMAND ${Python3_EXECUTABLE}
+        add_test(NAME rom.bus-suite COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_bus_suite.py
-            --rom ${CUPID_BUS_SUITE_ROM} --bios ${CUPID_TEST_BIOS}
+            --rom ${CUPID_BUS_SUITE_ROM}
             --runner $<TARGET_FILE:cupidgba-headless>)
-        set_tests_properties(rom.bus-suite-external PROPERTIES TIMEOUT 100)
+        set_tests_properties(rom.bus-suite PROPERTIES TIMEOUT 100)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME rom.bus-suite-external COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_bus_suite.py
+                --rom ${CUPID_BUS_SUITE_ROM} --bios ${CUPID_TEST_BIOS}
+                --runner $<TARGET_FILE:cupidgba-headless>)
+            set_tests_properties(rom.bus-suite-external PROPERTIES TIMEOUT 100)
+        endif()
+    endif()
+
+    if(CUPID_BIOS_MATH_SUITE_ROM)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        add_test(NAME rom.bios-math-suite COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_bios_math_suite.py
+            --rom ${CUPID_BIOS_MATH_SUITE_ROM}
+            --runner $<TARGET_FILE:cupidgba-headless>)
+        set_tests_properties(rom.bios-math-suite PROPERTIES TIMEOUT 100)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME rom.bios-math-suite-external COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_bios_math_suite.py
+                --rom ${CUPID_BIOS_MATH_SUITE_ROM} --bios ${CUPID_TEST_BIOS}
+                --runner $<TARGET_FILE:cupidgba-headless>)
+            set_tests_properties(rom.bios-math-suite-external PROPERTIES TIMEOUT 100)
+        endif()
     endif()
 
     if(CUPID_DMA_SUITE_ROM)

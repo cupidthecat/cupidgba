@@ -37,7 +37,6 @@ static void _SoftReset(struct CupidGBA* gba) {
 /**
  * @brief SWI 0x01: RegisterRamReset.
  *
- * Matches the reference implementation behavior for register reset.
  */
 static void _RegisterRamReset(struct CupidGBA* gba) {
     uint32_t reg = gba->cpu.gprs[0];
@@ -163,174 +162,6 @@ static void _Halt(struct CupidGBA* gba) {
 }
 
 /**
- * @brief SWI 0x06: Div (r0 / r1), SWI 0x07: DivArm (r1 / r0).
- *
- * Returns r0=quot, r1=rem, r3=abs(quot).
- * Matches the reference implementation behavior.
- */
-static void _Div(struct CupidGBA* gba, int32_t num, int32_t denom) {
-    if (denom == 0) {
-        /** Return a sign-based result instead of hanging */
-        gba->cpu.gprs[0] = (uint32_t)((num < 0) ? -1 : 1);
-        gba->cpu.gprs[1] = (uint32_t)num;
-        gba->cpu.gprs[3] = 1;
-        return;
-    }
-    if (denom == -1 && num == INT32_MIN) {
-        gba->cpu.gprs[0] = (uint32_t)INT32_MIN;
-        gba->cpu.gprs[1] = 0;
-        gba->cpu.gprs[3] = (uint32_t)INT32_MIN;
-        return;
-    }
-    div_t result = div(num, denom);
-    gba->cpu.gprs[0] = (uint32_t)result.quot;
-    gba->cpu.gprs[1] = (uint32_t)result.rem;
-    gba->cpu.gprs[3] = (uint32_t)abs(result.quot);
-}
-
-/**
- * @brief SWI 0x08: Sqrt.
- *
- * Matches the reference implementation behavior (Newton's method, integer).
- */
-static void _Sqrt(struct CupidGBA* gba) {
-    uint32_t x = gba->cpu.gprs[0];
-    if (!x) { gba->cpu.gprs[0] = 0; return; }
-
-    uint32_t upper = x;
-    uint32_t bound = 1;
-    while (bound < upper) {
-        upper >>= 1;
-        bound <<= 1;
-    }
-    while (1) {
-        upper = x;
-        uint32_t accum = 0;
-        uint32_t lower = bound;
-        while (1) {
-            uint32_t oldLower = lower;
-            if (lower <= upper >> 1) lower <<= 1;
-            if (oldLower >= upper >> 1) break;
-        }
-        while (1) {
-            accum <<= 1;
-            if (upper >= lower) { ++accum; upper -= lower; }
-            if (lower == bound) break;
-            lower >>= 1;
-        }
-        uint32_t oldBound = bound;
-        bound += accum;
-        bound >>= 1;
-        if (bound >= oldBound) { bound = oldBound; break; }
-    }
-    gba->cpu.gprs[0] = bound;
-}
-
-/**
- * @brief SWI 0x09: ArcTan.
- *
- * Matches the reference implementation behavior (Taylor series in fixed point).
- */
-static int16_t _ArcTan(int32_t i, int32_t* r1, int32_t* r3) {
-    int32_t a = -((i * i) >> 14);
-    int32_t b = ((0xA9 * a) >> 14) + 0x390;
-    b = ((b * a) >> 14) + 0x91C;
-    b = ((b * a) >> 14) + 0xFB6;
-    b = ((b * a) >> 14) + 0x16AA;
-    b = ((b * a) >> 14) + 0x2081;
-    b = ((b * a) >> 14) + 0x3651;
-    b = ((b * a) >> 14) + 0xA2F9;
-    if (r1) *r1 = a;
-    if (r3) *r3 = b;
-    return (int16_t)((i * b) >> 16);
-}
-
-/**
- * @brief SWI 0x0A: ArcTan2.
- *
- * Matches reference implementation _ArcTan2.
- */
-static int16_t _ArcTan2(int32_t x, int32_t y, int32_t* r1) {
-    if (!y) {
-        return (x >= 0) ? 0 : (int16_t)0x8000;
-    }
-    if (!x) {
-        return (y >= 0) ? (int16_t)0x4000 : (int16_t)0xC000;
-    }
-    if (y >= 0) {
-        if (x >= 0) {
-            if (x >= y) {
-                return _ArcTan((y << 14) / x, r1, NULL);
-            }
-        } else if (-x >= y) {
-            return _ArcTan((y << 14) / x, r1, NULL) + (int16_t)0x8000;
-        }
-        return (int16_t)0x4000 - _ArcTan((x << 14) / y, r1, NULL);
-    } else {
-        if (x <= 0) {
-            if (-x > -y) {
-                return _ArcTan((y << 14) / x, r1, NULL) + (int16_t)0x8000;
-            }
-        } else if (x >= -y) {
-            return _ArcTan((y << 14) / x, r1, NULL) + (int16_t)0x10000;
-        }
-        return (int16_t)0xC000 - _ArcTan((x << 14) / y, r1, NULL);
-    }
-}
-
-/**
- * @brief SWI 0x0B: CpuSet.
- *
- * r0=src, r1=dst, r2=control (bit24=fill, bit26=word, [20:0]=count).
- */
-static void _CpuSet(struct CupidGBA* gba) {
-    uint32_t src  = gba->cpu.gprs[0];
-    uint32_t dst  = gba->cpu.gprs[1];
-    uint32_t ctrl = gba->cpu.gprs[2];
-    uint32_t count = ctrl & 0x1FFFFF;
-    bool fill = (ctrl >> 24) & 1;
-    bool word = (ctrl >> 26) & 1;
-
-    if (word) {
-        src &= ~3u;
-        dst &= ~3u;
-        uint32_t fillVal = cupid_memory_load32(&gba->cpu, src, NULL);
-        for (uint32_t i = 0; i < count; i++) {
-            uint32_t val = fill ? fillVal : cupid_memory_load32(&gba->cpu, src + i * 4, NULL);
-            cupid_memory_store32(&gba->cpu, dst + i * 4, (int32_t)val, NULL);
-        }
-    } else {
-        src &= ~1u;
-        dst &= ~1u;
-        uint16_t fillVal = (uint16_t)cupid_memory_loadU16(&gba->cpu, src, NULL);
-        for (uint32_t i = 0; i < count; i++) {
-            uint16_t val = fill ? fillVal : (uint16_t)cupid_memory_loadU16(&gba->cpu, src + i * 2, NULL);
-            cupid_memory_store16(&gba->cpu, dst + i * 2, (int16_t)val, NULL);
-        }
-    }
-    gba->cpu.gprs[3] = 0x170;  /** match official BIOS clobber */
-}
-
-/**
- * @brief SWI 0x0C: CpuFastSet (always 32-bit, rounds to 8-word blocks).
- */
-static void _CpuFastSet(struct CupidGBA* gba) {
-    uint32_t src  = gba->cpu.gprs[0] & ~3u;
-    uint32_t dst  = gba->cpu.gprs[1] & ~3u;
-    uint32_t ctrl = gba->cpu.gprs[2];
-    uint32_t count = ctrl & 0x1FFFFF;
-    bool fill = (ctrl >> 24) & 1;
-
-    count = (count + 7) & ~7u;  /** round up to 8 */
-
-    uint32_t fillVal = cupid_memory_load32(&gba->cpu, src, NULL);
-    for (uint32_t i = 0; i < count; i++) {
-        uint32_t val = fill ? fillVal : cupid_memory_load32(&gba->cpu, src + i * 4, NULL);
-        cupid_memory_store32(&gba->cpu, dst + i * 4, (int32_t)val, NULL);
-    }
-}
-
-/**
  * @brief SWI 0x0D: GetBiosChecksum.
  */
 #define GBA_BIOS_CHECKSUM 0xBAAE187Fu
@@ -344,7 +175,6 @@ static void _GetBiosChecksum(struct CupidGBA* gba) {
 /**
  * @brief SWI 0x0E: BgAffineSet.
  *
- * Matches reference implementation _BgAffineSet.
  */
 static void _BgAffineSet(struct CupidGBA* gba) {
     int i = (int)gba->cpu.gprs[2];
@@ -381,7 +211,6 @@ static void _BgAffineSet(struct CupidGBA* gba) {
 /**
  * @brief SWI 0x0F: ObjAffineSet.
  *
- * Matches reference implementation _ObjAffineSet.
  */
 static void _ObjAffineSet(struct CupidGBA* gba) {
     int i = (int)gba->cpu.gprs[2];
@@ -411,7 +240,6 @@ static void _ObjAffineSet(struct CupidGBA* gba) {
 /**
  * @brief SWI 0x10: BitUnPack.
  *
- * Matches reference implementation _unBitPack.
  */
 static void _BitUnPack(struct CupidGBA* gba) {
     uint32_t source = gba->cpu.gprs[0];
@@ -542,7 +370,6 @@ static void _unLz77(struct CupidGBA* gba, int width) {
 /**
  * @brief SWI 0x13: HuffUnComp.
  *
- * Matches reference implementation _unHuffman.
  */
 static void _unHuffman(struct CupidGBA* gba) {
     uint32_t source = gba->cpu.gprs[0] & 0xFFFFFFFC;
@@ -611,7 +438,6 @@ static void _unHuffman(struct CupidGBA* gba) {
  * @brief SWI 0x14/0x15: RLUnCompWram/Vram.
  *
  * SWI 0x14 uses width=1, SWI 0x15 uses width=2.
- * Matches reference implementation _unRl.
  */
 static void _unRl(struct CupidGBA* gba, int width) {
     uint32_t source = gba->cpu.gprs[0];
@@ -669,7 +495,6 @@ static void _unRl(struct CupidGBA* gba, int width) {
  * @brief SWI 0x16/0x17/0x18: Diff*UnFilter.
  *
  * SWI 0x16 uses in=1, out=1. SWI 0x17 uses in=1, out=2. SWI 0x18 uses in=2, out=2.
- * Matches reference implementation _unFilter.
  */
 static void _unFilter(struct CupidGBA* gba, int inwidth, int outwidth) {
     uint32_t source = gba->cpu.gprs[0] & 0xFFFFFFFC;
@@ -714,7 +539,6 @@ static void _unFilter(struct CupidGBA* gba, int inwidth, int outwidth) {
 /**
  * @brief SWI 0x1F: MidiKey2Freq.
  *
- * Matches reference implementation _MidiKey2Freq.
  */
 static void _MidiKey2Freq(struct CupidGBA* gba) {
     uint32_t key = cupid_memory_load32(&gba->cpu, gba->cpu.gprs[0] + 4, NULL);
@@ -733,22 +557,11 @@ void cupid_bios_swi(struct CupidGBA* gba, uint8_t comment) {
         cupid_arm_raise_swi(&gba->cpu);
         break;
     case 0x03: _Halt(gba); break;  /** Stop -- treat as halt */
-    case 0x06: _Div(gba, (int32_t)gba->cpu.gprs[0], (int32_t)gba->cpu.gprs[1]); break;
-    case 0x07: _Div(gba, (int32_t)gba->cpu.gprs[1], (int32_t)gba->cpu.gprs[0]); break;
-    case 0x08: _Sqrt(gba); break;
-    case 0x09:
-        gba->cpu.gprs[0] = (uint32_t)_ArcTan((int32_t)(int16_t)gba->cpu.gprs[0],
-                                               (int32_t*)&gba->cpu.gprs[1],
-                                               (int32_t*)&gba->cpu.gprs[3]);
+    case 0x06: case 0x07: case 0x08: case 0x09: case 0x0A:
+    case 0x0B: case 0x0C:
+        /* Execute math and copy services through the timed CPU and bus. */
+        cupid_arm_raise_swi(&gba->cpu);
         break;
-    case 0x0A:
-        gba->cpu.gprs[0] = (uint16_t)_ArcTan2((int32_t)(int16_t)gba->cpu.gprs[0],
-                                                (int32_t)(int16_t)gba->cpu.gprs[1],
-                                                (int32_t*)&gba->cpu.gprs[1]);
-        gba->cpu.gprs[3] = 0x170;
-        break;
-    case 0x0B: _CpuSet(gba); break;
-    case 0x0C: _CpuFastSet(gba); break;
     case 0x0D: _GetBiosChecksum(gba); break;
     case 0x0E: _BgAffineSet(gba); break;
     case 0x0F: _ObjAffineSet(gba); break;
