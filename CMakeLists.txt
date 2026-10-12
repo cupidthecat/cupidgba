@@ -11,6 +11,7 @@ set(CUPID_TIMER_SUITE_ROM "" CACHE FILEPATH "Locally built timer and IRQ suite R
 set(CUPID_DMA_SUITE_ROM "" CACHE FILEPATH "Locally built DMA transfer suite ROM")
 set(CUPID_BUS_SUITE_ROM "" CACHE FILEPATH "Locally built CPU and bus timing suite ROM")
 set(CUPID_BIOS_MATH_SUITE_ROM "" CACHE FILEPATH "Locally built BIOS math register suite ROM")
+set(CUPID_IO_SUITE_ROM "" CACHE FILEPATH "Locally built I/O register-read suite ROM")
 set(CUPID_TEST_BIOS "" CACHE FILEPATH "External BIOS for local hardware suite checks")
 
 add_library(cupid_build_options INTERFACE)
@@ -60,6 +61,11 @@ if(BUILD_TESTING)
     target_link_libraries(test_system PRIVATE cupid_core)
     add_test(NAME gba.system COMMAND test_system)
     set_tests_properties(gba.system PROPERTIES TIMEOUT 10)
+
+    add_executable(test_io tests/gba/test_io.c)
+    target_link_libraries(test_io PRIVATE cupid_core)
+    add_test(NAME gba.io COMMAND test_io)
+    set_tests_properties(gba.io PROPERTIES TIMEOUT 10)
 
     add_executable(test_timer tests/gba/test_timer.c)
     target_link_libraries(test_timer PRIVATE cupid_core)
@@ -220,6 +226,21 @@ if(BUILD_TESTING)
                 --rom ${CUPID_DMA_SUITE_ROM} --bios ${CUPID_TEST_BIOS}
                 --runner $<TARGET_FILE:cupidgba-headless>)
             set_tests_properties(rom.dma-suite-external PROPERTIES TIMEOUT 100)
+        endif()
+    endif()
+
+    if(CUPID_IO_SUITE_ROM)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        add_test(NAME rom.io-suite COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_io_suite.py
+            --rom ${CUPID_IO_SUITE_ROM} --runner $<TARGET_FILE:cupidgba-headless>)
+        set_tests_properties(rom.io-suite PROPERTIES TIMEOUT 100)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME rom.io-suite-external COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_io_suite.py
+                --rom ${CUPID_IO_SUITE_ROM} --bios ${CUPID_TEST_BIOS}
+                --runner $<TARGET_FILE:cupidgba-headless>)
+            set_tests_properties(rom.io-suite-external PROPERTIES TIMEOUT 100)
         endif()
     endif()
 

@@ -1540,6 +1540,7 @@ void cupid_audio_write_register(struct CupidAudio* audio, uint32_t addr,
 
     /** SOUNDCNT_L (NR50 + NR51). */
     case REG_SOUNDCNT_L:
+        val &= 0xFF77;
         audio->soundcntL = val;
         _writeNR50(psg, (uint8_t)(val & 0xFF));
         _writeNR51(psg, (uint8_t)(val >> 8));
@@ -1547,7 +1548,7 @@ void cupid_audio_write_register(struct CupidAudio* audio, uint32_t addr,
 
     /** SOUNDCNT_H (DMA sound control). */
     case REG_SOUNDCNT_H: {
-        audio->soundcntH = val;
+        audio->soundcntH = val & 0x770F;
         audio->volume    = val & 0x3;
         audio->volumeChA = (val >> 2) & 1;
         audio->volumeChB = (val >> 3) & 1;
@@ -1581,6 +1582,7 @@ void cupid_audio_write_register(struct CupidAudio* audio, uint32_t addr,
             audio->chBRight,
             audio->chBTimer ? 1 : 0,
             chBReset ? 1 : 0);
+        val &= 0x770F;
         break;
     }
 
