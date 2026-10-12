@@ -1,3 +1,8 @@
+/* Copyright (c) 2013-2014 Jeffrey Pfau
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /**
  * @file emitter-thumb.h
  * @brief Thumb instruction table layout macros.
@@ -139,61 +144,61 @@
 	DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, PUSH)), \
 	/** 0x2D4-0x2D7: Format 14 — PUSH {Rlist, LR} (4 entries) */ \
 	DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, PUSHR)), \
-	/** 0x2D8-0x2FF: ILL (40 entries) */ \
+	/** 0x2D8-0x2EF: ILL (24 entries) */ \
 	DO_8(DECLARE_INSTRUCTION_THUMB(EMITTER, ILL)), \
 	DO_8(DECLARE_INSTRUCTION_THUMB(EMITTER, ILL)), \
 	DO_8(DECLARE_INSTRUCTION_THUMB(EMITTER, ILL)), \
-	/** 0x300-0x303: Format 14 — POP (4 entries) */ \
+	/** 0x2F0-0x2F3: Format 14 — POP (4 entries) */ \
 	DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, POP)), \
-	/** 0x304-0x307: Format 14 — POP {Rlist, PC} (4 entries) */ \
+	/** 0x2F4-0x2F7: Format 14 — POP {Rlist, PC} (4 entries) */ \
 	DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, POPR)), \
-	/** 0x308-0x30B: BKPT (4 entries) */ \
+	/** 0x2F8-0x2FB: BKPT (4 entries) */ \
 	DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, BKPT)), \
-	/** 0x30C-0x30F: ILL (4 entries) */ \
+	/** 0x2FC-0x2FF: ILL (4 entries) */ \
 	DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, ILL)), \
-	/** 0x310-0x32F: Format 15 — STMIA (32 entries) */ \
+	/** 0x300-0x31F: Format 15 — STMIA (32 entries) */ \
 	DO_8(DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, STMIA))), \
-	/** 0x330-0x34F: Format 15 — LDMIA (32 entries) */ \
+	/** 0x320-0x33F: Format 15 — LDMIA (32 entries) */ \
 	DO_8(DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, LDMIA))), \
-	/** 0x350-0x353: Format 16 — BEQ (4 entries) */ \
+	/** 0x340-0x343: Format 16 — BEQ (4 entries) */ \
 	DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, BEQ)), \
-	/** 0x354-0x357: Format 16 — BNE */ \
+	/** 0x344-0x347: Format 16 — BNE */ \
 	DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, BNE)), \
-	/** 0x358-0x35B: Format 16 — BCS */ \
+	/** 0x348-0x34B: Format 16 — BCS */ \
 	DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, BCS)), \
-	/** 0x35C-0x35F: Format 16 — BCC */ \
+	/** 0x34C-0x34F: Format 16 — BCC */ \
 	DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, BCC)), \
-	/** 0x360-0x363: Format 16 — BMI */ \
+	/** 0x350-0x353: Format 16 — BMI */ \
 	DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, BMI)), \
-	/** 0x364-0x367: Format 16 — BPL */ \
+	/** 0x354-0x357: Format 16 — BPL */ \
 	DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, BPL)), \
-	/** 0x368-0x36B: Format 16 — BVS */ \
+	/** 0x358-0x35B: Format 16 — BVS */ \
 	DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, BVS)), \
-	/** 0x36C-0x36F: Format 16 — BVC */ \
+	/** 0x35C-0x35F: Format 16 — BVC */ \
 	DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, BVC)), \
-	/** 0x370-0x373: Format 16 — BHI */ \
+	/** 0x360-0x363: Format 16 — BHI */ \
 	DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, BHI)), \
-	/** 0x374-0x377: Format 16 — BLS */ \
+	/** 0x364-0x367: Format 16 — BLS */ \
 	DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, BLS)), \
-	/** 0x378-0x37B: Format 16 — BGE */ \
+	/** 0x368-0x36B: Format 16 — BGE */ \
 	DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, BGE)), \
-	/** 0x37C-0x37F: Format 16 — BLT */ \
+	/** 0x36C-0x36F: Format 16 — BLT */ \
 	DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, BLT)), \
-	/** 0x380-0x383: Format 16 — BGT */ \
+	/** 0x370-0x373: Format 16 — BGT */ \
 	DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, BGT)), \
-	/** 0x384-0x387: Format 16 — BLE */ \
+	/** 0x374-0x377: Format 16 — BLE */ \
 	DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, BLE)), \
-	/** 0x388-0x38B: ILL (undefined condition 0xE) */ \
+	/** 0x378-0x37B: ILL (undefined condition 0xE) */ \
 	DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, ILL)), \
-	/** 0x38C-0x38F: Format 17 — SWI */ \
+	/** 0x37C-0x37F: Format 17 — SWI */ \
 	DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, SWI)), \
-	/** 0x390-0x3AF: Format 18 — B (unconditional, 32 entries) */ \
+	/** 0x380-0x39F: Format 18 — B (unconditional, 32 entries) */ \
 	DO_8(DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, B))), \
-	/** 0x3B0-0x3CF: ILL (undefined, 32 entries) */ \
+	/** 0x3A0-0x3BF: ILL (undefined, 32 entries) */ \
 	DO_8(DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, ILL))), \
-	/** 0x3D0-0x3EF: Format 19 — BL prefix (32 entries) */ \
+	/** 0x3C0-0x3DF: Format 19 — BL prefix (32 entries) */ \
 	DO_8(DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, BL1))), \
-	/** 0x3F0-0x3FF: Format 19 — BL suffix (32 entries - but only 16 left!) */ \
+	/** 0x3E0-0x3FF: Format 19 — BL suffix (32 entries) */ \
 	DO_8(DO_4(DECLARE_INSTRUCTION_THUMB(EMITTER, BL2))) \
 
 #endif /* CUPID_EMITTER_THUMB_H */

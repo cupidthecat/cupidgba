@@ -1,3 +1,8 @@
+/* Copyright (c) 2013-2015 Jeffrey Pfau
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /**
  * @file gba.c
  * @brief Top-level GBA system: create, reset, destroy, main frame loop.
@@ -320,7 +325,6 @@ static void _cupidProcessEvents(struct CupidARM* cpu) {
         do {
             int32_t cycles = cpu->cycles;
             cpu->cycles = 0;
-            gba->timing.globalCycles += (uint64_t)(cycles > nextEvent ? cycles : nextEvent);
             nextEvent = cupid_timing_tick(&gba->timing,
                                           cycles > nextEvent ? cycles : nextEvent);
         } while (gba->cpuBlocked && !gba->earlyExit);

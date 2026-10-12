@@ -1,3 +1,8 @@
+/* Copyright (c) 2013-2016 Jeffrey Pfau
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /**
  * @file memory.h
  * @brief GBA memory map and bus definitions.
@@ -281,6 +286,8 @@ void cupid_memory_deinit(struct CupidGBA* gba);
 
 /** Bus operations (installed as function pointers on CPU) */
 uint32_t cupid_memory_load32(struct CupidARM* cpu, uint32_t addr, int* cyc);
+/** Value driven by the existing CPU/DMA bus model on an unmapped read. */
+uint32_t cupid_memory_open_bus(struct CupidARM* cpu);
 uint32_t cupid_memory_load16(struct CupidARM* cpu, uint32_t addr, int* cyc);
 uint32_t cupid_memory_loadU16(struct CupidARM* cpu, uint32_t addr, int* cyc);
 uint32_t cupid_memory_load8(struct CupidARM* cpu, uint32_t addr, int* cyc);

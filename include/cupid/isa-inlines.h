@@ -1,3 +1,8 @@
+/* Copyright (c) 2013-2014 Jeffrey Pfau
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /**
  * @file isa-inlines.h
  * @brief Shared inline helpers and macros for ARM/Thumb ISA implementations.
@@ -52,9 +57,9 @@
 
 /** @name Bit / Sign Helpers */
 
-#define ARM_SIGN(I) ((I) >> 31)
-#define ARM_SXT_8(I)  (((int8_t) (I) << 24) >> 24)
-#define ARM_SXT_16(I) (((int16_t) (I) << 16) >> 16)
+#define ARM_SIGN(I) ((uint32_t)(I) >> 31)
+#define ARM_SXT_8(I)  ((int32_t)(int8_t)(I))
+#define ARM_SXT_16(I) ((int32_t)(int16_t)(I))
 #define ARM_UXT_64(I) (uint64_t)(uint32_t)(I)
 
 /** @name Flag Computation Helpers */
@@ -78,7 +83,7 @@
 /** @name PC Write Helpers */
 
 static inline int32_t CupidARMWritePC(struct CupidARM* cpu) {
-	uint32_t pc = cpu->gprs[ARM_PC] & ~(uint32_t)(WORD_SIZE_THUMB - 1);
+	uint32_t pc = cpu->gprs[ARM_PC] & ~(uint32_t)(WORD_SIZE_ARM - 1);
 	cpu->memory.setActiveRegion(cpu, pc);
 	LOAD_32(cpu->prefetch[0], pc & cpu->memory.activeMask, cpu->memory.activeRegion);
 	pc += WORD_SIZE_ARM;

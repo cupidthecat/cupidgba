@@ -1,3 +1,8 @@
+/* Copyright (c) 2013-2016 Jeffrey Pfau
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /**
  * @file audio.c
  * @brief GBA audio mixing: PSG channels plus Direct Sound FIFO channels.
@@ -359,7 +364,7 @@ void cupid_audio_psg_run(struct CupidAudioPSG* psg, int32_t timestamp,
                         sample >>= 4;  /* mute */
                     } else if (vol > 3) {
                         /** GBA 75% mode: sample * 3 / 4. */
-                        sample = (int8_t)(sample + (sample << 1));
+                        sample = (int8_t)(sample * 3);
                         sample >>= 2;
                     } else {
                         /** vol 1 = 100% (shift 0), vol 2 = 50% (shift 1), vol 3 = 25% (shift 2). */
@@ -444,12 +449,12 @@ void cupid_audio_psg_sample(struct CupidAudioPSG* psg,
 
     sampleLeft  += dcOffset;
     sampleRight += dcOffset;
-    sampleLeft  <<= 3;
-    sampleRight <<= 3;
+    sampleLeft  *= 8;
+    sampleRight *= 8;
 
     /** Ch4: added separately after shift. */
     if (psg->playingCh4 && !psg->forceDisableCh[3]) {
-        int16_t noiseSample = (int16_t)(psg->ch4.sample << 3);
+        int16_t noiseSample = (int16_t)(psg->ch4.sample * 8);
         if (psg->ch4Left)  sampleLeft  += noiseSample;
         if (psg->ch4Right) sampleRight += noiseSample;
     }
@@ -783,7 +788,7 @@ void cupid_audio_sample(struct CupidAudio* audio, int32_t timestamp) {
         /** Mix FIFO A. */
         {
             int8_t fifoSample = audio->chA.samples[sample];
-            int32_t scaled = (int32_t)fifoSample << 2;
+            int32_t scaled = (int32_t)fifoSample * 4;
             if (!audio->volumeChA) scaled >>= 1;  /* 50% */
             if (audio->chALeft)  sampleLeft  += scaled;
             if (audio->chARight) sampleRight += scaled;
@@ -792,7 +797,7 @@ void cupid_audio_sample(struct CupidAudio* audio, int32_t timestamp) {
         /** Mix FIFO B. */
         {
             int8_t fifoSample = audio->chB.samples[sample];
-            int32_t scaled = (int32_t)fifoSample << 2;
+            int32_t scaled = (int32_t)fifoSample * 4;
             if (!audio->volumeChB) scaled >>= 1;  /* 50% */
             if (audio->chBLeft)  sampleLeft  += scaled;
             if (audio->chBRight) sampleRight += scaled;

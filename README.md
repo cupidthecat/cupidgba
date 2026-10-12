@@ -1,115 +1,48 @@
 # CupidGBA
 
-CupidGBA is a Game Boy Advance emulator written in C with SDL2 for video, audio, and input.
+CupidGBA is a Game Boy Advance emulator written in C11 with SDL2 for video,
+audio, and input. Hardware accuracy and compatibility are under active work.
 
-## Current scope
+## Build and run
 
-- Emulates **Game Boy Advance (`.gba`)** ROMs
-- Uses optional real BIOS (`-b`) or built-in HLE BIOS fallback
-- Supports battery-backed save types (auto-detect + manual override)
-- Renders at native GBA resolution `240x160` with integer window scaling
+On Debian or Ubuntu, install `build-essential`, `cmake`, `pkg-config`, and
+`libsdl2-dev`, then run:
 
-## Requirements
-
-- Linux (or another platform with SDL2)
-- `gcc`
-- `make`
-- `pkg-config`
-- `SDL2` development package
-
-On Debian/Ubuntu:
-
-```bash
-sudo apt update
-sudo apt install build-essential pkg-config libsdl2-dev
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel 2
+./build/cupidgba game.gba -b /path/to/gba-bios.bin
 ```
 
-## Build
-
-From the project root:
-
-```bash
-make clean && make
-```
-
-This produces the executable:
-
-- `./cupidgba`
-
-## Usage
-
-```bash
-./cupidgba rom.gba [-b bios.bin] [-s scale] [-S savetype]
-```
-
-Options:
-
-- `-b <path>`: Load real GBA BIOS image (optional)
-- `-s <1..10>`: Window scale factor (default: 3)
-- `-S <type>`: Force save type instead of auto-detect
-
-Save types for `-S`:
-
-- `sram`
-- `sram512`
-- `flash512`
-- `flash1m`
-- `eeprom`
-- `eeprom512`
-- `none`
-
-Example:
-
-```bash
-./cupidgba /path/to/game.gba -s 4 -b bios/gba_bios.bin
-```
+The Linux Makefile also supports `make`. The BIOS argument is optional;
+without it, the emulator uses a built-in replacement BIOS and HLE calls.
+See [build instructions](docs/development/building.md) for Windows and core
+builds, and [usage](docs/usage/running.md) for scaling and save options.
 
 ## Controls
 
-Keyboard:
+| Key | GBA button |
+| --- | --- |
+| Z / X | A / B |
+| Enter / Backspace | Start / Select |
+| Arrow keys | D-pad |
+| A / S | L / R |
+| Escape | Quit |
 
-- `Z` = A
-- `X` = B
-- `Backspace` = Select
-- `Enter` = Start
-- `Arrow Keys` = D-Pad
-- `A` = L
-- `S` = R
-- `Esc` = Quit
+SDL2 controllers are supported. Battery saves use a `.sav` file next to the
+ROM. Supply BIOS and game files you are authorized to use; they are not
+included in the project.
 
-Gamepad (SDL controller mapping):
+## Tests
 
-- `A/B` = A/B
-- `Back` = Select
-- `Start` = Start
-- `D-Pad` = D-Pad
-- `LB/RB` = L/R
-- Left analog stick also maps to D-Pad (with deadzone)
+```sh
+ctest --test-dir build --output-on-failure
+```
 
-## Save files
+See [testing](docs/development/testing.md) for headless execution, verified test
+ROM inputs, sanitizers, and the limits of the current coverage.
 
-- Save data is stored next to the ROM, using the same base name with `.sav`
-- Example: `Pokemon.gba` → `Pokemon.sav`
-- Saves are periodically flushed during play and once again on exit
+## License
 
-## Notes
-
-- This project currently targets **GBA ROMs only**.
-- Supplying non-GBA ROM formats may fail or crash.
-
-## Project layout
-
-- `src/` — emulator source
-  - `src/arm/` — ARM7TDMI CPU core
-  - `src/gba/` — GBA subsystems (memory, video, audio, DMA, timers, BIOS, savedata)
-  - `src/gba/render/` — software renderer modes
-  - `src/core/` — timing/event scheduler
-  - `src/platform/` — SDL frontend (`main`, audio, input)
-- `include/cupid/` — public/internal headers
-- `bios/` — optional location for BIOS image(s)
-
-## Troubleshooting
-
-- Build fails with missing SDL2: ensure `libsdl2-dev` and `pkg-config` are installed.
-- No audio: emulator continues running if audio init fails.
-- Crashes with `.gb` / `.gbc`: use `.gba` ROMs only.
+Project contributions use GPL-3.0-or-later. See [LICENSE](LICENSE) and
+[source notices](docs/legal/provenance.md) for the terms covering adapted code.

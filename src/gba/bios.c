@@ -1,3 +1,8 @@
+/* Copyright (c) 2013-2015 Jeffrey Pfau
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /**
  * @file bios.c
  * @brief High-Level Emulation of GBA BIOS SWI calls.
@@ -6,6 +11,9 @@
 #include "cupid/gba.h"
 #include <math.h>
 #include <stdlib.h>
+
+/* C11 does not require the nonstandard M_PI macro. */
+static const float CUPID_PI = 3.14159265358979323846f;
 
 /**
  * @brief SWI 0x00: SoftReset.
@@ -383,7 +391,7 @@ static void _BgAffineSet(struct CupidGBA* gba) {
         float cy = (int16_t)cupid_memory_load16(&gba->cpu, offset + 10, NULL);
         float sx = (int16_t)cupid_memory_load16(&gba->cpu, offset + 12, NULL) / 256.f;
         float sy = (int16_t)cupid_memory_load16(&gba->cpu, offset + 14, NULL) / 256.f;
-        float theta = (cupid_memory_loadU16(&gba->cpu, offset + 16, NULL) >> 8) / 128.f * (float)M_PI;
+        float theta = (cupid_memory_loadU16(&gba->cpu, offset + 16, NULL) >> 8) / 128.f * CUPID_PI;
         offset += 20;
 
         float a = cosf(theta) * sx;
@@ -417,7 +425,7 @@ static void _ObjAffineSet(struct CupidGBA* gba) {
     while (i--) {
         float sx = (int16_t)cupid_memory_load16(&gba->cpu, offset, NULL) / 256.f;
         float sy = (int16_t)cupid_memory_load16(&gba->cpu, offset + 2, NULL) / 256.f;
-        float theta = (cupid_memory_loadU16(&gba->cpu, offset + 4, NULL) >> 8) / 128.f * (float)M_PI;
+        float theta = (cupid_memory_loadU16(&gba->cpu, offset + 4, NULL) >> 8) / 128.f * CUPID_PI;
         offset += 8;
 
         float a = cosf(theta) * sx;

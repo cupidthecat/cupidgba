@@ -1,0 +1,17 @@
+/build*/
+/.build/
+/.local-research/
+/cupidgba
+/cupidgba.exe
+/cupidgba-headless
+*.o
+*.obj
+*.d
+*.a
+*.lib
+*.dll
+*.exe
+*.sav
+*.gba
+/bios/*.bin
+__pycache__/

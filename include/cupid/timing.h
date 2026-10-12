@@ -1,3 +1,8 @@
+/* Copyright (c) 2013-2016 Jeffrey Pfau
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /**
  * @file timing.h
  * @brief Sorted linked-list priority queue for cycle-accurate event scheduling.
@@ -51,7 +56,7 @@ void cupid_timing_deinit(struct CupidTiming* timing);
 /** Remove all scheduled events and reset cycle counters. */
 void cupid_timing_clear(struct CupidTiming* timing);
 
-/** Move root → reroot (allows safe insertion while iterating). */
+/** Defer the pending queue during a callback. Tick still dispatches due events. */
 void cupid_timing_interrupt(struct CupidTiming* timing);
 
 /**
@@ -77,7 +82,9 @@ bool cupid_timing_is_scheduled(const struct CupidTiming* timing,
 
 /**
  * Advance the master clock by `cycles` and fire all due events.
- * Returns cycles until the next pending event (or INT_MAX).
+ * Advances both masterCycles and globalCycles. The caller consumes and clears
+ * relativeCycles before calling this function. Callbacks may add CPU cycles.
+ * Returns the next CPU breakpoint relative to masterCycles (or INT_MAX).
  */
 int32_t cupid_timing_tick(struct CupidTiming* timing, int32_t cycles);
 
