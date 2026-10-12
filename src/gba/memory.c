@@ -1,8 +1,3 @@
-/* Copyright (c) 2013-2016 Jeffrey Pfau
- *
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /**
  * @file memory.c
  * @brief GBA memory bus: init, load, store, region switching, ROM/BIOS loading.
@@ -10,6 +5,17 @@
 
 #include "cupid/gba.h"
 #include <errno.h>
+
+/* Observe MMIO at the end of its data-bus cycle. The instruction's accumulated
+ * fetch/data clocks are consumed here; its remaining internal clocks stay in
+ * cycleCounter. Peripheral events run here, while CPU IRQ entry stays at the
+ * next instruction boundary. NULL counters are untimed observer/DMA accesses. */
+static void sync_io(struct CupidARM* cpu, int* cycleCounter) {
+    if (!cycleCounter) return;
+    cpu->cycles += *cycleCounter + 1;
+    *cycleCounter = -1;
+    if (cpu->cycles >= cpu->nextEvent) cpu->irqh.processEvents(cpu);
+}
 
 /**
  * @brief HLE BIOS stub installed by default and overwritten when a real BIOS is loaded.
@@ -365,6 +371,7 @@ uint32_t cupid_memory_load32(struct CupidARM* cpu, uint32_t address, int* cycleC
         LOAD_32(value, address & (GBA_SIZE_IWRAM - 4), memory->iwram);
         break;
     case GBA_REGION_IO:
+        sync_io(cpu, cycleCounter);
         value = cupid_io_read(gba, address & GBA_OFFSET_MASK & ~3)
               | ((uint32_t)cupid_io_read(gba, (address & GBA_OFFSET_MASK & ~1) | 2) << 16);
         break;
@@ -459,6 +466,7 @@ uint32_t cupid_memory_load16(struct CupidARM* cpu, uint32_t address, int* cycleC
         LOAD_16(value, address & (GBA_SIZE_IWRAM - 2), memory->iwram);
         break;
     case GBA_REGION_IO:
+        sync_io(cpu, cycleCounter);
         value = cupid_io_read(gba, address & (GBA_OFFSET_MASK - 1));
         break;
     case GBA_REGION_PALETTE:
@@ -553,6 +561,7 @@ uint32_t cupid_memory_load8(struct CupidARM* cpu, uint32_t address, int* cycleCo
         value = ((uint8_t*)memory->iwram)[address & (GBA_SIZE_IWRAM - 1)];
         break;
     case GBA_REGION_IO:
+        sync_io(cpu, cycleCounter);
         value = (cupid_io_read(gba, address & 0xFFFE) >> ((address & 1) << 3)) & 0xFF;
         break;
     case GBA_REGION_PALETTE:
@@ -628,6 +637,7 @@ void cupid_memory_store32(struct CupidARM* cpu, uint32_t address, int32_t value,
         STORE_32(value, address & (GBA_SIZE_IWRAM - 4), memory->iwram);
         break;
     case GBA_REGION_IO:
+        sync_io(cpu, cycleCounter);
         cupid_io_write(gba, address & (GBA_OFFSET_MASK - 3), value & 0xFFFF);
         cupid_io_write(gba, (address & (GBA_OFFSET_MASK - 3)) + 2, value >> 16);
         break;
@@ -685,6 +695,7 @@ void cupid_memory_store16(struct CupidARM* cpu, uint32_t address, int16_t value,
         STORE_16(value, address & (GBA_SIZE_IWRAM - 2), memory->iwram);
         break;
     case GBA_REGION_IO:
+        sync_io(cpu, cycleCounter);
         cupid_io_write(gba, address & (GBA_OFFSET_MASK - 1), value);
         break;
     case GBA_REGION_PALETTE:
@@ -745,6 +756,7 @@ void cupid_memory_store8(struct CupidARM* cpu, uint32_t address, int8_t value, i
         ((int8_t*)memory->iwram)[address & (GBA_SIZE_IWRAM - 1)] = value;
         break;
     case GBA_REGION_IO:
+        sync_io(cpu, cycleCounter);
         cupid_io_write8(gba, address & GBA_OFFSET_MASK, (uint8_t)value);
         break;
     case GBA_REGION_PALETTE:
@@ -990,32 +1002,26 @@ uint32_t cupid_memory_load_multiple(struct CupidARM* cpu, uint32_t address,
     if (direction & LSM_D) address = writeback;
     if ((direction & LSM_B) != ((direction & LSM_D) >> 1)) address += 4;
     address &= 0xFFFFFFFC;
-
-    int region = address >> GBA_BASE_OFFSET;
-    int wait = 0;
-
-    /* An empty list transfers PC, with writeback for sixteen registers. */
+    struct CupidGBA* gba = cpu->master;
+    int cycles = cycleCounter ? *cycleCounter : 0;
+    bool first = true;
     if (!mask) mask = 1 << ARM_PC;
-
     for (int i = 0; i < 16; i++) {
         if (!(mask & (1 << i))) continue;
-        int w = 0;
-        uint32_t val = cupid_memory_load32(cpu, address, &w);
-        wait += w;
+        uint32_t val = cupid_memory_load32(cpu, address, cycleCounter ? &cycles : NULL);
+        if (cycleCounter) {
+            /* LDM has one final internal cycle, not one after each word. */
+            cycles--;
+            unsigned region = address >> GBA_BASE_OFFSET;
+            if (!first && region < 16) {
+                cycles -= gba->memory.waitstatesNonseq32[region] - gba->memory.waitstatesSeq32[region];
+            }
+        }
+        first = false;
         cpu->gprs[i] = (int32_t)val;
         address += 4;
     }
-
-    if (cycleCounter) {
-        ++wait; /** +1 internal cycle for LDM. */
-        struct CupidGBA* gba = cpu->master;
-        if (region < GBA_REGION_ROM0) {
-            wait = cupid_memory_stall(cpu, wait);
-        }
-        (void)gba;
-        *cycleCounter += wait;
-    }
-
+    if (cycleCounter) *cycleCounter = cycles + 1;
     return writeback;
 }
 
@@ -1028,32 +1034,25 @@ uint32_t cupid_memory_store_multiple(struct CupidARM* cpu, uint32_t address,
     if (direction & LSM_D) address = writeback;
     if ((direction & LSM_B) != ((direction & LSM_D) >> 1)) address += 4;
     address &= 0xFFFFFFFC;
-
-    int region = address >> GBA_BASE_OFFSET;
-    int wait = 0;
-
+    struct CupidGBA* gba = cpu->master;
+    int cycles = cycleCounter ? *cycleCounter : 0;
+    bool first = true;
     if (!mask) mask = 1 << ARM_PC;
-
     for (int i = 0; i < 16; i++) {
         if (!(mask & (1 << i))) continue;
         int32_t val = cpu->gprs[i];
-        /** PC is stored as PC+12 in ARM mode (current + 2 instructions). */
         if (i == ARM_PC) {
             val = (uint32_t)val + (cpu->executionMode == MODE_ARM ? WORD_SIZE_ARM : WORD_SIZE_THUMB);
         }
-        int w = 0;
-        cupid_memory_store32(cpu, address, val, &w);
-        wait += w;
+        cupid_memory_store32(cpu, address, val, cycleCounter ? &cycles : NULL);
+        unsigned region = address >> GBA_BASE_OFFSET;
+        if (cycleCounter && !first && region < 16) {
+            cycles -= gba->memory.waitstatesNonseq32[region] - gba->memory.waitstatesSeq32[region];
+        }
+        first = false;
         address += 4;
     }
-
-    if (cycleCounter) {
-        if (region < GBA_REGION_ROM0) {
-            wait = cupid_memory_stall(cpu, wait);
-        }
-        *cycleCounter += wait;
-    }
-
+    if (cycleCounter) *cycleCounter = cycles;
     return writeback;
 }
 

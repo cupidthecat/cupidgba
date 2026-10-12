@@ -1,8 +1,3 @@
-/* Copyright (c) 2013-2014 Jeffrey Pfau
- *
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /**
  * @file arm.h
  * @brief ARM7TDMI CPU core definitions for CupidGBA emulator.
@@ -196,6 +191,7 @@ struct CupidARM {
 
     /** Halt state */
     int halted;
+    bool irqDisableLatch; /**< IRQ mask sampled by the instruction pipeline */
 
     /**
      * Banked registers (one set per mode: USR/SYS, FIQ, IRQ, SVC, ABT, UND).
@@ -250,6 +246,7 @@ void cupid_thumb_step(struct CupidARM* cpu);
 
 /** @name Exception Entry */
 void cupid_arm_raise_irq(struct CupidARM* cpu);
+void cupid_arm_take_irq(struct CupidARM* cpu);
 void cupid_arm_raise_swi(struct CupidARM* cpu);
 void cupid_arm_raise_undefined(struct CupidARM* cpu);
 

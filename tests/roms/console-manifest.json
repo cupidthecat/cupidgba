@@ -1,0 +1,24 @@
+{
+  "repository": "https://codeberg.org/nba-emu/hw-test",
+  "revision": "fbc99140e06f083c0a47612467cfbb02470e56dc",
+  "roms": [
+    {
+      "name": "timer-reload",
+      "path": "timer/reload/reload.gba",
+      "sha256": "ce1c32a560aa46e3070e7a9745102c0168380d3d1c100032fd5ff4ebe9fd6947",
+      "lines": ["FFF8 -- -: PASS 0xfff9", "FFF8 16 0: PASS 0xdeae", "FFF8 32 0: PASS 0xdeae", "FFF8 32 6: PASS 0xdeae", "FFF8 32 7: PASS 0xfff9", "FFFF 16 0: PASS 0xdeb4", "FFFF 32 0: PASS 0xdeb4", "congratulations!"]
+    },
+    {
+      "name": "timer-start-stop",
+      "path": "timer/start-stop/start-stop.gba",
+      "sha256": "c25f0a63e7b9a350163dc8d683dd081934b65295f06a9079109ab709b9b785a7",
+      "lines": ["1ST: PASS 3", "2ND: PASS 8", "congratulations!"]
+    },
+    {
+      "name": "timer-tick-before-reload",
+      "path": "timer/tick-before-reload/tick-before-reload.gba",
+      "sha256": "d4b872ff07839e898c123a69b871f3a98f60af322be18dedc03f352e5f627499",
+      "lines": ["TM1CNT_L: PASS 1", "IF: PASS 8", "congratulations!"]
+    }
+  ]
+}

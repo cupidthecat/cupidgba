@@ -1,8 +1,3 @@
-/* Copyright (c) 2013-2015 Jeffrey Pfau
- *
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /**
  * @file gba.c
  * @brief Top-level GBA system: create, reset, destroy, main frame loop.
@@ -21,8 +16,7 @@ static void _cupidSwi32(struct CupidARM* cpu, int immediate);
 static void _cupidHitIllegal(struct CupidARM* cpu, uint32_t opcode);
 static void _cupidHitStub(struct CupidARM* cpu, uint32_t opcode);
 static void _cupidBreakpoint(struct CupidARM* cpu, int immediate);
-static void _cupidTestIRQNoDelay(struct CupidARM* cpu);
-static void _cupidTriggerIRQ(struct CupidTiming* timing, void* context, uint32_t cyclesLate);
+static void _cupidCPSRChanged(struct CupidARM* cpu);
 
 /**
  * @brief Wire interrupt handler callbacks.
@@ -33,7 +27,7 @@ static void _cupidInterruptHandlerInit(struct CupidARMInterruptHandler* irqh) {
     irqh->swi16 = _cupidSwi16;
     irqh->swi32 = _cupidSwi32;
     irqh->hitIllegal = _cupidHitIllegal;
-    irqh->readCPSR = _cupidTestIRQNoDelay;
+    irqh->readCPSR = _cupidCPSRChanged;
     irqh->hitStub = _cupidHitStub;
     irqh->bkpt16 = _cupidBreakpoint;
     irqh->bkpt32 = _cupidBreakpoint;
@@ -88,12 +82,6 @@ void cupid_gba_create(struct CupidGBA* gba) {
     /** Init timing scheduler and wire CPU cycle and next-event counters. */
     cupid_timing_init(&gba->timing, &gba->cpu.cycles, &gba->cpu.nextEvent);
 
-    /** IRQ event scheduled when IE and IF become non-zero. */
-    gba->irqEvent.name = "GBA IRQ Event";
-    gba->irqEvent.callback = _cupidTriggerIRQ;
-    gba->irqEvent.context = gba;
-    gba->irqEvent.priority = 0;
-    gba->irqEvent.next = NULL;
 }
 
 /**
@@ -155,6 +143,7 @@ static void _cupidGBAReset(struct CupidARM* cpu) {
     gba->ime = 0;
     gba->ie = 0;
     gba->irqf = 0;
+    cupid_irq_init(gba);
     gba->frameReady = false;
     gba->bus = 0;
     gba->totalCycles = 0;
@@ -274,15 +263,18 @@ void cupid_gba_test_keypad_irq(struct CupidGBA* gba) {
 void cupid_gba_step(struct CupidGBA* gba) {
     struct CupidARM* cpu = &gba->cpu;
 
+    if (cpu->halted && gba->irq.available) {
+        cpu->halted = 0;
+        cpu->cycles++; /* Wake-up consumes one clock before the next fetch. */
+        if (cpu->cycles >= cpu->nextEvent) cpu->irqh.processEvents(cpu);
+    }
     if (cpu->halted) {
-        /** Fast-forward to next event when halted. */
         cpu->cycles = cpu->nextEvent;
     } else {
-        if (cpu->executionMode == MODE_THUMB) {
-            cupid_thumb_step(cpu);
-        } else {
-            cupid_arm_step(cpu);
-        }
+        if (gba->irq.line && !cpu->irqDisableLatch) cupid_arm_take_irq(cpu);
+        cpu->irqDisableLatch = cpu->cpsr.i;
+        if (cpu->executionMode == MODE_THUMB) cupid_thumb_step(cpu);
+        else cupid_arm_step(cpu);
     }
 
     if (cpu->cycles >= cpu->nextEvent) {
@@ -330,15 +322,6 @@ static void _cupidProcessEvents(struct CupidARM* cpu) {
         } while (gba->cpuBlocked && !gba->earlyExit);
 
         cpu->nextEvent = nextEvent;
-        if (cpu->halted) {
-            cpu->cycles = nextEvent;
-            if (!gba->ime || !gba->ie) {
-                break;
-            }
-        }
-        if (gba->earlyExit) {
-            break;
-        }
     }
     gba->earlyExit = false;
     if (gba->cpuBlocked) {
@@ -395,30 +378,8 @@ static void _cupidBreakpoint(struct CupidARM* cpu, int immediate) {
 }
 
 /**
- * @brief Check if IRQ should fire after CPSR modifications.
+ * @brief CPSR changes take effect through the CPU's instruction-boundary latch.
  */
-static void _cupidTestIRQNoDelay(struct CupidARM* cpu) {
-    struct CupidGBA* gba = cpu->master;
-    cupid_test_irq(gba, 0);
-}
-
-/**
- * @brief IRQ timing event callback.
- *
- * Fires GBA_IRQ_DELAY cycles after IE and IF became non-zero, unhalts the
- * CPU and, if IME is set and IRQs are not masked in CPSR, enters IRQ.
- */
-static void _cupidTriggerIRQ(struct CupidTiming* timing, void* context, uint32_t cyclesLate) {
-    (void)timing;
-    (void)cyclesLate;
-    struct CupidGBA* gba = context;
-    gba->cpu.halted = 0;
-
-    if (!(gba->ie & gba->irqf)) {
-        return;
-    }
-
-    if (gba->ime && !gba->cpu.cpsr.i) {
-        cupid_arm_raise_irq(&gba->cpu);
-    }
+static void _cupidCPSRChanged(struct CupidARM* cpu) {
+    (void)cpu; /* IRQ entry is handled by cupid_gba_step. */
 }

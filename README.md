@@ -45,4 +45,4 @@ ROM inputs, sanitizers, and the limits of the current coverage.
 ## License
 
 Project contributions use GPL-3.0-or-later. See [LICENSE](LICENSE) and
-[source notices](docs/legal/provenance.md) for the terms covering adapted code.
+[licensing](docs/legal/provenance.md) for details.

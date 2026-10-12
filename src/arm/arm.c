@@ -1,15 +1,11 @@
-/* Copyright (c) 2013-2014 Jeffrey Pfau
- *
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /** @file arm.c
  * @brief ARM7TDMI CPU core: init, reset, step, run loop, exceptions.
  *
  *   - 16-entry condition code LUT indexed by NZCV flags
  *   - Fast-path for condition 0xE (always execute)
  *   - ARMStep / ThumbStep are static inline, called from ARMRun / ARMRunLoop
- *   - Instruction handlers own cycle accounting (step functions don't add extra)
+ *   - Instruction handlers account for fetch, data and internal clocks;
+ *     the bus synchronizes MMIO during the data transfer
  *   - ARMWritePC / ThumbWritePC refill the pipeline on branches & exceptions
  *   - Mode switch sets nextEvent = cycles → forces loop exit
  */
@@ -37,7 +33,7 @@ static const uint16_t conditionLut[16] = {
 	0x0A05, // GT  Z clear && N == V
 	0xF5FA, // LE  Z set || N != V
 	0xFFFF, // AL  always
-	0x0000  // NV  never (ARMv4: same as AL, but we treat as never)
+	0x0000  // NV  never
 };
 
 /** Prefetch-cycle cost for a no-op (failed condition or idle fetch) */
@@ -110,6 +106,7 @@ void cupid_arm_init(struct CupidARM* cpu) {
 	memset(cpu->bankedRegisters, 0, sizeof(cpu->bankedRegisters));
 	memset(cpu->bankedSPSRs, 0, sizeof(cpu->bankedSPSRs));
 	cpu->cpsr.packed = 0;
+	cpu->irqDisableLatch = false;
 	cpu->spsr.packed = 0;
 	cpu->cycles = 0;
 	cpu->nextEvent = 0;
@@ -150,7 +147,7 @@ void cupid_arm_reset(struct CupidARM* cpu) {
 	_CupidSetMode(cpu, MODE_ARM);
 
 	/** Fill the initial prefetch pipeline from address 0 (reset vector).
-	 * Mirrors mGBA: ARMWritePC(cpu) before irqh.reset.
+	 * Updates the program counter before the reset callback.
 	 */
 	CupidARMWritePC(cpu);
 
@@ -182,6 +179,13 @@ void cupid_arm_raise_irq(struct CupidARM* cpu) {
 	if (cpu->cpsr.i) {
 		return;
 	}
+	cupid_arm_take_irq(cpu);
+}
+
+void cupid_arm_take_irq(struct CupidARM* cpu) {
+	/* IRQ entry discards one instruction fetch before refilling the vector. */
+	cpu->cycles += 1 + (cpu->executionMode == MODE_ARM
+		? cpu->memory.activeSeqCycles32 : cpu->memory.activeSeqCycles16);
 	union CupidPSR cpsr = cpu->cpsr;
 	int instructionWidth;
 	if (cpu->executionMode == MODE_THUMB) {
@@ -194,9 +198,9 @@ void cupid_arm_raise_irq(struct CupidARM* cpu) {
 	cpu->gprs[ARM_LR] = cpu->gprs[ARM_PC] - instructionWidth + WORD_SIZE_ARM;
 	cpu->gprs[ARM_PC] = BASE_IRQ;
 	_CupidSetMode(cpu, MODE_ARM);
-	cpu->cycles += CupidARMWritePC(cpu);
 	cpu->spsr = cpsr;
 	cpu->cpsr.i = 1;
+	cpu->cycles += CupidARMWritePC(cpu);
 	cpu->halted = 0;
 }
 
@@ -213,9 +217,9 @@ void cupid_arm_raise_swi(struct CupidARM* cpu) {
 	cpu->gprs[ARM_LR] = cpu->gprs[ARM_PC] - instructionWidth;
 	cpu->gprs[ARM_PC] = BASE_SWI;
 	_CupidSetMode(cpu, MODE_ARM);
-	cpu->cycles += CupidARMWritePC(cpu);
 	cpu->spsr = cpsr;
 	cpu->cpsr.i = 1;
+	cpu->cycles += CupidARMWritePC(cpu);
 }
 
 void cupid_arm_raise_undefined(struct CupidARM* cpu) {
@@ -231,9 +235,9 @@ void cupid_arm_raise_undefined(struct CupidARM* cpu) {
 	cpu->gprs[ARM_LR] = cpu->gprs[ARM_PC] - instructionWidth;
 	cpu->gprs[ARM_PC] = BASE_UNDEF;
 	_CupidSetMode(cpu, MODE_ARM);
-	cpu->cycles += CupidARMWritePC(cpu);
 	cpu->spsr = cpsr;
 	cpu->cpsr.i = 1;
+	cpu->cycles += CupidARMWritePC(cpu);
 }
 
 /** @name ARMStep

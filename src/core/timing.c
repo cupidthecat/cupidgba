@@ -1,8 +1,3 @@
-/* Copyright (c) 2013-2016 Jeffrey Pfau
- *
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include "cupid/timing.h"
 
 /* Timestamps wrap modulo 2^32. Deadlines must be within INT32_MAX cycles. */
@@ -42,6 +37,7 @@ void cupid_timing_clear(struct CupidTiming* timing) {
     timing->reroot = NULL;
     timing->globalCycles = 0;
     timing->masterCycles = 0;
+    timing->inCallback = false;
     *timing->relativeCycles = 0;
     *timing->nextEvent = INT32_MAX;
 }
@@ -114,7 +110,10 @@ int32_t cupid_timing_tick(struct CupidTiming* timing, int32_t cycles) {
         timing->root = next->next;
         next->next = NULL;
         uint32_t late = timing->masterCycles - next->when;
+        bool wasInCallback = timing->inCallback;
+        timing->inCallback = true;
         next->callback(timing, next->context, late);
+        timing->inCallback = wasInCallback;
     }
     /* The CPU compares its relative accumulator against this breakpoint. */
     *timing->nextEvent = deadline(timing);

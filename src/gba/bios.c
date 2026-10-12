@@ -1,8 +1,3 @@
-/* Copyright (c) 2013-2015 Jeffrey Pfau
- *
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /**
  * @file bios.c
  * @brief High-Level Emulation of GBA BIOS SWI calls.
@@ -501,7 +496,7 @@ static void _BitUnPack(struct CupidGBA* gba) {
  * @brief SWI 0x11/0x12: LZ77UnCompWram/Vram.
  *
  * SWI 0x11 uses width=1 (byte writes). SWI 0x12 uses width=2 (halfword writes).
- * Matches reference implementation _unLz77.
+ * Backreferences copy bytes from the decoded destination.
  */
 static void _unLz77(struct CupidGBA* gba, int width) {
     uint32_t source = gba->cpu.gprs[0];
@@ -526,14 +521,14 @@ static void _unLz77(struct CupidGBA* gba, int width) {
                     if (remaining > 0) --remaining;
                     int byte;
                     if (width == 2) {
-                        byte = (int16_t)cupid_memory_load16(&gba->cpu, disp & ~1u, NULL);
+                        /* Select an unsigned byte before packing a VRAM halfword. */
+                        byte = (int)((cupid_memory_load16(&gba->cpu, disp & ~1u, NULL)
+                                      >> ((disp & 1) * 8)) & 0xFF);
                         if (dest & 1) {
-                            byte >>= (disp & 1) * 8;
                             halfword |= byte << 8;
                             cupid_memory_store16(&gba->cpu, dest ^ 1, (int16_t)halfword, NULL);
                         } else {
-                            byte >>= (disp & 1) * 8;
-                            halfword = byte & 0xFF;
+                            halfword = byte;
                         }
                     } else {
                         byte = (uint8_t)cupid_memory_load8(&gba->cpu, disp, NULL);

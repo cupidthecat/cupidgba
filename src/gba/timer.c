@@ -1,218 +1,121 @@
-/* Copyright (c) 2013-2018 Jeffrey Pfau
- *
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
-/**
- * @file timer.c
- * @brief Event-driven GBA hardware timers (4 channels).
- *
- * Each non-cascade timer owns a CupidTimingEvent that fires on overflow.
- * The running counter is stored in @c memory.io[REG_TMxCNT_L >> 1] so that
- * I/O reads can return the up-to-date value after a sync. Cascade timers are
- * incremented directly when the preceding timer overflows.
- */
-
 #include "cupid/gba.h"
 
-/**
- * @brief Prescaler control bits 0-1 select shift amount (F/1, F/64, F/256, F/1024).
- */
-static const unsigned PRESCALE_BITS[4] = { 0, 6, 8, 10 };
+static const unsigned PRESCALE_BITS[4] = {0, 6, 8, 10};
 
-/**
- * @brief Per-timer overflow handler common logic.
- */
-static void _timerUpdate(struct CupidGBA* gba, int timerId,
-                         uint32_t cyclesLate)
-{
-    struct CupidTimer* timer = &gba->timers[timerId];
+static void schedule_at(struct CupidTimer* timer, struct CupidTimingEvent* event,
+                        uint64_t when) {
+    cupid_timing_schedule_absolute(&timer->gba->timing, event, (int32_t)(uint32_t)when);
+}
 
-    /**
-     * Reload counter.
-     * Cascade timers get the reload value directly.
-     * Non-cascade timers sync the running counter first (writes into
-     * memory.io), then reload.
-     */
-    if (timer->countUp) {
-        gba->memory.io[REG_TMCNT_LO(timerId) >> 1] = timer->reload;
-    } else {
-        cupid_timer_update_register(gba, timerId, cyclesLate);
-    }
+static uint16_t counter_at(const struct CupidTimer* timer, uint64_t when) {
+    /* Enabling an independent timer delays its first counting edge. */
+    uint64_t delta = timer->running && when > timer->epoch
+                   ? (when - timer->epoch) >> timer->prescaleBits : 0;
+    return (uint16_t)(timer->counter + delta);
+}
 
-    /** IRQ. */
-    if (timer->doIrq) {
-        cupid_raise_irq(gba, IRQ_TIMER0 << timerId, cyclesLate);
-    }
+static void start(struct CupidTimer* timer, uint64_t epoch) {
+    timer->running = true;
+    timer->epoch = epoch;
+    uint64_t period = UINT64_C(1) << timer->prescaleBits;
+    schedule_at(timer, &timer->event, epoch + (0x10000u - timer->counter) * period);
+}
 
-    /** Audio FIFO for timers 0 and 1. */
-    if (timerId < 2) {
-        cupid_audio_timer_overflow(&gba->audio, timerId);
-    }
-
-    /** Cascade to the next timer. */
-    if (timerId < 3) {
-        struct CupidTimer* next = &gba->timers[timerId + 1];
-        if (next->countUp && next->enable) {
-            ++gba->memory.io[REG_TMCNT_LO(timerId + 1) >> 1];
-            if (!gba->memory.io[REG_TMCNT_LO(timerId + 1) >> 1]) {
-                /** Wrapped to 0, overflow on the next timer. */
-                _timerUpdate(gba, timerId + 1, cyclesLate);
-            }
+static void overflow(struct CupidTimer* timer, uint64_t when) {
+    struct CupidGBA* gba = timer->gba;
+    timer->counter = timer->reload;
+    if (timer->control & 0x40) cupid_raise_irq_at(gba, IRQ_TIMER0 << timer->id, when);
+    if (timer->id < 2) cupid_audio_timer_overflow(&gba->audio, (int)timer->id, when);
+    if (timer->id < 3) {
+        struct CupidTimer* next = &gba->timers[timer->id + 1];
+        if ((next->control & 0x84) == 0x84 && ++next->counter == 0) {
+            overflow(next, when);
         }
     }
 }
 
-/**
- * @brief Per-channel timing callbacks.
- */
-static void _timerUpdate0(struct CupidTiming* timing, void* context,
-                          uint32_t cyclesLate)
-{
+static void overflow_callback(struct CupidTiming* timing, void* context, uint32_t late) {
+    struct CupidTimer* timer = context;
+    uint64_t when = timing->globalCycles - late;
+    overflow(timer, when);
+    /* Reschedule from this overflow. Dispatch every overdue overflow, including
+     * its IRQ, FIFO and cascade effects, in chronological order. */
+    start(timer, when);
+}
+
+static void reload_callback(struct CupidTiming* timing, void* context, uint32_t late) {
     (void)timing;
-    _timerUpdate(context, 0, cyclesLate);
-}
-static void _timerUpdate1(struct CupidTiming* timing, void* context,
-                          uint32_t cyclesLate)
-{
-    (void)timing;
-    _timerUpdate(context, 1, cyclesLate);
-}
-static void _timerUpdate2(struct CupidTiming* timing, void* context,
-                          uint32_t cyclesLate)
-{
-    (void)timing;
-    _timerUpdate(context, 2, cyclesLate);
-}
-static void _timerUpdate3(struct CupidTiming* timing, void* context,
-                          uint32_t cyclesLate)
-{
-    (void)timing;
-    _timerUpdate(context, 3, cyclesLate);
+    (void)late;
+    struct CupidTimer* timer = context;
+    timer->reload = timer->pendingReload;
 }
 
-/**
- * @brief Callback table indexed by timer id.
- */
-static void (*const TIMER_CALLBACKS[4])(struct CupidTiming*, void*, uint32_t) = {
-    _timerUpdate0, _timerUpdate1, _timerUpdate2, _timerUpdate3
-};
-
-/**
- * @brief Initialize timer events.
- */
-void cupid_timer_init(struct CupidGBA* gba) {
-    static const char* NAMES[4] = {
-        "CupidTimer 0", "CupidTimer 1", "CupidTimer 2", "CupidTimer 3"
-    };
-
-    memset(gba->timers, 0, sizeof(gba->timers));
-
-    for (int i = 0; i < 4; i++) {
-        gba->timers[i].event.name     = NAMES[i];
-        gba->timers[i].event.callback = TIMER_CALLBACKS[i];
-        gba->timers[i].event.context  = gba;
-        gba->timers[i].event.priority = 0x20 + i;
-    }
-}
-
-/**
- * @brief Sync timer counter into IO register and reschedule overflow event.
- */
-void cupid_timer_update_register(struct CupidGBA* gba, int timer,
-                                 int32_t cyclesLate)
-{
-    struct CupidTimer* t = &gba->timers[timer];
-    if (!t->enable || t->countUp) {
+static void control_callback(struct CupidTiming* timing, void* context, uint32_t late) {
+    struct CupidTimer* timer = context;
+    uint64_t when = timing->globalCycles - late;
+    bool wasEnabled = (timer->control & 0x80) != 0;
+    timer->counter = counter_at(timer, when);
+    timer->running = false;
+    cupid_timing_deschedule(timing, &timer->event);
+    timer->control = timer->pendingControl;
+    timer->gba->memory.io[(REG_TMCNT_LO(timer->id) + 2) >> 1] = timer->control;
+    timer->prescaleBits = PRESCALE_BITS[timer->control & 3];
+    if (!(timer->control & 0x80)) return;
+    if (timer->control & 4) {
+        if (!wasEnabled) timer->counter = timer->reload;
         return;
     }
 
-    int prescaleBits = t->prescaleBits;
-
-    /** Align to prescaler boundary. */
-    int32_t currentTime = cupid_timing_current_time(&gba->timing) - cyclesLate;
-    int32_t tickMask    = (1 << prescaleBits) - 1;
-    currentTime &= ~tickMask;
-
-    /** Compute elapsed ticks since last sync. */
-    int32_t tickIncrement = currentTime - t->lastEvent;
-    t->lastEvent = currentTime;
-    tickIncrement >>= prescaleBits;
-    tickIncrement += gba->memory.io[REG_TMCNT_LO(timer) >> 1];
-
-    /** Absorb any overflows (event normally fires first). */
-    while (tickIncrement >= 0x10000) {
-        tickIncrement -= 0x10000 - t->reload;
-    }
-    gba->memory.io[REG_TMCNT_LO(timer) >> 1] = (uint16_t)tickIncrement;
-
-    /** Schedule next overflow. */
-    tickIncrement = (0x10000 - tickIncrement) << prescaleBits;
-    currentTime += tickIncrement;
-    currentTime &= ~tickMask;
-
-    cupid_timing_deschedule(&gba->timing, &t->event);
-    cupid_timing_schedule_absolute(&gba->timing, &t->event, currentTime);
-}
-
-/**
- * @brief Write TMxCNT_L reload latch.
- */
-void cupid_timer_write_reload(struct CupidGBA* gba, int ch, uint16_t val) {
-    gba->timers[ch].reload = val;
-}
-
-/**
- * @brief Write TMxCNT_H control register.
- */
-void cupid_timer_write_control(struct CupidGBA* gba, int ch, uint16_t value)
-{
-    struct CupidTimer* t = &gba->timers[ch];
-
-    /** Sync counter before changing any settings. */
-    cupid_timer_update_register(gba, ch, 0);
-
-    unsigned prescaleBits = PRESCALE_BITS[value & 3];
-
-    /** Snapshot previous state. */
-    bool wasEnabled = t->enable;
-    bool wasCountUp = t->countUp;
-    int  oldPrescale = t->prescaleBits;
-
-    /** Decode new settings. */
-    t->prescaleBits = (int)prescaleBits;
-    t->countUp      = (ch > 0) && (value & 0x0004);
-    t->doIrq        = (value & 0x0040) != 0;
-    t->enable       = (value & 0x0080) != 0;
-
-    /** Determine whether to reschedule. */
-    bool reschedule = false;
-    if (wasEnabled != t->enable) {
-        reschedule = true;
-        if (t->enable) {
-            /** 0 to 1 transition: reload counter. */
-            gba->memory.io[REG_TMCNT_LO(ch) >> 1] = t->reload;
-        }
-    } else if (wasCountUp != t->countUp) {
-        reschedule = true;
-    } else if (oldPrescale != t->prescaleBits) {
-        reschedule = true;
-    }
-
-    if (reschedule) {
-        cupid_timing_deschedule(&gba->timing, &t->event);
-        if (t->enable && !t->countUp) {
-            int32_t tickMask = (1 << prescaleBits) - 1;
-            t->lastEvent = cupid_timing_current_time(&gba->timing) & ~tickMask;
-            cupid_timer_update_register(gba, ch, 0);
+    uint64_t mask = (UINT64_C(1) << timer->prescaleBits) - 1;
+    uint64_t epoch = when & ~mask;
+    if (!wasEnabled) {
+        /* A stopped FFFF counter can overflow before loading the reload.
+         * Otherwise the enable pipeline postpones the first counting edge. */
+        if (timer->counter != 0xFFFF || (when & mask)) {
+            timer->counter = timer->reload;
+            epoch++;
         }
     }
+    start(timer, epoch);
 }
 
-/**
- * @brief Read TMxCNT_L current counter value.
- */
+void cupid_timer_init(struct CupidGBA* gba) {
+    memset(gba->timers, 0, sizeof(gba->timers));
+    for (unsigned i = 0; i < 4; i++) {
+        struct CupidTimer* timer = &gba->timers[i];
+        timer->gba = gba;
+        timer->id = i;
+        timer->event = (struct CupidTimingEvent){.context = timer,
+            .callback = overflow_callback, .name = "Timer overflow", .priority = 0};
+        timer->reloadEvent = (struct CupidTimingEvent){.context = timer,
+            .callback = reload_callback, .name = "Timer reload write", .priority = 1};
+        timer->controlEvent = (struct CupidTimingEvent){.context = timer,
+            .callback = control_callback, .name = "Timer control write", .priority = 2};
+    }
+}
+
+void cupid_timer_write_reload(struct CupidGBA* gba, int ch, uint16_t value) {
+    struct CupidTimer* timer = &gba->timers[ch];
+    timer->pendingReload = value;
+    cupid_timing_schedule(&gba->timing, &timer->reloadEvent, 1);
+}
+
+void cupid_timer_write_control(struct CupidGBA* gba, int ch, uint16_t value) {
+    struct CupidTimer* timer = &gba->timers[ch];
+    timer->pendingControl = value & (ch ? 0xC7 : 0xC3);
+    cupid_timing_schedule(&gba->timing, &timer->controlEvent, 1);
+}
+
+void cupid_timer_write_byte(struct CupidGBA* gba, unsigned ch, unsigned byte, uint8_t value) {
+    uint16_t reload = gba->timers[ch].pendingReload;
+    switch (byte) {
+    case 0: cupid_timer_write_reload(gba, (int)ch, (reload & 0xFF00) | value); break;
+    case 1: cupid_timer_write_reload(gba, (int)ch, (reload & 0xFF) | ((uint16_t)value << 8)); break;
+    case 2: cupid_timer_write_control(gba, (int)ch, value); break;
+    default: break; /* The reserved byte does not change control or its timing. */
+    }
+}
+
 uint16_t cupid_timer_read_counter(struct CupidGBA* gba, int ch) {
-    cupid_timer_update_register(gba, ch, 0);
-    return gba->memory.io[REG_TMCNT_LO(ch) >> 1];
+    return counter_at(&gba->timers[ch], cupid_timing_global_time(&gba->timing));
 }

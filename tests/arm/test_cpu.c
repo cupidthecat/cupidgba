@@ -124,7 +124,37 @@ static void arm_pc_alignment(void) {
     free(gba);
 }
 
+static void block_transfers_charge_one_final_internal_cycle(void) {
+    const uint32_t regions[] = {GBA_BASE_IWRAM + 0x100, GBA_BASE_EWRAM};
+    const uint64_t loadCycles[] = {6, 26};
+    const uint64_t storeCycles[] = {5, 25};
+    for (unsigned i = 0; i < 2; i++) {
+        struct CupidGBA* gba = calloc(1, sizeof(*gba));
+        CHECK(gba);
+        cupid_gba_create(gba);
+        cupid_gba_reset(gba);
+        const uint32_t values[] = {0x12345678, 0x9ABCDEF0, 0x13572468, 0xA5A5A5A5};
+        uint8_t* data = i ? gba->memory.ewram : gba->memory.iwram + 0x100;
+        memcpy(data, values, sizeof(values));
+        gba->cpu.gprs[10] = regions[i];
+        uint64_t before = cupid_timing_global_time(&gba->timing);
+        execute(gba, 0xE8BA000F, false); /* ldmia r10!, {r0-r3} */
+        CHECK(cupid_timing_global_time(&gba->timing) - before == loadCycles[i]);
+        CHECK(!memcmp(gba->cpu.gprs, values, sizeof(values)));
+        CHECK((uint32_t)gba->cpu.gprs[10] == regions[i] + sizeof(values));
+        memset(data, 0, sizeof(values));
+        gba->cpu.gprs[10] = regions[i];
+        before = cupid_timing_global_time(&gba->timing);
+        execute(gba, 0xE8AA000F, false); /* stmia r10!, {r0-r3} */
+        CHECK(cupid_timing_global_time(&gba->timing) - before == storeCycles[i]);
+        CHECK(!memcmp(data, values, sizeof(values)));
+        cupid_gba_destroy(gba);
+        free(gba);
+    }
+}
+
 int main(void) {
+    RUN(block_transfers_charge_one_final_internal_cycle);
     RUN(complete_dispatch_tables);
     RUN(swi_decode_and_exception);
     RUN(fixed_width_arithmetic);
