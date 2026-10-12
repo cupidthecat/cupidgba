@@ -17,6 +17,9 @@ DMA regressions check read/write phase boundaries, priority and preemption,
 CPU bus stalls, internal-cycle overlap, swap locking, masks, maximum counts,
 address stepping, repeat reloads, cancellation, FIFO requests, timed I/O and
 clock wrap. They compare late dispatch with advancing one clock at a time.
+Prefetch regressions check pending/cached fetches, queue capacity and sustained
+bandwidth, fill/cancellation clocks, disable/restart behavior, width changes,
+uncached page boundaries and DMA/timer/IRQ interactions across clock wrap.
 BIOS regressions check LZ77 backreferences with bytes whose high bit is set
 through both byte and halfword output paths. They also execute ARM/Thumb
 interrupt waits, check ready-flag consumption and register preservation,
@@ -107,11 +110,25 @@ Both paths pass. This suite checks transfer data; the four hardware ROMs check
 the listed timings and latches. See [DMA and bus ownership](../hardware/dma.md)
 for the behavior and remaining limits.
 
+The local CPU and bus timing matrix uses an external BIOS for its firmware
+timing cases:
+
+```sh
+python3 tests/roms/check_bus_suite.py --runner build/cupidgba-headless \
+  --rom /path/to/bus-suite.gba --bios /path/to/gba-bios.bin
+```
+
+Set `CUPID_BUS_SUITE_ROM` and `CUPID_TEST_BIOS` to add it to CTest. The observer
+requires its pinned digest, the terminal instruction, R12=0, 2020/2020 observations
+and zero logged failures. The built-in BIOS currently returns R12=1 and
+1880/2020 results on the same ROM; its 140 math/copy SWI timing failures remain
+open. See [prefetch](../hardware/prefetch.md) for coverage and unresolved edges.
+
 To run another authorized input for a fixed number of frames:
 
 ```sh
 ./build/cupidgba-headless /path/to/game.gba --bios /path/to/gba-bios.bin \
-  --frames 600 --screenshot .local-research/frame.ppm
+  --frames 600 --steps 168537600 --screenshot .local-research/frame.ppm
 ```
 
 The headless runner does not load or write disk saves. Its screenshot is the
@@ -123,6 +140,11 @@ a specific instruction address.
 result inspection.
 `--dump-ewram FILE` provides the result counters and failure log for the local
 timer suite observer.
+The example explicitly allows at most one instruction per emulated clock for
+600 frames (600 × 280896 clocks). The runner's default 50-million-step guard
+can stop a valid long run when prefetch permits more instructions per frame.
+This changes the observation budget; it does not change emulation timing or
+any hardware test expectation.
 
 Passing these checks establishes the listed cases. They do not cover every CPU
 encoding, every bus or arbitration edge, every timer/IRQ interaction, raster

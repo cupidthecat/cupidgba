@@ -21,7 +21,9 @@ static void begin_data_access(struct CupidARM* cpu, uint32_t address,
         ? (sequential ? memory->waitstatesSeq32[region] : memory->waitstatesNonseq32[region])
         : (sequential ? memory->waitstatesSeq16[region] : memory->waitstatesNonseq16[region]));
     memory->fetchNonseq = true;
-    cupid_bus_advance(cpu, wait + 1, true);
+    unsigned penalty = cupid_prefetch_before_data(cpu->master, address);
+    cupid_bus_advance(cpu, wait + 1 + penalty, true);
+    cupid_prefetch_after_data(cpu->master);
 }
 
 static void end_data_access(struct CupidARM* cpu, int* cycles, bool load) {
@@ -141,6 +143,7 @@ void cupid_memory_reset(struct CupidGBA* gba) {
     mem->activeRegion = -1;
     mem->biosPrefetch = 0;
     mem->prefetch = false;
+    memset(&mem->prefetchUnit, 0, sizeof(mem->prefetchUnit));
     mem->lastPrefetchedPc = 0;
     mem->openBus = 0;
     mem->busBusy = false;
@@ -198,6 +201,8 @@ void cupid_memory_update_waitstates(struct CupidGBA* gba, uint16_t parameters) {
     memory->waitstatesSeq32[GBA_REGION_ROM1] = memory->waitstatesSeq32[GBA_REGION_ROM1_EX] = 2 * memory->waitstatesSeq16[GBA_REGION_ROM1] + 1;
     memory->waitstatesSeq32[GBA_REGION_ROM2] = memory->waitstatesSeq32[GBA_REGION_ROM2_EX] = 2 * memory->waitstatesSeq16[GBA_REGION_ROM2] + 1;
 
+    cupid_prefetch_update(gba, cupid_timing_global_time(&gba->timing));
+    if (memory->prefetch && !prefetch) memory->prefetchUnit.disabled = true;
     memory->prefetch = prefetch;
 
     cpu->memory.activeSeqCycles32    = memory->waitstatesSeq32[memory->activeRegion];

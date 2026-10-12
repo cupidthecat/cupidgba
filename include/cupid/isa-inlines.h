@@ -80,11 +80,11 @@
 static inline int32_t CupidARMWritePC(struct CupidARM* cpu) {
 	uint32_t pc = cpu->gprs[ARM_PC] & ~(uint32_t)(WORD_SIZE_ARM - 1);
 	cpu->memory.setActiveRegion(cpu, pc);
-	if (cpu->memory.timed) cpu->memory.fetch(cpu, WORD_SIZE_ARM, false);
+	if (cpu->memory.timed) cpu->memory.fetch(cpu, pc, WORD_SIZE_ARM, false);
 	LOAD_32(cpu->prefetch[0], pc & cpu->memory.activeMask, cpu->memory.activeRegion);
 	if (cpu->memory.timed) cpu->memory.finish(cpu);
 	pc += WORD_SIZE_ARM;
-	if (cpu->memory.timed) cpu->memory.fetch(cpu, WORD_SIZE_ARM, true);
+	if (cpu->memory.timed) cpu->memory.fetch(cpu, pc, WORD_SIZE_ARM, true);
 	LOAD_32(cpu->prefetch[1], pc & cpu->memory.activeMask, cpu->memory.activeRegion);
 	if (cpu->memory.timed) cpu->memory.finish(cpu);
 	cpu->gprs[ARM_PC] = pc;
@@ -95,11 +95,11 @@ static inline int32_t CupidARMWritePC(struct CupidARM* cpu) {
 static inline int32_t CupidThumbWritePC(struct CupidARM* cpu) {
 	uint32_t pc = cpu->gprs[ARM_PC] & ~(uint32_t)(WORD_SIZE_THUMB - 1);
 	cpu->memory.setActiveRegion(cpu, pc);
-	if (cpu->memory.timed) cpu->memory.fetch(cpu, WORD_SIZE_THUMB, false);
+	if (cpu->memory.timed) cpu->memory.fetch(cpu, pc, WORD_SIZE_THUMB, false);
 	LOAD_16(cpu->prefetch[0], pc & cpu->memory.activeMask, cpu->memory.activeRegion);
 	if (cpu->memory.timed) cpu->memory.finish(cpu);
 	pc += WORD_SIZE_THUMB;
-	if (cpu->memory.timed) cpu->memory.fetch(cpu, WORD_SIZE_THUMB, true);
+	if (cpu->memory.timed) cpu->memory.fetch(cpu, pc, WORD_SIZE_THUMB, true);
 	LOAD_16(cpu->prefetch[1], pc & cpu->memory.activeMask, cpu->memory.activeRegion);
 	if (cpu->memory.timed) cpu->memory.finish(cpu);
 	cpu->gprs[ARM_PC] = pc;

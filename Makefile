@@ -11,7 +11,7 @@ CFLAGS += $(CFLAGS_EXTRA)
 # Source files
 SRC_ARM      = src/arm/arm.c src/arm/isa-arm.c src/arm/isa-thumb.c
 SRC_GBA      = src/gba/gba.c src/gba/memory.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c \
-               src/gba/audio.c src/gba/dma.c src/gba/timer.c src/gba/bios.c \
+               src/gba/audio.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c \
                src/gba/hle-bios.c src/gba/savedata.c
 SRC_CORE     = src/core/timing.c
 SRC_RENDER   = src/gba/render/software.c src/gba/render/composite.c \
