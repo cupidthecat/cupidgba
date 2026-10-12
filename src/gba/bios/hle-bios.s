@@ -238,7 +238,7 @@ adr r3, copySourceValid
 mov r12, r4
 bx r3
 .ltorg
-.align 2
+.balign 4, 0
 .arm
 
 CpuFastSet:
@@ -335,7 +335,7 @@ bx lr
 
 @ Signed division uses unsigned magnitudes and a shift/subtract quotient.
 @ A zero denominator with a magnitude above one remains in the scale loop.
-.align 2
+.balign 4, 0
 .thumb
 .thumb_func
 divideFromThumb:
@@ -405,7 +405,7 @@ ldmfd sp!, {r4}
 bx lr
 
 @ Each multiply retains the low word before the signed fixed-point shift.
-.align 2
+.balign 4, 0
 .thumb
 .thumb_func
 angleFromThumb:
@@ -449,7 +449,7 @@ mov r0, r0, asr #16
 bx lr
 
 @ Signed quadrant comparisons retain the low-word overflow behavior.
-.align 2
+.balign 4, 0
 .thumb
 .thumb_func
 ArcTan2:
@@ -539,7 +539,7 @@ pop {r4-r7}
 pop {r3}
 bx r3
 
-.align 2
+.balign 4, 0
 .arm
 
 undefBase:
