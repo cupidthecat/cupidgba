@@ -6,19 +6,78 @@
       "name": "timer-reload",
       "path": "timer/reload/reload.gba",
       "sha256": "ce1c32a560aa46e3070e7a9745102c0168380d3d1c100032fd5ff4ebe9fd6947",
-      "lines": ["FFF8 -- -: PASS 0xfff9", "FFF8 16 0: PASS 0xdeae", "FFF8 32 0: PASS 0xdeae", "FFF8 32 6: PASS 0xdeae", "FFF8 32 7: PASS 0xfff9", "FFFF 16 0: PASS 0xdeb4", "FFFF 32 0: PASS 0xdeb4", "congratulations!"]
+      "lines": [
+        "FFF8 -- -: PASS 0xfff9",
+        "FFF8 16 0: PASS 0xdeae",
+        "FFF8 32 0: PASS 0xdeae",
+        "FFF8 32 6: PASS 0xdeae",
+        "FFF8 32 7: PASS 0xfff9",
+        "FFFF 16 0: PASS 0xdeb4",
+        "FFFF 32 0: PASS 0xdeb4",
+        "congratulations!"
+      ]
     },
     {
       "name": "timer-start-stop",
       "path": "timer/start-stop/start-stop.gba",
       "sha256": "c25f0a63e7b9a350163dc8d683dd081934b65295f06a9079109ab709b9b785a7",
-      "lines": ["1ST: PASS 3", "2ND: PASS 8", "congratulations!"]
+      "lines": [
+        "1ST: PASS 3",
+        "2ND: PASS 8",
+        "congratulations!"
+      ]
     },
     {
       "name": "timer-tick-before-reload",
       "path": "timer/tick-before-reload/tick-before-reload.gba",
       "sha256": "d4b872ff07839e898c123a69b871f3a98f60af322be18dedc03f352e5f627499",
-      "lines": ["TM1CNT_L: PASS 1", "IF: PASS 8", "congratulations!"]
+      "lines": [
+        "TM1CNT_L: PASS 1",
+        "IF: PASS 8",
+        "congratulations!"
+      ]
+    },
+    {
+      "name": "dma-start-delay",
+      "path": "dma/start-delay/start-delay.gba",
+      "sha256": "dfd922caac35579b1ea2ef60aa2c12b92f7025ae9f17c75fee053f2c870ed9c8",
+      "lines": [
+        "IMM: PASS 20",
+        "congratulations!"
+      ]
+    },
+    {
+      "name": "dma-nonseq",
+      "path": "dma/force-nseq-access/force-nseq-access.gba",
+      "sha256": "e623d15dc8962731f38e5a467689f88cf49a270d367cbbb970203d11f186eb8b",
+      "lines": [
+        "EWRAM DMA: PASS 88",
+        "ROM DMA: PASS 88",
+        "congratulations!"
+      ]
+    },
+    {
+      "name": "dma-latch",
+      "path": "dma/latch/latch.gba",
+      "sha256": "4e3a6510d30a67afe1b0e8bc8de4676bbbabeef5c0f0f3e960ff25c4c082373b",
+      "lines": [
+        "DMA LATCH 0: PASS 0xc0de",
+        "DMA LATCH 1: PASS 0xdead",
+        "DMA LATCH 2: PASS 0x1234",
+        "BUS LATCH: PASS 0x46c046c0",
+        "congratulations!"
+      ]
+    },
+    {
+      "name": "dma-burst",
+      "path": "dma/burst-into-tears/burst-into-tears.gba",
+      "sha256": "803ce6e7d444ad4a1397fb12bee1e2144aa5e95731ff31e9c2d68077e45958ce",
+      "lines": [
+        "1ST VALUE: PASS 0xea00",
+        "2ND VALUE: PASS 0xff24",
+        "DMA TIME: PASS 41",
+        "congratulations!"
+      ]
     }
   ]
 }

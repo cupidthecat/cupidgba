@@ -589,8 +589,8 @@ void cupid_audio_fifo_reset(struct CupidAudioFIFO* fifo) {
 /**
  * @brief Configure a DMA channel for Direct Sound FIFO service.
  *
- * Adjusts the DMA mode to match FIFO requirements and records which DMA feeds
- * FIFO A or FIFO B based on the destination address.
+ * Records which DMA feeds FIFO A or FIFO B based on its destination address.
+ * The DMA engine forces FIFO burst width, length and destination stepping.
  *
  * @param audio     Audio subsystem state.
  * @param dmaNumber DMA channel number.
@@ -599,17 +599,13 @@ void cupid_audio_fifo_reset(struct CupidAudioFIFO* fifo) {
 void cupid_audio_schedule_fifo_dma(struct CupidAudio* audio, int dmaNumber,
                                    struct CupidDMA* dma)
 {
-    if (dma->dest != GBA_BASE_IO + REG_FIFO_A_LO &&
-        dma->dest != GBA_BASE_IO + REG_FIFO_B_LO) return;
-    /** Configure DMA for FIFO: fixed dest, 32-bit, 4 words. */
-    dma->destControl  = 2;        /* fixed destination */
-    dma->wordTransfer = true;     /* 32-bit */
-
+    if (dma->nextDest != GBA_BASE_IO + REG_FIFO_A_LO &&
+        dma->nextDest != GBA_BASE_IO + REG_FIFO_B_LO) return;
     /** Record which DMA feeds which FIFO. */
-    if (dma->dest == 0x040000A0) {
+    if (dma->nextDest == GBA_BASE_IO + REG_FIFO_A_LO) {
         /** FIFO_A. */
         audio->chA.dmaSource = dmaNumber;
-    } else if (dma->dest == 0x040000A4) {
+    } else if (dma->nextDest == GBA_BASE_IO + REG_FIFO_B_LO) {
         /** FIFO_B. */
         audio->chB.dmaSource = dmaNumber;
     }
@@ -650,7 +646,7 @@ void cupid_audio_sample_fifo(struct CupidAudio* audio, int fifoId, uint64_t time
             if (dma->enable && dma->timing == DMA_TIMING_CUSTOM) {
                 _audioDebugLog(audio, "fifo%d dma refill: dma=%d fifoSize=%d", fifoId, dmaCh, fifoSize);
                 uint32_t destination = GBA_BASE_IO + (fifoId ? REG_FIFO_B_LO : REG_FIFO_A_LO);
-                if (dma->dest == destination) cupid_dma_request_fifo(gba, dmaCh, timestamp);
+                if (dma->nextDest == destination) cupid_dma_request_fifo(gba, dmaCh, timestamp);
             }
         }
     }

@@ -129,18 +129,15 @@ struct CupidDMA {
     struct CupidGBA* gba;
     unsigned id;
     uint64_t busyUntil;
-    struct CupidTimingEvent fifoEvent; /**< Pending timer-driven refill request */
-    struct CupidTimingEvent irqEvent;
+    struct CupidTimingEvent requestEvent; /**< Pending activation request */
     uint16_t reg;            /**< Raw DMA control register (CNT_HI) */
 
-    uint32_t source;         /**< Latched SAD (masked on write) */
-    uint32_t dest;           /**< Latched DAD (masked on write) */
-    int32_t  count;          /**< Transfer count (0 normalised to max) */
+    uint32_t source;         /**< Programmed SAD (masked on write) */
+    uint32_t dest;           /**< Programmed DAD (masked on write) */
+    int32_t  count;          /**< Programmed count (zero means maximum) */
     uint32_t nextSource;     /**< Current source during transfer */
     uint32_t nextDest;       /**< Current dest during transfer */
-    int32_t  nextCount;      /**< Words remaining (|0x80000000 = finishing) */
-    uint32_t when;           /**< Absolute cycle timestamp for next word */
-    int32_t  cycles;         /**< Cached sequential waitstate cost */
+    int32_t  nextCount;      /**< Transfer units remaining in the latched burst */
     uint32_t latch;          /**< Open-bus: last value transferred */
 
     int32_t  sourceOffset;   /**< Bytes per step (±width, forced +width for ROM) */
@@ -154,6 +151,11 @@ struct CupidDMA {
     bool     repeat;
     bool     wordTransfer;   /* 0=16-bit, 1=32-bit */
     bool     doIrq;
+    bool     ready;
+    bool     fifo;
+    bool     transferWord;
+    bool     externalSeen;
+    uint32_t accessAddress;  /**< Address sampled by the current bus phase */
 };
 
 /**
@@ -258,6 +260,13 @@ struct CupidMemory {
     struct CupidTimingEvent dmaEvent;   /**< Shared timing event for all channels */
     int  activeDMA;              /**< -1 when no DMA running */
     bool dmaRunning;
+    unsigned dmaPhase;
+    bool busBusy;
+    bool busLocked;
+    bool fetchNonseq;
+    bool lastWasDMA;
+    uint32_t dmaBus;
+    uint32_t dmaROMAddress;  /**< Game Pak counter shared by DMA reads/writes */
 
     /**
      * Wait-state tables (indexed by region = address >> 24).
@@ -312,13 +321,18 @@ void cupid_dma_write_sad(struct CupidGBA* gba, int ch, uint32_t address);
 void cupid_dma_write_dad(struct CupidGBA* gba, int ch, uint32_t address);
 void cupid_dma_write_cnt_lo(struct CupidGBA* gba, int ch, uint16_t count);
 void cupid_dma_write_cnt(struct CupidGBA* gba, int ch, uint16_t value);
-void cupid_dma_schedule(struct CupidGBA* gba, int ch, struct CupidDMA* dma);
-void cupid_dma_update(struct CupidGBA* gba);
-void cupid_dma_service(struct CupidGBA* gba, int ch, struct CupidDMA* dma);
 void cupid_dma_run_hblank(struct CupidGBA* gba, int32_t cycles);
 void cupid_dma_run_vblank(struct CupidGBA* gba, int32_t cycles);
 void cupid_dma_transfer(struct CupidGBA* gba, int ch);
 void cupid_dma_request_fifo(struct CupidGBA* gba, int ch, uint64_t timestamp);
+void cupid_dma_kick(struct CupidGBA* gba, uint64_t timestamp);
+void cupid_dma_run_display(struct CupidGBA* gba);
+void cupid_bus_fetch(struct CupidARM* cpu, unsigned width, bool sequential);
+void cupid_bus_finish(struct CupidARM* cpu);
+void cupid_bus_wait(struct CupidARM* cpu);
+void cupid_bus_advance(struct CupidARM* cpu, unsigned cycles, bool occupied);
+void cupid_bus_release(struct CupidARM* cpu);
+void cupid_bus_lock(struct CupidARM* cpu, bool locked);
 
 /** @name Waitstate Control */
 void cupid_memory_update_waitstates(struct CupidGBA* gba, uint16_t waitcnt);

@@ -271,7 +271,11 @@ void cupid_gba_step(struct CupidGBA* gba) {
     if (cpu->halted) {
         cpu->cycles = cpu->nextEvent;
     } else {
-        if (gba->irq.line && !cpu->irqDisableLatch) cupid_arm_take_irq(cpu);
+        if (gba->irq.line && !cpu->irqDisableLatch) {
+            cpu->memory.timed = true;
+            cupid_arm_take_irq(cpu);
+            cpu->memory.timed = false;
+        }
         cpu->irqDisableLatch = cpu->cpsr.i;
         if (cpu->executionMode == MODE_THUMB) cupid_thumb_step(cpu);
         else cupid_arm_step(cpu);
@@ -314,19 +318,13 @@ static void _cupidProcessEvents(struct CupidARM* cpu) {
     while (cpu->cycles >= nextEvent) {
         cpu->nextEvent = INT32_MAX;
         nextEvent = 0;
-        do {
-            int32_t cycles = cpu->cycles;
-            cpu->cycles = 0;
-            nextEvent = cupid_timing_tick(&gba->timing,
-                                          cycles > nextEvent ? cycles : nextEvent);
-        } while (gba->cpuBlocked && !gba->earlyExit);
+        int32_t cycles = cpu->cycles;
+        cpu->cycles = 0;
+        nextEvent = cupid_timing_tick(&gba->timing, cycles);
 
         cpu->nextEvent = nextEvent;
     }
     gba->earlyExit = false;
-    if (gba->cpuBlocked) {
-        cpu->cycles = cpu->nextEvent;
-    }
 
     /** Tick subsystems not yet wired into the timing scheduler. */
     cupid_gba_process_events(gba);

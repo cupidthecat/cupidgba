@@ -6,6 +6,31 @@
 #include "cupid/gba.h"
 #include <errno.h>
 
+static void begin_data_access(struct CupidARM* cpu, uint32_t address,
+                              unsigned width, int* cycles) {
+    struct CupidMemory* memory = &((struct CupidGBA*)cpu->master)->memory;
+    cpu->cycles += *cycles;
+    *cycles = 0;
+    cupid_bus_wait(cpu);
+    unsigned region = address >> GBA_BASE_OFFSET;
+    bool sequential = cpu->memory.dataSequential;
+    if (region >= GBA_REGION_ROM0 && region <= GBA_REGION_ROM2_EX &&
+        (!(address & 0x1FFFF) || memory->lastWasDMA)) sequential = false;
+    bool word = width == 4 && region != GBA_REGION_SRAM && region != GBA_REGION_SRAM_MIRROR;
+    unsigned wait = (unsigned)(word
+        ? (sequential ? memory->waitstatesSeq32[region] : memory->waitstatesNonseq32[region])
+        : (sequential ? memory->waitstatesSeq16[region] : memory->waitstatesNonseq16[region]));
+    memory->fetchNonseq = true;
+    cupid_bus_advance(cpu, wait + 1, true);
+}
+
+static void end_data_access(struct CupidARM* cpu, int* cycles, bool load) {
+    if (!cycles) return;
+    *cycles = load ? 1 : 0;
+    ((struct CupidGBA*)cpu->master)->memory.lastWasDMA = false;
+    cupid_bus_release(cpu);
+}
+
 /* Observe MMIO at the end of its data-bus cycle. The instruction's accumulated
  * fetch/data clocks are consumed here; its remaining internal clocks stay in
  * cycleCounter. Peripheral events run here, while CPU IRQ entry stays at the
@@ -71,6 +96,11 @@ void cupid_memory_init(struct CupidGBA* gba) {
     cpu->memory.loadMultiple  = cupid_memory_load_multiple;
     cpu->memory.storeMultiple = cupid_memory_store_multiple;
     cpu->memory.setActiveRegion = cupid_memory_set_active_region;
+    cpu->memory.fetch = cupid_bus_fetch;
+    cpu->memory.finish = cupid_bus_finish;
+    cpu->memory.lock = cupid_bus_lock;
+    cpu->memory.timed = false;
+    cpu->memory.dataSequential = false;
     cpu->memory.stall = cupid_memory_stall;
     cpu->memory.accessSource = CUPID_ACCESS_UNKNOWN;
 
@@ -113,6 +143,11 @@ void cupid_memory_reset(struct CupidGBA* gba) {
     mem->prefetch = false;
     mem->lastPrefetchedPc = 0;
     mem->openBus = 0;
+    mem->busBusy = false;
+    mem->busLocked = false;
+    mem->fetchNonseq = false;
+    gba->cpu.memory.timed = false;
+    gba->cpu.memory.dataSequential = false;
 }
 
 void cupid_memory_deinit(struct CupidGBA* gba) {
@@ -201,17 +236,13 @@ static uint8_t _deadbeef[4] = { 0x10, 0xB7, 0x10, 0xE7 };
  * @brief Return open-bus data for invalid or protected reads.
  *
  * Returns the prefetch pipeline value, swizzled for Thumb mode.
- * During DMA (or the instruction right after DMA starts), returns gba->bus,
- * which holds the last value driven by DMA or the pipeline.
+ * After a DMA bus access, returns the DMA read latch until the CPU next
+ * completes a fetch or data access.
  */
 uint32_t cupid_memory_open_bus(struct CupidARM* cpu) {
     struct CupidGBA* gba = cpu->master;
     uint32_t value = 0;
-    if (gba->performingDMA ||
-        cpu->gprs[ARM_PC] - gba->dmaPC ==
-            (uint32_t)(cpu->executionMode == MODE_THUMB ? WORD_SIZE_THUMB : WORD_SIZE_ARM)) {
-        return gba->bus;
-    }
+    if (gba->memory.lastWasDMA) return gba->memory.dmaBus;
     value = cpu->prefetch[1];
     if (cpu->executionMode == MODE_THUMB) {
         switch (cpu->gprs[ARM_PC] >> GBA_BASE_OFFSET) {
@@ -347,6 +378,12 @@ void cupid_memory_set_active_region(struct CupidARM* cpu, uint32_t address) {
 uint32_t cupid_memory_load32(struct CupidARM* cpu, uint32_t address, int* cycleCounter) {
     struct CupidGBA* gba = cpu->master;
     struct CupidMemory* memory = &gba->memory;
+    int* timedCounter = NULL;
+    if (cycleCounter && cpu->memory.timed) {
+        timedCounter = cycleCounter;
+        begin_data_access(cpu, address, 4, cycleCounter);
+        cycleCounter = NULL;
+    }
     uint32_t value = 0;
     int wait = 0;
     char* waitstatesRegion = memory->waitstatesNonseq32;
@@ -431,6 +468,7 @@ uint32_t cupid_memory_load32(struct CupidARM* cpu, uint32_t address, int* cycleC
         *cycleCounter += wait;
     }
     /** Unaligned 32-bit loads are rotated to match hardware behavior. */
+    end_data_access(cpu, timedCounter, true);
     int rotate = (address & 3) << 3;
     return ROR(value, rotate);
 }
@@ -443,6 +481,12 @@ uint32_t cupid_memory_load32(struct CupidARM* cpu, uint32_t address, int* cycleC
 uint32_t cupid_memory_load16(struct CupidARM* cpu, uint32_t address, int* cycleCounter) {
     struct CupidGBA* gba = cpu->master;
     struct CupidMemory* memory = &gba->memory;
+    int* timedCounter = NULL;
+    if (cycleCounter && cpu->memory.timed) {
+        timedCounter = cycleCounter;
+        begin_data_access(cpu, address, 2, cycleCounter);
+        cycleCounter = NULL;
+    }
     uint32_t value = 0;
     int wait = 0;
 
@@ -521,6 +565,7 @@ uint32_t cupid_memory_load16(struct CupidARM* cpu, uint32_t address, int* cycleC
         *cycleCounter += wait;
     }
     /** Unaligned 16-bit loads are rotated on real hardware. */
+    end_data_access(cpu, timedCounter, true);
     int rotate = (address & 1) << 3;
     return ROR(value, rotate);
 }
@@ -538,6 +583,12 @@ uint32_t cupid_memory_loadU16(struct CupidARM* cpu, uint32_t address, int* cycle
 uint32_t cupid_memory_load8(struct CupidARM* cpu, uint32_t address, int* cycleCounter) {
     struct CupidGBA* gba = cpu->master;
     struct CupidMemory* memory = &gba->memory;
+    int* timedCounter = NULL;
+    if (cycleCounter && cpu->memory.timed) {
+        timedCounter = cycleCounter;
+        begin_data_access(cpu, address, 1, cycleCounter);
+        cycleCounter = NULL;
+    }
     uint32_t value = 0;
     int wait = 0;
 
@@ -616,6 +667,7 @@ uint32_t cupid_memory_load8(struct CupidARM* cpu, uint32_t address, int* cycleCo
         wait += 2;
         *cycleCounter += wait;
     }
+    end_data_access(cpu, timedCounter, true);
     return value;
 }
 
@@ -625,6 +677,12 @@ uint32_t cupid_memory_load8(struct CupidARM* cpu, uint32_t address, int* cycleCo
 void cupid_memory_store32(struct CupidARM* cpu, uint32_t address, int32_t value, int* cycleCounter) {
     struct CupidGBA* gba = cpu->master;
     struct CupidMemory* memory = &gba->memory;
+    int* timedCounter = NULL;
+    if (cycleCounter && cpu->memory.timed) {
+        timedCounter = cycleCounter;
+        begin_data_access(cpu, address, 4, cycleCounter);
+        cycleCounter = NULL;
+    }
     int wait = 0;
     char* waitstatesRegion = memory->waitstatesNonseq32;
 
@@ -667,6 +725,7 @@ void cupid_memory_store32(struct CupidARM* cpu, uint32_t address, int32_t value,
     case GBA_REGION_SRAM:
     case GBA_REGION_SRAM_MIRROR:
         cupid_memory_store8(cpu, address, value >> (8 * (address & 3)), cycleCounter);
+        end_data_access(cpu, timedCounter, false);
         return;  /** Store8 handles the cycle counter. */
     default:
         break;
@@ -676,6 +735,7 @@ void cupid_memory_store32(struct CupidARM* cpu, uint32_t address, int32_t value,
         ++wait;
         *cycleCounter += wait;
     }
+    end_data_access(cpu, timedCounter, false);
 }
 
 /**
@@ -684,6 +744,12 @@ void cupid_memory_store32(struct CupidARM* cpu, uint32_t address, int32_t value,
 void cupid_memory_store16(struct CupidARM* cpu, uint32_t address, int16_t value, int* cycleCounter) {
     struct CupidGBA* gba = cpu->master;
     struct CupidMemory* memory = &gba->memory;
+    int* timedCounter = NULL;
+    if (cycleCounter && cpu->memory.timed) {
+        timedCounter = cycleCounter;
+        begin_data_access(cpu, address, 2, cycleCounter);
+        cycleCounter = NULL;
+    }
     int wait = 0;
 
     switch (address >> GBA_BASE_OFFSET) {
@@ -728,6 +794,7 @@ void cupid_memory_store16(struct CupidARM* cpu, uint32_t address, int16_t value,
             value >>= 8;
         }
         cupid_memory_store8(cpu, address, value, cycleCounter);
+        end_data_access(cpu, timedCounter, false);
         return;  /** Store8 handles the cycle counter. */
     default:
         break;
@@ -737,6 +804,7 @@ void cupid_memory_store16(struct CupidARM* cpu, uint32_t address, int16_t value,
         ++wait;
         *cycleCounter += wait;
     }
+    end_data_access(cpu, timedCounter, false);
 }
 
 /**
@@ -745,6 +813,12 @@ void cupid_memory_store16(struct CupidARM* cpu, uint32_t address, int16_t value,
 void cupid_memory_store8(struct CupidARM* cpu, uint32_t address, int8_t value, int* cycleCounter) {
     struct CupidGBA* gba = cpu->master;
     struct CupidMemory* memory = &gba->memory;
+    int* timedCounter = NULL;
+    if (cycleCounter && cpu->memory.timed) {
+        timedCounter = cycleCounter;
+        begin_data_access(cpu, address, 1, cycleCounter);
+        cycleCounter = NULL;
+    }
     int wait = 0;
 
     switch (address >> GBA_BASE_OFFSET) {
@@ -818,6 +892,7 @@ void cupid_memory_store8(struct CupidARM* cpu, uint32_t address, int8_t value, i
         ++wait;
         *cycleCounter += wait;
     }
+    end_data_access(cpu, timedCounter, false);
 }
 
 /**
@@ -1008,12 +1083,13 @@ uint32_t cupid_memory_load_multiple(struct CupidARM* cpu, uint32_t address,
     if (!mask) mask = 1 << ARM_PC;
     for (int i = 0; i < 16; i++) {
         if (!(mask & (1 << i))) continue;
+        cpu->memory.dataSequential = !first;
         uint32_t val = cupid_memory_load32(cpu, address, cycleCounter ? &cycles : NULL);
         if (cycleCounter) {
             /* LDM has one final internal cycle, not one after each word. */
             cycles--;
             unsigned region = address >> GBA_BASE_OFFSET;
-            if (!first && region < 16) {
+            if (!cpu->memory.timed && !first && region < 16) {
                 cycles -= gba->memory.waitstatesNonseq32[region] - gba->memory.waitstatesSeq32[region];
             }
         }
@@ -1022,6 +1098,7 @@ uint32_t cupid_memory_load_multiple(struct CupidARM* cpu, uint32_t address,
         address += 4;
     }
     if (cycleCounter) *cycleCounter = cycles + 1;
+    cpu->memory.dataSequential = false;
     return writeback;
 }
 
@@ -1044,15 +1121,17 @@ uint32_t cupid_memory_store_multiple(struct CupidARM* cpu, uint32_t address,
         if (i == ARM_PC) {
             val = (uint32_t)val + (cpu->executionMode == MODE_ARM ? WORD_SIZE_ARM : WORD_SIZE_THUMB);
         }
+        cpu->memory.dataSequential = !first;
         cupid_memory_store32(cpu, address, val, cycleCounter ? &cycles : NULL);
         unsigned region = address >> GBA_BASE_OFFSET;
-        if (cycleCounter && !first && region < 16) {
+        if (cycleCounter && !cpu->memory.timed && !first && region < 16) {
             cycles -= gba->memory.waitstatesNonseq32[region] - gba->memory.waitstatesSeq32[region];
         }
         first = false;
         address += 4;
     }
     if (cycleCounter) *cycleCounter = cycles;
+    cpu->memory.dataSequential = false;
     return writeback;
 }
 
@@ -1062,6 +1141,8 @@ uint32_t cupid_memory_store_multiple(struct CupidARM* cpu, uint32_t address,
  * Currently pass-through; prefetch-buffer effects are not yet modeled here.
  */
 int32_t cupid_memory_stall(struct CupidARM* cpu, int32_t wait) {
-    (void)cpu;
+    if (cpu->memory.timed && wait > 0) {
+        ((struct CupidGBA*)cpu->master)->memory.fetchNonseq = true;
+    }
     return wait;
 }

@@ -52,13 +52,13 @@
 
 /** @name Cycle-Timing Macros */
 
-#define THUMB_PREFETCH_CYCLES (1 + (int)cpu->memory.activeSeqCycles16)
+#define THUMB_PREFETCH_CYCLES (cpu->memory.timed ? 0 : 1 + (int)cpu->memory.activeSeqCycles16)
 
 #define THUMB_LOAD_POST_BODY \
-	currentCycles += (int)cpu->memory.activeNonseqCycles16 - (int)cpu->memory.activeSeqCycles16;
+	currentCycles += cpu->memory.timed ? 0 : (int)cpu->memory.activeNonseqCycles16 - (int)cpu->memory.activeSeqCycles16;
 
 #define THUMB_STORE_POST_BODY \
-	currentCycles += (int)cpu->memory.activeNonseqCycles16 - (int)cpu->memory.activeSeqCycles16;
+	currentCycles += cpu->memory.timed ? 0 : (int)cpu->memory.activeNonseqCycles16 - (int)cpu->memory.activeSeqCycles16;
 
 /** @name Base Instruction Definition Macro */
 
@@ -223,7 +223,7 @@ DEFINE_DATA_FORM_5_INSTRUCTION_THUMB(LSL2,
 			cpu->gprs[rd] = 0;
 		}
 	}
-	++currentCycles;
+	currentCycles += cpu->memory.stall ? cpu->memory.stall(cpu, 1) : 1;
 	THUMB_NEUTRAL_S( , , cpu->gprs[rd]))
 
 DEFINE_DATA_FORM_5_INSTRUCTION_THUMB(LSR2,
@@ -241,7 +241,7 @@ DEFINE_DATA_FORM_5_INSTRUCTION_THUMB(LSR2,
 			cpu->gprs[rd] = 0;
 		}
 	}
-	++currentCycles;
+	currentCycles += cpu->memory.stall ? cpu->memory.stall(cpu, 1) : 1;
 	THUMB_NEUTRAL_S( , , cpu->gprs[rd]))
 
 DEFINE_DATA_FORM_5_INSTRUCTION_THUMB(ASR2,
@@ -259,7 +259,7 @@ DEFINE_DATA_FORM_5_INSTRUCTION_THUMB(ASR2,
 			}
 		}
 	}
-	++currentCycles;
+	currentCycles += cpu->memory.stall ? cpu->memory.stall(cpu, 1) : 1;
 	THUMB_NEUTRAL_S( , , cpu->gprs[rd]))
 
 DEFINE_DATA_FORM_5_INSTRUCTION_THUMB(ADC,
@@ -285,7 +285,7 @@ DEFINE_DATA_FORM_5_INSTRUCTION_THUMB(ROR,
 			cpu->cpsr.c = ARM_SIGN(cpu->gprs[rd]);
 		}
 	}
-	++currentCycles;
+	currentCycles += cpu->memory.stall ? cpu->memory.stall(cpu, 1) : 1;
 	THUMB_NEUTRAL_S( , , cpu->gprs[rd]);)
 
 DEFINE_DATA_FORM_5_INSTRUCTION_THUMB(TST,
@@ -311,7 +311,7 @@ DEFINE_DATA_FORM_5_INSTRUCTION_THUMB(MUL,
 	ARM_WAIT_SMUL(cpu->gprs[rd], 0);
 	cpu->gprs[rd] = (uint32_t)cpu->gprs[rd] * (uint32_t)cpu->gprs[rn];
 	THUMB_NEUTRAL_S( , , cpu->gprs[rd]);
-	currentCycles += (int)cpu->memory.activeNonseqCycles16 - (int)cpu->memory.activeSeqCycles16)
+	currentCycles += cpu->memory.timed ? 0 : (int)cpu->memory.activeNonseqCycles16 - (int)cpu->memory.activeSeqCycles16)
 
 DEFINE_DATA_FORM_5_INSTRUCTION_THUMB(BIC,
 	cpu->gprs[rd] = cpu->gprs[rd] & ~cpu->gprs[rn];
@@ -341,7 +341,7 @@ DEFINE_DATA_FORM_5_INSTRUCTION_THUMB(MVN,
 DEFINE_INSTRUCTION_WITH_HIGH_THUMB(ADD4,
 	cpu->gprs[rd] = (uint32_t)cpu->gprs[rd] + (uint32_t)cpu->gprs[rm];
 	if (rd == ARM_PC) {
-		currentCycles += CupidThumbWritePC(cpu);
+		CupidFlushCycles(cpu, &currentCycles); currentCycles += CupidThumbWritePC(cpu);
 	})
 
 DEFINE_INSTRUCTION_WITH_HIGH_THUMB(CMP3,
@@ -351,7 +351,7 @@ DEFINE_INSTRUCTION_WITH_HIGH_THUMB(CMP3,
 DEFINE_INSTRUCTION_WITH_HIGH_THUMB(MOV3,
 	cpu->gprs[rd] = cpu->gprs[rm];
 	if (rd == ARM_PC) {
-		currentCycles += CupidThumbWritePC(cpu);
+		CupidFlushCycles(cpu, &currentCycles); currentCycles += CupidThumbWritePC(cpu);
 	})
 
 /** @name Format 6 — PC-Relative Load
@@ -460,7 +460,7 @@ DEFINE_LOAD_STORE_MULTIPLE_THUMB(LDMIA,
 	,
 	THUMB_LOAD_POST_BODY;
 	if (!rs) {
-		currentCycles += CupidThumbWritePC(cpu);
+		CupidFlushCycles(cpu, &currentCycles); currentCycles += CupidThumbWritePC(cpu);
 	}
 	if (!((1 << rn) & rs)) {
 		cpu->gprs[rn] = address;
@@ -492,7 +492,7 @@ DEFINE_LOAD_STORE_MULTIPLE_THUMB(POPR,
 	rs |= 1 << ARM_PC,
 	THUMB_LOAD_POST_BODY;
 	cpu->gprs[ARM_SP] = address;
-	currentCycles += CupidThumbWritePC(cpu);)
+	CupidFlushCycles(cpu, &currentCycles); currentCycles += CupidThumbWritePC(cpu);)
 
 DEFINE_LOAD_STORE_MULTIPLE_THUMB(PUSH,
 	ARM_SP,
@@ -520,7 +520,7 @@ DEFINE_LOAD_STORE_MULTIPLE_THUMB(PUSHR,
 		if (ARM_COND_ ## COND) { \
 			int8_t immediate = opcode; \
 			cpu->gprs[ARM_PC] = (uint32_t)cpu->gprs[ARM_PC] + (uint32_t)((int32_t)immediate * 2); \
-			currentCycles += CupidThumbWritePC(cpu); \
+			CupidFlushCycles(cpu, &currentCycles); currentCycles += CupidThumbWritePC(cpu); \
 		})
 
 DEFINE_CONDITIONAL_BRANCH_THUMB(EQ)
@@ -568,7 +568,7 @@ DEFINE_INSTRUCTION_THUMB(SWI,
 DEFINE_INSTRUCTION_THUMB(B,
 	int16_t immediate = (opcode & 0x07FF) << 5;
 	cpu->gprs[ARM_PC] = (uint32_t)cpu->gprs[ARM_PC] + (uint32_t)(((int32_t)immediate) >> 4);
-	currentCycles += CupidThumbWritePC(cpu);)
+	CupidFlushCycles(cpu, &currentCycles); currentCycles += CupidThumbWritePC(cpu);)
 
 /** @name Format 19 — Long Branch with Link (BL)
  *
@@ -586,7 +586,7 @@ DEFINE_INSTRUCTION_THUMB(BL2,
 	uint32_t pc = cpu->gprs[ARM_PC];
 	cpu->gprs[ARM_PC] = (uint32_t)cpu->gprs[ARM_LR] + immediate;
 	cpu->gprs[ARM_LR] = pc - 1;
-	currentCycles += CupidThumbWritePC(cpu);)
+	CupidFlushCycles(cpu, &currentCycles); currentCycles += CupidThumbWritePC(cpu);)
 
 /** @name Format 5 — BX: Branch and Exchange
  *
@@ -598,9 +598,9 @@ DEFINE_INSTRUCTION_THUMB(BX,
 	_CupidSetMode(cpu, cpu->gprs[rm] & 0x00000001);
 	cpu->gprs[ARM_PC] = cpu->gprs[rm] & 0xFFFFFFFE;
 	if (cpu->executionMode == MODE_THUMB) {
-		currentCycles += CupidThumbWritePC(cpu);
+		CupidFlushCycles(cpu, &currentCycles); currentCycles += CupidThumbWritePC(cpu);
 	} else {
-		currentCycles += CupidARMWritePC(cpu);
+		CupidFlushCycles(cpu, &currentCycles); currentCycles += CupidARMWritePC(cpu);
 	})
 
 /** @name Dispatch Table

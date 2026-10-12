@@ -38,6 +38,7 @@ void cupid_timing_clear(struct CupidTiming* timing) {
     timing->globalCycles = 0;
     timing->masterCycles = 0;
     timing->inCallback = false;
+    timing->callbackCycles = 0;
     *timing->relativeCycles = 0;
     *timing->nextEvent = INT32_MAX;
 }
@@ -68,7 +69,7 @@ void cupid_timing_deschedule(struct CupidTiming* timing, struct CupidTimingEvent
 void cupid_timing_schedule(struct CupidTiming* timing, struct CupidTimingEvent* event,
                            int32_t when) {
     cupid_timing_deschedule(timing, event);
-    event->when = timing->masterCycles + (uint32_t)*timing->relativeCycles + (uint32_t)when;
+    event->when = (uint32_t)cupid_timing_current_time(timing) + (uint32_t)when;
     struct CupidTimingEvent** link = timing->reroot ? &timing->reroot : &timing->root;
     while (*link) {
         int32_t delta = distance((*link)->when, event->when);
@@ -82,7 +83,7 @@ void cupid_timing_schedule(struct CupidTiming* timing, struct CupidTimingEvent* 
 
 void cupid_timing_schedule_absolute(struct CupidTiming* timing, struct CupidTimingEvent* event,
                                     int32_t when) {
-    uint32_t now = timing->masterCycles + (uint32_t)*timing->relativeCycles;
+    uint32_t now = (uint32_t)cupid_timing_current_time(timing);
     cupid_timing_schedule(timing, event, distance((uint32_t)when, now));
 }
 
@@ -111,9 +112,12 @@ int32_t cupid_timing_tick(struct CupidTiming* timing, int32_t cycles) {
         next->next = NULL;
         uint32_t late = timing->masterCycles - next->when;
         bool wasInCallback = timing->inCallback;
+        uint64_t previousCallback = timing->callbackCycles;
         timing->inCallback = true;
+        timing->callbackCycles = timing->globalCycles - late;
         next->callback(timing, next->context, late);
         timing->inCallback = wasInCallback;
+        timing->callbackCycles = previousCallback;
     }
     /* The CPU compares its relative accumulator against this breakpoint. */
     *timing->nextEvent = deadline(timing);
@@ -121,10 +125,12 @@ int32_t cupid_timing_tick(struct CupidTiming* timing, int32_t cycles) {
 }
 
 int32_t cupid_timing_current_time(const struct CupidTiming* timing) {
+    if (timing->inCallback) return (int32_t)(uint32_t)timing->callbackCycles;
     return (int32_t)(timing->masterCycles + (uint32_t)*timing->relativeCycles);
 }
 
 uint64_t cupid_timing_global_time(const struct CupidTiming* timing) {
+    if (timing->inCallback) return timing->callbackCycles;
     return timing->globalCycles + (uint32_t)*timing->relativeCycles;
 }
 

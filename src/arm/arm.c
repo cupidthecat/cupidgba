@@ -4,8 +4,8 @@
  *   - 16-entry condition code LUT indexed by NZCV flags
  *   - Fast-path for condition 0xE (always execute)
  *   - ARMStep / ThumbStep are static inline, called from ARMRun / ARMRunLoop
- *   - Instruction handlers account for fetch, data and internal clocks;
- *     the bus synchronizes MMIO during the data transfer
+ *   - Fetch/data callbacks advance bus phases during CPU execution;
+ *     instruction handlers retain internal clocks
  *   - ARMWritePC / ThumbWritePC refill the pipeline on branches & exceptions
  *   - Mode switch sets nextEvent = cycles → forces loop exit
  */
@@ -37,8 +37,7 @@ static const uint16_t conditionLut[16] = {
 };
 
 /** Prefetch-cycle cost for a no-op (failed condition or idle fetch) */
-#define ARM_PREFETCH_CYCLES  (1 + (int)cpu->memory.activeSeqCycles32)
-#define THUMB_PREFETCH_CYCLES (1 + (int)cpu->memory.activeSeqCycles16)
+#define ARM_PREFETCH_CYCLES  (cpu->memory.timed ? 0 : 1 + (int)cpu->memory.activeSeqCycles32)
 
 /** @name Mode Switching
  *
@@ -184,8 +183,13 @@ void cupid_arm_raise_irq(struct CupidARM* cpu) {
 
 void cupid_arm_take_irq(struct CupidARM* cpu) {
 	/* IRQ entry discards one instruction fetch before refilling the vector. */
-	cpu->cycles += 1 + (cpu->executionMode == MODE_ARM
-		? cpu->memory.activeSeqCycles32 : cpu->memory.activeSeqCycles16);
+	if (cpu->memory.timed) {
+		cpu->memory.fetch(cpu, cpu->executionMode == MODE_ARM ? WORD_SIZE_ARM : WORD_SIZE_THUMB, true);
+		cpu->memory.finish(cpu);
+	} else {
+		cpu->cycles += 1 + (cpu->executionMode == MODE_ARM
+			? cpu->memory.activeSeqCycles32 : cpu->memory.activeSeqCycles16);
+	}
 	union CupidPSR cpsr = cpu->cpsr;
 	int instructionWidth;
 	if (cpu->executionMode == MODE_THUMB) {
@@ -244,10 +248,9 @@ void cupid_arm_raise_undefined(struct CupidARM* cpu) {
  *
  * ARMStep — fetch → decode → execute (ARM mode).
  *
- * The instruction handler itself accounts for all cycles
- * (via currentCycles += ... in the DEFINE_INSTRUCTION_ARM macro).
- * The step function only adds cycles when a condition FAILS
- * (just the sequential prefetch cost).
+ * A timed fetch runs peripheral events before reading the next opcode.
+ * Handlers account for internal cycles and invoke data-bus callbacks. Without
+ * timing callbacks, handlers and failed conditions use the static fetch cost.
  *
  * Fast-path: condition 0xE (AL) skips the LUT check entirely.
  */
@@ -256,7 +259,10 @@ static inline void cupid_arm_step_inline(struct CupidARM* cpu) {
 	uint32_t opcode = cpu->prefetch[0];
 	cpu->prefetch[0] = cpu->prefetch[1];
 	cpu->gprs[ARM_PC] += WORD_SIZE_ARM;
+	if (cpu->memory.timed) cpu->memory.fetch(cpu, WORD_SIZE_ARM, true);
 	LOAD_32(cpu->prefetch[1], cpu->gprs[ARM_PC] & cpu->memory.activeMask, cpu->memory.activeRegion);
+	if (cpu->memory.timed) cpu->memory.finish(cpu);
+	cpu->memory.dataSequential = false;
 
 	unsigned condition = opcode >> 28;
 	if (condition != 0xE) {
@@ -280,14 +286,17 @@ static inline void cupid_arm_step_inline(struct CupidARM* cpu) {
  * ThumbStep — fetch → decode → execute (Thumb mode).
  *
  * Thumb instructions are unconditional (no condition field).
- * The instruction handler accounts for all cycles.
+ * Bus callbacks handle fetch/data clocks; the handler adds internal cycles.
  */
 
 static inline void cupid_thumb_step_inline(struct CupidARM* cpu) {
 	uint32_t opcode = cpu->prefetch[0];
 	cpu->prefetch[0] = cpu->prefetch[1];
 	cpu->gprs[ARM_PC] += WORD_SIZE_THUMB;
+	if (cpu->memory.timed) cpu->memory.fetch(cpu, WORD_SIZE_THUMB, true);
 	LOAD_16(cpu->prefetch[1], cpu->gprs[ARM_PC] & cpu->memory.activeMask, cpu->memory.activeRegion);
+	if (cpu->memory.timed) cpu->memory.finish(cpu);
+	cpu->memory.dataSequential = false;
 	CupidThumbInstruction instruction = cupid_thumb_table[opcode >> 6];
 	instruction(cpu, opcode);
 }
@@ -295,11 +304,19 @@ static inline void cupid_thumb_step_inline(struct CupidARM* cpu) {
 /** @name Public Step Functions */
 
 void cupid_arm_step(struct CupidARM* cpu) {
+	bool previous = cpu->memory.timed;
+	cpu->memory.timed = cpu->memory.fetch != NULL;
 	cupid_arm_step_inline(cpu);
+	if (cpu->memory.timed) cpu->memory.finish(cpu);
+	cpu->memory.timed = previous;
 }
 
 void cupid_thumb_step(struct CupidARM* cpu) {
+	bool previous = cpu->memory.timed;
+	cpu->memory.timed = cpu->memory.fetch != NULL;
 	cupid_thumb_step_inline(cpu);
+	if (cpu->memory.timed) cpu->memory.finish(cpu);
+	cpu->memory.timed = previous;
 }
 
 /** @name ARMRun
@@ -316,9 +333,9 @@ void cupid_arm_run(struct CupidARM* cpu) {
 		cpu->irqh.processEvents(cpu);
 	}
 	if (cpu->executionMode == MODE_THUMB) {
-		cupid_thumb_step_inline(cpu);
+		cupid_thumb_step(cpu);
 	} else {
-		cupid_arm_step_inline(cpu);
+		cupid_arm_step(cpu);
 	}
 	while (cpu->cycles >= cpu->nextEvent) {
 		cpu->irqh.processEvents(cpu);
@@ -338,11 +355,11 @@ void cupid_arm_run(struct CupidARM* cpu) {
 void cupid_arm_run_loop(struct CupidARM* cpu) {
 	if (cpu->executionMode == MODE_THUMB) {
 		while (cpu->cycles < cpu->nextEvent) {
-			cupid_thumb_step_inline(cpu);
+			cupid_thumb_step(cpu);
 		}
 	} else {
 		while (cpu->cycles < cpu->nextEvent) {
-			cupid_arm_step_inline(cpu);
+			cupid_arm_step(cpu);
 		}
 	}
 	cpu->irqh.processEvents(cpu);

@@ -459,7 +459,7 @@ uint16_t cupid_io_read(struct CupidGBA* gba, uint32_t addr) {
     case REG_BG2CNT:    return gba->video.bg[2].cnt;
     case REG_BG3CNT:    return gba->video.bg[3].cnt;
 
-    /** Write-only video registers return 0 (open bus simplified). */
+    /** Write-only video registers expose the last value on the bus. */
     case REG_BG0HOFS: case REG_BG0VOFS:
     case REG_BG1HOFS: case REG_BG1VOFS:
     case REG_BG2HOFS: case REG_BG2VOFS:
@@ -471,7 +471,7 @@ uint16_t cupid_io_read(struct CupidGBA* gba, uint32_t addr) {
     case REG_WIN0H: case REG_WIN1H: case REG_WIN0V: case REG_WIN1V:
     case REG_MOSAIC:
     case REG_BLDY:
-        return 0;
+        return (uint16_t)(cupid_memory_open_bus(&gba->cpu) >> ((addr & 2) * 8));
 
     case REG_WININ:    return gba->memory.io[addr >> 1];
     case REG_WINOUT:   return gba->memory.io[addr >> 1];

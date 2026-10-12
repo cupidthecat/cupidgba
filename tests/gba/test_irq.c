@@ -270,12 +270,19 @@ static void dma_completion_requests_the_channel_bit(void) {
         cupid_dma_write_dad(gba, channel, GBA_BASE_EWRAM);
         cupid_dma_write_cnt_lo(gba, channel, 1);
         cupid_dma_write_cnt(gba, channel, 0xC000);
+        CHECK(cupid_memory_load16(&gba->cpu, GBA_BASE_EWRAM, NULL) == 0);
+        CHECK(gba->cpu.cycles == 0);
+        tick(gba, 3); /* Two request clocks and the bus handover clock. */
+        CHECK(gba->memory.dmaRunning && gba->memory.dma[channel].latch == 0);
+        tick(gba, 1); /* IWRAM read completes; EWRAM write is still pending. */
+        CHECK(gba->memory.dma[channel].latch == UINT32_C(0x5A815A81));
+        CHECK(cupid_memory_load16(&gba->cpu, GBA_BASE_EWRAM, NULL) == 0);
+        tick(gba, 3);
         CHECK(cupid_memory_load16(&gba->cpu, GBA_BASE_EWRAM, NULL) == value);
-        CHECK(gba->cpu.cycles == 2);
-        gba->cpu.cycles = 0;
-        tick(gba, 2);
+        CHECK(gba->cpu.cycles == 0 && gba->memory.dmaRunning);
         CHECK(gba->irqf == 0);
         tick(gba, 1);
+        CHECK(!gba->memory.dmaRunning);
         CHECK(gba->irqf == (IRQ_DMA0 << channel) && !gba->irq.line);
         tick(gba, 2);
         CHECK(gba->irq.line);

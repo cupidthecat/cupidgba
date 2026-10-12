@@ -34,7 +34,8 @@ struct CupidTiming {
 
     uint64_t globalCycles;               /**< Total cycles since power-on */
     uint32_t masterCycles;               /**< Current absolute master counter */
-    bool inCallback;                     /**< Relative CPU stalls are outside callback time */
+    bool inCallback;                     /**< Time queries use the active event's deadline */
+    uint64_t callbackCycles;             /**< Timestamp of the event being dispatched */
     int32_t* relativeCycles;             /**< → cpu->cycles (elapsed since last tick) */
     int32_t* nextEvent;                  /**< → cpu->nextEvent (next deadline) */
 };
@@ -56,7 +57,7 @@ void cupid_timing_clear(struct CupidTiming* timing);
 void cupid_timing_interrupt(struct CupidTiming* timing);
 
 /**
- * Schedule an event `when` cycles from *now* (relativeCycles).
+ * Schedule an event `when` cycles from the current CPU time or callback deadline.
  * If the event is already scheduled it is silently moved.
  */
 void cupid_timing_schedule(struct CupidTiming* timing,
@@ -84,10 +85,10 @@ bool cupid_timing_is_scheduled(const struct CupidTiming* timing,
  */
 int32_t cupid_timing_tick(struct CupidTiming* timing, int32_t cycles);
 
-/** Current time = masterCycles + *relativeCycles. */
+/** Master time including CPU elapsed cycles, or the active callback deadline. */
 int32_t cupid_timing_current_time(const struct CupidTiming* timing);
 
-/** Global time since power-on (64-bit). */
+/** Global time since power-on, or the active callback deadline (64-bit). */
 uint64_t cupid_timing_global_time(const struct CupidTiming* timing);
 
 /** Cycles until the earliest pending event. */

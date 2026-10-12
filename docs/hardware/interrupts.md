@@ -31,8 +31,9 @@ registers are described in the
 [ARM7TDMI technical reference manual](https://support.arm.com/documentation/ddi0210/c/).
 
 The relative priority of an IRQ assertion and an IF acknowledge on exactly
-the same hardware cycle remains unverified. The current pending-register
-model preserves requests reasserted after an acknowledge is queued. DMA
-arbitration, Game Pak prefetch interactions and STOP wake-up need separate
-hardware coverage. The built-in BIOS interrupt-wait path also has remaining
-count-up failures documented in the testing guide.
+the same hardware cycle remains unverified. Queued IF changes retain their
+acceptance deadlines and apply assertions and acknowledgements in request
+order. Reassertions after a queued acknowledgement remain pending. See
+[DMA and bus ownership](dma.md) for transfer arbitration and its tested limits.
+Game Pak prefetch interactions and STOP wake-up need separate hardware coverage.
+Both BIOS paths pass the listed count-up and IRQ suite on the pinned local input.

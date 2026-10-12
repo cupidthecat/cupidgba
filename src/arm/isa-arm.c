@@ -11,7 +11,7 @@
 #include "cupid/isa-inlines.h"
 #include "cupid/emitter-arm.h"
 
-#define ARM_PREFETCH_CYCLES (1 + (int)cpu->memory.activeSeqCycles32)
+#define ARM_PREFETCH_CYCLES (cpu->memory.timed ? 0 : 1 + (int)cpu->memory.activeSeqCycles32)
 
 /** @name Addressing Mode 1 — Barrel Shifter
  *
@@ -22,7 +22,7 @@ static inline void _shiftLSL(struct CupidARM* cpu, uint32_t opcode) {
 	int rm = opcode & 0xF;
 	if (opcode & 0x00000010) {
 		int rs = (opcode >> 8) & 0xF;
-		++cpu->cycles;
+		cpu->cycles += cpu->memory.stall ? cpu->memory.stall(cpu, 1) : 1;
 		int32_t shiftVal = cpu->gprs[rm];
 		if (rm == ARM_PC) shiftVal += 4;
 		int shift = cpu->gprs[rs] & 0xFF;
@@ -55,7 +55,7 @@ static inline void _shiftLSR(struct CupidARM* cpu, uint32_t opcode) {
 	int rm = opcode & 0xF;
 	if (opcode & 0x00000010) {
 		int rs = (opcode >> 8) & 0xF;
-		++cpu->cycles;
+		cpu->cycles += cpu->memory.stall ? cpu->memory.stall(cpu, 1) : 1;
 		uint32_t shiftVal = cpu->gprs[rm];
 		if (rm == ARM_PC) shiftVal += 4;
 		int shift = cpu->gprs[rs] & 0xFF;
@@ -88,7 +88,7 @@ static inline void _shiftASR(struct CupidARM* cpu, uint32_t opcode) {
 	int rm = opcode & 0xF;
 	if (opcode & 0x00000010) {
 		int rs = (opcode >> 8) & 0xF;
-		++cpu->cycles;
+		cpu->cycles += cpu->memory.stall ? cpu->memory.stall(cpu, 1) : 1;
 		int shiftVal = cpu->gprs[rm];
 		if (rm == ARM_PC) shiftVal += 4;
 		int shift = cpu->gprs[rs] & 0xFF;
@@ -121,7 +121,7 @@ static inline void _shiftROR(struct CupidARM* cpu, uint32_t opcode) {
 	int rm = opcode & 0xF;
 	if (opcode & 0x00000010) {
 		int rs = (opcode >> 8) & 0xF;
-		++cpu->cycles;
+		cpu->cycles += cpu->memory.stall ? cpu->memory.stall(cpu, 1) : 1;
 		int shiftVal = cpu->gprs[rm];
 		if (rm == ARM_PC) shiftVal += 4;
 		int shift = cpu->gprs[rs] & 0xFF;
@@ -236,7 +236,7 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM* cpu, int32_t d) {
 #define ADDR_MODE_2_WRITEBACK(ADDR) \
 	cpu->gprs[rn] = ADDR; \
 	if (UNLIKELY(rn == ARM_PC)) { \
-		currentCycles += CupidARMWritePC(cpu); \
+		CupidFlushCycles(cpu, &currentCycles); currentCycles += CupidARMWritePC(cpu); \
 	}
 
 #define ADDR_MODE_2_WRITEBACK_PRE_STORE(WB)
@@ -266,13 +266,13 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM* cpu, int32_t d) {
 
 /** Post-body for loads/stores */
 #define ARM_LOAD_POST_BODY \
-	currentCycles += (int)cpu->memory.activeNonseqCycles32 - (int)cpu->memory.activeSeqCycles32; \
+	currentCycles += cpu->memory.timed ? 0 : (int)cpu->memory.activeNonseqCycles32 - (int)cpu->memory.activeSeqCycles32; \
 	if (rd == ARM_PC) { \
-		currentCycles += CupidARMWritePC(cpu); \
+		CupidFlushCycles(cpu, &currentCycles); currentCycles += CupidARMWritePC(cpu); \
 	}
 
 #define ARM_STORE_POST_BODY \
-	currentCycles += (int)cpu->memory.activeNonseqCycles32 - (int)cpu->memory.activeSeqCycles32;
+	currentCycles += cpu->memory.timed ? 0 : (int)cpu->memory.activeNonseqCycles32 - (int)cpu->memory.activeSeqCycles32;
 
 /** @name DEFINE_INSTRUCTION_ARM
  *
@@ -302,9 +302,9 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM* cpu, int32_t d) {
 		S_BODY; \
 		if (DO_WRITE && rd == ARM_PC) { \
 			if (cpu->executionMode == MODE_ARM) { \
-				currentCycles += CupidARMWritePC(cpu); \
+				CupidFlushCycles(cpu, &currentCycles); currentCycles += CupidARMWritePC(cpu); \
 			} else { \
-				currentCycles += CupidThumbWritePC(cpu); \
+				CupidFlushCycles(cpu, &currentCycles); currentCycles += CupidThumbWritePC(cpu); \
 			} \
 		})
 
@@ -341,7 +341,7 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM* cpu, int32_t d) {
 			BODY; \
 			S_BODY; \
 		} \
-		currentCycles += (int)cpu->memory.activeNonseqCycles32 - (int)cpu->memory.activeSeqCycles32)
+		currentCycles += cpu->memory.timed ? 0 : (int)cpu->memory.activeNonseqCycles32 - (int)cpu->memory.activeSeqCycles32)
 
 #define DEFINE_MULTIPLY_INSTRUCTION_2_EX_ARM(NAME, BODY, S_BODY, SIGNED, WAIT) \
 	DEFINE_INSTRUCTION_ARM(NAME, \
@@ -354,7 +354,7 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM* cpu, int32_t d) {
 			BODY; \
 			S_BODY; \
 		} \
-		currentCycles += (int)cpu->memory.activeNonseqCycles32 - (int)cpu->memory.activeSeqCycles32)
+		currentCycles += cpu->memory.timed ? 0 : (int)cpu->memory.activeNonseqCycles32 - (int)cpu->memory.activeSeqCycles32)
 
 #define DEFINE_MULTIPLY_INSTRUCTION_ARM(NAME, BODY, S_BODY, SIGNED) \
 	DEFINE_MULTIPLY_INSTRUCTION_EX_ARM(NAME,      BODY, , SIGNED) \
@@ -655,12 +655,12 @@ DEFINE_LOAD_STORE_MODE_3_INSTRUCTION_ARM(STRH, STORE,
 /** @name Block Transfer (LDM/STM) */
 
 DEFINE_LOAD_STORE_MULTIPLE_INSTRUCTION_ARM(LDM, load,
-	currentCycles += (int)cpu->memory.activeNonseqCycles32 - (int)cpu->memory.activeSeqCycles32;
+	currentCycles += cpu->memory.timed ? 0 : (int)cpu->memory.activeNonseqCycles32 - (int)cpu->memory.activeSeqCycles32;
 	if ((rs & 0x8000) || !rs) {
 		if (cpu->executionMode == MODE_THUMB) {
-			currentCycles += CupidThumbWritePC(cpu);
+			CupidFlushCycles(cpu, &currentCycles); currentCycles += CupidThumbWritePC(cpu);
 		} else {
-			currentCycles += CupidARMWritePC(cpu);
+			CupidFlushCycles(cpu, &currentCycles); currentCycles += CupidARMWritePC(cpu);
 		}
 	})
 
@@ -673,16 +673,23 @@ DEFINE_INSTRUCTION_ARM(SWP,
 	int rm = opcode & 0xF;
 	int rd = (opcode >> 12) & 0xF;
 	int rn = (opcode >> 16) & 0xF;
+	if (cpu->memory.timed) cpu->memory.lock(cpu, true);
 	int32_t d = cpu->memory.load32(cpu, cpu->gprs[rn], &currentCycles);
+	/* SWP's internal cycle follows both locked data accesses. */
+	if (cpu->memory.timed) currentCycles = 0;
 	cpu->memory.store32(cpu, cpu->gprs[rn], cpu->gprs[rm], &currentCycles);
+	if (cpu->memory.timed) { cpu->memory.lock(cpu, false); currentCycles = 1; }
 	cpu->gprs[rd] = d;)
 
 DEFINE_INSTRUCTION_ARM(SWPB,
 	int rm = opcode & 0xF;
 	int rd = (opcode >> 12) & 0xF;
 	int rn = (opcode >> 16) & 0xF;
+	if (cpu->memory.timed) cpu->memory.lock(cpu, true);
 	int32_t d = cpu->memory.load8(cpu, cpu->gprs[rn], &currentCycles);
+	if (cpu->memory.timed) currentCycles = 0;
 	cpu->memory.store8(cpu, cpu->gprs[rn], cpu->gprs[rm], &currentCycles);
+	if (cpu->memory.timed) { cpu->memory.lock(cpu, false); currentCycles = 1; }
 	cpu->gprs[rd] = d;)
 
 /** @name Branches */
@@ -691,22 +698,22 @@ DEFINE_INSTRUCTION_ARM(B,
 	int32_t offset = opcode << 8;
 	offset >>= 6;
 	cpu->gprs[ARM_PC] += offset;
-	currentCycles += CupidARMWritePC(cpu);)
+	CupidFlushCycles(cpu, &currentCycles); currentCycles += CupidARMWritePC(cpu);)
 
 DEFINE_INSTRUCTION_ARM(BL,
 	int32_t immediate = (opcode & 0x00FFFFFF) << 8;
 	cpu->gprs[ARM_LR] = cpu->gprs[ARM_PC] - WORD_SIZE_ARM;
 	cpu->gprs[ARM_PC] += immediate >> 6;
-	currentCycles += CupidARMWritePC(cpu);)
+	CupidFlushCycles(cpu, &currentCycles); currentCycles += CupidARMWritePC(cpu);)
 
 DEFINE_INSTRUCTION_ARM(BX,
 	int rm = opcode & 0xF;
 	_CupidSetMode(cpu, cpu->gprs[rm] & 1);
 	cpu->gprs[ARM_PC] = cpu->gprs[rm] & 0xFFFFFFFE;
 	if (cpu->executionMode == MODE_THUMB) {
-		currentCycles += CupidThumbWritePC(cpu);
+		CupidFlushCycles(cpu, &currentCycles); currentCycles += CupidThumbWritePC(cpu);
 	} else {
-		currentCycles += CupidARMWritePC(cpu);
+		CupidFlushCycles(cpu, &currentCycles); currentCycles += CupidARMWritePC(cpu);
 	})
 
 /** @name PSR Transfer */
