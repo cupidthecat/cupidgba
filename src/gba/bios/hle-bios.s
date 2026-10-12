@@ -1,8 +1,9 @@
 #define nop andeq r0, r0
+.syntax unified
 
 @ Fixed ARM offsets are covered by tests/bios/verify_hle.py.
-.equ SWI_TABLE_OFFSET, 0xCC
-.equ STALL_CALL_OFFSET, 0x340
+.equ SWI_TABLE_OFFSET, 0x198
+.equ STALL_CALL_OFFSET, 0x3FC
 
 .text
 hle_start:
@@ -25,33 +26,21 @@ b fiqBase
 .word 0
 .word 0
 
+@ The shared SWI return address is also CpuSet's visible R3 clobber.
+.org 0x140
 swiBase:
-cmp    sp, #0
-moveq  sp, #0x04000000
-subeq  sp, #0x20
 stmfd  sp!, {r11, r12, lr}
 ldrb   r12, [lr, #-2]
 mov    r11, #SWI_TABLE_OFFSET
 ldr    r12, [r11, r12, lsl #2]
-mov    r11, #STALL_CALL_OFFSET
-cmp    r11, r12
 mrs    r11, spsr
 stmfd  sp!, {r11}
 and    r11, #0x80
 orr    r11, #0x1F
-@ Keep the dispatch condition for the internal stall-count request.
-msr    cpsr_c, r11
-swieq  0xF00000  @ CupidGBA internal call to load the stall count into r11
+msr    cpsr, r11
 stmfd  sp!, {r2, lr}
-cmp    r12, #0
-nop
-nop
-nop
-nop
-nop
-nop
-movne  lr, pc
-bxne   r12
+mov    lr, pc
+bx     r12
 ldmfd  sp!, {r2, lr}
 mov    r12, #0xD3
 msr    cpsr, r12
@@ -195,65 +184,72 @@ strhne r2, [r12, #-8]
 strb   r4, [r12, #0x208]
 bx     lr
 
+@ CpuSet uses halfword instruction fetches and word or halfword data phases.
+.thumb
+.thumb_func
 CpuSet:
-stmfd  sp!, {r4, r5, lr}
-mov    r4, r2, lsl #12
-mov    r12, r0
-mov    r5, r1
-tst    r2, #0x01000000
-beq    0f
-@ Fill
-tst    r2, #0x04000000
-beq    1f
-@ Word
-add    r4, r5, r4, lsr #10
-ldmia  r0!, {r3}
-2:
-cmp    r1, r4
-stmialt  r1!, {r3}
-blt    2b
-b      3f
-@ Halfword
-1:
-bic    r12, #1
-bic    r5, #1
-add    r4, r5, r4, lsr #11
-ldrh   r3, [r12]
-2:
-cmp    r5, r4
-strhlt r3, [r5], #2
-blt    2b
-b      3f
-@ Copy
-0:
-tst    r2, #0x04000000
-beq    1f
-@ Word
-add    r4, r5, r4, lsr #10
-2:
-cmp    r1, r4
-ldmialt r0!, {r3}
-stmialt r1!, {r3}
-blt    2b
-b      3f
-@ Halfword
-1:
-add    r4, r5, r4, lsr #11
-2:
-cmp    r5, r4
-ldrhlt r3, [r12], #2
-strhlt r3, [r5], #2
-blt    2b
-3:
-mov    r3, #0x170  @ Match official BIOS's clobbered r3
-ldmfd  sp!, {r4, r5, pc}
+push {r4, r5, lr}
+lsls r4, r2, #11
+lsrs r4, r4, #9
+bl copySourceThumb
+beq copySetDone
+movs r5, #0
+lsrs r3, r2, #27
+bcc copySetHalf
+adds r5, r1, r4
+lsrs r3, r2, #25
+bcc copySetWords
+ldmia r0!, {r3}
+copyFillWords:
+cmp r1, r5
+bge copySetDone
+stmia r1!, {r3}
+b copyFillWords
+copySetWords:
+cmp r1, r5
+bge copySetDone
+ldmia r0!, {r3}
+stmia r1!, {r3}
+b copySetWords
+copySetHalf:
+lsrs r4, r4, #1
+lsrs r3, r2, #25
+bcc copySetHalves
+ldrh r3, [r0]
+copyFillHalves:
+cmp r5, r4
+bge copySetDone
+strh r3, [r1, r5]
+adds r5, #2
+b copyFillHalves
+copySetHalves:
+cmp r5, r4
+bge copySetDone
+ldrh r3, [r0, r5]
+strh r3, [r1, r5]
+adds r5, #2
+b copySetHalves
+copySetDone:
+pop {r4, r5}
+pop {r3}
+bx r3
+copySourceThumb:
+adr r3, copySourceValid
+mov r12, r4
+bx r3
+.ltorg
+.align 2
+.arm
 
 CpuFastSet:
 stmfd  sp!, {r4-r10, lr}
-tst    r2, #0x01000000
-mov    r3, r2, lsl #12
-add    r2, r1, r3, lsr #10
-beq    0f
+mov    r10, r2, lsl #11
+movs   r12, r10, lsr #9
+bl     copySourceValid
+beq    2f
+add    r12, r1, r10, lsr #9
+movs   r2, r2, lsl #8
+bcc    0f
 @ Fill
 ldr    r3, [r0]
 mov    r4, r3
@@ -264,18 +260,30 @@ mov    r8, r3
 mov    r9, r3
 mov    r10, r3
 1:
-cmp    r1, r2
+cmp    r1, r12
 stmialt r1!, {r3-r10}
 blt    1b
 b      2f
 @ Copy
 0:
-cmp    r1, r2
+cmp    r1, r12
 ldmialt r0!, {r3-r10}
 stmialt r1!, {r3-r10}
 blt    0b
 2:
-ldmfd  sp!, {r4-r10, pc}
+ldmfd  sp!, {r4-r10, lr}
+bx     lr
+
+@ Z rejects a zero size or a source range entering the protected low region.
+copySourceValid:
+cmp    r12, #0
+beq    0f
+bic    r12, r12, #0xFE000000
+add    r12, r0, r12
+tst    r0, #0x0E000000
+tstne  r12, #0x0E000000
+0:
+bx     lr
 
 SoundDriverGetJumpList:
 stmfd  sp!, {r4-r10}
@@ -298,11 +306,6 @@ bx     lr
 
 .ltorg
 
-Div:
-DivArm:
-Sqrt:
-ArcTan:
-ArcTan2:
 Lz77UnCompWram:
 Lz77UnCompVram:
 
@@ -329,6 +332,215 @@ bx lr
 .word 0xE129F000
 
 .ltorg
+
+@ Signed division uses unsigned magnitudes and a shift/subtract quotient.
+@ A zero denominator with a magnitude above one remains in the scale loop.
+.align 2
+.thumb
+.thumb_func
+divideFromThumb:
+adr r3, Div
+bx r3
+.arm
+DivArm:
+mov r3, r0
+mov r0, r1
+mov r1, r3
+Div:
+ands r3, r1, #0x80000000
+rsbmi r1, r1, #0
+eors r12, r3, r0, asr #32
+rsbcs r0, r0, #0
+movs r2, r1
+0:
+cmp r2, r0, lsr #1
+movls r2, r2, lsl #1
+blo 0b
+1:
+cmp r0, r2
+adc r3, r3, r3
+subcs r0, r0, r2
+cmp r2, r1
+movne r2, r2, lsr #1
+bne 1b
+mov r1, r0
+mov r0, r3
+movs r12, r12, lsl #1
+rsbcs r0, r0, #0
+rsbmi r1, r1, #0
+bx lr
+
+@ Newton iteration uses the same unsigned divider at each trial bound.
+Sqrt:
+stmfd sp!, {r4}
+mov r12, r0
+mov r1, #1
+0:
+cmp r1, r0
+movlo r0, r0, lsr #1
+movlo r1, r1, lsl #1
+blo 0b
+1:
+mov r0, r12
+mov r4, r1
+mov r3, #0
+mov r2, r1
+2:
+cmp r2, r0, lsr #1
+movls r2, r2, lsl #1
+blo 2b
+3:
+cmp r0, r2
+adc r3, r3, r3
+subcs r0, r0, r2
+cmp r2, r1
+movne r2, r2, lsr #1
+bne 3b
+add r1, r1, r3
+movs r1, r1, lsr #1
+cmp r1, r4
+blo 1b
+mov r0, r4
+ldmfd sp!, {r4}
+bx lr
+
+@ Each multiply retains the low word before the signed fixed-point shift.
+.align 2
+.thumb
+.thumb_func
+angleFromThumb:
+adr r3, ArcTan
+bx r3
+.arm
+ArcTan:
+mul r1, r0, r0
+mov r1, r1, asr #14
+rsb r1, r1, #0
+mov r3, #0xA9
+mul r3, r1, r3
+mov r3, r3, asr #14
+add r3, r3, #0x390
+mul r3, r1, r3
+mov r3, r3, asr #14
+add r3, r3, #0x900
+add r3, r3, #0x1C
+mul r3, r1, r3
+mov r3, r3, asr #14
+add r3, r3, #0xF00
+add r3, r3, #0xB6
+mul r3, r1, r3
+mov r3, r3, asr #14
+add r3, r3, #0x1600
+add r3, r3, #0xAA
+mul r3, r1, r3
+mov r3, r3, asr #14
+add r3, r3, #0x2000
+add r3, r3, #0x81
+mul r3, r1, r3
+mov r3, r3, asr #14
+add r3, r3, #0x3600
+add r3, r3, #0x51
+mul r3, r1, r3
+mov r3, r3, asr #14
+add r3, r3, #0xA200
+add r3, r3, #0xF9
+mul r0, r3, r0
+mov r0, r0, asr #16
+bx lr
+
+@ Signed quadrant comparisons retain the low-word overflow behavior.
+.align 2
+.thumb
+.thumb_func
+ArcTan2:
+push {r4-r7, lr}
+cmp r1, #0
+bne atanHaveY
+cmp r0, #0
+blt atanNegativeX
+movs r0, #0
+b atanDone
+atanNegativeX:
+movs r0, #0x80
+lsls r0, r0, #8
+b atanDone
+atanHaveY:
+cmp r0, #0
+bne atanQuadrant
+cmp r1, #0
+blt atanNegativeY
+movs r0, #0x40
+lsls r0, r0, #8
+b atanDone
+atanNegativeY:
+movs r0, #0xC0
+lsls r0, r0, #8
+b atanDone
+atanQuadrant:
+movs r2, r0
+movs r3, r1
+lsls r3, r3, #14
+lsls r2, r2, #14
+rsbs r4, r0, #0
+rsbs r5, r1, #0
+movs r6, #0x40
+lsls r6, r6, #8
+lsls r7, r6, #1
+cmp r1, #0
+blt atanLower
+cmp r0, #0
+blt atanUpperLeft
+cmp r0, r1
+blt atanUpperXY
+movs r1, r0
+movs r0, r3
+bl divideFromThumb
+bl angleFromThumb
+b atanDone
+atanUpperLeft:
+cmp r4, r1
+blt atanUpperXY
+atanLeftYX:
+movs r1, r0
+movs r0, r3
+bl divideFromThumb
+bl angleFromThumb
+adds r0, r0, r7
+b atanDone
+atanUpperXY:
+movs r0, r2
+bl divideFromThumb
+bl angleFromThumb
+subs r0, r6, r0
+b atanDone
+atanLower:
+cmp r0, #0
+bgt atanLowerRight
+cmp r4, r5
+bgt atanLeftYX
+atanLowerXY:
+movs r0, r2
+bl divideFromThumb
+bl angleFromThumb
+adds r6, r6, r7
+subs r0, r6, r0
+b atanDone
+atanLowerRight:
+cmp r0, r5
+blt atanLowerXY
+movs r1, r0
+movs r0, r3
+bl divideFromThumb
+bl angleFromThumb
+adds r7, r7, r7
+adds r0, r7, r0
+atanDone:
+pop {r4-r7}
+pop {r3}
+bx r3
+
+.align 2
+.arm
 
 undefBase:
 pabtBase:

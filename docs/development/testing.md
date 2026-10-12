@@ -110,19 +110,35 @@ Both paths pass. This suite checks transfer data; the four hardware ROMs check
 the listed timings and latches. See [DMA and bus ownership](../hardware/dma.md)
 for the behavior and remaining limits.
 
-The local CPU and bus timing matrix uses an external BIOS for its firmware
-timing cases:
+The local CPU and bus timing matrix runs with either BIOS path:
 
 ```sh
 python3 tests/roms/check_bus_suite.py --runner build/cupidgba-headless \
   --rom /path/to/bus-suite.gba --bios /path/to/gba-bios.bin
 ```
 
-Set `CUPID_BUS_SUITE_ROM` and `CUPID_TEST_BIOS` to add it to CTest. The observer
+Set `CUPID_BUS_SUITE_ROM` to add the built-in check to CTest and
+`CUPID_TEST_BIOS` to add the external path. The observer
 requires its pinned digest, the terminal instruction, R12=0, 2020/2020 observations
-and zero logged failures. The built-in BIOS currently returns R12=1 and
-1880/2020 results on the same ROM; its 140 math/copy SWI timing failures remain
-open. See [prefetch](../hardware/prefetch.md) for coverage and unresolved edges.
+and zero logged failures. Both paths pass. See
+[prefetch](../hardware/prefetch.md) for coverage and unresolved edges.
+
+The local BIOS math suite checks 615 register observations across 123 inputs:
+
+```sh
+python3 tests/roms/check_bios_math_suite.py --runner build/cupidgba-headless \
+  --rom /path/to/bios-math-suite.gba --bios /path/to/gba-bios.bin
+```
+
+Set `CUPID_BIOS_MATH_SUITE_ROM` to add the built-in path and `CUPID_TEST_BIOS`
+to add the external comparison. Its observer requires the pinned digest,
+terminal instruction, R12=0, 615/615 results and an empty failure log. Both paths
+pass without changing the original test inputs or expectations. Native BIOS
+checks also cover division and square-root boundaries, fixed-point overflow,
+copy/fill alignment and overlap, control masks, selected timing observations,
+protected BIOS reads, and a copy interrupted by DMA and a timer IRQ. See
+[BIOS execution](../hardware/bios.md). The local ROM and external BIOS are
+private inputs and are not required by hosted CI.
 
 To run another authorized input for a fixed number of frames:
 

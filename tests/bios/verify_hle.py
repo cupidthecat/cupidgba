@@ -16,8 +16,14 @@ assembly = source.with_name("bios").joinpath("hle-bios.s").read_text()
 offsets = dict(re.findall(r"\.equ\s+(SWI_TABLE_OFFSET|STALL_CALL_OFFSET),\s*(0x[0-9A-Fa-f]+)", assembly))
 table = int(offsets["SWI_TABLE_OFFSET"], 16)
 stall = int(offsets["STALL_CALL_OFFSET"], 16)
-# These five dispatch slots share the internal stall-count routine.
-for call in range(6, 11):
+# Compression dispatch slots retain the internal stall-count routine.
+for call in (0x11, 0x12):
     if struct.unpack_from("<I", actual, table + call * 4)[0] != stall:
         raise SystemExit("HLE dispatch offsets do not match the assembled table")
+for call in range(6, 13):
+    target = struct.unpack_from("<I", actual, table + call * 4)[0]
+    aligned = target & ~1
+    valid_mode = target & 1 if call in (0x0A, 0x0B) else target % 4 == 0
+    if target == stall or not valid_mode or not table + 0x2B * 4 <= aligned < len(actual):
+        raise SystemExit("HLE math/copy dispatch target is invalid")
 print(f"Verified {len(actual)} HLE bytes")
