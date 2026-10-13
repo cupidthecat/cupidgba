@@ -29,6 +29,10 @@ struct CupidPlatformAudio {
     uint64_t sampleOverruns;    /**< Last observed producer overrun count */
     int16_t lastSampleL;        /**< Last output sample (for underrun fade) */
     int16_t lastSampleR;
+    /* Optional playback observer. Called on the SDL worker with a borrowed
+     * stereo buffer; validFrames excludes the synthesized underrun tail. */
+    void (*outputSink)(void* context, const int16_t* pcm, int frames, int validFrames);
+    void* outputSinkContext;
 };
 
 /** @name Platform State */

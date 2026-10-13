@@ -92,7 +92,26 @@ static void producer_overrun_resets_the_interpolation_anchor(void) {
     free(gba);
 }
 
-static void live_device_consumes_output_between_producer_frames(void) {
+struct PlaybackObservation {
+    unsigned validFrames;
+    unsigned mismatches;
+    int16_t lastValidL;
+    int16_t lastValidR;
+    bool underrun;
+};
+
+static void observe_playback(void* context, const int16_t* pcm, int frames, int validFrames) {
+    struct PlaybackObservation* observation = context;
+    observation->underrun |= validFrames < frames;
+    for (int frame = 0; frame < validFrames; frame++) {
+        observation->lastValidL = pcm[frame * 2];
+        observation->lastValidR = pcm[frame * 2 + 1];
+        observation->mismatches += pcm[frame * 2] != 12288 || pcm[frame * 2 + 1] != 12288;
+        observation->validFrames++;
+    }
+}
+
+static void live_device_case(unsigned delay) {
     CHECK(SDL_setenv("SDL_AUDIODRIVER", "dummy", 1) == 0);
     SDL_SetMainReady();
     CHECK(SDL_Init(SDL_INIT_AUDIO) == 0);
@@ -107,20 +126,35 @@ static void live_device_consumes_output_between_producer_frames(void) {
     cupid_audio_timer_overflow(&gba->audio, 0, 0);
     struct CupidPlatform platform = {0};
     CHECK(cupid_platform_init_audio(&platform, gba));
+    struct PlaybackObservation observation = {0};
+    SDL_LockAudioDevice(platform.audioDevice);
+    platform.platformAudio.outputSink = observe_playback;
+    platform.platformAudio.outputSinkContext = &observation;
+    SDL_UnlockAudioDevice(platform.audioDevice);
     for (unsigned frame = 0; frame < 24; frame++) {
         SDL_LockAudioDevice(platform.audioDevice);
         cupid_gba_run_frame(gba);
         SDL_UnlockAudioDevice(platform.audioDevice);
-        SDL_Delay(2);
+        SDL_Delay(delay);
     }
     SDL_PauseAudioDevice(platform.audioDevice, 1);
-    CHECK(platform.platformAudio.lastSampleL == 12288);
-    CHECK(platform.platformAudio.lastSampleR == 12288);
+    CHECK(observation.validFrames > 0 && observation.mismatches == 0);
+    CHECK(observation.lastValidL == 12288);
+    CHECK(observation.lastValidR == 12288);
+    if (delay == 50) CHECK(observation.underrun);
     CHECK(platform.platformAudio.resamplePos > 0);
     SDL_CloseAudioDevice(platform.audioDevice);
     SDL_Quit();
     cupid_gba_destroy(gba);
     free(gba);
+}
+
+static void live_device_consumes_output_between_producer_frames(void) {
+    live_device_case(2);
+}
+
+static void live_device_preserves_source_pcm_with_a_slow_producer(void) {
+    live_device_case(50);
 }
 
 int main(void) {
@@ -129,5 +163,6 @@ int main(void) {
     RUN(underrun_keeps_the_last_valid_anchor);
     RUN(producer_overrun_resets_the_interpolation_anchor);
     RUN(live_device_consumes_output_between_producer_frames);
+    RUN(live_device_preserves_source_pcm_with_a_slow_producer);
     return 0;
 }
