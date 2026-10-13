@@ -39,7 +39,7 @@ add_library(cupid_core STATIC
     src/core/timing.c
     src/gba/gba.c src/gba/memory.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
     src/gba/audio.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c
-    src/gba/hle-bios.c src/gba/savedata.c
+    src/gba/hle-bios.c src/gba/savedata.c src/gba/save/file.c
     src/gba/render/software.c src/gba/render/composite.c
     src/gba/render/mode0.c src/gba/render/mode2.c
     src/gba/render/mode3.c src/gba/render/mode4.c
@@ -79,6 +79,11 @@ if(BUILD_TESTING)
     add_test(NAME gba.io COMMAND test_io)
     set_tests_properties(gba.io PROPERTIES TIMEOUT 10)
 
+    add_executable(test_save_file tests/gba/save/test_file.c)
+    target_link_libraries(test_save_file PRIVATE cupid_core)
+    add_test(NAME gba.save-file COMMAND test_save_file ${CMAKE_CURRENT_BINARY_DIR})
+    set_tests_properties(gba.save-file PROPERTIES TIMEOUT 10)
+
     add_executable(test_audio tests/gba/test_audio.c)
     target_link_libraries(test_audio PRIVATE cupid_core)
     add_test(NAME gba.audio COMMAND test_audio)
@@ -89,6 +94,11 @@ if(BUILD_TESTING)
         target_link_libraries(test_audio_output PRIVATE cupid_core SDL2::SDL2)
         add_test(NAME platform.audio COMMAND test_audio_output)
         set_tests_properties(platform.audio PROPERTIES TIMEOUT 10)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        add_test(NAME platform.save-startup COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_save_startup.py
+            --frontend $<TARGET_FILE:cupidgba>)
+        set_tests_properties(platform.save-startup PROPERTIES TIMEOUT 10)
     endif()
 
     add_executable(test_timer tests/gba/test_timer.c)

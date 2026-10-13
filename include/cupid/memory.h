@@ -219,6 +219,7 @@ struct CupidSavedata {
     uint8_t* data;
     size_t   size;
     bool     dirty;
+    bool     typeForced; /**< An explicit type override limits file-load expansion */
 
     /** Flash state machine */
     enum CupidFlashState flashState;
@@ -377,15 +378,16 @@ void cupid_savedata_detect_type(struct CupidSavedata* savedata, const uint8_t* r
 
 /**
  * Load save data from a .sav file into savedata->data.
- * If the save type is still SAVE_AUTODETECT the type is guessed from the
- * file size.  Safe to call even when no file exists yet (returns false
- * silently in that case).
+ * Recognized compatible file capacities can expand an inferred type. Explicit
+ * overrides retain their capacity. A failed load leaves active data unchanged;
+ * a missing file returns false with errno=ENOENT.
  */
 bool cupid_savedata_load_file(struct CupidSavedata* savedata, const char* path);
 
 /**
  * Flush savedata->data to a .sav file.  Only writes when dirty.
- * Returns true on success (or when nothing needed to be written).
+ * Replaces the destination only after a complete staged write. Failures retain
+ * dirty state. Returns true on success (or when nothing needed to be written).
  */
 bool cupid_savedata_save_file(struct CupidSavedata* savedata, const char* path);
 

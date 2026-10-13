@@ -5,6 +5,7 @@
 
 #include "cupid/gba.h"
 #include "cupid/platform.h"
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,17 +18,19 @@
 /**
  * @brief Derive a .sav path from a ROM path.
  */
-static void derive_save_path(const char* romPath, char* out, size_t outSize) {
-    strncpy(out, romPath, outSize - 1);
-    out[outSize - 1] = '\0';
-    /** Find the last '.' that comes after the last directory separator. */
-    char* lastSlash = strrchr(out, '/');
-    char* ext = strrchr(out, '.');
-    if (ext && (!lastSlash || ext > lastSlash)) {
-        strcpy(ext, ".sav");
-    } else {
-        strncat(out, ".sav", outSize - strlen(out) - 1);
-    }
+static bool derive_save_path(const char* romPath, char* out, size_t outSize) {
+    const char* lastSlash = strrchr(romPath, '/');
+#ifdef _WIN32
+    const char* backslash = strrchr(romPath, '\\');
+    if (backslash && (!lastSlash || backslash > lastSlash)) lastSlash = backslash;
+#endif
+    const char* ext = strrchr(romPath, '.');
+    size_t prefix = ext && (!lastSlash || ext > lastSlash)
+        ? (size_t)(ext - romPath) : strlen(romPath);
+    if (outSize < 5 || prefix > outSize - 5) return false;
+    memcpy(out, romPath, prefix);
+    memcpy(out + prefix, ".sav", 5);
+    return true;
 }
 
 /**
@@ -177,7 +180,10 @@ int main(int argc, char* argv[]) {
 
     /** Derive save-file path (.sav alongside the ROM). */
     char savePath[512];
-    derive_save_path(romPath, savePath, sizeof(savePath));
+    if (!derive_save_path(romPath, savePath, sizeof(savePath))) {
+        fprintf(stderr, "Error: Save path is too long: %s\n", romPath);
+        return 1;
+    }
 
     /** Create GBA instance. */
     struct CupidGBA gba;
@@ -224,7 +230,14 @@ int main(int argc, char* argv[]) {
     cupid_gba_reset(&gba);
 
     /** Load persisted save data (no-op when .sav does not exist). */
-    cupid_savedata_load_file(&gba.memory.savedata, savePath);
+    if (!cupid_savedata_load_file(&gba.memory.savedata, savePath) && errno != ENOENT) {
+        const char* reason = errno == EINVAL
+            ? "unsupported save size or incompatible save type; check the -S option"
+            : strerror(errno);
+        fprintf(stderr, "Error: Cannot load save %s: %s\n", savePath, reason);
+        cupid_gba_destroy(&gba);
+        return 1;
+    }
 
     /** Initialize SDL platform. */
     struct CupidPlatform plat;
@@ -275,7 +288,8 @@ int main(int argc, char* argv[]) {
         /** Periodic save flush. */
         if (++saveFlushCounter >= SAVE_FLUSH_FRAMES) {
             saveFlushCounter = 0;
-            cupid_savedata_save_file(&gba.memory.savedata, savePath);
+            if (!cupid_savedata_save_file(&gba.memory.savedata, savePath))
+                fprintf(stderr, "Error: Cannot save %s: %s\n", savePath, strerror(errno));
         }
 
         /**
@@ -304,9 +318,13 @@ int main(int argc, char* argv[]) {
     }
 
     /** Cleanup and flush unsaved progress before exit. */
-    cupid_savedata_save_file(&gba.memory.savedata, savePath);
+    int result = 0;
+    if (!cupid_savedata_save_file(&gba.memory.savedata, savePath)) {
+        fprintf(stderr, "Error: Cannot save %s: %s\n", savePath, strerror(errno));
+        result = 1;
+    }
     cupid_platform_deinit(&plat);
     cupid_gba_destroy(&gba);
     printf("CupidGBA exited.\n");
-    return 0;
+    return result;
 }
