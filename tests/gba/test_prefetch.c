@@ -39,6 +39,46 @@ static void idle(struct CupidGBA* gba, unsigned cycles) {
     cupid_bus_finish(&gba->cpu);
 }
 
+static void wait_controls_before_fetch_and_after_invalid_jump(void) {
+    for (unsigned configuration = 0; configuration < 3; configuration++) {
+        struct CupidGBA* gba = calloc(1, sizeof(*gba));
+        CHECK(gba);
+        cupid_gba_create(gba);
+        if (configuration == 1) {
+            /* Reset an attached firmware path without fetching an instruction. */
+            gba->memory.fullBios = 1;
+            cupid_gba_reset(gba);
+        } else if (configuration == 2) {
+            cupid_memory_set_active_region(&gba->cpu, GBA_BASE_IWRAM);
+            cupid_memory_set_active_region(&gba->cpu, 0x01000000);
+        }
+        CHECK(gba->memory.activeRegion == -1);
+        gba->cpu.memory.activeSeqCycles32 = 7;
+        gba->cpu.memory.activeSeqCycles16 = 11;
+        gba->cpu.memory.activeNonseqCycles32 = 13;
+        gba->cpu.memory.activeNonseqCycles16 = 17;
+        cupid_io_write(gba, REG_WAITCNT, 0x4317);
+        cupid_memory_update_ewram_waitstates(gba, 0x0B00);
+        CHECK(gba->memory.activeRegion == -1);
+        CHECK(gba->cpu.memory.activeSeqCycles32 == 7 && gba->cpu.memory.activeSeqCycles16 == 11);
+        CHECK(gba->cpu.memory.activeNonseqCycles32 == 13 && gba->cpu.memory.activeNonseqCycles16 == 17);
+        cupid_memory_set_active_region(&gba->cpu, GBA_BASE_EWRAM + 0x100);
+        CHECK(fetch(gba, GBA_BASE_EWRAM + 0x100, 2, false) == 5);
+        CHECK(fetch(gba, GBA_BASE_EWRAM + 0x104, 4, false) == 10);
+        cupid_memory_update_ewram_waitstates(gba, 0x0C00);
+        CHECK(fetch(gba, GBA_BASE_EWRAM + 0x108, 2, false) == 4);
+        gba->memory.rom = calloc(1, 0x4000);
+        CHECK(gba->memory.rom);
+        gba->memory.romSize = 0x4000;
+        gba->memory.romMask = 0x3FFF;
+        cupid_memory_set_active_region(&gba->cpu, GBA_BASE_ROM0 + 0x100);
+        CHECK(fetch(gba, GBA_BASE_ROM0 + 0x100, 4, false) == 6);
+        cupid_io_write(gba, REG_WAITCNT, 0);
+        CHECK(fetch(gba, GBA_BASE_ROM0 + 0x200, 4, false) == 8);
+        destroy(gba);
+    }
+}
+
 static void initial_fetch_pending_completion_and_cache_consumption(void) {
     for (unsigned width = 2; width <= 4; width += 2) {
         struct CupidGBA* gba = machine(0);
@@ -229,6 +269,7 @@ static void dma_external_write_waits_for_completing_prefetch_halfword(void) {
 }
 
 int main(void) {
+    RUN(wait_controls_before_fetch_and_after_invalid_jump);
     RUN(initial_fetch_pending_completion_and_cache_consumption);
     RUN(queue_capacity_is_bounded_and_reset_clears_pending_state);
     RUN(cpu_ram_data_fills_and_gamepak_data_cancels);

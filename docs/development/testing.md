@@ -24,6 +24,8 @@ clock wrap. They compare late dispatch with advancing one clock at a time.
 Prefetch regressions check pending/cached fetches, queue capacity and sustained
 bandwidth, fill/cancellation clocks, disable/restart behavior, width changes,
 uncached page boundaries and DMA/timer/IRQ interactions across clock wrap.
+They also write wait controls before the first fetch, after a firmware reset
+and after an invalid jump, then require the configured costs on a valid fetch.
 BIOS regressions check LZ77 backreferences with bytes whose high bit is set
 through both byte and halfword output paths. They also execute ARM/Thumb
 interrupt waits, check ready-flag consumption and register preservation,
@@ -31,6 +33,20 @@ and distinguish a matching interrupt from an unrelated HALT wake-up.
 The wait cases also cover IRQ callers, their saved exception state, both saved
 CPSR IRQ masks and either initial IME value. They check the returned request
 in R0 and the cleared R3 alongside the preserved registers.
+
+The data-service regressions execute ARM/Thumb callers for SWIs 10 through 19.
+They check 2,043 unpacking, compression and differential-filter observations,
+including work-RAM and cartridge sources, two cartridge wait-state settings,
+complete output and guards, register preservation, timers and elapsed clocks.
+A separate 98-case bias check samples register changes during both ramp
+directions, preserves every sampling-resolution setting, and runs timer IRQs
+and a DMA transfer during a ramp. `CUPID_TEST_BIOS` registers the same checks
+against a local external BIOS and compares clocks and caller state directly.
+CTest splits the data corpus into 773 EWRAM, 728 IWRAM and 542 cartridge
+observations, each with the same ten-second deadline. Every group requires its
+full count.
+The BIOS input is not distributed. See [data services](../hardware/bios-data-services.md)
+for the fixtures and qualification limits.
 
 ```sh
 cmake -S . -B build -DCUPID_BUILD_FRONTEND=OFF
@@ -202,7 +218,11 @@ queue overflow. It fails the run on file write or close errors. See
 [audio timing](../hardware/audio/timing.md) for coverage and qualification limits.
 
 `platform.audio` checks interpolation and a live SDL2 dummy device with a
-concurrent consumer. Linux CI also runs this check in a separate ThreadSanitizer
+concurrent consumer, including a producer slower than playback. The optional
+host output sink observes each playback buffer and its source-backed prefix.
+The live checks require every source-backed frame to retain the expected PCM;
+the slower case must also exercise underrun. The final faded sample is not a
+fixed-value observation. Linux CI also runs this check in a separate ThreadSanitizer
 build. To reproduce it locally:
 
 ```sh

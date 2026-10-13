@@ -71,5 +71,14 @@ The unchanged local math suite passes 615/615 register observations on both
 paths. Both also pass the complete 2020/2020 CPU/bus timing matrix, including
 its division, square-root, angle and copy cases. The observers reject partial
 counts and logged failures. These results cover the listed calls and inputs;
-affine, unpacking, decompression, sound, multiboot, STOP and other services still
-need separate execution and timing work.
+affine, sound-driver, multiboot, STOP and other services still need separate
+execution and timing work.
+
+## Data utilities and sound bias
+
+SWIs 10 through 19 also execute replacement instructions through the CPU and
+memory bus. They cover bit unpacking, LZ77, Huffman, run-length and differential
+data, and the sound-bias ramp. Their memory transfers and internal work allow
+timers, IRQs, DMA and audio to advance during the call. See
+[data services](bios-data-services.md) for output widths, caller state,
+qualification cases and remaining limits.
