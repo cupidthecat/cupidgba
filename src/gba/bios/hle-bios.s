@@ -118,7 +118,6 @@ subs   pc, lr, #4
 .word 0x03A0E004
 
 @ Unimplemented
-RegisterRamReset:
 Stop:
 GetBiosChecksum:
 SoundDriverInit:
@@ -233,38 +232,8 @@ bx r3
 .balign 4, 0
 .arm
 
-CpuFastSet:
-stmfd  sp!, {r4-r10, lr}
-mov    r10, r2, lsl #11
-movs   r12, r10, lsr #9
-bl     copySourceValid
-beq    2f
-add    r12, r1, r10, lsr #9
-movs   r2, r2, lsl #8
-bcc    0f
-@ Fill
-ldr    r3, [r0]
-mov    r4, r3
-mov    r5, r3
-mov    r6, r3
-mov    r7, r3
-mov    r8, r3
-mov    r9, r3
-mov    r10, r3
-1:
-cmp    r1, r12
-stmialt r1!, {r3-r10}
-blt    1b
-b      2f
-@ Copy
-0:
-cmp    r1, r12
-ldmialt r0!, {r3-r10}
-stmialt r1!, {r3-r10}
-blt    0b
-2:
-ldmfd  sp!, {r4-r10, lr}
-bx     lr
+@ Keep the fixed stall entry and later firmware offsets in place.
+.space 0x68, 0
 
 @ Z rejects a zero size or a source range entering the protected low region.
 copySourceValid:
@@ -601,3 +570,6 @@ movs  pc, lr
 
 .include "src/gba/bios/data-services.s"
 .include "src/gba/bios/affine-services.s"
+.include "src/gba/bios/register-reset.s"
+
+.include "src/gba/bios/copy-fast.s"
