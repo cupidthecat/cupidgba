@@ -121,8 +121,6 @@ subs   pc, lr, #4
 RegisterRamReset:
 Stop:
 GetBiosChecksum:
-BgAffineSet:
-ObjAffineSet:
 SoundDriverInit:
 SoundDriverMode:
 SoundDriverMain:
@@ -602,3 +600,4 @@ movs  pc, lr
 .ltorg
 
 .include "src/gba/bios/data-services.s"
+.include "src/gba/bios/affine-services.s"

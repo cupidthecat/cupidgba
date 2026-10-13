@@ -44,6 +44,16 @@ full count.
 The BIOS input is not distributed. See [data services](../hardware/bios-data-services.md)
 for the fixtures and qualification limits.
 
+Affine regressions cover 382 background and 1,102 object observations,
+including every 16-bit angle for both services. They check complete output,
+signed product rounding, wrapped origins, preserved caller state, source and
+destination advancement, count/stride cases and memory regions. Four cases
+require timer/DMA interrupts, DMA replacement of a future input entry and
+sampled output-write chronology. `CUPID_TEST_BIOS` adds comparisons against
+the local external BIOS. Background and object groups retain separate
+ten-second deadlines, and a mathematical generator checks all sine values.
+See [affine services](../hardware/bios-affine-services.md).
+
 ```sh
 cmake -S . -B build -DCUPID_BUILD_FRONTEND=OFF
 cmake --build build --parallel 2
