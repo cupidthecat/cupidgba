@@ -12,7 +12,7 @@ python3 tests/bios/verify_hle.py .local-research/hle-rebuilt.bin
 python3 tests/bios/generate_affine_table.py --check
 ```
 
-The verifier compares all 4,988 explicit bytes with `src/gba/hle-bios.c`.
+The verifier compares all 5,360 explicit bytes with `src/gba/hle-bios.c`.
 The included `src/gba/bios/data-services.s` contains the timed data utilities and
 bias ramp. The verifier checks the internal stall entry, the ARM/Thumb service
 targets, and the utility source guard's observable address at `0x0BA4`.
@@ -20,5 +20,7 @@ targets, and the utility source guard's observable address at `0x0BA4`.
 `affine-sine.inc`. Its 256 signed 1.14 sine values are reproduced with decimal
 arithmetic by `tests/bios/generate_affine_table.py`; `--write` regenerates the
 include and `--check` verifies it. No external firmware data is needed.
+`register-reset.s` contains the timed register/memory reset. `copy-fast.s`
+contains its direct Thumb-to-ARM bridge and the shared block-transfer code.
 The remaining space in the 16 KiB C array is zero-initialized. Linux Clang CI
 also runs this comparison. External BIOS dumps are separate inputs.

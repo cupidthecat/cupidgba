@@ -161,6 +161,35 @@ static void copy_fill_and_block_rounding(void) {
     }
 }
 
+static void fast_copy_data_register_results(void) {
+    const unsigned counts[] = {0, 1, 8, 9, 16};
+    for (unsigned fill = 0; fill < 2; fill++) {
+        for (unsigned n = 0; n < sizeof(counts) / sizeof(*counts); n++) {
+            struct CupidGBA* gba = machine();
+            uint8_t* source = gba->memory.ewram;
+            for (unsigned i = 0; i < 128; i++) source[i] = (uint8_t)(i * 13 + 7);
+            const unsigned copied = (counts[n] + 7) & ~7u;
+            const uint32_t control = (fill ? UINT32_C(0x85000000) : UINT32_C(0x84000000)) | counts[n];
+            gba->cpu.gprs[0] = GBA_BASE_EWRAM;
+            gba->cpu.gprs[1] = GBA_BASE_EWRAM + 0x100;
+            gba->cpu.gprs[2] = (int32_t)control;
+            gba->cpu.gprs[3] = (int32_t)UINT32_C(0x98765432);
+            call(gba, 0x0C, n & 1);
+            uint32_t r3 = UINT32_C(0x98765432);
+            if (copied) {
+                const unsigned offset = fill ? 0 : (copied - 7) * 4;
+                r3 = (uint32_t)source[offset] | (uint32_t)source[offset+1] << 8 |
+                     (uint32_t)source[offset+2] << 16 | (uint32_t)source[offset+3] << 24;
+            }
+            CHECK((uint32_t)gba->cpu.gprs[0] == GBA_BASE_EWRAM + (fill ? 0 : copied * 4));
+            CHECK((uint32_t)gba->cpu.gprs[1] == GBA_BASE_EWRAM + 0x100 + copied * 4);
+            CHECK((uint32_t)gba->cpu.gprs[2] == control);
+            CHECK((uint32_t)gba->cpu.gprs[3] == r3);
+            destroy(gba);
+        }
+    }
+}
+
 static void copy_source_guards_and_control_masks(void) {
     const uint32_t sources[] = {0, 0x100, 0x01000000, 0x10000000, 0xFFFFFFFC, 0x0FD00000};
     for (unsigned fast = 0; fast < 2; fast++) {
@@ -367,6 +396,7 @@ int main(int argc, char** argv) {
     RUN(square_root_limits);
     RUN(angle_fixed_point_values);
     RUN(copy_fill_and_block_rounding);
+    RUN(fast_copy_data_register_results);
     RUN(copy_source_guards_and_control_masks);
     RUN(native_firmware_clock_observations);
     RUN(copy_alignment_and_forward_overlap);

@@ -54,6 +54,16 @@ the local external BIOS. Background and object groups retain separate
 ten-second deadlines, and a mathematical generator checks all sine values.
 See [affine services](../hardware/bios-affine-services.md).
 
+Register/memory reset checks cover 650 observations across all 256 masks,
+both caller modes, ignored upper bits, cartridge waits and safe RAM callers.
+They compare complete memory, retained regions, readable I/O, wave banks,
+FIFO state, preserved caller state, timers and elapsed clocks. Two clears
+require timer/DMA IRQs and sampled DMA writes that the CPU later overwrites.
+`CUPID_TEST_BIOS` adds the external comparison, including the sampled chronology.
+Each of the sixteen mask groups and the interaction group retains a ten-second
+deadline. The existing copy checks also require the observed CpuFastSet R3
+data result. See [register reset](../hardware/bios-register-reset.md).
+
 ```sh
 cmake -S . -B build -DCUPID_BUILD_FRONTEND=OFF
 cmake --build build --parallel 2

@@ -32,126 +32,6 @@ static void _SoftReset(struct CupidGBA* gba) {
 }
 
 /**
- * @brief SWI 0x01: RegisterRamReset.
- *
- */
-static void _RegisterRamReset(struct CupidGBA* gba) {
-    uint32_t reg = gba->cpu.gprs[0];
-
-    /** Always force blank first */
-    cupid_io_write(gba, REG_DISPCNT, 0x0080);
-
-    if (reg & 0x01) memset(gba->memory.ewram, 0, GBA_SIZE_EWRAM);
-    if (reg & 0x02) memset(gba->memory.iwram, 0, GBA_SIZE_IWRAM - 0x200);
-    if (reg & 0x04) memset(gba->video.palette, 0, GBA_SIZE_PALETTE);
-    if (reg & 0x08) memset(gba->video.vram, 0, GBA_SIZE_VRAM);
-    if (reg & 0x10) memset(gba->video.oam.raw, 0, GBA_SIZE_OAM);
-
-    if (reg & 0x20) {
-        /** Serial IO */
-        cupid_io_write(gba, REG_SIOCNT, 0);
-        cupid_io_write(gba, REG_RCNT, 0x8000);  /** RCNT_INITIAL */
-        cupid_io_write(gba, REG_SIOMLT_SEND, 0);
-        cupid_io_write(gba, REG_JOYCNT, 0);
-        cupid_io_write(gba, REG_JOY_RECV_LO, 0);
-        cupid_io_write(gba, REG_JOY_RECV_HI, 0);
-        cupid_io_write(gba, REG_JOY_TRANS_LO, 0);
-        cupid_io_write(gba, REG_JOY_TRANS_HI, 0);
-    }
-
-    if (reg & 0x40) {
-        /** Sound */
-        cupid_io_write(gba, REG_SOUND1CNT_L, 0);
-        cupid_io_write(gba, REG_SOUND1CNT_H, 0);
-        cupid_io_write(gba, REG_SOUND1CNT_X, 0);
-        cupid_io_write(gba, REG_SOUND2CNT_L, 0);
-        cupid_io_write(gba, REG_SOUND2CNT_H, 0);
-        cupid_io_write(gba, REG_SOUND3CNT_L, 0);
-        cupid_io_write(gba, REG_SOUND3CNT_H, 0);
-        cupid_io_write(gba, REG_SOUND3CNT_X, 0);
-        cupid_io_write(gba, REG_SOUND4CNT_L, 0);
-        cupid_io_write(gba, REG_SOUND4CNT_H, 0);
-        cupid_io_write(gba, REG_SOUNDCNT_L, 0);
-        cupid_io_write(gba, REG_SOUNDCNT_H, 0);
-        cupid_io_write(gba, REG_SOUNDCNT_X, 0);
-        cupid_io_write(gba, REG_SOUNDBIAS, 0x0200);
-        /** Zero wave RAM */
-        cupid_io_write(gba, REG_WAVE_RAM0_LO, 0);
-        cupid_io_write(gba, REG_WAVE_RAM0_HI, 0);
-        cupid_io_write(gba, REG_WAVE_RAM1_LO, 0);
-        cupid_io_write(gba, REG_WAVE_RAM1_HI, 0);
-        cupid_io_write(gba, REG_WAVE_RAM2_LO, 0);
-        cupid_io_write(gba, REG_WAVE_RAM2_HI, 0);
-        cupid_io_write(gba, REG_WAVE_RAM3_LO, 0);
-        cupid_io_write(gba, REG_WAVE_RAM3_HI, 0);
-    }
-
-    if (reg & 0x80) {
-        /** All other registers */
-        cupid_io_write(gba, REG_DISPSTAT, 0);
-        /** BG control + scroll */
-        cupid_io_write(gba, REG_BG0CNT, 0);
-        cupid_io_write(gba, REG_BG1CNT, 0);
-        cupid_io_write(gba, REG_BG2CNT, 0);
-        cupid_io_write(gba, REG_BG3CNT, 0);
-        cupid_io_write(gba, REG_BG0HOFS, 0);
-        cupid_io_write(gba, REG_BG0VOFS, 0);
-        cupid_io_write(gba, REG_BG1HOFS, 0);
-        cupid_io_write(gba, REG_BG1VOFS, 0);
-        cupid_io_write(gba, REG_BG2HOFS, 0);
-        cupid_io_write(gba, REG_BG2VOFS, 0);
-        cupid_io_write(gba, REG_BG3HOFS, 0);
-        cupid_io_write(gba, REG_BG3VOFS, 0);
-        /** BG2/3 affine (identity) */
-        cupid_io_write(gba, REG_BG2PA, 0x0100);
-        cupid_io_write(gba, REG_BG2PB, 0);
-        cupid_io_write(gba, REG_BG2PC, 0);
-        cupid_io_write(gba, REG_BG2PD, 0x0100);
-        cupid_io_write(gba, REG_BG2X_LO, 0);
-        cupid_io_write(gba, REG_BG2X_HI, 0);
-        cupid_io_write(gba, REG_BG2Y_LO, 0);
-        cupid_io_write(gba, REG_BG2Y_HI, 0);
-        cupid_io_write(gba, REG_BG3PA, 0x0100);
-        cupid_io_write(gba, REG_BG3PB, 0);
-        cupid_io_write(gba, REG_BG3PC, 0);
-        cupid_io_write(gba, REG_BG3PD, 0x0100);
-        cupid_io_write(gba, REG_BG3X_LO, 0);
-        cupid_io_write(gba, REG_BG3X_HI, 0);
-        cupid_io_write(gba, REG_BG3Y_LO, 0);
-        cupid_io_write(gba, REG_BG3Y_HI, 0);
-        /** Windows */
-        cupid_io_write(gba, REG_WIN0H, 0);
-        cupid_io_write(gba, REG_WIN1H, 0);
-        cupid_io_write(gba, REG_WIN0V, 0);
-        cupid_io_write(gba, REG_WIN1V, 0);
-        cupid_io_write(gba, REG_WININ, 0);
-        cupid_io_write(gba, REG_WINOUT, 0);
-        /** Blend / mosaic */
-        cupid_io_write(gba, REG_MOSAIC, 0);
-        cupid_io_write(gba, REG_BLDCNT, 0);
-        cupid_io_write(gba, REG_BLDALPHA, 0);
-        cupid_io_write(gba, REG_BLDY, 0);
-        /** DMA: zero all 4 channels */
-        for (int i = 0; i < 4; i++) {
-            uint16_t base = REG_DMA0SAD_LO + i * 12;
-            for (int r = 0; r < 6; r++) {
-                cupid_io_write(gba, base + r * 2, 0);
-            }
-        }
-        /** Timers: zero all 4 */
-        for (int i = 0; i < 4; i++) {
-            cupid_io_write(gba, REG_TM0CNT_L + i * 4, 0);
-            cupid_io_write(gba, REG_TM0CNT_H + i * 4, 0);
-        }
-        /** Interrupt */
-        cupid_io_write(gba, REG_IE, 0);
-        cupid_io_write(gba, REG_IF, 0xFFFF);
-        cupid_io_write(gba, REG_WAITCNT, 0);
-        cupid_io_write(gba, REG_IME, 0);
-    }
-}
-
-/**
  * @brief SWI 0x02: Halt.
  */
 static void _Halt(struct CupidGBA* gba) {
@@ -184,7 +64,10 @@ static void _MidiKey2Freq(struct CupidGBA* gba) {
 void cupid_bios_swi(struct CupidGBA* gba, uint8_t comment) {
     switch (comment) {
     case 0x00: _SoftReset(gba); break;
-    case 0x01: _RegisterRamReset(gba); break;
+    case 0x01:
+        /* Reset fills and device writes run through the timed firmware. */
+        cupid_arm_raise_swi(&gba->cpu);
+        break;
     case 0x02: case 0x04: case 0x05:
         /* Execute the replacement BIOS wait loop through the CPU pipeline. */
         cupid_arm_raise_swi(&gba->cpu);
