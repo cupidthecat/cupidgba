@@ -33,6 +33,26 @@ static void end_data_access(struct CupidARM* cpu, int* cycles, bool load) {
     cupid_bus_release(cpu);
 }
 
+static void begin_gpio_word(struct CupidARM* cpu, uint32_t address, int* cycles) {
+    struct CupidGBA* gba = cpu->master;
+    struct CupidMemory* memory = &gba->memory;
+    cpu->cycles += *cycles;
+    *cycles = 0;
+    cupid_bus_wait(cpu);
+    const unsigned region = address >> GBA_BASE_OFFSET;
+    bool sequential = cpu->memory.dataSequential;
+    if (!(address & 0x1FFFF) || memory->lastWasDMA) sequential = false;
+    const unsigned wait = sequential ? memory->waitstatesSeq16[region] : memory->waitstatesNonseq16[region];
+    memory->fetchNonseq = true;
+    const unsigned penalty = cupid_prefetch_before_data(gba, address);
+    cupid_bus_advance(cpu, wait + 1 + penalty, true);
+}
+
+static void next_gpio_halfword(struct CupidARM* cpu, uint32_t address) {
+    struct CupidGBA* gba = cpu->master;
+    cupid_bus_advance(cpu, (unsigned)gba->memory.waitstatesSeq16[address >> GBA_BASE_OFFSET] + 1, true);
+}
+
 /* Observe MMIO at the end of its data-bus cycle. The instruction's accumulated
  * fetch/data clocks are consumed here; its remaining internal clocks stay in
  * cycleCounter. Peripheral events run here, while CPU IRQ entry stays at the
@@ -384,6 +404,16 @@ void cupid_memory_set_active_region(struct CupidARM* cpu, uint32_t address) {
 uint32_t cupid_memory_load32(struct CupidARM* cpu, uint32_t address, int* cycleCounter) {
     struct CupidGBA* gba = cpu->master;
     struct CupidMemory* memory = &gba->memory;
+    if (cycleCounter && cpu->memory.timed && cupid_cartridge_gpio_address(gba, address & ~3u)) {
+        const uint32_t aligned = address & ~3u;
+        begin_gpio_word(cpu, aligned, cycleCounter);
+        const uint32_t low = cupid_memory_loadU16(cpu, aligned, NULL);
+        next_gpio_halfword(cpu, aligned + 2);
+        const uint32_t high = cupid_memory_loadU16(cpu, aligned + 2, NULL);
+        cupid_prefetch_after_data(gba);
+        end_data_access(cpu, cycleCounter, true);
+        return ROR(low | high << 16, (address & 3) * 8);
+    }
     int* timedCounter = NULL;
     if (cycleCounter && cpu->memory.timed) {
         timedCounter = cycleCounter;
@@ -474,6 +504,12 @@ uint32_t cupid_memory_load32(struct CupidARM* cpu, uint32_t address, int* cycleC
         *cycleCounter += wait;
     }
     /** Unaligned 32-bit loads are rotated to match hardware behavior. */
+    if (memory->rom && gba->cartridge.readable && cupid_cartridge_gpio_address(gba, address & ~3u)) {
+        const uint32_t aligned = address & ~3u;
+        uint16_t low, high;
+        if (cupid_cartridge_gpio_read(gba, aligned, &low)) value = (value & 0xFFFF0000) | low;
+        if (cupid_cartridge_gpio_read(gba, aligned + 2, &high)) value = (value & 0xFFFF) | (uint32_t)high << 16;
+    }
     end_data_access(cpu, timedCounter, true);
     int rotate = (address & 3) << 3;
     return ROR(value, rotate);
@@ -571,6 +607,8 @@ uint32_t cupid_memory_load16(struct CupidARM* cpu, uint32_t address, int* cycleC
         *cycleCounter += wait;
     }
     /** Unaligned 16-bit loads are rotated on real hardware. */
+    uint16_t port;
+    if (cupid_cartridge_gpio_read(gba, address & ~1u, &port)) value = port;
     end_data_access(cpu, timedCounter, true);
     int rotate = (address & 1) << 3;
     return ROR(value, rotate);
@@ -673,6 +711,8 @@ uint32_t cupid_memory_load8(struct CupidARM* cpu, uint32_t address, int* cycleCo
         wait += 2;
         *cycleCounter += wait;
     }
+    uint16_t port;
+    if (cupid_cartridge_gpio_read(gba, address & ~1u, &port)) value = (port >> ((address & 1) * 8)) & 255;
     end_data_access(cpu, timedCounter, true);
     return value;
 }
@@ -683,6 +723,16 @@ uint32_t cupid_memory_load8(struct CupidARM* cpu, uint32_t address, int* cycleCo
 void cupid_memory_store32(struct CupidARM* cpu, uint32_t address, int32_t value, int* cycleCounter) {
     struct CupidGBA* gba = cpu->master;
     struct CupidMemory* memory = &gba->memory;
+    if (cycleCounter && cpu->memory.timed && cupid_cartridge_gpio_address(gba, address & ~3u)) {
+        const uint32_t aligned = address & ~3u;
+        begin_gpio_word(cpu, aligned, cycleCounter);
+        cupid_memory_store16(cpu, aligned, (int16_t)value, NULL);
+        next_gpio_halfword(cpu, aligned + 2);
+        cupid_memory_store16(cpu, aligned + 2, (int16_t)((uint32_t)value >> 16), NULL);
+        cupid_prefetch_after_data(gba);
+        end_data_access(cpu, cycleCounter, false);
+        return;
+    }
     int* timedCounter = NULL;
     if (cycleCounter && cpu->memory.timed) {
         timedCounter = cycleCounter;
@@ -727,6 +777,8 @@ void cupid_memory_store32(struct CupidARM* cpu, uint32_t address, int32_t value,
     case GBA_REGION_ROM2:
     case GBA_REGION_ROM2_EX:
         wait += waitstatesRegion[address >> GBA_BASE_OFFSET];
+        cupid_cartridge_gpio_write(gba, address & ~3u, (uint16_t)value);
+        cupid_cartridge_gpio_write(gba, (address & ~3u) + 2, (uint16_t)((uint32_t)value >> 16));
         break;
     case GBA_REGION_SRAM:
     case GBA_REGION_SRAM_MIRROR:
@@ -782,6 +834,14 @@ void cupid_memory_store16(struct CupidARM* cpu, uint32_t address, int16_t value,
         break;
     case GBA_REGION_OAM:
         STORE_16(value, address & (GBA_SIZE_OAM - 2), gba->video.oam.raw);
+        break;
+    case GBA_REGION_ROM0:
+    case GBA_REGION_ROM0_EX:
+    case GBA_REGION_ROM1:
+    case GBA_REGION_ROM1_EX:
+    case GBA_REGION_ROM2:
+        cupid_cartridge_gpio_write(gba, address & ~1u, (uint16_t)value);
+        wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
         break;
     case GBA_REGION_ROM2_EX:
         /** EEPROM writes. */
@@ -863,7 +923,7 @@ void cupid_memory_store8(struct CupidARM* cpu, uint32_t address, int8_t value, i
         /** Cannot Store8 to OAM. */
         break;
     case GBA_REGION_ROM0:
-        /** Stub: some carts use 8-bit GPIO writes. */
+        /* Byte stores do not strobe the cartridge GPIO registers. */
         break;
     case GBA_REGION_SRAM:
     case GBA_REGION_SRAM_MIRROR:
@@ -1019,6 +1079,8 @@ bool cupid_load_rom(struct CupidGBA* gba, const char* path) {
     if (gba->memory.activeRegion >= GBA_REGION_ROM0) {
         gba->cpu.memory.setActiveRegion(&gba->cpu, gba->cpu.gprs[15]);
     }
+
+    cupid_cartridge_attach(gba, gba->memory.rom, pristineSize);
 
     /** Detect save type from ROM strings. */
     cupid_savedata_detect_type(&gba->memory.savedata, gba->memory.rom, pristineSize);

@@ -18,6 +18,7 @@
 #include "cupid/irq.h"
 #include "cupid/bios.h"
 #include "cupid/render.h"
+#include "cupid/cartridge.h"
 
 /** @name GBA Clock */
 #define GBA_ARM7TDMI_FREQUENCY 0x1000000U  /**< 16,777,216 Hz */
@@ -65,6 +66,7 @@ struct CupidGBA {
     struct CupidVideo  video;
     struct CupidAudio  audio;
     struct CupidTimer  timers[4];
+    struct CupidCartridge cartridge;
 
     /** Cycle-accurate event scheduler */
     struct CupidTiming timing;

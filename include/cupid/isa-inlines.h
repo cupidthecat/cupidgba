@@ -77,15 +77,23 @@
 
 /** @name PC Write Helpers */
 
+static inline uint32_t CupidReadOpcode(struct CupidARM* cpu, uint32_t address, unsigned width) {
+    uint32_t value;
+    if (cpu->memory.readOpcode && cpu->memory.readOpcode(cpu, address, width, &value)) return value;
+    if (width == WORD_SIZE_ARM) LOAD_32(value, address & cpu->memory.activeMask, cpu->memory.activeRegion);
+    else LOAD_16(value, address & cpu->memory.activeMask, cpu->memory.activeRegion);
+    return value;
+}
+
 static inline int32_t CupidARMWritePC(struct CupidARM* cpu) {
 	uint32_t pc = cpu->gprs[ARM_PC] & ~(uint32_t)(WORD_SIZE_ARM - 1);
 	cpu->memory.setActiveRegion(cpu, pc);
 	if (cpu->memory.timed) cpu->memory.fetch(cpu, pc, WORD_SIZE_ARM, false);
-	LOAD_32(cpu->prefetch[0], pc & cpu->memory.activeMask, cpu->memory.activeRegion);
+	cpu->prefetch[0] = CupidReadOpcode(cpu, pc, WORD_SIZE_ARM);
 	if (cpu->memory.timed) cpu->memory.finish(cpu);
 	pc += WORD_SIZE_ARM;
 	if (cpu->memory.timed) cpu->memory.fetch(cpu, pc, WORD_SIZE_ARM, true);
-	LOAD_32(cpu->prefetch[1], pc & cpu->memory.activeMask, cpu->memory.activeRegion);
+	cpu->prefetch[1] = CupidReadOpcode(cpu, pc, WORD_SIZE_ARM);
 	if (cpu->memory.timed) cpu->memory.finish(cpu);
 	cpu->gprs[ARM_PC] = pc;
 	cpu->irqDisableLatch = cpu->cpsr.i;
@@ -96,11 +104,11 @@ static inline int32_t CupidThumbWritePC(struct CupidARM* cpu) {
 	uint32_t pc = cpu->gprs[ARM_PC] & ~(uint32_t)(WORD_SIZE_THUMB - 1);
 	cpu->memory.setActiveRegion(cpu, pc);
 	if (cpu->memory.timed) cpu->memory.fetch(cpu, pc, WORD_SIZE_THUMB, false);
-	LOAD_16(cpu->prefetch[0], pc & cpu->memory.activeMask, cpu->memory.activeRegion);
+	cpu->prefetch[0] = CupidReadOpcode(cpu, pc, WORD_SIZE_THUMB);
 	if (cpu->memory.timed) cpu->memory.finish(cpu);
 	pc += WORD_SIZE_THUMB;
 	if (cpu->memory.timed) cpu->memory.fetch(cpu, pc, WORD_SIZE_THUMB, true);
-	LOAD_16(cpu->prefetch[1], pc & cpu->memory.activeMask, cpu->memory.activeRegion);
+	cpu->prefetch[1] = CupidReadOpcode(cpu, pc, WORD_SIZE_THUMB);
 	if (cpu->memory.timed) cpu->memory.finish(cpu);
 	cpu->gprs[ARM_PC] = pc;
 	cpu->irqDisableLatch = cpu->cpsr.i;

@@ -5,15 +5,37 @@
 
 #include "cupid/gba.h"
 #include "cupid/platform.h"
+#include "cupid/platform/rtc.h"
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 /**
  * @brief Frames between automatic save flushes.
  */
 #define SAVE_FLUSH_FRAMES 300
+
+static bool host_clock(struct CupidRTCDateTime* date, uint64_t* stamp) {
+    time_t now = time(NULL);
+    if (now == (time_t)-1 || now < 0) { errno = EIO; return false; }
+    *stamp = (uint64_t)now;
+    if (date) {
+        const struct tm* local = localtime(&now);
+        if (!local || local->tm_year < 100 || local->tm_year > 199) { errno = EINVAL; return false; }
+        *date = (struct CupidRTCDateTime){(uint8_t)(local->tm_year - 100), (uint8_t)(local->tm_mon + 1),
+            (uint8_t)local->tm_mday, (uint8_t)local->tm_wday, (uint8_t)local->tm_hour,
+            (uint8_t)local->tm_min, (uint8_t)local->tm_sec};
+    }
+    return true;
+}
+
+static bool flush_rtc(struct CupidGBA* gba, struct CupidPlatformRTC* config) {
+    uint64_t stamp = 0;
+    if (gba->cartridge.rtcPresent && config->offlineWall && !host_clock(NULL, &stamp)) return false;
+    return cupid_platform_rtc_save(gba, config, stamp);
+}
 
 /**
  * @brief Derive a .sav path from a ROM path.
@@ -133,6 +155,8 @@ void cupid_platform_render_frame(struct CupidPlatform* plat, const uint32_t* fra
 static void printUsage(const char* progname) {
     fprintf(stderr, "Usage: %s rom.gba [-b bios.bin] [-s scale] [-S savetype]\n", progname);
     fprintf(stderr, "\nSave types (GBA): sram, sram512, flash512, flash1m, eeprom, eeprom512, none\n");
+    fprintf(stderr, "\nRTC: --rtc auto|on|off  --rtc-time YYYY-MM-DDTHH:MM:SS\n");
+    fprintf(stderr, "     --rtc-offline pause|wall (default: pause; wall includes powered-off time)\n");
     fprintf(stderr, "\nControls:\n");
     fprintf(stderr, "  Z=A  X=B  Enter=Start  Backspace=Select\n");
     fprintf(stderr, "  Arrow keys=D-Pad  A=L  S=R  Esc=Quit\n");
@@ -147,6 +171,9 @@ int main(int argc, char* argv[]) {
     const char* biosPath = NULL;
     const char* saveTypeStr = NULL;
     int scale = CUPID_DEFAULT_SCALE;
+    int rtcPresence = -1;
+    struct CupidRTCDateTime rtcSeed;
+    struct CupidPlatformRTC rtcConfig = {0};
 
     /** Parse CLI arguments. */
     for (int i = 1; i < argc; i++) {
@@ -158,6 +185,22 @@ int main(int argc, char* argv[]) {
             if (scale > 10) scale = 10;
         } else if (strcmp(argv[i], "-S") == 0 && i + 1 < argc) {
             saveTypeStr = argv[++i];
+        } else if (strcmp(argv[i], "--rtc") == 0 && i + 1 < argc) {
+            const char* mode = argv[++i];
+            if (!strcmp(mode, "auto")) rtcPresence = -1;
+            else if (!strcmp(mode, "on")) rtcPresence = 1;
+            else if (!strcmp(mode, "off")) rtcPresence = 0;
+            else { fprintf(stderr, "Error: Invalid RTC mode: %s\n", mode); return 1; }
+        } else if (strcmp(argv[i], "--rtc-time") == 0 && i + 1 < argc) {
+            if (!cupid_rtc_parse_datetime(argv[++i], &rtcSeed)) {
+                fprintf(stderr, "Error: Invalid RTC time; use a valid date from 2000 through 2099\n"); return 1;
+            }
+            rtcConfig.seed = &rtcSeed;
+        } else if (strcmp(argv[i], "--rtc-offline") == 0 && i + 1 < argc) {
+            const char* mode = argv[++i];
+            if (!strcmp(mode, "pause")) rtcConfig.offlineWall = false;
+            else if (!strcmp(mode, "wall")) rtcConfig.offlineWall = true;
+            else { fprintf(stderr, "Error: Invalid RTC offline mode: %s\n", mode); return 1; }
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
             printUsage(argv[0]);
             return 0;
@@ -196,6 +239,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     printf("Loaded ROM: %s (%zu bytes)\n", romPath, gba.memory.romSize);
+    if (rtcPresence >= 0) cupid_cartridge_enable_rtc(&gba, rtcPresence != 0);
 
     /** Override save type if specified on CLI. */
     if (saveTypeStr) {
@@ -237,6 +281,21 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "Error: Cannot load save %s: %s\n", savePath, reason);
         cupid_gba_destroy(&gba);
         return 1;
+    }
+
+    char rtcPath[sizeof(savePath)];
+    memcpy(rtcPath, savePath, strlen(savePath) + 1);
+    memcpy(rtcPath + strlen(rtcPath) - 4, ".rtc", 5);
+    rtcConfig.path = rtcPath;
+    struct CupidRTCDateTime hostDate;
+    uint64_t hostStamp = 0;
+    if (gba.cartridge.rtcPresent && rtcConfig.offlineWall && !host_clock(&hostDate, &hostStamp)) {
+        fprintf(stderr, "Error: Cannot read RTC host clock: %s\n", strerror(errno));
+        cupid_gba_destroy(&gba); return 1;
+    }
+    if (!cupid_platform_rtc_load(&gba, &rtcConfig, rtcConfig.offlineWall ? &hostDate : NULL, hostStamp)) {
+        fprintf(stderr, "Error: Cannot load RTC state %s: %s\n", rtcPath, strerror(errno));
+        cupid_gba_destroy(&gba); return 1;
     }
 
     /** Initialize SDL platform. */
@@ -290,6 +349,8 @@ int main(int argc, char* argv[]) {
             saveFlushCounter = 0;
             if (!cupid_savedata_save_file(&gba.memory.savedata, savePath))
                 fprintf(stderr, "Error: Cannot save %s: %s\n", savePath, strerror(errno));
+            if (!flush_rtc(&gba, &rtcConfig))
+                fprintf(stderr, "Error: Cannot save RTC state %s: %s\n", rtcPath, strerror(errno));
         }
 
         /**
@@ -321,6 +382,10 @@ int main(int argc, char* argv[]) {
     int result = 0;
     if (!cupid_savedata_save_file(&gba.memory.savedata, savePath)) {
         fprintf(stderr, "Error: Cannot save %s: %s\n", savePath, strerror(errno));
+        result = 1;
+    }
+    if (!flush_rtc(&gba, &rtcConfig)) {
+        fprintf(stderr, "Error: Cannot save RTC state %s: %s\n", rtcPath, strerror(errno));
         result = 1;
     }
     cupid_platform_deinit(&plat);

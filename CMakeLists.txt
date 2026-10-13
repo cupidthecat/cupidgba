@@ -36,10 +36,11 @@ endif()
 
 add_library(cupid_core STATIC
     src/arm/arm.c src/arm/isa-arm.c src/arm/isa-thumb.c
-    src/core/timing.c
+    src/core/timing.c src/core/file.c
     src/gba/gba.c src/gba/memory.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
     src/gba/audio.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c
     src/gba/hle-bios.c src/gba/savedata.c src/gba/save/file.c
+    src/gba/cartridge/rtc.c src/gba/cartridge/gpio.c src/gba/cartridge/battery.c
     src/gba/render/software.c src/gba/render/composite.c
     src/gba/render/mode0.c src/gba/render/mode2.c
     src/gba/render/mode3.c src/gba/render/mode4.c
@@ -52,7 +53,7 @@ endif()
 
 if(CUPID_BUILD_FRONTEND)
     find_package(SDL2 REQUIRED CONFIG)
-    add_executable(cupidgba src/platform/main.c src/platform/audio.c src/platform/input.c)
+    add_executable(cupidgba src/platform/main.c src/platform/audio.c src/platform/input.c src/platform/rtc.c)
     if(TARGET SDL2::SDL2main)
         target_link_libraries(cupidgba PRIVATE SDL2::SDL2main)
     endif()
@@ -64,6 +65,22 @@ target_link_libraries(cupidgba-headless PRIVATE cupid_core)
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(test_rtc tests/gba/cartridge/test_rtc.c)
+    target_link_libraries(test_rtc PRIVATE cupid_core)
+    add_test(NAME gba.rtc-calendar COMMAND test_rtc)
+    set_tests_properties(gba.rtc-calendar PROPERTIES TIMEOUT 10)
+    add_executable(test_cartridge_gpio tests/gba/cartridge/test_gpio.c)
+    target_link_libraries(test_cartridge_gpio PRIVATE cupid_core)
+    add_test(NAME gba.cartridge-gpio COMMAND test_cartridge_gpio)
+    set_tests_properties(gba.cartridge-gpio PROPERTIES TIMEOUT 10)
+    add_executable(test_rtc_battery tests/gba/cartridge/test_battery.c)
+    target_link_libraries(test_rtc_battery PRIVATE cupid_core)
+    add_test(NAME gba.rtc-battery COMMAND test_rtc_battery ${CMAKE_CURRENT_BINARY_DIR})
+    set_tests_properties(gba.rtc-battery PROPERTIES TIMEOUT 10)
+    add_executable(test_rtc_config tests/platform/test_rtc_config.c src/platform/rtc.c)
+    target_link_libraries(test_rtc_config PRIVATE cupid_core)
+    add_test(NAME platform.rtc-config COMMAND test_rtc_config ${CMAKE_CURRENT_BINARY_DIR})
+    set_tests_properties(platform.rtc-config PROPERTIES TIMEOUT 10)
     add_executable(test_timing tests/core/test_timing.c)
     target_link_libraries(test_timing PRIVATE cupid_core)
     add_test(NAME core.timing COMMAND test_timing)

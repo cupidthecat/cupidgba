@@ -16,6 +16,12 @@ save files stop startup with an error. Failed writes keep the previous file;
 see [save files](../hardware/cartridge/save-files.md) for capacities, overrides
 and recovery behavior.
 
+RTC cartridges use a separate `.rtc` battery file. `--rtc auto|on|off` selects
+the hardware; `--rtc-time YYYY-MM-DDTHH:MM:SS` supplies a calendar seed.
+`--rtc-offline pause|wall` chooses whether a saved clock includes elapsed
+host time while the frontend is closed. The default is pause. See
+[cartridge RTC](../hardware/cartridge/rtc.md) for persistence and current limits.
+
 Keyboard controls are Z for A, X for B, Enter for Start, Backspace for Select,
 the arrow keys for the D-pad, A for L, S for R, and Escape to quit. SDL2
 controllers use A/B, Back, Start, the D-pad, and the shoulder buttons. The left

@@ -81,6 +81,7 @@ void cupid_gba_create(struct CupidGBA* gba) {
 
     /** Init timing scheduler and wire CPU cycle and next-event counters. */
     cupid_timing_init(&gba->timing, &gba->cpu.cycles, &gba->cpu.nextEvent);
+    cupid_cartridge_init(gba);
 
 }
 
@@ -95,7 +96,10 @@ void cupid_gba_reset(struct CupidGBA* gba) {
     gba->cpu.master = gba;
 
     /** Clear timing event queue first. */
+    cupid_rtc_sync(&gba->cartridge.rtc, cupid_timing_global_time(&gba->timing));
     cupid_timing_clear(&gba->timing);
+    cupid_rtc_rebase(&gba->cartridge.rtc, 0);
+    cupid_cartridge_reset_bus(gba);
 
     /**
      * Reset CPU - zero registers, set mode to SYS, fill pipeline, then

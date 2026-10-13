@@ -156,6 +156,8 @@ struct CupidDMA {
     bool     transferWord;
     bool     externalSeen;
     uint32_t accessAddress;  /**< Address sampled by the current bus phase */
+    unsigned gpioHalfCycles; /**< Second halfword strobe of a cartridge port word */
+    uint16_t gpioReadLow;
 };
 
 /**

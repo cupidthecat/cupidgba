@@ -1,0 +1,191 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+#ifndef _WIN32
+#define _POSIX_C_SOURCE 200809L
+#endif
+#include "cupid/gba.h"
+#include "cupid/file.h"
+#include "../../test.h"
+#include <errno.h>
+#include <sys/stat.h>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <direct.h>
+#else
+#include <unistd.h>
+#endif
+
+static char directory[1024], statePath[1100], savePath[1100];
+static uint8_t valid[44];
+
+static struct CupidGBA* machine(void) {
+    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+    CHECK(gba);
+    cupid_gba_create(gba);
+    cupid_gba_reset(gba);
+    const uint8_t image[] = "test cartridge SIIRTC_V001";
+    cupid_cartridge_attach(gba, image, sizeof(image));
+    CHECK(gba->cartridge.rtcPresent);
+    return gba;
+}
+
+static void destroy(struct CupidGBA* gba) {
+    cupid_gba_destroy(gba);
+    free(gba);
+}
+
+static void write_bytes(const void* data, size_t size) {
+    FILE* file = fopen(statePath, "wb");
+    CHECK(file && fwrite(data, 1, size, file) == size && fclose(file) == 0);
+}
+
+static void repair_checksum(uint8_t data[44]) {
+    uint32_t sum = 2166136261u;
+    for (unsigned i = 0; i < 40; i++) sum = (sum ^ data[i]) * 16777619u;
+    for (unsigned i = 0; i < 4; i++) data[40 + i] = (uint8_t)(sum >> (8 * i));
+}
+
+static void reject_without_changing_battery(const uint8_t* data, size_t size) {
+    write_bytes(data, size);
+    struct CupidGBA* gba = machine();
+    const struct CupidCartridge before = gba->cartridge;
+    uint64_t stamp = 7;
+    CHECK(!cupid_cartridge_load_rtc(gba, statePath, &stamp) && errno == EINVAL);
+    CHECK(stamp == 7 && !memcmp(&before, &gba->cartridge, sizeof(before)));
+    destroy(gba);
+}
+
+static void roundtrip_uses_a_separate_bound_battery_and_clock_anchor(void) {
+    const uint8_t rawSave[] = {0x12, 0x34, 0xA5, 0x5A, 0xFF};
+    CHECK(cupid_file_replace(savePath, rawSave, sizeof(rawSave)));
+    struct CupidGBA* gba = machine();
+    const struct CupidRTCDateTime date = {26, 10, 13, 5, 23, 59, 59};
+    CHECK(cupid_rtc_set_datetime(&gba->cartridge.rtc, &date));
+    cupid_rtc_write_control(&gba->cartridge.rtc, 0x4A);
+    cupid_rtc_sample_power(&gba->cartridge.rtc, false);
+    cupid_timing_tick(&gba->timing, CUPID_RTC_CLOCK_HZ / 2);
+    CHECK(cupid_cartridge_save_rtc(gba, statePath, UINT64_C(0x1122334455667788)));
+    CHECK(cupid_file_read_exact(statePath, valid, sizeof(valid)));
+    CHECK(!memcmp(valid, "CPDRTC01", 8) && valid[16] == 26 && valid[19] == 5 && valid[23] == 0xCA);
+    destroy(gba);
+    gba = machine();
+    cupid_timing_tick(&gba->timing, 1234);
+    uint64_t stamp = 0;
+    CHECK(cupid_cartridge_load_rtc(gba, statePath, &stamp));
+    CHECK(stamp == UINT64_C(0x1122334455667788) && gba->cartridge.rtc.lastClock == 1234);
+    CHECK(!memcmp(&gba->cartridge.rtc.date, &date, sizeof(date)));
+    CHECK(gba->cartridge.rtc.control == 0xCA && !gba->cartridge.rtc.powerSampling);
+    CHECK(gba->cartridge.rtc.fraction == CUPID_RTC_CLOCK_HZ / 2);
+    cupid_timing_tick(&gba->timing, CUPID_RTC_CLOCK_HZ / 2);
+    cupid_rtc_sync(&gba->cartridge.rtc, cupid_timing_global_time(&gba->timing));
+    CHECK(gba->cartridge.rtc.date.day == 14 && gba->cartridge.rtc.date.weekday == 6);
+    CHECK(gba->cartridge.rtc.date.hour == 0 && gba->cartridge.rtc.date.second == 0);
+    uint8_t readSave[sizeof(rawSave)];
+    CHECK(cupid_file_read_exact(savePath, readSave, sizeof(readSave)) && !memcmp(rawSave, readSave, sizeof(rawSave)));
+    gba->cartridge.identity ^= 1;
+    const struct CupidCartridge before = gba->cartridge;
+    CHECK(!cupid_cartridge_load_rtc(gba, statePath, &stamp) && errno == EINVAL);
+    CHECK(!memcmp(&before, &gba->cartridge, sizeof(before)));
+    destroy(gba);
+}
+
+static void corrupt_or_impossible_state_never_changes_the_running_clock(void) {
+    for (unsigned size = 0; size < sizeof(valid); size++) reject_without_changing_battery(valid, size);
+    uint8_t longer[45];
+    memcpy(longer, valid, sizeof(valid)); longer[44] = 0;
+    reject_without_changing_battery(longer, sizeof(longer));
+    for (unsigned i = 0; i < sizeof(valid); i++) {
+        uint8_t corrupt[44];
+        memcpy(corrupt, valid, sizeof(corrupt)); corrupt[i] ^= 1;
+        reject_without_changing_battery(corrupt, sizeof(corrupt));
+    }
+    const struct {unsigned at; uint8_t value;} impossible[] = {
+        {16,100}, {17,0}, {17,13}, {18,32}, {19,7}, {20,24}, {21,60}, {22,60},
+        {23,0xCB}, {27,1}, {28,4}, {29,1}, {30,1}, {31,1}
+    };
+    for (unsigned i = 0; i < sizeof(impossible) / sizeof(*impossible); i++) {
+        uint8_t data[44]; memcpy(data, valid, sizeof(data));
+        data[impossible[i].at] = impossible[i].value;
+        repair_checksum(data);
+        reject_without_changing_battery(data, sizeof(data));
+    }
+    uint8_t data[44]; memcpy(data, valid, sizeof(data));
+    data[17] = 2; data[18] = 30; repair_checksum(data);
+    reject_without_changing_battery(data, sizeof(data));
+    memcpy(data, valid, sizeof(data)); data[28] |= 1; data[22] = 0x59; repair_checksum(data);
+    reject_without_changing_battery(data, sizeof(data));
+}
+
+static void invalid_second_and_power_latch_survive_until_the_next_carry(void) {
+    struct CupidGBA* gba = machine();
+    const uint8_t time[] = {0x23, 0x59, 0x6A};
+    cupid_rtc_write_time(&gba->cartridge.rtc, time);
+    cupid_rtc_sample_power(&gba->cartridge.rtc, false);
+    CHECK(cupid_cartridge_save_rtc(gba, statePath, 0));
+    destroy(gba); gba = machine();
+    CHECK(cupid_cartridge_load_rtc(gba, statePath, NULL));
+    CHECK(gba->cartridge.rtc.invalidSecond && gba->cartridge.rtc.date.second == 0x6A);
+    CHECK((gba->cartridge.rtc.control & 0x80) && !gba->cartridge.rtc.powerSampling);
+    cupid_rtc_advance_seconds(&gba->cartridge.rtc, 1);
+    CHECK(!gba->cartridge.rtc.invalidSecond && gba->cartridge.rtc.date.day == 2);
+    CHECK(gba->cartridge.rtc.date.hour == 0 && gba->cartridge.rtc.date.second == 0);
+    destroy(gba);
+}
+
+static void failed_save_preserves_the_existing_file(void) {
+    write_bytes(valid, sizeof(valid));
+#ifdef _WIN32
+    CHECK(SetFileAttributesA(statePath, FILE_ATTRIBUTE_READONLY));
+#else
+    CHECK(chmod(statePath, 0400) == 0);
+#endif
+    struct CupidGBA* gba = machine();
+    CHECK(!cupid_cartridge_save_rtc(gba, statePath, 0));
+    uint8_t actual[44];
+    CHECK(cupid_file_read_exact(statePath, actual, sizeof(actual)) && !memcmp(actual, valid, sizeof(valid)));
+#ifdef _WIN32
+    CHECK(SetFileAttributesA(statePath, FILE_ATTRIBUTE_NORMAL));
+#else
+    CHECK(chmod(statePath, 0600) == 0);
+#endif
+    CHECK(!cupid_cartridge_load_rtc(gba, directory, NULL));
+    CHECK(!cupid_cartridge_save_rtc(gba, directory, 0));
+    cupid_cartridge_enable_rtc(gba, false);
+    CHECK(cupid_cartridge_load_rtc(gba, directory, NULL));
+    CHECK(cupid_cartridge_save_rtc(gba, directory, 0));
+    destroy(gba);
+}
+
+int main(int argc, char** argv) {
+    CHECK(argc == 2);
+#ifdef _WIN32
+    unsigned long process = GetCurrentProcessId();
+#else
+    unsigned long process = (unsigned long)getpid();
+#endif
+    unsigned attempt = 0;
+    for (; attempt < 100; attempt++) {
+        int size = snprintf(directory, sizeof(directory), "%s/rtc-battery-%lu-%u", argv[1], process, attempt);
+        CHECK(size > 0 && (size_t)size < sizeof(directory));
+#ifdef _WIN32
+        if (_mkdir(directory) == 0) break;
+#else
+        if (mkdir(directory, 0700) == 0) break;
+#endif
+        CHECK(errno == EEXIST);
+    }
+    CHECK(attempt < 100);
+    CHECK(snprintf(statePath, sizeof(statePath), "%s/input.rtc", directory) > 0);
+    CHECK(snprintf(savePath, sizeof(savePath), "%s/input.sav", directory) > 0);
+    RUN(roundtrip_uses_a_separate_bound_battery_and_clock_anchor);
+    RUN(corrupt_or_impossible_state_never_changes_the_running_clock);
+    RUN(invalid_second_and_power_latch_survive_until_the_next_carry);
+    RUN(failed_save_preserves_the_existing_file);
+    CHECK(remove(statePath) == 0 && remove(savePath) == 0);
+#ifdef _WIN32
+    CHECK(_rmdir(directory) == 0);
+#else
+    CHECK(rmdir(directory) == 0);
+#endif
+    return 0;
+}
