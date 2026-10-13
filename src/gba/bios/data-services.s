@@ -282,7 +282,7 @@ biasWait:
     b SoundBias
 biasDone:
     bx lr
-.balign 4
+.balign 4, 0
 biasRegister:
     .word 0x04000088
 .arm
