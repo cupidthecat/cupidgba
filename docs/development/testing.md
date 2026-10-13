@@ -64,6 +64,17 @@ Each of the sixteen mask groups and the interaction group retains a ten-second
 deadline. The existing copy checks also require the observed CpuFastSet R3
 data result. See [register reset](../hardware/bios-register-reset.md).
 
+Soft-reset regressions require 768 observations across every restart byte,
+ARM/Thumb state, seven caller banks, three caller memory regions, cartridge
+wait settings and DMA before/after restart selection. They check complete
+architectural register banks, memory, I/O, elapsed clocks and entry pipeline,
+then execute the actual first entry instructions. DMA cases compare sampled
+work-area writes and pending timer/DMA requests with IME clear.
+`CUPID_TEST_BIOS` adds the external comparisons. Four restart-byte groups,
+the caller-state group and the DMA group each retain a ten-second deadline.
+See [soft reset](../hardware/bios-soft-reset.md), including the unresolved
+hardware status-register readback edge.
+
 ```sh
 cmake -S . -B build -DCUPID_BUILD_FRONTEND=OFF
 cmake --build build --parallel 2

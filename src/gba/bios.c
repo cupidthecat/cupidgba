@@ -8,30 +8,6 @@
 #include <stdlib.h>
 
 /**
- * @brief SWI 0x00: SoftReset.
- */
-static void _SoftReset(struct CupidGBA* gba) {
-    /** Clear 200h bytes of IWRAM (0x03007E00..0x03007FFF) */
-    memset(gba->memory.iwram + GBA_SIZE_IWRAM - 0x200, 0, 0x200);
-
-    /** Reset stack pointers (matches the HLE BIOS stub behavior) */
-    gba->cpu.gprs[13] = GBA_SP_BASE_SYSTEM;
-    cupid_arm_set_priv_mode(&gba->cpu, MODE_IRQ);
-    gba->cpu.gprs[13] = GBA_SP_BASE_IRQ;
-    cupid_arm_set_priv_mode(&gba->cpu, MODE_SVC);
-    gba->cpu.gprs[13] = GBA_SP_BASE_SUPERVISOR;
-    cupid_arm_set_priv_mode(&gba->cpu, MODE_SYS);
-
-    /** Check reset flag at 0x03007FFA (0=ROM, non-zero=RAM) */
-    uint8_t flag = gba->memory.iwram[GBA_SIZE_IWRAM - 6];
-    uint32_t dest = (flag == 0) ? 0x08000000 : 0x02000000;
-
-    gba->cpu.gprs[15] = dest;
-    gba->cpu.cpsr.packed = MODE_SYS;
-    gba->cpu.executionMode = MODE_ARM;
-}
-
-/**
  * @brief SWI 0x02: Halt.
  */
 static void _Halt(struct CupidGBA* gba) {
@@ -63,7 +39,10 @@ static void _MidiKey2Freq(struct CupidGBA* gba) {
  */
 void cupid_bios_swi(struct CupidGBA* gba, uint8_t comment) {
     switch (comment) {
-    case 0x00: _SoftReset(gba); break;
+    case 0x00:
+        /* Firmware clears the reset work area and refills the selected entry pipeline. */
+        cupid_arm_raise_swi(&gba->cpu);
+        break;
     case 0x01:
         /* Reset fills and device writes run through the timed firmware. */
         cupid_arm_raise_swi(&gba->cpu);
