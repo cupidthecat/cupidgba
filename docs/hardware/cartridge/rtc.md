@@ -13,7 +13,8 @@ cartridge bytes remain visible. The three ROM wait-state windows select the
 same physical port; addresses in the upper 16 MiB of each window do not.
 See the [GPIO register description](https://problemkaputt.de/gbatek-gba-cart-i-o-port-gpio.htm).
 
-CPU and DMA word data accesses use two halfword strobes. The first port is
+CPU and DMA word data accesses, and ARM opcode fetches that start a Game Pak
+access, use two halfword strobes. The first port is
 sampled or written before the second strobe, with scheduler events running
 between them. DMA uses the cartridge burst counter to select the physical
 port. Byte stores currently leave the port unchanged. That byte policy and

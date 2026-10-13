@@ -10,8 +10,9 @@ struct CupidARM;
 struct CupidCartridge {
     struct CupidRTC rtc;
     uint64_t identity;
+    uint32_t opcodeAddress, opcodeValue;
     uint8_t output, direction;
-    bool rtcPresent, readable;
+    bool rtcPresent, readable, opcodeValid;
     uint8_t (*inputPins)(void* context);
     void* inputContext;
 };
@@ -25,6 +26,7 @@ bool cupid_cartridge_gpio_address(const struct CupidGBA* gba, uint32_t address);
 bool cupid_cartridge_gpio_read(struct CupidGBA* gba, uint32_t address, uint16_t* value);
 bool cupid_cartridge_gpio_write(struct CupidGBA* gba, uint32_t address, uint16_t value);
 bool cupid_cartridge_fetch_opcode(struct CupidARM* cpu, uint32_t address, unsigned width, uint32_t* value);
+bool cupid_cartridge_fetch_bus(struct CupidGBA* gba, uint32_t address, unsigned width, unsigned cycles);
 /* Battery state uses a separate file; the caller supplies any host timestamp. */
 bool cupid_cartridge_load_rtc(struct CupidGBA* gba, const char* path, uint64_t* hostStamp);
 bool cupid_cartridge_save_rtc(struct CupidGBA* gba, const char* path, uint64_t hostStamp);

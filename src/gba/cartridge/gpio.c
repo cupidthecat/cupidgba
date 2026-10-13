@@ -39,6 +39,7 @@ void cupid_cartridge_attach(struct CupidGBA* gba, const uint8_t* rom, size_t siz
 void cupid_cartridge_reset_bus(struct CupidGBA* gba) {
     gba->cartridge.output = gba->cartridge.direction = 0;
     gba->cartridge.readable = false;
+    gba->cartridge.opcodeValid = false;
     gba->cpu.memory.readOpcode = NULL;
     cupid_rtc_reset_bus(&gba->cartridge.rtc);
 }
@@ -75,6 +76,7 @@ bool cupid_cartridge_gpio_write(struct CupidGBA* gba, uint32_t address, uint16_t
     case 0xC6: gba->cartridge.direction = value & 15; break;
     case 0xC8:
         gba->cartridge.readable = value & 1;
+        gba->cartridge.opcodeValid = false;
         gba->cpu.memory.readOpcode = gba->cartridge.readable ? cupid_cartridge_fetch_opcode : NULL;
         return true;
     default: return false;
@@ -87,7 +89,31 @@ bool cupid_cartridge_gpio_write(struct CupidGBA* gba, uint32_t address, uint16_t
 
 bool cupid_cartridge_fetch_opcode(struct CupidARM* cpu, uint32_t address, unsigned width, uint32_t* value) {
     struct CupidGBA* gba = cpu->master;
+    if (gba->cartridge.opcodeValid) {
+        gba->cartridge.opcodeValid = false;
+        if (width == 4 && address == gba->cartridge.opcodeAddress) {
+            *value = gba->cartridge.opcodeValue;
+            return true;
+        }
+    }
     if (!cupid_cartridge_gpio_address(gba, address)) return false;
     *value = width == 4 ? cupid_memory_load32(cpu, address, NULL) : cupid_memory_loadU16(cpu, address, NULL);
+    return true;
+}
+
+bool cupid_cartridge_fetch_bus(struct CupidGBA* gba, uint32_t address, unsigned width, unsigned cycles) {
+    struct CupidCartridge* cart = &gba->cartridge;
+    cart->opcodeValid = false;
+    if (width != 4 || gba->memory.prefetchUnit.fetchKind != CUPID_PREFETCH_START ||
+        !cupid_cartridge_gpio_address(gba, address)) return false;
+    const unsigned highCycles = (unsigned)gba->memory.waitstatesSeq16[address >> GBA_BASE_OFFSET] + 1;
+    if (cycles <= highCycles) return false;
+    cupid_bus_advance(&gba->cpu, cycles - highCycles, true);
+    const uint32_t low = cupid_memory_loadU16(&gba->cpu, address, NULL);
+    cupid_bus_advance(&gba->cpu, highCycles, true);
+    const uint32_t high = cupid_memory_loadU16(&gba->cpu, address + 2, NULL);
+    cart->opcodeAddress = address;
+    cart->opcodeValue = low | high << 16;
+    cart->opcodeValid = true;
     return true;
 }

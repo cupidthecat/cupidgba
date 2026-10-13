@@ -339,6 +339,38 @@ static void marker_bounds_and_physical_rom_windows(void) {
     destroy(gba);
 }
 
+static void uncached_arm_gpio_fetch_samples_the_low_halfword_first(void) {
+    for (unsigned bank = 0; bank < 3; bank++) {
+        for (unsigned nonseq = 0; nonseq < 4; nonseq++) {
+            for (unsigned sequential = 0; sequential < 2; sequential++) {
+                for (unsigned prefetch = 0; prefetch < 2; prefetch++) {
+                    struct CupidGBA* gba = machine(false);
+                    struct Observation observed = {.gba = gba, .input = 1};
+                    cupid_cartridge_set_input(gba, input_pins, &observed.input);
+                    cupid_memory_store16(&gba->cpu, 0x080000C8, 1, NULL);
+                    const unsigned shift = bank * 3 + 2;
+                    const uint16_t waitcnt = (uint16_t)(nonseq << shift | sequential << (shift + 2) | prefetch << 14);
+                    cupid_memory_update_waitstates(gba, waitcnt);
+                    const unsigned first = (unsigned)GBA_ROM_WAITSTATES[nonseq] + 1;
+                    const unsigned second = (unsigned)GBA_ROM_WAITSTATES_SEQ[bank * 2 + sequential] + 1;
+                    struct CupidTimingEvent event = {.context = &observed, .callback = change_input, .priority = 0x60};
+                    cupid_timing_schedule(&gba->timing, &event, (int32_t)first + 1);
+                    gba->cpu.cpsr.t = 0;
+                    _CupidSetMode(&gba->cpu, MODE_ARM);
+                    gba->cpu.memory.timed = true;
+                    gba->cpu.gprs[ARM_PC] = (int32_t)(0x080000C4 + bank * 0x02000000);
+                    CupidARMWritePC(&gba->cpu);
+                    CHECK(observed.input == 9);
+                    CHECK(gba->cpu.prefetch[0] == 1);
+                    CHECK(gba->cpu.prefetch[1] == 0xA55A0001);
+                    CHECK(cupid_timing_global_time(&gba->timing) == first + second * 3);
+                    destroy(gba);
+                }
+            }
+        }
+    }
+}
+
 int main(void) {
     RUN(directions_latches_input_and_pristine_cartridge);
     RUN(word_lanes_opcode_fetch_and_read_control);
@@ -348,5 +380,6 @@ int main(void) {
     RUN(dma_gpio_uses_the_cartridge_burst_counter);
     RUN(rtc_driver_runs_through_arm_and_thumb_instructions);
     RUN(marker_bounds_and_physical_rom_windows);
+    RUN(uncached_arm_gpio_fetch_samples_the_low_halfword_first);
     return 0;
 }
