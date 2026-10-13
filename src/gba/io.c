@@ -401,12 +401,17 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
 /**
  * @brief Write an 8-bit IO register.
  *
- * Most 8-bit writes merge into the 16-bit register and dispatch through
- * cupid_io_write. Special cases: HALTCNT at 0x301 is byte-only and should
- * not be merged.
+ * Sound, timers and IRQ registers have byte dispatch so untouched fields do
+ * not repeat side effects. Other writes merge into their register halfword.
+ * HALTCNT at 0x301 is byte-only.
  */
 void cupid_io_write8(struct CupidGBA* gba, uint32_t addr, uint8_t value) {
     if (addr >= GBA_SIZE_IO) return;
+    if ((addr >= REG_SOUND1CNT_L && addr <= REG_SOUNDBIAS + 1) ||
+        (addr >= REG_WAVE_RAM0_LO && addr <= REG_WAVE_RAM3_HI + 1)) {
+        cupid_audio_write_register8(&gba->audio, addr, value);
+        return;
+    }
     if (addr >= REG_TM0CNT_L && addr <= REG_TM3CNT_H + 1) {
         cupid_timer_write_byte(gba, (addr - REG_TM0CNT_L) >> 2, addr & 3, value);
         return;
@@ -493,7 +498,7 @@ uint16_t cupid_io_read(struct CupidGBA* gba, uint32_t addr) {
     case REG_WAVE_RAM1_LO: case REG_WAVE_RAM1_HI:
     case REG_WAVE_RAM2_LO: case REG_WAVE_RAM2_HI:
     case REG_WAVE_RAM3_LO: case REG_WAVE_RAM3_HI:
-        return gba->memory.io[addr >> 1];
+        return cupid_audio_read_register(&gba->audio, addr);
 
     /** FIFO is write-only and exposes the existing bus value. */
     case REG_FIFO_A_LO: case REG_FIFO_A_HI:
