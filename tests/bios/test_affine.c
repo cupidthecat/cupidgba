@@ -5,6 +5,8 @@
 #include <math.h>
 
 static const char* externalBios;
+static uint8_t externalImage[GBA_SIZE_BIOS];
+static bool externalImageLoaded;
 static unsigned observations;
 static unsigned firstCall = 0x0E, lastCall = 0x0F;
 
@@ -107,7 +109,20 @@ static struct CupidGBA* machine(const char* bios) {
     struct CupidGBA* gba = calloc(1, sizeof(*gba));
     CHECK(gba);
     cupid_gba_create(gba);
-    if (bios) CHECK(cupid_load_bios(gba, bios));
+    if (bios) {
+        if (!externalImageLoaded) {
+            CHECK(cupid_load_bios(gba, bios));
+            memcpy(externalImage, gba->memory.bios, sizeof(externalImage));
+            externalImageLoaded = true;
+        } else {
+            /* Each fresh core gets the same image without reopening the input file. */
+            memcpy(gba->memory.bios, externalImage, sizeof(externalImage));
+            gba->memory.fullBios = 1;
+            gba->memory.biosLoaded = true;
+            gba->hasBios = true;
+            gba->biosHLE = false;
+        }
+    }
     cupid_gba_reset(gba);
     for (unsigned r = 0; r < 15; r++) gba->cpu.gprs[r] = (int32_t)(0x11220000 + r);
     gba->cpu.gprs[ARM_SP] = GBA_SP_BASE_SYSTEM;

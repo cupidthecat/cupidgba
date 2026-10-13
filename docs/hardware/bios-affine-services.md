@@ -68,7 +68,9 @@ DMA overwrites a future source entry; the final conversion must use that
 changed entry, and the source check requires exactly the DMA write extent.
 With `CUPID_TEST_BIOS` configured, all observations also run against a local
 external BIOS and compare caller state, elapsed clocks and the interrupted
-output chronology. That input is not distributed.
+output chronology. The input is loaded once per test process; each case still
+uses a fresh core with its own BIOS buffer and reset state. That input is not
+distributed.
 
 The signed rounding fixture uses scales 257 and -513 with angle `1980`. Its
 coefficients are 210, -147, -296 and -420. The EWRAM-to-IWRAM ARM background
