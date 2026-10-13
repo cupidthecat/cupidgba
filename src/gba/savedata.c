@@ -45,6 +45,7 @@ void cupid_savedata_deinit(struct CupidSavedata* savedata) {
     savedata->currentBank = NULL;
     savedata->type = SAVE_AUTODETECT;
     savedata->size = 0;
+    savedata->typeForced = false;
 }
 
 /**
@@ -53,12 +54,14 @@ void cupid_savedata_deinit(struct CupidSavedata* savedata) {
 
 void cupid_savedata_force_type(struct CupidSavedata* savedata, enum CupidSaveType type) {
     if (savedata->type == type) {
+        savedata->typeForced = type != SAVE_AUTODETECT;
         return;
     }
     if (savedata->type != SAVE_AUTODETECT) {
         cupid_savedata_deinit(savedata);
         cupid_savedata_init(savedata);
     }
+    savedata->typeForced = type != SAVE_AUTODETECT;
     switch (type) {
     case SAVE_FLASH512:
     case SAVE_FLASH1M:
@@ -382,86 +385,6 @@ uint16_t cupid_savedata_read_eeprom(struct CupidSavedata* savedata) {
         return data & 0x1;
     }
     return 0;
-}
-
-/**
- * @brief File-backed save persistence.
- */
-
-bool cupid_savedata_load_file(struct CupidSavedata* savedata, const char* path) {
-    FILE* f = fopen(path, "rb");
-    if (!f) return false;  /** No save file yet, that is fine. */
-
-    fseek(f, 0, SEEK_END);
-    long fileSize = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    if (fileSize <= 0) {
-        fclose(f);
-        return false;
-    }
-
-    /** If save type is unknown, guess it from file size. */
-    if (savedata->type == SAVE_AUTODETECT) {
-        if      ((size_t)fileSize == GBA_SIZE_EEPROM512) {
-            savedata->type = SAVE_EEPROM512;
-            cupid_savedata_init_eeprom(savedata);
-        } else if ((size_t)fileSize == GBA_SIZE_EEPROM) {
-            savedata->type = SAVE_EEPROM;
-            cupid_savedata_init_eeprom(savedata);
-        } else if ((size_t)fileSize == GBA_SIZE_SRAM) {
-            cupid_savedata_init_sram(savedata);
-        } else if ((size_t)fileSize == GBA_SIZE_FLASH512) {
-            /** Could be SRAM512 or FLASH512; default to FLASH512. */
-            savedata->type = SAVE_FLASH512;
-            cupid_savedata_init_flash(savedata);
-        } else if ((size_t)fileSize == GBA_SIZE_FLASH1M) {
-            savedata->type = SAVE_FLASH1M;
-            cupid_savedata_init_flash(savedata);
-        } else {
-            fprintf(stderr, "CUPID: Unrecognised .sav size %ld, ignoring\n", fileSize);
-            fclose(f);
-            return false;
-        }
-    }
-
-    /** Ensure the internal buffer is allocated before copying into it. */
-    if (!savedata->data || !savedata->size) {
-        fclose(f);
-        return false;
-    }
-
-    size_t toRead = (size_t)fileSize < savedata->size ? (size_t)fileSize : savedata->size;
-    size_t nread  = fread(savedata->data, 1, toRead, f);
-    fclose(f);
-
-    savedata->dirty = false;  /** Freshly loaded, not dirty. */
-    printf("CUPID: Loaded save: %s (%zu bytes)\n", path, nread);
-    return nread == toRead;
-}
-
-bool cupid_savedata_save_file(struct CupidSavedata* savedata, const char* path) {
-    if (!savedata->data || !savedata->size) return true;  /** Nothing to save. */
-    if (!savedata->dirty)                   return true;  /** No changes. */
-
-    FILE* f = fopen(path, "wb");
-    if (!f) {
-        fprintf(stderr, "CUPID: Failed to open save file for writing: %s: %s\n",
-                path, strerror(errno));
-        return false;
-    }
-
-    size_t nwritten = fwrite(savedata->data, 1, savedata->size, f);
-    fclose(f);
-
-    if (nwritten != savedata->size) {
-        fprintf(stderr, "CUPID: Save write short: %zu / %zu\n", nwritten, savedata->size);
-        return false;
-    }
-
-    savedata->dirty = false;
-    printf("CUPID: Saved: %s (%zu bytes)\n", path, nwritten);
-    return true;
 }
 
 /**
