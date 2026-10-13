@@ -308,6 +308,15 @@ can stop a valid long run when prefetch permits more instructions per frame.
 This changes the observation budget; it does not change emulation timing or
 any hardware test expectation.
 
+`gba.rtc-outputs` checks the documented alarm and selected-frequency model:
+all 16 divider clocks, mixed masks across the complete divider phase, output
+priority, both hour formats, held alarm output, daily carries and long waits.
+`gba.rtc-irq`, `gba.rtc-battery` and `platform.rtc-config` cover parameter stores,
+interrupt visibility, repeated edges across timer/DMA work, late dispatch,
+clock wrap, reset, both battery versions and offline state. These tests preserve
+the model's specified behavior; physical cartridge edge/phase timing still
+needs qualification. See [RTC behavior and limits](../hardware/cartridge/rtc.md).
+
 Passing these checks establishes the listed cases. They do not cover every CPU
 encoding, every bus or arbitration edge, every timer/IRQ interaction, raster
 effects, audio fidelity, cartridge peripherals, save persistence, or link

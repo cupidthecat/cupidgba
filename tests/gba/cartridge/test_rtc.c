@@ -265,23 +265,23 @@ static void minute_output_latches_and_steady_release(void) {
         cupid_rtc_write_control(&rtc, (uint8_t)(0x40 | (mode & 1 ? 8 : 0) | (mode & 2 ? 2 : 0)));
         CHECK(cupid_rtc_next_interrupt(&rtc) == (mode & 1 ? CUPID_RTC_CLOCK_HZ : 0));
         cupid_rtc_sync(&rtc, CUPID_RTC_CLOCK_HZ - 1);
-        CHECK(!rtc.minuteLow);
+        CHECK(!rtc.interruptLow);
         cupid_rtc_sync(&rtc, CUPID_RTC_CLOCK_HZ);
-        CHECK(rtc.minuteLow == ((mode & 1) != 0));
+        CHECK(rtc.interruptLow == ((mode & 1) != 0));
         CHECK(rtc.date.minute == 35 && rtc.date.second == 0);
         CHECK(cupid_rtc_next_interrupt(&rtc) == (mode == 3 ? 30 * CUPID_RTC_CLOCK_HZ : 0));
         cupid_rtc_sync(&rtc, 31 * CUPID_RTC_CLOCK_HZ - 1);
-        CHECK(rtc.minuteLow == ((mode & 1) != 0));
+        CHECK(rtc.interruptLow == ((mode & 1) != 0));
         cupid_rtc_sync(&rtc, 31 * CUPID_RTC_CLOCK_HZ);
-        CHECK(rtc.minuteLow == (mode == 1));
+        CHECK(rtc.interruptLow == (mode == 1));
         if (mode == 3) CHECK(cupid_rtc_next_interrupt(&rtc) == 30 * CUPID_RTC_CLOCK_HZ);
         cupid_rtc_write_control(&rtc, rtc.control);
-        CHECK(!rtc.minuteLow);
+        CHECK(!rtc.interruptLow);
         if (mode & 1) CHECK(cupid_rtc_next_interrupt(&rtc) == 30 * CUPID_RTC_CLOCK_HZ);
         cupid_rtc_sync(&rtc, 61 * CUPID_RTC_CLOCK_HZ);
-        CHECK(rtc.minuteLow == ((mode & 1) != 0));
+        CHECK(rtc.interruptLow == ((mode & 1) != 0));
         cupid_rtc_reset_registers(&rtc);
-        CHECK(!rtc.minuteLow && !cupid_rtc_next_interrupt(&rtc));
+        CHECK(!rtc.interruptLow && !cupid_rtc_next_interrupt(&rtc));
     }
 }
 
@@ -293,7 +293,7 @@ static void minute_output_bulk_clock_matches_each_second(void) {
             const struct CupidRTCDateTime date = {99, 12, 31, 6, 23, 59, (uint8_t)second};
             CHECK(cupid_rtc_set_datetime(&bulk, &date));
             cupid_rtc_write_control(&bulk, steady ? 0x4A : 0x48);
-            bulk.minuteLow = held != 0;
+            bulk.interruptLow = held != 0;
             bulk.fraction = CUPID_RTC_CLOCK_HZ / 3;
             struct CupidRTC each = bulk;
             const uint64_t end = bulk.lastClock + 183 * CUPID_RTC_CLOCK_HZ;
@@ -301,7 +301,7 @@ static void minute_output_bulk_clock_matches_each_second(void) {
             for (unsigned i = 1; i <= 183; i++)
                 cupid_rtc_sync(&each, UINT64_C(0xFFFFFFF0) + i * CUPID_RTC_CLOCK_HZ);
             CHECK(!memcmp(&bulk.date, &each.date, sizeof(bulk.date)));
-            CHECK(bulk.minuteLow == each.minuteLow && bulk.fraction == each.fraction);
+            CHECK(bulk.interruptLow == each.interruptLow && bulk.fraction == each.fraction);
             CHECK(cupid_rtc_next_interrupt(&bulk) == cupid_rtc_next_interrupt(&each));
         }
     }
@@ -315,15 +315,15 @@ static void invalid_seconds_offline_clock_and_rebase_keep_the_minute_latch(void)
     cupid_rtc_write_time(&rtc, invalid);
     CHECK(cupid_rtc_next_interrupt(&rtc) == CUPID_RTC_CLOCK_HZ);
     cupid_rtc_sync(&rtc, CUPID_RTC_CLOCK_HZ - 1);
-    CHECK(!rtc.minuteLow);
+    CHECK(!rtc.interruptLow);
     cupid_rtc_sync(&rtc, CUPID_RTC_CLOCK_HZ);
-    CHECK(rtc.minuteLow && !cupid_rtc_next_interrupt(&rtc));
+    CHECK(rtc.interruptLow && !cupid_rtc_next_interrupt(&rtc));
     cupid_rtc_rebase(&rtc, 0);
     cupid_rtc_sync(&rtc, 17);
-    CHECK(rtc.minuteLow && rtc.fraction == 17);
+    CHECK(rtc.interruptLow && rtc.fraction == 17);
     cupid_rtc_write_control(&rtc, 0x48);
     cupid_rtc_advance_seconds(&rtc, UINT64_MAX);
-    CHECK(rtc.minuteLow && rtc.fraction == 17);
+    CHECK(rtc.interruptLow && rtc.fraction == 17);
 }
 
 static void payload_bit(struct CupidRTC* rtc, bool value, uint64_t* clock, bool rising) {
@@ -433,7 +433,28 @@ static void driven_low_data_corrupts_only_the_previous_response_bit(void) {
     }
 }
 
+static void interrupt_parameters_use_a_complete_two_byte_write_only_frame(void) {
+    for (unsigned msb = 0; msb < 2; msb++) {
+        struct CupidRTC rtc;
+        cupid_rtc_init(&rtc, 0);
+        uint64_t clock = 0;
+        select_chip(&rtc, &clock);
+        CHECK(!send_byte(&rtc, msb ? 0x68 : 0x16, msb, &clock));
+        CHECK(!send_byte(&rtc, 0x92, false, &clock));
+        CHECK(!send_byte(&rtc, 0x34, false, &clock));
+        CHECK(rtc.interruptParameters == 0x3492);
+        select_chip(&rtc, &clock);
+        CHECK(!send_byte(&rtc, msb ? 0x69 : 0x96, msb, &clock));
+        CHECK(read_byte(&rtc, &clock) == 0xFF && read_byte(&rtc, &clock) == 0xFF);
+        CHECK(rtc.interruptParameters == 0x3492);
+        select_chip(&rtc, &clock);
+        CHECK(!send_byte(&rtc, 0x06, false, &clock));
+        CHECK(!rtc.interruptParameters && !rtc.interruptLow);
+    }
+}
+
 int main(void) {
+    RUN(interrupt_parameters_use_a_complete_two_byte_write_only_frame);
     RUN(payload_commit_waits_for_the_eighth_rising_edge);
     RUN(response_frames_repeat_until_chip_select_release);
     RUN(status_writes_repeat_and_retain_the_shifted_partial_byte);

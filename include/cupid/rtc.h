@@ -14,10 +14,11 @@ struct CupidRTC {
     struct CupidRTCDateTime date;
     uint64_t lastClock;
     uint32_t fraction;
+    uint16_t interruptParameters;
     uint8_t control;
     bool invalidSecond;
     bool powerSampling;
-    bool minuteLow;
+    bool interruptLow;
     uint8_t pins, driveMask, inputLatch, inputByte, bit, byte, length, command;
     uint8_t transfer[7];
     uint8_t state;
@@ -26,7 +27,7 @@ struct CupidRTC {
 
 void cupid_rtc_init(struct CupidRTC* rtc, uint64_t clock);
 void cupid_rtc_sync(struct CupidRTC* rtc, uint64_t clock);
-/* Clocks to the next minute-output transition, or zero while disabled/held. */
+/* Clocks to the next output transition or long-wait checkpoint; zero if idle. */
 uint32_t cupid_rtc_next_interrupt(const struct CupidRTC* rtc);
 /* Rebase the execution clock after console reset without resetting the battery. */
 void cupid_rtc_rebase(struct CupidRTC* rtc, uint64_t clock);
@@ -37,6 +38,7 @@ void cupid_rtc_advance_seconds(struct CupidRTC* rtc, uint64_t seconds);
 void cupid_rtc_reset_registers(struct CupidRTC* rtc);
 uint8_t cupid_rtc_read_control(struct CupidRTC* rtc);
 void cupid_rtc_write_control(struct CupidRTC* rtc, uint8_t value);
+void cupid_rtc_write_interrupt_parameters(struct CupidRTC* rtc, uint16_t value);
 /* The clock/device scheduler supplies each power-detector sample. */
 void cupid_rtc_sample_power(struct CupidRTC* rtc, bool aboveThreshold);
 void cupid_rtc_read_datetime(const struct CupidRTC* rtc, uint8_t data[7]);

@@ -66,10 +66,20 @@ static void control_write(struct CupidGBA* gba, bool thumb, uint8_t value) {
     CHECK(gba->cartridge.rtc.control == value);
 }
 
+static void parameter_write(struct CupidGBA* gba, bool thumb, uint16_t value) {
+    port_write(gba, thumb, 2, 7);
+    port_write(gba, thumb, 0, 1);
+    port_write(gba, thumb, 0, 5);
+    send_byte(gba, thumb, 0x16);
+    send_byte(gba, thumb, (uint8_t)value);
+    send_byte(gba, thumb, (uint8_t)(value >> 8));
+    CHECK(gba->cartridge.rtc.interruptParameters == value);
+}
+
 static void phase(struct CupidGBA* gba, unsigned second, bool low, unsigned until) {
     const struct CupidRTCDateTime date = {26, 10, 13, 2, 12, 34, (uint8_t)second};
     CHECK(cupid_rtc_set_datetime(&gba->cartridge.rtc, &date));
-    gba->cartridge.rtc.minuteLow = low;
+    gba->cartridge.rtc.interruptLow = low;
     gba->cartridge.rtc.fraction = (uint32_t)(CUPID_RTC_CLOCK_HZ - until);
     cupid_rtc_rebase(&gba->cartridge.rtc, cupid_timing_global_time(&gba->timing));
     cupid_cartridge_rtc_reschedule(gba);
@@ -85,15 +95,15 @@ static void steady_edges_enter_the_irq_pipeline_through_the_board_inverter(void)
         cupid_timing_tick(&gba->timing, 2);
         phase(gba, 59, false, 12);
         cupid_timing_tick(&gba->timing, 11);
-        CHECK(!gba->cartridge.rtc.minuteLow && !gba->irq.pendingIF);
+        CHECK(!gba->cartridge.rtc.interruptLow && !gba->irq.pendingIF);
         cupid_timing_tick(&gba->timing, 1);
-        CHECK(gba->cartridge.rtc.minuteLow && !gba->irq.pendingIF);
+        CHECK(gba->cartridge.rtc.interruptLow && !gba->irq.pendingIF);
         CHECK(cupid_timing_until(&gba->timing, &gba->cartridge.rtcInterruptEvent) == 30 * CUPID_RTC_CLOCK_HZ);
         phase(gba, 29, true, 12);
         cupid_timing_tick(&gba->timing, 11);
-        CHECK(gba->cartridge.rtc.minuteLow && !gba->irq.pendingIF);
+        CHECK(gba->cartridge.rtc.interruptLow && !gba->irq.pendingIF);
         cupid_timing_tick(&gba->timing, 1);
-        CHECK(!gba->cartridge.rtc.minuteLow && gba->irq.pendingIF == IRQ_GAMEPAK);
+        CHECK(!gba->cartridge.rtc.interruptLow && gba->irq.pendingIF == IRQ_GAMEPAK);
         CHECK(!gba->irqf && !gba->irq.available && !gba->irq.line);
         cupid_timing_tick(&gba->timing, 1);
         CHECK(gba->irqf == IRQ_GAMEPAK && !gba->irq.available && !gba->irq.line);
@@ -114,7 +124,7 @@ static void held_minute_output_releases_on_a_complete_control_write(void) {
         control_write(gba, thumb != 0, 0x48);
         phase(gba, 59, false, 1);
         cupid_timing_tick(&gba->timing, 1);
-        CHECK(gba->cartridge.rtc.minuteLow && !gba->irq.pendingIF);
+        CHECK(gba->cartridge.rtc.interruptLow && !gba->irq.pendingIF);
         CHECK(!cupid_timing_is_scheduled(&gba->timing, &gba->cartridge.rtcInterruptEvent));
         /* A control read or an aborted write must not acknowledge the latch. */
         CHECK(cupid_rtc_read_control(&gba->cartridge.rtc) == 0x48);
@@ -122,9 +132,9 @@ static void held_minute_output_releases_on_a_complete_control_write(void) {
         port_write(gba, thumb != 0, 0, 5);
         send_byte(gba, thumb != 0, 0x46);
         port_write(gba, thumb != 0, 0, 1);
-        CHECK(gba->cartridge.rtc.minuteLow && !gba->irqf);
+        CHECK(gba->cartridge.rtc.interruptLow && !gba->irqf);
         control_write(gba, thumb != 0, 0x48);
-        CHECK(!gba->cartridge.rtc.minuteLow && gba->irqf == IRQ_GAMEPAK);
+        CHECK(!gba->cartridge.rtc.interruptLow && gba->irqf == IRQ_GAMEPAK);
         CHECK(cupid_timing_is_scheduled(&gba->timing, &gba->cartridge.rtcInterruptEvent));
         cupid_irq_write(gba, REG_IF, IRQ_GAMEPAK);
         cupid_timing_tick(&gba->timing, 8);
@@ -140,11 +150,11 @@ static void console_reset_disable_and_cartridge_replacement_preserve_ownership(v
     phase(gba, 29, true, 12);
     cupid_timing_tick(&gba->timing, 5);
     cupid_gba_reset(gba);
-    CHECK(gba->cartridge.rtc.minuteLow && gba->cartridge.rtc.control == 0x4A);
+    CHECK(gba->cartridge.rtc.interruptLow && gba->cartridge.rtc.control == 0x4A);
     CHECK(!gba->cartridge.readable && !gba->cartridge.direction);
     CHECK(cupid_timing_until(&gba->timing, &gba->cartridge.rtcInterruptEvent) == 7);
     cupid_timing_tick(&gba->timing, 7);
-    CHECK(!gba->cartridge.rtc.minuteLow && gba->irq.pendingIF == IRQ_GAMEPAK);
+    CHECK(!gba->cartridge.rtc.interruptLow && gba->irq.pendingIF == IRQ_GAMEPAK);
     cupid_timing_tick(&gba->timing, 1);
     CHECK(gba->irqf == IRQ_GAMEPAK);
     cupid_irq_write(gba, REG_IF, IRQ_GAMEPAK);
@@ -166,6 +176,8 @@ struct Trace {
     uint16_t flags[48];
     uint8_t low[48];
     unsigned count;
+    unsigned interval;
+    bool acknowledge;
 };
 
 static void observe(struct CupidTiming* timing, void* context, uint32_t late) {
@@ -173,8 +185,9 @@ static void observe(struct CupidTiming* timing, void* context, uint32_t late) {
     struct Trace* trace = context;
     CHECK(trace->count < 48);
     trace->flags[trace->count] = trace->gba->irqf;
-    trace->low[trace->count++] = trace->gba->cartridge.rtc.minuteLow;
-    if (trace->count < 48) cupid_timing_schedule(timing, &trace->event, 1);
+    trace->low[trace->count++] = trace->gba->cartridge.rtc.interruptLow;
+    if (trace->acknowledge) cupid_irq_write(trace->gba, REG_IF, IRQ_GAMEPAK);
+    if (trace->count < 48) cupid_timing_schedule(timing, &trace->event, trace->interval ? (int32_t)trace->interval : 1);
 }
 
 static void late_dispatch_clock_wrap_timer_and_dma_preserve_every_edge(void) {
@@ -266,7 +279,168 @@ static void forced_requests_retain_the_original_gpio_strobe_when_dispatched_late
     }
 }
 
+static void every_frequency_releases_through_arm_thumb_gpio_and_the_irq_pipeline(void) {
+    for (unsigned thumb = 0; thumb < 2; thumb++) for (unsigned bit = 0; bit < 16; bit++) {
+        struct CupidGBA* gba = machine();
+        cupid_timing_clear(&gba->timing);
+        cupid_irq_init(gba);
+        parameter_write(gba, thumb != 0, (uint16_t)(1u << bit));
+        control_write(gba, thumb != 0, 0x42);
+        /* Acknowledge free-running edges produced during serial setup. */
+        cupid_irq_write(gba, REG_IF, IRQ_GAMEPAK);
+        cupid_irq_write(gba, REG_IE, IRQ_GAMEPAK);
+        cupid_irq_write(gba, REG_IME, 1);
+        const uint32_t half = 256u << bit;
+        gba->cartridge.rtc.fraction = half - 14;
+        cupid_rtc_rebase(&gba->cartridge.rtc, cupid_timing_global_time(&gba->timing));
+        cupid_cartridge_rtc_reschedule(gba);
+        cupid_timing_tick(&gba->timing, 2);
+        CHECK(gba->cartridge.rtc.interruptLow && !gba->irq.pendingIF && !gba->irqf);
+        CHECK(cupid_timing_until(&gba->timing, &gba->cartridge.rtcInterruptEvent) == 12);
+        cupid_timing_tick(&gba->timing, 11);
+        CHECK(gba->cartridge.rtc.interruptLow && !gba->irq.pendingIF);
+        cupid_timing_tick(&gba->timing, 1);
+        CHECK(!gba->cartridge.rtc.interruptLow && gba->irq.pendingIF == IRQ_GAMEPAK);
+        CHECK(!gba->irqf && !gba->irq.available && !gba->irq.line);
+        cupid_timing_tick(&gba->timing, 1);
+        CHECK(gba->irqf == IRQ_GAMEPAK && !gba->irq.available);
+        cupid_timing_tick(&gba->timing, 1);
+        CHECK(gba->irq.available && !gba->irq.line);
+        cupid_timing_tick(&gba->timing, 1);
+        CHECK(gba->irq.line);
+        cupid_irq_write(gba, REG_IF, IRQ_GAMEPAK);
+        cupid_timing_tick(&gba->timing, (int32_t)half - 3);
+        CHECK(gba->cartridge.rtc.interruptLow && !gba->irq.pendingIF && !gba->irqf);
+        destroy(gba);
+    }
+}
+
+static void alarm_gpio_acknowledgement_and_long_wait_checkpoints_keep_the_latch(void) {
+    for (unsigned thumb = 0; thumb < 2; thumb++) {
+        struct CupidGBA* gba = machine();
+        cupid_timing_clear(&gba->timing);
+        cupid_irq_init(gba);
+        parameter_write(gba, thumb != 0, 0x3492);
+        control_write(gba, thumb != 0, 0x60);
+        const struct CupidRTCDateTime date = {26, 10, 13, 2, 12, 33, 59};
+        CHECK(cupid_rtc_set_datetime(&gba->cartridge.rtc, &date));
+        gba->cartridge.rtc.fraction = CUPID_RTC_CLOCK_HZ - 12;
+        cupid_rtc_rebase(&gba->cartridge.rtc, cupid_timing_global_time(&gba->timing));
+        cupid_cartridge_rtc_reschedule(gba);
+        cupid_timing_tick(&gba->timing, 11);
+        CHECK(!gba->cartridge.rtc.interruptLow && !gba->irq.pendingIF);
+        cupid_timing_tick(&gba->timing, 1);
+        CHECK(gba->cartridge.rtc.interruptLow && !gba->irq.pendingIF);
+        CHECK(!cupid_timing_is_scheduled(&gba->timing, &gba->cartridge.rtcInterruptEvent));
+        control_write(gba, thumb != 0, 0x60);
+        CHECK(gba->cartridge.rtc.interruptLow && !gba->irqf);
+        control_write(gba, thumb != 0, 0x40);
+        CHECK(!gba->cartridge.rtc.interruptLow && gba->irqf == IRQ_GAMEPAK);
+        cupid_irq_write(gba, REG_IF, IRQ_GAMEPAK);
+        cupid_timing_tick(&gba->timing, 8);
+        control_write(gba, thumb != 0, 0x60);
+        CHECK(gba->cartridge.rtc.interruptLow && !gba->irq.pendingIF && !gba->irqf);
+        control_write(gba, thumb != 0, 0x40);
+        cupid_irq_write(gba, REG_IF, IRQ_GAMEPAK);
+        cupid_timing_tick(&gba->timing, 8);
+        parameter_write(gba, thumb != 0, 0x3792);
+        control_write(gba, thumb != 0, 0x60);
+        gba->cartridge.rtc.fraction = 0;
+        cupid_rtc_rebase(&gba->cartridge.rtc, cupid_timing_global_time(&gba->timing));
+        cupid_cartridge_rtc_reschedule(gba);
+        CHECK(cupid_timing_until(&gba->timing, &gba->cartridge.rtcInterruptEvent) == INT32_MAX);
+        cupid_timing_tick(&gba->timing, INT32_MAX);
+        CHECK(!gba->cartridge.rtc.interruptLow && !gba->irq.pendingIF);
+        const uint32_t remaining = cupid_rtc_next_interrupt(&gba->cartridge.rtc);
+        CHECK(remaining > 0 && remaining < INT32_MAX);
+        cupid_timing_tick(&gba->timing, (int32_t)remaining - 1);
+        CHECK(!gba->cartridge.rtc.interruptLow && !gba->irq.pendingIF);
+        cupid_timing_tick(&gba->timing, 1);
+        CHECK(gba->cartridge.rtc.interruptLow && !gba->irq.pendingIF);
+        destroy(gba);
+    }
+}
+
+static void repeated_frequency_edges_keep_timer_dma_and_late_wrap_chronology(void) {
+    struct Trace results[2] = {0};
+    for (unsigned bulk = 0; bulk < 2; bulk++) {
+        struct CupidGBA* gba = machine();
+        cupid_timing_clear(&gba->timing);
+        const uint64_t start = UINT64_C(0xFFFFFFF0);
+        gba->timing.globalCycles = start;
+        gba->timing.masterCycles = (uint32_t)start;
+        cupid_irq_init(gba);
+        cupid_timer_init(gba);
+        cupid_rtc_write_interrupt_parameters(&gba->cartridge.rtc, 1);
+        cupid_rtc_write_control(&gba->cartridge.rtc, 0x42);
+        gba->cartridge.rtc.fraction = 248;
+        cupid_rtc_rebase(&gba->cartridge.rtc, start);
+        cupid_cartridge_rtc_reschedule(gba);
+        cupid_timer_write_reload(gba, 0, 0xFFF8);
+        cupid_timer_write_control(gba, 0, 0xC0);
+        const uint32_t payload[] = {0xA5F01032, 0x18372645, 0xF0FFABC0};
+        memcpy(gba->memory.iwram + 0x100, payload, sizeof(payload));
+        cupid_dma_write_sad(gba, 0, GBA_BASE_IWRAM + 0x100);
+        cupid_dma_write_dad(gba, 0, GBA_BASE_IWRAM + 0x200);
+        cupid_dma_write_cnt_lo(gba, 0, 3);
+        cupid_dma_write_cnt(gba, 0, 0xC400);
+        struct Trace* trace = &results[bulk];
+        trace->gba = gba; trace->interval = 16; trace->acknowledge = true;
+        trace->event = (struct CupidTimingEvent){.context = trace, .callback = observe, .priority = 0x70};
+        cupid_timing_schedule(&gba->timing, &trace->event, 16);
+        if (bulk) cupid_timing_tick(&gba->timing, 768);
+        else for (unsigned clock = 0; clock < 768; clock++) cupid_timing_tick(&gba->timing, 1);
+        CHECK(trace->count == 48 && !trace->low[0] && !trace->low[15]);
+        CHECK(trace->low[16] && trace->low[31] && !trace->low[32]);
+        for (unsigned i = 0; i < 48; i++)
+            CHECK(((trace->flags[i] & IRQ_GAMEPAK) != 0) == (i == 0 || i == 32));
+        CHECK(!memcmp(gba->memory.iwram + 0x200, payload, sizeof(payload)));
+        CHECK((gba->irqf & (IRQ_TIMER0 | IRQ_DMA0)) == (IRQ_TIMER0 | IRQ_DMA0));
+        CHECK(!gba->memory.dmaRunning && !gba->cpuBlocked);
+        CHECK(cupid_timing_global_time(&gba->timing) == start + 768);
+        destroy(gba);
+        trace->gba = NULL;
+    }
+    CHECK(!memcmp(results[0].flags, results[1].flags, sizeof(results[0].flags)));
+    CHECK(!memcmp(results[0].low, results[1].low, sizeof(results[0].low)));
+}
+
+static void frequency_and_alarm_outputs_survive_console_reset_and_cancel_on_replacement(void) {
+    for (unsigned frequency = 0; frequency < 2; frequency++) {
+        struct CupidGBA* gba = machine();
+        cupid_rtc_write_interrupt_parameters(&gba->cartridge.rtc, frequency ? 0x8000 : 0);
+        cupid_rtc_write_control(&gba->cartridge.rtc, frequency ? 0x42 : 0x60);
+        if (frequency) gba->cartridge.rtc.fraction = CUPID_RTC_CLOCK_HZ / 2 - 12;
+        cupid_cartridge_rtc_reschedule(gba);
+        cupid_timing_tick(&gba->timing, 5);
+        const uint32_t fraction = gba->cartridge.rtc.fraction;
+        cupid_gba_reset(gba);
+        CHECK(gba->cartridge.rtc.interruptLow && !gba->irq.pendingIF && !gba->irqf);
+        CHECK(gba->cartridge.rtc.interruptParameters == (frequency ? 0x8000 : 0));
+        CHECK(gba->cartridge.rtc.fraction == fraction + 5);
+        CHECK(cupid_timing_is_scheduled(&gba->timing, &gba->cartridge.rtcInterruptEvent) == (frequency != 0));
+        if (frequency) {
+            CHECK(cupid_timing_until(&gba->timing, &gba->cartridge.rtcInterruptEvent) == 7);
+            cupid_timing_tick(&gba->timing, 7);
+            CHECK(!gba->cartridge.rtc.interruptLow && gba->irq.pendingIF == IRQ_GAMEPAK);
+        }
+        cupid_cartridge_enable_rtc(gba, false);
+        CHECK(!cupid_timing_is_scheduled(&gba->timing, &gba->cartridge.rtcInterruptEvent));
+        cupid_cartridge_enable_rtc(gba, true);
+        CHECK(cupid_timing_is_scheduled(&gba->timing, &gba->cartridge.rtcInterruptEvent) == (frequency != 0));
+        const uint8_t image[] = "replacement cartridge";
+        cupid_cartridge_attach(gba, image, sizeof(image));
+        CHECK(!gba->cartridge.rtcPresent && !gba->cartridge.rtc.interruptParameters);
+        CHECK(!cupid_timing_is_scheduled(&gba->timing, &gba->cartridge.rtcInterruptEvent));
+        destroy(gba);
+    }
+}
+
 int main(void) {
+    RUN(frequency_and_alarm_outputs_survive_console_reset_and_cancel_on_replacement);
+    RUN(repeated_frequency_edges_keep_timer_dma_and_late_wrap_chronology);
+    RUN(every_frequency_releases_through_arm_thumb_gpio_and_the_irq_pipeline);
+    RUN(alarm_gpio_acknowledgement_and_long_wait_checkpoints_keep_the_latch);
     RUN(steady_edges_enter_the_irq_pipeline_through_the_board_inverter);
     RUN(held_minute_output_releases_on_a_complete_control_write);
     RUN(console_reset_disable_and_cartridge_replacement_preserve_ownership);

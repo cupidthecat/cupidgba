@@ -124,7 +124,7 @@ static void minute_output_latch_roundtrips_without_an_extra_irq(void) {
         cupid_rtc_write_control(&gba->cartridge.rtc, steady ? 0x4A : 0x48);
         const struct CupidRTCDateTime date = {26, 10, 13, 2, 12, 34, 29};
         CHECK(cupid_rtc_set_datetime(&gba->cartridge.rtc, &date));
-        gba->cartridge.rtc.minuteLow = true;
+        gba->cartridge.rtc.interruptLow = true;
         gba->cartridge.rtc.fraction = CUPID_RTC_CLOCK_HZ - 12;
         CHECK(cupid_cartridge_save_rtc(gba, statePath, 0));
         uint8_t data[44];
@@ -132,15 +132,59 @@ static void minute_output_latch_roundtrips_without_an_extra_irq(void) {
         destroy(gba);
         gba = machine();
         CHECK(cupid_cartridge_load_rtc(gba, statePath, NULL));
-        CHECK(gba->cartridge.rtc.minuteLow && !gba->irq.pendingIF);
+        CHECK(gba->cartridge.rtc.interruptLow && !gba->irq.pendingIF);
         CHECK(cupid_timing_is_scheduled(&gba->timing, &gba->cartridge.rtcInterruptEvent) == (steady != 0));
         cupid_timing_tick(&gba->timing, 11);
-        CHECK(gba->cartridge.rtc.minuteLow && !gba->irq.pendingIF);
+        CHECK(gba->cartridge.rtc.interruptLow && !gba->irq.pendingIF);
         cupid_timing_tick(&gba->timing, 1);
-        CHECK(gba->cartridge.rtc.minuteLow == (steady == 0));
+        CHECK(gba->cartridge.rtc.interruptLow == (steady == 0));
         CHECK(gba->irq.pendingIF == (steady ? IRQ_GAMEPAK : 0));
         destroy(gba);
     }
+}
+
+static void extended_interrupt_state_roundtrips_and_validates_both_versions(void) {
+    for (unsigned mode = 0; mode < 3; mode++) {
+        struct CupidGBA* gba = machine();
+        const struct CupidRTCDateTime date = {26, 10, 13, 2, 12, 34, 0};
+        CHECK(cupid_rtc_set_datetime(&gba->cartridge.rtc, &date));
+        const uint16_t parameters = mode == 1 ? 0x8000 : 0x3492;
+        cupid_rtc_write_interrupt_parameters(&gba->cartridge.rtc, parameters);
+        cupid_rtc_write_control(&gba->cartridge.rtc, mode == 1 ? 0x42 : mode == 2 ? 0x60 : 0x40);
+        if (mode == 1) gba->cartridge.rtc.fraction = CUPID_RTC_CLOCK_HZ / 2 - 12;
+        CHECK(cupid_cartridge_save_rtc(gba, statePath, 1234));
+        uint8_t data[44];
+        CHECK(cupid_file_read_exact(statePath, data, sizeof(data)));
+        CHECK(!memcmp(data, "CPDRTC02", 8) && data[29] == (uint8_t)parameters && data[30] == parameters >> 8);
+        CHECK(((data[28] & 4) != 0) == (mode != 0) && !data[31]);
+        destroy(gba);
+        gba = machine();
+        uint64_t stamp = 0;
+        CHECK(cupid_cartridge_load_rtc(gba, statePath, &stamp));
+        CHECK(stamp == 1234 && gba->cartridge.rtc.interruptParameters == parameters);
+        CHECK(gba->cartridge.rtc.interruptLow == (mode != 0) && !gba->irq.pendingIF && !gba->irqf);
+        CHECK(cupid_timing_is_scheduled(&gba->timing, &gba->cartridge.rtcInterruptEvent) == (mode == 1));
+        if (mode == 1) {
+            CHECK(cupid_timing_until(&gba->timing, &gba->cartridge.rtcInterruptEvent) == 12);
+            cupid_timing_tick(&gba->timing, 11);
+            CHECK(gba->cartridge.rtc.interruptLow && !gba->irq.pendingIF);
+            cupid_timing_tick(&gba->timing, 1);
+            CHECK(!gba->cartridge.rtc.interruptLow && gba->irq.pendingIF == IRQ_GAMEPAK);
+        }
+        destroy(gba);
+        const unsigned invalidAt[] = {7, 28, 31};
+        const uint8_t invalidValue[] = {'3', 8, 1};
+        for (unsigned i = 0; i < 3; i++) {
+            uint8_t bad[44]; memcpy(bad, data, sizeof(bad));
+            bad[invalidAt[i]] = invalidValue[i]; repair_checksum(bad);
+            reject_without_changing_battery(bad, sizeof(bad));
+        }
+        memcpy(data, "CPDRTC01", 8); repair_checksum(data);
+        reject_without_changing_battery(data, sizeof(data)); /* v1 reserves parameters. */
+    }
+    uint8_t data[44]; memcpy(data, valid, sizeof(data));
+    memcpy(data, "CPDRTC02", 8); data[23] = 0x40; data[28] |= 4; repair_checksum(data);
+    reject_without_changing_battery(data, sizeof(data));
 }
 
 static void invalid_second_and_power_latch_survive_until_the_next_carry(void) {
@@ -209,6 +253,7 @@ int main(int argc, char** argv) {
     RUN(invalid_second_and_power_latch_survive_until_the_next_carry);
     RUN(failed_save_preserves_the_existing_file);
     RUN(minute_output_latch_roundtrips_without_an_extra_irq);
+    RUN(extended_interrupt_state_roundtrips_and_validates_both_versions);
     CHECK(remove(statePath) == 0 && remove(savePath) == 0);
 #ifdef _WIN32
     CHECK(_rmdir(directory) == 0);

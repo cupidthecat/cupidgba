@@ -20,7 +20,7 @@ between them. DMA uses the cartridge burst counter to select the physical
 port. Byte stores currently leave the port unchanged. That byte policy and
 the alias decoder still need direct hardware qualification.
 
-The RTC accepts control, date and time transactions over clock, serial-data
+The RTC accepts control, date, time and interrupt-parameter transactions over clock, serial-data
 and chip-select pins. Command and payload bits are sampled on rising clock
 edges. Commands use data latched while the clock is low; a simultaneous data
 change on a payload's rising edge can only clear that bit. Outgoing data
@@ -34,13 +34,15 @@ their byte and allow another aligned command without chip-select release.
 Status writes commit at the eighth rising edge and can accept more bytes in
 the same transaction. The first bit after each completed status byte also
 publishes the shifted byte; an incomplete continuation retains that value.
-Date writes commit after a complete frame; their partial and overrun behavior
-still needs qualification.
+Date, time and interrupt-parameter writes commit after a complete frame; their
+partial and overrun behavior still needs qualification. Interrupt parameters
+use two bytes, least significant byte first. Their write-only command reads
+as released serial data in the model.
 
 Date and time use BCD with a two-digit year, leap-year rollover and a separately
 stored weekday. In 12-hour mode, midnight and noon use hour zero; bit seven
 distinguishes PM. In 24-hour mode, the hour supplies that read flag and writes
-ignore it. Force-reset commands reset the calendar and control registers.
+ignore it. Force-reset commands reset the calendar, control and interrupt parameters.
 Console reset preserves the battery clock and clears the GPIO transaction.
 The [RTC register description](https://problemkaputt.de/gbatek-gba-cart-real-time-clock-rtc.htm)
 and [chip data sheet](https://www.rockby.com.au/DSheets/10110.pdf) describe the
@@ -50,7 +52,9 @@ registers and serial timing.
 
 The core advances the calendar from emulated clocks. It never reads host time.
 A new battery starts at `2000-01-01T00:00:00` in 24-hour mode with a healthy
-power flag. Supply a valid seed from 2000 through 2099 with, for example:
+power flag and zero interrupt parameters. Physical power-on calibration and
+voltage sampling remain unqualified. Supply a valid seed from 2000 through
+2099 with, for example:
 
 ```sh
 cupidgba game.gba --rtc-time 2026-10-13T12:34:56
@@ -80,17 +84,22 @@ The SDL2 frontend keeps a separate `.rtc` file beside the cartridge, using the
 same base name. The raw `.sav` format and bytes are independent. Battery state
 is flushed every 300 frames and on normal exit. It includes the calendar,
 fractional second, control and power-detector state, cartridge fingerprint,
-minute-output latch and optional host-time anchor. It excludes GPIO and
+interrupt parameters, output latch and optional host-time anchor. It excludes GPIO and
 in-progress transactions.
 
-The 44-byte `CPDRTC01` format stores integers in little-endian order. It has an
+The 44-byte battery formats store integers in little-endian order. They have an
 eight-byte cartridge fingerprint, seven binary calendar fields, a control
-byte, a four-byte fraction in GBA clocks, one flag byte and three reserved
-zero bytes, an eight-byte host anchor, and a four-byte checksum. The fingerprint
+byte, a four-byte fraction in GBA clocks, one flag byte, three version-dependent
+bytes, an eight-byte host anchor, and a four-byte checksum. The fingerprint
 is FNV-1a-64 of the complete cartridge image; the checksum is FNV-1a-32 of the
 preceding 40 bytes. These checks detect mismatches and accidental corruption.
-Flag-byte bit 2 retains the low minute output; it is valid only with control
-bit 3 enabled. Files with that bit clear remain valid. Loading a battery or
+Flag-byte bit 2 retains the low interrupt output. `CPDRTC01` reserves bytes
+29 through 31 as zero and requires control bit 3 for a low output. `CPDRTC02`
+stores the two interrupt-parameter bytes at offsets 29 and 30, reserves byte
+31 as zero, and permits a low output with any interrupt mode enabled. Both
+versions load; version 1 supplies zero parameters. Saves use version 2 when
+parameters or an alarm/frequency latch require it, and version 1 otherwise.
+Loading a battery or
 advancing its offline clock schedules future transitions without replaying
 console IRQs from the interval when execution was stopped.
 
@@ -126,6 +135,37 @@ inverter connection in the GBA RTC register description linked above. Its board
 edge is an inference from those descriptions. Direct cartridge captures are
 still required to qualify that edge and writes during minute-carry processing.
 
+## Alarm and frequency interrupts
+
+Control bit 3 selects minute output regardless of bits 1 and 5. When bit 3 is
+clear, bit 1 selects frequency output; when both are clear, bit 5 selects alarm
+output. With all three clear, the output is released. These modes share the
+separate cartridge interrupt connection and scheduler described above.
+
+In alarm mode, the low parameter byte holds the BCD hour and AM/PM flag; the
+high byte holds the BCD minute. The format must match control bit 6. The AM/PM
+flag must agree with the hour even in 24-hour mode. Reserved hour/minute bits
+are ignored. The output latches low when the hour and minute match and stays
+low until alarm mode is disabled. Rewriting an enabled alarm does not acknowledge
+it. Disabling and enabling it during the matching minute asserts the low output
+again. Invalid BCD or inconsistent 24-hour AM/PM parameters produce no match in
+the model; invalid-parameter behavior still needs hardware qualification.
+
+The scheduler splits alarm waits longer than its signed 32-bit horizon into
+checkpoints. A checkpoint advances the calendar and schedules the remaining
+wait; it does not create an output edge. Offline advancement retains an alarm
+that became due during the interval, even if the final time no longer matches.
+
+In frequency mode, parameter bits 0 through 15 select clocks from 32768 Hz
+through 1 Hz. The chip output is the logical AND of the selected clocks. A zero
+mask leaves it released. For example, `0x000A` selects 16384 Hz and 4096 Hz and
+releases the output only while both clocks are high. The fraction of the current
+second supplies the divider phase; the scheduler dispatches each output change
+without polling every oscillator tick. Parameter/control writes preserve that
+phase, and calendar/time writes reset it with the fractional second. The exact
+physical phase after writes, zero-mask output and serial writes during active
+outputs require cartridge captures.
+
 ## Qualification boundary
 
 Native tests cover calendar correction and rollover, wire commands, complete
@@ -159,10 +199,18 @@ retain the same transitions and interrupt visibility while timer and DMA request
 run across clock wrap. Forced-IRQ commands request the Game Pak interrupt at the
 original command-completion deadline, including late GPIO dispatch. Their physical
 pulse length and the board inverter's response to that pulse remain unqualified.
-Control bit 1 without bit 3, alarm mode, and their write-only frequency/alarm
-parameters are not implemented or qualified on the cartridge. Those flags retain
-their values. Minute hold rearming within the chip's 10 ms carry interval, time
-writes during an active output and STOP wake timing also need physical evidence.
+Alarm/frequency regressions cover all 16 divider selections, mixed-clock
+waveforms over a complete divider cycle, every hour in both formats, mode
+priority, matching-minute reenable, held output, daily/calendar carries,
+long-wait checkpoints and large offline intervals. ARM/Thumb parameter and
+control stores check IRQ visibility and acknowledgement. Repeated frequency
+edges retain timer/DMA chronology through late dispatch and clock wrap. Both
+battery versions, console reset, disable/replacement and frontend offline
+resume preserve parameters and output state without replaying past requests.
+These are documented-model regressions; the local original corpus does not
+exercise alarm or frequency timing. Direct cartridge timing remains unqualified.
+Minute hold rearming within the chip's 10 ms carry interval, time writes during
+an active output and STOP wake timing also need physical evidence.
 
 The power detector exposes an explicit sample input: a failure latches the
 flag and stops sampling; reading control rearms it. Voltage thresholds and

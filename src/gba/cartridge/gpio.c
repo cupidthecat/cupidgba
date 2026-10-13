@@ -13,13 +13,13 @@ static void schedule_rtc_interrupt(struct CupidGBA* gba) {
 
 static void rtc_output_changed(struct CupidGBA* gba, bool previousLow) {
     /* The cartridge inverter makes RTC release a falling Game Pak IRQ edge. */
-    if (gba->cartridge.rtcPresent && previousLow && !gba->cartridge.rtc.minuteLow)
+    if (gba->cartridge.rtcPresent && previousLow && !gba->cartridge.rtc.interruptLow)
         cupid_raise_irq_at(gba, IRQ_GAMEPAK, cupid_timing_global_time(&gba->timing));
     schedule_rtc_interrupt(gba);
 }
 
 void cupid_cartridge_rtc_sync(struct CupidGBA* gba) {
-    const bool previousLow = gba->cartridge.rtc.minuteLow;
+    const bool previousLow = gba->cartridge.rtc.interruptLow;
     cupid_rtc_sync(&gba->cartridge.rtc, cupid_timing_global_time(&gba->timing));
     rtc_output_changed(gba, previousLow);
 }
@@ -125,7 +125,7 @@ bool cupid_cartridge_gpio_write(struct CupidGBA* gba, uint32_t address, uint16_t
     default: return false;
     }
     if (gba->cartridge.rtcPresent) {
-        const bool previousLow = gba->cartridge.rtc.minuteLow;
+        const bool previousLow = gba->cartridge.rtc.interruptLow;
         if (cupid_rtc_write_pins_direction(&gba->cartridge.rtc, port_pins(&gba->cartridge),
                                            gba->cartridge.direction, cupid_timing_global_time(&gba->timing)))
             cupid_raise_irq_at(gba, IRQ_GAMEPAK, cupid_timing_global_time(&gba->timing));

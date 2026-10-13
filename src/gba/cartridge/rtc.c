@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "cupid/rtc.h"
+#include <limits.h>
 
 static unsigned month_length(unsigned year, unsigned month) {
     static const uint8_t lengths[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
@@ -14,6 +15,44 @@ static unsigned decimal(uint8_t value, unsigned minimum, unsigned maximum, unsig
     const unsigned low = value & 15, high = value >> 4;
     const unsigned result = high * 10 + low;
     return low > 9 || high > 9 || result < minimum || result > maximum ? fallback : result;
+}
+
+enum { OUTPUT_DISABLED, OUTPUT_MINUTE, OUTPUT_FREQUENCY, OUTPUT_ALARM };
+
+static unsigned output_mode(const struct CupidRTC* rtc) {
+    if (rtc->control & 8) return OUTPUT_MINUTE;
+    if (rtc->control & 2) return OUTPUT_FREQUENCY;
+    return rtc->control & 0x20 ? OUTPUT_ALARM : OUTPUT_DISABLED;
+}
+
+static uint64_t alarm_seconds(const struct CupidRTC* rtc) {
+    const uint8_t rawHour = (uint8_t)rtc->interruptParameters;
+    unsigned hour = decimal(rawHour & 0x3F, 0, rtc->control & 0x40 ? 23 : 11, 24);
+    const unsigned minute = decimal((uint8_t)(rtc->interruptParameters >> 8) & 0x7F, 0, 59, 60);
+    if (hour == 24 || minute == 60) return UINT64_MAX;
+    if (rtc->control & 0x40) {
+        /* The alarm comparison includes AM/PM even in 24-hour mode. */
+        if ((hour >= 12) != ((rawHour & 0x80) != 0)) return UINT64_MAX;
+    } else if (rawHour & 0x80) hour += 12;
+    const unsigned current = rtc->date.hour * 60u + rtc->date.minute;
+    const unsigned target = hour * 60 + minute;
+    const unsigned minutes = (target + 1440 - current) % 1440;
+    if (!minutes) return 0;
+    return rtc->invalidSecond ? (minutes - 1u) * 60u + 1 : minutes * 60u - rtc->date.second;
+}
+
+static void refresh_output(struct CupidRTC* rtc) {
+    switch (output_mode(rtc)) {
+    case OUTPUT_DISABLED: rtc->interruptLow = false; break;
+    case OUTPUT_FREQUENCY:
+        /* f0 is 32768 Hz; f15 is 1 Hz. Selected clocks are ANDed. */
+        rtc->interruptLow = ((rtc->fraction >> 8) & rtc->interruptParameters) != rtc->interruptParameters;
+        break;
+    case OUTPUT_ALARM:
+        if (!alarm_seconds(rtc)) rtc->interruptLow = true;
+        break;
+    default: break;
+    }
 }
 
 static void advance_month(struct CupidRTCDateTime* date) {
@@ -41,6 +80,10 @@ static void advance_days(struct CupidRTCDateTime* date, uint64_t days) {
 
 static void advance_seconds(struct CupidRTC* rtc, uint64_t seconds) {
     if (!seconds) return;
+    if (output_mode(rtc) == OUTPUT_ALARM) {
+        const uint64_t untilAlarm = alarm_seconds(rtc);
+        if (untilAlarm != UINT64_MAX && seconds >= untilAlarm) rtc->interruptLow = true;
+    }
     const bool minuteCarry = seconds >= (rtc->invalidSecond ? 1u : 60u - rtc->date.second);
     const unsigned toRelease = rtc->date.second < 30 ? 30u - rtc->date.second : 90u - rtc->date.second;
     const bool release = rtc->invalidSecond || seconds >= toRelease;
@@ -61,10 +104,10 @@ static void advance_seconds(struct CupidRTC* rtc, uint64_t seconds) {
     if (rtc->control & 8) {
         if (rtc->control & 2) {
             /* Steady output starts with a minute carry, then releases after 30s. */
-            if (minuteCarry) rtc->minuteLow = rtc->date.second < 30;
-            else if (release) rtc->minuteLow = false;
+            if (minuteCarry) rtc->interruptLow = rtc->date.second < 30;
+            else if (release) rtc->interruptLow = false;
         } else if (minuteCarry) {
-            rtc->minuteLow = true;
+            rtc->interruptLow = true;
         }
     }
 }
@@ -89,6 +132,7 @@ void cupid_rtc_sync(struct CupidRTC* rtc, uint64_t clock) {
     const uint64_t remainder = rtc->fraction + elapsed % CUPID_RTC_CLOCK_HZ;
     rtc->fraction = (uint32_t)(remainder % CUPID_RTC_CLOCK_HZ);
     advance_seconds(rtc, elapsed / CUPID_RTC_CLOCK_HZ + remainder / CUPID_RTC_CLOCK_HZ);
+    refresh_output(rtc);
 }
 
 void cupid_rtc_rebase(struct CupidRTC* rtc, uint64_t clock) {
@@ -96,10 +140,38 @@ void cupid_rtc_rebase(struct CupidRTC* rtc, uint64_t clock) {
 }
 
 uint32_t cupid_rtc_next_interrupt(const struct CupidRTC* rtc) {
-    if (!(rtc->control & 8) || (rtc->minuteLow && !(rtc->control & 2))) return 0;
+    const unsigned mode = output_mode(rtc);
+    if (mode == OUTPUT_DISABLED) return 0;
+    if (mode == OUTPUT_FREQUENCY) {
+        const unsigned mask = rtc->interruptParameters;
+        if (!mask) return 0;
+        const unsigned phase = rtc->fraction >> 8;
+        const unsigned missing = mask & ~phase;
+        if (!missing) {
+            unsigned bit = 0;
+            while (!(mask & (1u << bit))) ++bit;
+            const unsigned half = 256u << bit;
+            return half - (rtc->fraction & (half - 1));
+        }
+        unsigned bit = 15;
+        while (!(missing & (1u << bit))) --bit;
+        const unsigned lower = (1u << (bit + 1)) - 1;
+        const unsigned next = (phase & ~lower) | (mask & lower);
+        return next * 256u - rtc->fraction;
+    }
+    if (mode == OUTPUT_ALARM) {
+        if (rtc->interruptLow) return 0;
+        const uint64_t seconds = alarm_seconds(rtc);
+        if (seconds == UINT64_MAX) return 0;
+        if (!seconds) return 1;
+        const uint64_t clocks = seconds * CUPID_RTC_CLOCK_HZ - rtc->fraction;
+        /* The scheduler compares deadlines within its signed 32-bit horizon. */
+        return clocks > INT32_MAX ? INT32_MAX : (uint32_t)clocks;
+    }
+    if (rtc->interruptLow && !(rtc->control & 2)) return 0;
     unsigned seconds;
     if (rtc->invalidSecond) seconds = 1;
-    else if (rtc->minuteLow)
+    else if (rtc->interruptLow)
         seconds = rtc->date.second < 30 ? 30u - rtc->date.second : 90u - rtc->date.second;
     else seconds = 60u - rtc->date.second;
     return (uint32_t)(seconds * CUPID_RTC_CLOCK_HZ - rtc->fraction);
@@ -112,11 +184,13 @@ bool cupid_rtc_set_datetime(struct CupidRTC* rtc, const struct CupidRTCDateTime*
     rtc->date = *date;
     rtc->fraction = 0;
     rtc->invalidSecond = false;
+    refresh_output(rtc);
     return true;
 }
 
 void cupid_rtc_advance_seconds(struct CupidRTC* rtc, uint64_t seconds) {
     advance_seconds(rtc, seconds);
+    refresh_output(rtc);
 }
 
 bool cupid_rtc_parse_datetime(const char* text, struct CupidRTCDateTime* date) {
@@ -143,10 +217,11 @@ bool cupid_rtc_parse_datetime(const char* text, struct CupidRTCDateTime* date) {
 void cupid_rtc_reset_registers(struct CupidRTC* rtc) {
     rtc->date = (struct CupidRTCDateTime){0, 1, 1, 0, 0, 0, 0};
     rtc->control = 0;
+    rtc->interruptParameters = 0;
     rtc->fraction = 0;
     rtc->invalidSecond = false;
     rtc->powerSampling = true;
-    rtc->minuteLow = false;
+    rtc->interruptLow = false;
 }
 
 uint8_t cupid_rtc_read_control(struct CupidRTC* rtc) {
@@ -156,9 +231,17 @@ uint8_t cupid_rtc_read_control(struct CupidRTC* rtc) {
 }
 
 void cupid_rtc_write_control(struct CupidRTC* rtc, uint8_t value) {
+    const unsigned previousMode = output_mode(rtc);
     rtc->control = (rtc->control & 0x80) | (value & 0x6A);
-    /* A status write releases the minute latch, even if the bits are unchanged. */
-    rtc->minuteLow = false;
+    /* Minute writes acknowledge the latch; an alarm stays held until disabled. */
+    if (previousMode != OUTPUT_ALARM || output_mode(rtc) != OUTPUT_ALARM)
+        rtc->interruptLow = false;
+    refresh_output(rtc);
+}
+
+void cupid_rtc_write_interrupt_parameters(struct CupidRTC* rtc, uint16_t value) {
+    rtc->interruptParameters = value;
+    refresh_output(rtc);
 }
 
 void cupid_rtc_sample_power(struct CupidRTC* rtc, bool aboveThreshold) {
@@ -188,6 +271,7 @@ static void write_clock(struct CupidRTC* rtc, const uint8_t data[3]) {
     rtc->invalidSecond = decoded == 60;
     rtc->date.second = rtc->invalidSecond ? second : (uint8_t)decoded;
     rtc->fraction = 0;
+    refresh_output(rtc);
 }
 
 void cupid_rtc_write_datetime(struct CupidRTC* rtc, const uint8_t data[7]) {
@@ -236,6 +320,7 @@ static bool receive_command(struct CupidRTC* rtc) {
         return false;
     case 3:
         return true;
+    case 1: rtc->length = 2; break;
     case 2: rtc->length = 7; break;
     case 4: rtc->length = 1; break;
     case 6: rtc->length = 3; break;
@@ -277,6 +362,9 @@ static void receive_payload(struct CupidRTC* rtc, bool data) {
     rtc->inputByte = rtc->bit = 0;
     if (rtc->byte != rtc->length) return;
     switch (rtc->command) {
+    case 1:
+        cupid_rtc_write_interrupt_parameters(rtc, (uint16_t)(rtc->transfer[0] | rtc->transfer[1] << 8));
+        break;
     case 2: cupid_rtc_write_datetime(rtc, rtc->transfer); break;
     case 4: cupid_rtc_write_control(rtc, rtc->transfer[0]); break;
     case 6: cupid_rtc_write_time(rtc, rtc->transfer); break;

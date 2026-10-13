@@ -105,18 +105,45 @@ static void offline_output_transitions_do_not_replay_console_interrupts(void) {
     struct CupidPlatformRTC config = {.path = path, .offlineWall = true};
     CHECK(cupid_platform_rtc_load(gba, &config, &seed, 1000));
     cupid_rtc_write_control(&gba->cartridge.rtc, 0x4A);
-    gba->cartridge.rtc.minuteLow = true;
+    gba->cartridge.rtc.interruptLow = true;
     gba->cartridge.rtc.fraction = CUPID_RTC_CLOCK_HZ / 2;
     CHECK(cupid_platform_rtc_save(gba, &config, 1000));
     destroy(gba);
     gba = machine();
     CHECK(cupid_platform_rtc_load(gba, &config, NULL, 1002));
-    CHECK(gba->cartridge.rtc.date.second == 31 && !gba->cartridge.rtc.minuteLow);
+    CHECK(gba->cartridge.rtc.date.second == 31 && !gba->cartridge.rtc.interruptLow);
     CHECK(!gba->irqf && !gba->irq.pendingIF);
     CHECK(cupid_timing_until(&gba->timing, &gba->cartridge.rtcInterruptEvent) ==
           29 * CUPID_RTC_CLOCK_HZ - CUPID_RTC_CLOCK_HZ / 2);
     destroy(gba);
     CHECK(remove(path) == 0);
+}
+
+static void offline_alarm_and_frequency_state_resume_without_past_requests(void) {
+    for (unsigned frequency = 0; frequency < 2; frequency++) {
+        struct CupidGBA* gba = machine();
+        const struct CupidRTCDateTime seed = {26, 10, 13, 2, 11, 59, 59};
+        struct CupidPlatformRTC config = {.path = path, .offlineWall = true};
+        CHECK(cupid_platform_rtc_load(gba, &config, &seed, 1000));
+        cupid_rtc_write_interrupt_parameters(&gba->cartridge.rtc, frequency ? 0x8000 : 0x0092);
+        cupid_rtc_write_control(&gba->cartridge.rtc, frequency ? 0x42 : 0x60);
+        if (frequency) gba->cartridge.rtc.fraction = CUPID_RTC_CLOCK_HZ / 2 - 12;
+        CHECK(cupid_platform_rtc_save(gba, &config, 1000));
+        destroy(gba);
+        gba = machine();
+        CHECK(cupid_platform_rtc_load(gba, &config, NULL, 4600));
+        CHECK(gba->cartridge.rtc.date.hour == 12 && gba->cartridge.rtc.date.minute == 59);
+        CHECK(gba->cartridge.rtc.date.second == 59 && gba->cartridge.rtc.interruptLow);
+        CHECK(!gba->irq.pendingIF && !gba->irqf);
+        CHECK(cupid_timing_is_scheduled(&gba->timing, &gba->cartridge.rtcInterruptEvent) == (frequency != 0));
+        if (frequency) {
+            CHECK(cupid_timing_until(&gba->timing, &gba->cartridge.rtcInterruptEvent) == 12);
+            cupid_timing_tick(&gba->timing, 12);
+            CHECK(!gba->cartridge.rtc.interruptLow && gba->irq.pendingIF == IRQ_GAMEPAK);
+        }
+        destroy(gba);
+        CHECK(remove(path) == 0);
+    }
 }
 
 int main(int argc, char** argv) {
@@ -134,5 +161,6 @@ int main(int argc, char** argv) {
     RUN(offline_elapsed_time_keeps_game_clock_offset_and_weekday);
     RUN(invalid_input_preserves_state_and_disabled_hardware_has_no_file_io);
     RUN(offline_output_transitions_do_not_replay_console_interrupts);
+    RUN(offline_alarm_and_frequency_state_resume_without_past_requests);
     return 0;
 }
