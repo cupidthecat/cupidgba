@@ -99,6 +99,26 @@ static void invalid_input_preserves_state_and_disabled_hardware_has_no_file_io(v
     destroy(gba); CHECK(remove(path) == 0);
 }
 
+static void offline_output_transitions_do_not_replay_console_interrupts(void) {
+    struct CupidGBA* gba = machine();
+    const struct CupidRTCDateTime seed = {26, 10, 13, 2, 0, 0, 29};
+    struct CupidPlatformRTC config = {.path = path, .offlineWall = true};
+    CHECK(cupid_platform_rtc_load(gba, &config, &seed, 1000));
+    cupid_rtc_write_control(&gba->cartridge.rtc, 0x4A);
+    gba->cartridge.rtc.minuteLow = true;
+    gba->cartridge.rtc.fraction = CUPID_RTC_CLOCK_HZ / 2;
+    CHECK(cupid_platform_rtc_save(gba, &config, 1000));
+    destroy(gba);
+    gba = machine();
+    CHECK(cupid_platform_rtc_load(gba, &config, NULL, 1002));
+    CHECK(gba->cartridge.rtc.date.second == 31 && !gba->cartridge.rtc.minuteLow);
+    CHECK(!gba->irqf && !gba->irq.pendingIF);
+    CHECK(cupid_timing_until(&gba->timing, &gba->cartridge.rtcInterruptEvent) ==
+          29 * CUPID_RTC_CLOCK_HZ - CUPID_RTC_CLOCK_HZ / 2);
+    destroy(gba);
+    CHECK(remove(path) == 0);
+}
+
 int main(int argc, char** argv) {
     CHECK(argc == 2);
 #ifdef _WIN32
@@ -113,5 +133,6 @@ int main(int argc, char** argv) {
     RUN(first_launch_and_explicit_seed_are_deterministic);
     RUN(offline_elapsed_time_keeps_game_clock_offset_and_weekday);
     RUN(invalid_input_preserves_state_and_disabled_hardware_has_no_file_io);
+    RUN(offline_output_transitions_do_not_replay_console_interrupts);
     return 0;
 }

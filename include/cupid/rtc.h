@@ -17,6 +17,7 @@ struct CupidRTC {
     uint8_t control;
     bool invalidSecond;
     bool powerSampling;
+    bool minuteLow;
     uint8_t pins, inputLatch, inputByte, bit, byte, length, command;
     uint8_t transfer[7];
     uint8_t state;
@@ -25,6 +26,8 @@ struct CupidRTC {
 
 void cupid_rtc_init(struct CupidRTC* rtc, uint64_t clock);
 void cupid_rtc_sync(struct CupidRTC* rtc, uint64_t clock);
+/* Clocks to the next minute-output transition, or zero while disabled/held. */
+uint32_t cupid_rtc_next_interrupt(const struct CupidRTC* rtc);
 /* Rebase the execution clock after console reset without resetting the battery. */
 void cupid_rtc_rebase(struct CupidRTC* rtc, uint64_t clock);
 bool cupid_rtc_set_datetime(struct CupidRTC* rtc, const struct CupidRTCDateTime* date);

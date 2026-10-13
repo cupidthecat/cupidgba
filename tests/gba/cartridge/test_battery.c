@@ -101,7 +101,7 @@ static void corrupt_or_impossible_state_never_changes_the_running_clock(void) {
     }
     const struct {unsigned at; uint8_t value;} impossible[] = {
         {16,100}, {17,0}, {17,13}, {18,32}, {19,7}, {20,24}, {21,60}, {22,60},
-        {23,0xCB}, {27,1}, {28,4}, {29,1}, {30,1}, {31,1}
+        {23,0xCB}, {27,1}, {28,8}, {29,1}, {30,1}, {31,1}
     };
     for (unsigned i = 0; i < sizeof(impossible) / sizeof(*impossible); i++) {
         uint8_t data[44]; memcpy(data, valid, sizeof(data));
@@ -114,6 +114,33 @@ static void corrupt_or_impossible_state_never_changes_the_running_clock(void) {
     reject_without_changing_battery(data, sizeof(data));
     memcpy(data, valid, sizeof(data)); data[28] |= 1; data[22] = 0x59; repair_checksum(data);
     reject_without_changing_battery(data, sizeof(data));
+    memcpy(data, valid, sizeof(data)); data[28] |= 4; data[23] &= (uint8_t)~8; repair_checksum(data);
+    reject_without_changing_battery(data, sizeof(data));
+}
+
+static void minute_output_latch_roundtrips_without_an_extra_irq(void) {
+    for (unsigned steady = 0; steady < 2; steady++) {
+        struct CupidGBA* gba = machine();
+        cupid_rtc_write_control(&gba->cartridge.rtc, steady ? 0x4A : 0x48);
+        const struct CupidRTCDateTime date = {26, 10, 13, 2, 12, 34, 29};
+        CHECK(cupid_rtc_set_datetime(&gba->cartridge.rtc, &date));
+        gba->cartridge.rtc.minuteLow = true;
+        gba->cartridge.rtc.fraction = CUPID_RTC_CLOCK_HZ - 12;
+        CHECK(cupid_cartridge_save_rtc(gba, statePath, 0));
+        uint8_t data[44];
+        CHECK(cupid_file_read_exact(statePath, data, sizeof(data)) && (data[28] & 4));
+        destroy(gba);
+        gba = machine();
+        CHECK(cupid_cartridge_load_rtc(gba, statePath, NULL));
+        CHECK(gba->cartridge.rtc.minuteLow && !gba->irq.pendingIF);
+        CHECK(cupid_timing_is_scheduled(&gba->timing, &gba->cartridge.rtcInterruptEvent) == (steady != 0));
+        cupid_timing_tick(&gba->timing, 11);
+        CHECK(gba->cartridge.rtc.minuteLow && !gba->irq.pendingIF);
+        cupid_timing_tick(&gba->timing, 1);
+        CHECK(gba->cartridge.rtc.minuteLow == (steady == 0));
+        CHECK(gba->irq.pendingIF == (steady ? IRQ_GAMEPAK : 0));
+        destroy(gba);
+    }
 }
 
 static void invalid_second_and_power_latch_survive_until_the_next_carry(void) {
@@ -181,6 +208,7 @@ int main(int argc, char** argv) {
     RUN(corrupt_or_impossible_state_never_changes_the_running_clock);
     RUN(invalid_second_and_power_latch_survive_until_the_next_carry);
     RUN(failed_save_preserves_the_existing_file);
+    RUN(minute_output_latch_roundtrips_without_an_extra_irq);
     CHECK(remove(statePath) == 0 && remove(savePath) == 0);
 #ifdef _WIN32
     CHECK(_rmdir(directory) == 0);

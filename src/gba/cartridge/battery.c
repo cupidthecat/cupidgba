@@ -27,7 +27,7 @@ bool cupid_cartridge_load_rtc(struct CupidGBA* gba, const char* path, uint64_t* 
     if (!cupid_file_read_exact(path, data, sizeof(data))) return false;
     if (memcmp(data, "CPDRTC01", 8) || little(data + 8, 8) != gba->cartridge.identity ||
         little(data + 40, 4) != checksum(data) || (data[23] & ~0xEA) ||
-        (data[28] & ~3) || data[29] || data[30] || data[31] ||
+        (data[28] & ~7) || ((data[28] & 4) && !(data[23] & 8)) || data[29] || data[30] || data[31] ||
         little(data + 24, 4) >= CUPID_RTC_CLOCK_HZ) { errno = EINVAL; return false; }
     struct CupidRTC restored;
     cupid_rtc_init(&restored, cupid_timing_global_time(&gba->timing));
@@ -46,6 +46,7 @@ bool cupid_cartridge_load_rtc(struct CupidGBA* gba, const char* path, uint64_t* 
     restored.control = data[23];
     restored.fraction = (uint32_t)little(data + 24, 4);
     restored.powerSampling = (data[28] & 2) != 0;
+    restored.minuteLow = (data[28] & 4) != 0;
     gba->cartridge.rtc = restored;
     cupid_cartridge_reset_bus(gba);
     if (hostStamp) *hostStamp = little(data + 32, 8);
@@ -56,7 +57,7 @@ bool cupid_cartridge_load_rtc(struct CupidGBA* gba, const char* path, uint64_t* 
 bool cupid_cartridge_save_rtc(struct CupidGBA* gba, const char* path, uint64_t hostStamp) {
     if (!gba->cartridge.rtcPresent) { errno = 0; return true; }
     struct CupidRTC* rtc = &gba->cartridge.rtc;
-    cupid_rtc_sync(rtc, cupid_timing_global_time(&gba->timing));
+    cupid_cartridge_rtc_sync(gba);
     uint8_t data[BATTERY_SIZE] = {0};
     memcpy(data, "CPDRTC01", 8);
     encode(data + 8, gba->cartridge.identity, 8);
@@ -64,7 +65,7 @@ bool cupid_cartridge_save_rtc(struct CupidGBA* gba, const char* path, uint64_t h
     data[19] = rtc->date.weekday; data[20] = rtc->date.hour; data[21] = rtc->date.minute;
     data[22] = rtc->date.second; data[23] = rtc->control;
     encode(data + 24, rtc->fraction, 4);
-    data[28] = (rtc->invalidSecond ? 1 : 0) | (rtc->powerSampling ? 2 : 0);
+    data[28] = (rtc->invalidSecond ? 1 : 0) | (rtc->powerSampling ? 2 : 0) | (rtc->minuteLow ? 4 : 0);
     encode(data + 32, hostStamp, 8);
     encode(data + 40, checksum(data), 4);
     return cupid_file_replace(path, data, sizeof(data));

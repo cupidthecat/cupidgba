@@ -24,6 +24,7 @@ bool cupid_platform_rtc_load(struct CupidGBA* gba, struct CupidPlatformRTC* conf
         }
     }
     config->hostAnchor = config->offlineWall ? (previous > hostStamp ? previous : hostStamp) : 0;
+    cupid_cartridge_rtc_reschedule(gba);
     errno = 0;
     return true;
 }

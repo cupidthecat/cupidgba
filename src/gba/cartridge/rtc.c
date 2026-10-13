@@ -41,6 +41,9 @@ static void advance_days(struct CupidRTCDateTime* date, uint64_t days) {
 
 static void advance_seconds(struct CupidRTC* rtc, uint64_t seconds) {
     if (!seconds) return;
+    const bool minuteCarry = seconds >= (rtc->invalidSecond ? 1u : 60u - rtc->date.second);
+    const unsigned toRelease = rtc->date.second < 30 ? 30u - rtc->date.second : 90u - rtc->date.second;
+    const bool release = rtc->invalidSecond || seconds >= toRelease;
     uint64_t minutes = 0;
     if (rtc->invalidSecond && seconds) {
         rtc->invalidSecond = false;
@@ -55,6 +58,15 @@ static void advance_seconds(struct CupidRTC* rtc, uint64_t seconds) {
     const uint64_t hours = minutes / 60 + rtc->date.hour;
     rtc->date.hour = (uint8_t)(hours % 24);
     advance_days(&rtc->date, hours / 24);
+    if (rtc->control & 8) {
+        if (rtc->control & 2) {
+            /* Steady output starts with a minute carry, then releases after 30s. */
+            if (minuteCarry) rtc->minuteLow = rtc->date.second < 30;
+            else if (release) rtc->minuteLow = false;
+        } else if (minuteCarry) {
+            rtc->minuteLow = true;
+        }
+    }
 }
 
 void cupid_rtc_init(struct CupidRTC* rtc, uint64_t clock) {
@@ -81,6 +93,16 @@ void cupid_rtc_sync(struct CupidRTC* rtc, uint64_t clock) {
 
 void cupid_rtc_rebase(struct CupidRTC* rtc, uint64_t clock) {
     rtc->lastClock = clock;
+}
+
+uint32_t cupid_rtc_next_interrupt(const struct CupidRTC* rtc) {
+    if (!(rtc->control & 8) || (rtc->minuteLow && !(rtc->control & 2))) return 0;
+    unsigned seconds;
+    if (rtc->invalidSecond) seconds = 1;
+    else if (rtc->minuteLow)
+        seconds = rtc->date.second < 30 ? 30u - rtc->date.second : 90u - rtc->date.second;
+    else seconds = 60u - rtc->date.second;
+    return (uint32_t)(seconds * CUPID_RTC_CLOCK_HZ - rtc->fraction);
 }
 
 bool cupid_rtc_set_datetime(struct CupidRTC* rtc, const struct CupidRTCDateTime* date) {
@@ -124,6 +146,7 @@ void cupid_rtc_reset_registers(struct CupidRTC* rtc) {
     rtc->fraction = 0;
     rtc->invalidSecond = false;
     rtc->powerSampling = true;
+    rtc->minuteLow = false;
 }
 
 uint8_t cupid_rtc_read_control(struct CupidRTC* rtc) {
@@ -134,6 +157,8 @@ uint8_t cupid_rtc_read_control(struct CupidRTC* rtc) {
 
 void cupid_rtc_write_control(struct CupidRTC* rtc, uint8_t value) {
     rtc->control = (rtc->control & 0x80) | (value & 0x6A);
+    /* A status write releases the minute latch, even if the bits are unchanged. */
+    rtc->minuteLow = false;
 }
 
 void cupid_rtc_sample_power(struct CupidRTC* rtc, bool aboveThreshold) {

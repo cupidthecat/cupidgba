@@ -2,13 +2,49 @@
 #include "cupid/gba.h"
 
 static void prefetch_sample(struct CupidTiming* timing, void* context, uint32_t late);
+static void rtc_interrupt(struct CupidTiming* timing, void* context, uint32_t late);
+
+static void schedule_rtc_interrupt(struct CupidGBA* gba) {
+    struct CupidCartridge* cart = &gba->cartridge;
+    cupid_timing_deschedule(&gba->timing, &cart->rtcInterruptEvent);
+    const uint32_t delay = cart->rtcPresent ? cupid_rtc_next_interrupt(&cart->rtc) : 0;
+    if (delay) cupid_timing_schedule(&gba->timing, &cart->rtcInterruptEvent, (int32_t)delay);
+}
+
+static void rtc_output_changed(struct CupidGBA* gba, bool previousLow) {
+    /* The cartridge inverter makes RTC release a falling Game Pak IRQ edge. */
+    if (gba->cartridge.rtcPresent && previousLow && !gba->cartridge.rtc.minuteLow)
+        cupid_raise_irq_at(gba, IRQ_GAMEPAK, cupid_timing_global_time(&gba->timing));
+    schedule_rtc_interrupt(gba);
+}
+
+void cupid_cartridge_rtc_sync(struct CupidGBA* gba) {
+    const bool previousLow = gba->cartridge.rtc.minuteLow;
+    cupid_rtc_sync(&gba->cartridge.rtc, cupid_timing_global_time(&gba->timing));
+    rtc_output_changed(gba, previousLow);
+}
+
+void cupid_cartridge_rtc_reschedule(struct CupidGBA* gba) {
+    cupid_rtc_sync(&gba->cartridge.rtc, cupid_timing_global_time(&gba->timing));
+    schedule_rtc_interrupt(gba);
+}
+
+static void rtc_interrupt(struct CupidTiming* timing, void* context, uint32_t late) {
+    (void)timing;
+    (void)late;
+    /* Scheduler time is this edge's deadline, including during late dispatch. */
+    cupid_cartridge_rtc_sync(context);
+}
 
 void cupid_cartridge_init(struct CupidGBA* gba) {
     cupid_cartridge_prefetch_cancel(gba);
+    cupid_timing_deschedule(&gba->timing, &gba->cartridge.rtcInterruptEvent);
     memset(&gba->cartridge, 0, sizeof(gba->cartridge));
     cupid_rtc_init(&gba->cartridge.rtc, cupid_timing_global_time(&gba->timing));
     gba->cartridge.prefetchEvent = (struct CupidTimingEvent){.context = gba,
         .callback = prefetch_sample, .name = "Cartridge prefetch sample", .priority = 0x70};
+    gba->cartridge.rtcInterruptEvent = (struct CupidTimingEvent){.context = gba,
+        .callback = rtc_interrupt, .name = "Cartridge RTC interrupt", .priority = 0x40};
 }
 
 void cupid_cartridge_enable_rtc(struct CupidGBA* gba, bool enabled) {
@@ -48,6 +84,7 @@ void cupid_cartridge_reset_bus(struct CupidGBA* gba) {
     gba->cartridge.opcodeValid = false;
     gba->cpu.memory.readOpcode = NULL;
     cupid_rtc_reset_bus(&gba->cartridge.rtc);
+    cupid_cartridge_rtc_reschedule(gba);
 }
 
 bool cupid_cartridge_gpio_address(const struct CupidGBA* gba, uint32_t address) {
@@ -87,9 +124,13 @@ bool cupid_cartridge_gpio_write(struct CupidGBA* gba, uint32_t address, uint16_t
         return true;
     default: return false;
     }
-    if (gba->cartridge.rtcPresent && cupid_rtc_write_pins(&gba->cartridge.rtc, port_pins(&gba->cartridge),
-                             cupid_timing_global_time(&gba->timing)))
-        cupid_raise_irq(gba, IRQ_GAMEPAK, 0);
+    if (gba->cartridge.rtcPresent) {
+        const bool previousLow = gba->cartridge.rtc.minuteLow;
+        if (cupid_rtc_write_pins(&gba->cartridge.rtc, port_pins(&gba->cartridge),
+                                 cupid_timing_global_time(&gba->timing)))
+            cupid_raise_irq_at(gba, IRQ_GAMEPAK, cupid_timing_global_time(&gba->timing));
+        rtc_output_changed(gba, previousLow);
+    }
     return true;
 }
 

@@ -13,6 +13,7 @@ struct CupidCartridge {
     uint64_t identity;
     uint32_t opcodeAddress, opcodeValue;
     struct CupidTimingEvent prefetchEvent;
+    struct CupidTimingEvent rtcInterruptEvent;
     uint32_t prefetchBase, prefetchAddress;
     uint16_t prefetchPorts[3];
     uint8_t prefetchMask;
@@ -28,6 +29,9 @@ void cupid_cartridge_attach(struct CupidGBA* gba, const uint8_t* rom, size_t siz
 void cupid_cartridge_enable_rtc(struct CupidGBA* gba, bool enabled);
 void cupid_cartridge_set_input(struct CupidGBA* gba, uint8_t (*input)(void*), void* context);
 void cupid_cartridge_reset_bus(struct CupidGBA* gba);
+/* Reconfigure the battery clock without replaying edges from powered-off time. */
+void cupid_cartridge_rtc_reschedule(struct CupidGBA* gba);
+void cupid_cartridge_rtc_sync(struct CupidGBA* gba);
 bool cupid_cartridge_gpio_address(const struct CupidGBA* gba, uint32_t address);
 bool cupid_cartridge_gpio_read(struct CupidGBA* gba, uint32_t address, uint16_t* value);
 bool cupid_cartridge_gpio_write(struct CupidGBA* gba, uint32_t address, uint16_t value);

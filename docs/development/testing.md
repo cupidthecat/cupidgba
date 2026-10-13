@@ -1,5 +1,13 @@
 # Testing
 
+Cartridge minute-interrupt regressions check held and steady RTC outputs,
+ARM/Thumb control writes, the inverted board edge, IF/IME/HALT sequencing,
+timer/DMA ordering, late dispatch, clock wrap and reset. Calendar tests compare
+bulk advances with every second; battery and frontend tests preserve the output
+latch and avoid replaying IRQs from offline time. These are documented signal
+model checks. Physical pulse timing and the remaining cartridge modes are
+unqualified; see [RTC behavior](../hardware/cartridge/rtc.md).
+
 The native regression executables check event scheduling, clock wrap and reset,
 video event deadlines, CPU dispatch coverage, SWI exception entry, arithmetic
 boundaries, block transfers, I/O dispatch bounds, signed audio samples, and

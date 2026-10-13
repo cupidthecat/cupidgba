@@ -70,7 +70,8 @@ The SDL2 frontend keeps a separate `.rtc` file beside the cartridge, using the
 same base name. The raw `.sav` format and bytes are independent. Battery state
 is flushed every 300 frames and on normal exit. It includes the calendar,
 fractional second, control and power-detector state, cartridge fingerprint,
-and optional host-time anchor. It excludes GPIO and in-progress transactions.
+minute-output latch and optional host-time anchor. It excludes GPIO and
+in-progress transactions.
 
 The 44-byte `CPDRTC01` format stores integers in little-endian order. It has an
 eight-byte cartridge fingerprint, seven binary calendar fields, a control
@@ -78,11 +79,42 @@ byte, a four-byte fraction in GBA clocks, one flag byte and three reserved
 zero bytes, an eight-byte host anchor, and a four-byte checksum. The fingerprint
 is FNV-1a-64 of the complete cartridge image; the checksum is FNV-1a-32 of the
 preceding 40 bytes. These checks detect mismatches and accidental corruption.
+Flag-byte bit 2 retains the low minute output; it is valid only with control
+bit 3 enabled. Files with that bit clear remain valid. Loading a battery or
+advancing its offline clock schedules future transitions without replaying
+console IRQs from the interval when execution was stopped.
 
 Invalid size, calendar, reserved fields, checksum or cartridge identity stops
 startup before SDL initialization. Failed writes preserve the previous file.
 If recovery is needed, preserve the rejected file before starting with a fresh
 `.rtc` file and an explicit seed. `--rtc off` leaves an existing RTC file alone.
+
+## Minute interrupts
+
+Control bit 3 enables the minute output. With bit 1 clear, the chip output goes
+low at the next minute carry and stays low until a complete control write or
+reset releases it. With bit 1 set, the output goes low at the minute carry and
+returns high 30 seconds later. Enabling the mode waits for the next carry.
+Reading control or aborting an incomplete write does not acknowledge the latch.
+
+The cartridge's inverter passes the chip's rising release edge to the falling
+Game Pak IRQ input. That edge requests IF bit 13 through the ordinary interrupt
+pipeline. The first low transition does not request it. In steady mode, the
+request occurs at second 30; in held mode, it occurs when software releases the
+output. Changing or disabling the mode with a complete control write releases
+a low output. GPIO read-control and pin direction do not disable this separate
+interrupt connection.
+
+An owned scheduler event dispatches each transition at its original deadline,
+including during CPU stalls and late dispatch. Calendar writes reschedule from
+the written time and reset divider fraction. Console reset retains the calendar,
+fraction and output latch, while RTC disable or cartridge replacement cancels
+the event. IRQ acknowledgement does not create another chip edge.
+
+This model follows the minute-output waveforms in the chip data sheet and the
+inverter connection in the GBA RTC register description linked above. Its board
+edge is an inference from those descriptions. Direct cartridge captures are
+still required to qualify that edge and writes during minute-carry processing.
 
 ## Qualification boundary
 
@@ -102,10 +134,17 @@ An authorized gameplay replay has executed the cartridge's startup RTC reads
 and reached the normal new-game flow. These results do not establish complete
 peripheral accuracy.
 
-Forced-IRQ commands currently request the Game Pak interrupt when the command
-completes. The physical pulse length and the board inverter's edge remain
-unqualified. Periodic RTC IRQ generation is not implemented. Control bits for
-those modes retain their values without scheduling periodic interrupts.
+Minute regressions cover held and steady outputs, divider fractions, calendar
+carry, complete and aborted ARM/Thumb control writes, IF/IME/HALT sequencing,
+reset, battery/offline state and event ownership. Bulk and single-clock dispatch
+retain the same transitions and interrupt visibility while timer and DMA requests
+run across clock wrap. Forced-IRQ commands request the Game Pak interrupt at the
+original command-completion deadline, including late GPIO dispatch. Their physical
+pulse length and the board inverter's response to that pulse remain unqualified.
+Control bit 1 without bit 3, alarm mode, and their write-only frequency/alarm
+parameters are not implemented or qualified on the cartridge. Those flags retain
+their values. Minute hold rearming within the chip's 10 ms carry interval, time
+writes during an active output and STOP wake timing also need physical evidence.
 
 The power detector exposes an explicit sample input: a failure latches the
 flag and stops sampling; reading control rearms it. Voltage thresholds and
