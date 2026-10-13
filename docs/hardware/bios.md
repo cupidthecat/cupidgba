@@ -5,6 +5,17 @@ CupidGBA uses its embedded replacement image and C helpers for services that
 do not yet run in firmware. The replacement assembly and embedded bytes
 are checked together; see [rebuilding the BIOS](../development/rebuilding-bios.md).
 
+SoftReset executes timed firmware, latches the restart byte before clearing
+its work area, resets the visible registers and stacks, and refills the ARM
+pipeline at the selected entry address. See [soft reset](bios-soft-reset.md)
+for caller state, interrupt preconditions, DMA checks and qualification limits.
+
+RegisterRamReset executes timed Thumb firmware for its selected memory and
+device reset groups. Its block fills, register writes and shared transfer
+routine allow timers, IRQs and DMA to run during the call. See
+[register and memory reset](bios-register-reset.md) for flags, write order,
+caller state and qualification cases.
+
 Halt, IntrWait and VBlankIntrWait execute the replacement assembly through
 the normal CPU pipeline. IntrWait takes a discard-old-flags argument in R0
 and an interrupt mask in R1. With R0 clear, flags already recorded in the BIOS
@@ -70,8 +81,16 @@ The unchanged local math suite passes 615/615 register observations on both
 paths. Both also pass the complete 2020/2020 CPU/bus timing matrix, including
 its division, square-root, angle and copy cases. The observers reject partial
 counts and logged failures. These results cover the listed calls and inputs;
-affine, sound-driver, multiboot, STOP and other services still need separate
+sound-driver, multiboot, STOP and other services still need separate
 execution and timing work.
+
+## Affine conversion
+
+SWIs 0E and 0F execute timed ARM instructions for background and object affine
+conversion. They use signed integer lookup products, retain coefficient
+rounding and wrapped background origins, and advance the caller's pointers.
+See [affine services](bios-affine-services.md) for layouts, strides, caller
+state, complete angle coverage and timer/IRQ/DMA checks.
 
 ## Data utilities and sound bias
 

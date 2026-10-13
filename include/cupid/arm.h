@@ -201,7 +201,8 @@ struct CupidARM {
 
     /**
      * Banked registers (one set per mode: USR/SYS, FIQ, IRQ, SVC, ABT, UND).
-     * Per bank: [0..4] = R8-R12 (FIQ only), [5] = SP, [6] = LR.
+     * Per bank: [0] = SP, [1] = LR. Slots [2..6] save R8-R12 when
+     * switching between the shared register set and FIQ.
      */
     int32_t bankedRegisters[6][7];
     int32_t bankedSPSRs[6];

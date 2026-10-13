@@ -44,6 +44,37 @@ full count.
 The BIOS input is not distributed. See [data services](../hardware/bios-data-services.md)
 for the fixtures and qualification limits.
 
+Affine regressions cover 382 background and 1,102 object observations,
+including every 16-bit angle for both services. They check complete output,
+signed product rounding, wrapped origins, preserved caller state, source and
+destination advancement, count/stride cases and memory regions. Four cases
+require timer/DMA interrupts, DMA replacement of a future input entry and
+sampled output-write chronology. `CUPID_TEST_BIOS` adds comparisons against
+the local external BIOS. Background and object groups retain separate
+ten-second deadlines, and a mathematical generator checks all sine values.
+See [affine services](../hardware/bios-affine-services.md).
+
+Register/memory reset checks cover 650 observations across all 256 masks,
+both caller modes, ignored upper bits, cartridge waits and safe RAM callers.
+They compare complete memory, retained regions, readable I/O, wave banks,
+FIFO state, preserved caller state, timers and elapsed clocks. Two clears
+require timer/DMA IRQs and sampled DMA writes that the CPU later overwrites.
+`CUPID_TEST_BIOS` adds the external comparison, including the sampled chronology.
+Each of the sixteen mask groups and the interaction group retains a ten-second
+deadline. The existing copy checks also require the observed CpuFastSet R3
+data result. See [register reset](../hardware/bios-register-reset.md).
+
+Soft-reset regressions require 768 observations across every restart byte,
+ARM/Thumb state, seven caller banks, three caller memory regions, cartridge
+wait settings and DMA before/after restart selection. They check complete
+architectural register banks, memory, I/O, elapsed clocks and entry pipeline,
+then execute the actual first entry instructions. DMA cases compare sampled
+work-area writes and pending timer/DMA requests with IME clear.
+`CUPID_TEST_BIOS` adds the external comparisons. Four restart-byte groups,
+the caller-state group and the DMA group each retain a ten-second deadline.
+See [soft reset](../hardware/bios-soft-reset.md), including the unresolved
+hardware status-register readback edge.
+
 ```sh
 cmake -S . -B build -DCUPID_BUILD_FRONTEND=OFF
 cmake --build build --parallel 2

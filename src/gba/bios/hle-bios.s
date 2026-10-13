@@ -118,11 +118,8 @@ subs   pc, lr, #4
 .word 0x03A0E004
 
 @ Unimplemented
-RegisterRamReset:
 Stop:
 GetBiosChecksum:
-BgAffineSet:
-ObjAffineSet:
 SoundDriverInit:
 SoundDriverMode:
 SoundDriverMain:
@@ -235,38 +232,8 @@ bx r3
 .balign 4, 0
 .arm
 
-CpuFastSet:
-stmfd  sp!, {r4-r10, lr}
-mov    r10, r2, lsl #11
-movs   r12, r10, lsr #9
-bl     copySourceValid
-beq    2f
-add    r12, r1, r10, lsr #9
-movs   r2, r2, lsl #8
-bcc    0f
-@ Fill
-ldr    r3, [r0]
-mov    r4, r3
-mov    r5, r3
-mov    r6, r3
-mov    r7, r3
-mov    r8, r3
-mov    r9, r3
-mov    r10, r3
-1:
-cmp    r1, r12
-stmialt r1!, {r3-r10}
-blt    1b
-b      2f
-@ Copy
-0:
-cmp    r1, r12
-ldmialt r0!, {r3-r10}
-stmialt r1!, {r3-r10}
-blt    0b
-2:
-ldmfd  sp!, {r4-r10, lr}
-bx     lr
+@ Keep the fixed stall entry and later firmware offsets in place.
+.space 0x68, 0
 
 @ Z rejects a zero size or a source range entering the protected low region.
 copySourceValid:
@@ -560,45 +527,11 @@ subs pc, lr, #4
 .word 0
 .word 0x03A0E004
 
-SoftReset:
-msr   spsr, #0
-mov   lr, #0
-ldr   sp, =0x03007F00
-msr   cpsr_c, #0x92
-msr   spsr, #0
-mov   lr, #0
-ldr   sp, =0x03007FA0
-msr   cpsr_c, #0x93
-msr   spsr, #0
-mov   lr, #0
-ldr   sp, =0x03007FE0
-mov   r0, #0x04000000
-sub   r1, r0, #0x200
-ldrb  r0, [r0, #-6]
-mov   r2, #0
-mov   r3, #0
-mov   r4, #0
-mov   r5, #0
-mov   r6, #0
-mov   r7, #0
-mov   r8, #0
-mov   r9, #0
-mov   r10, #0
-mov   r11, #0
-mov   r12, #0
-1:
-stmia r1!, {r2, r3, r4, r5, r6, r7, r8, r9}
-cmp   r1, #0x04000000
-bne   1b
-cmp   r0, #0
-mov   r0, #0
-mov   r1, #0
-moveq lr, #0x08000000
-movne lr, #0x02000000
-movs  pc, lr
-.word 0
-.word 0xE129F000
-
 .ltorg
 
 .include "src/gba/bios/data-services.s"
+.include "src/gba/bios/affine-services.s"
+.include "src/gba/bios/register-reset.s"
+
+.include "src/gba/bios/copy-fast.s"
+.include "src/gba/bios/soft-reset.s"
