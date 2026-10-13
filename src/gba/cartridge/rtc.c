@@ -210,6 +210,7 @@ enum { RTC_IDLE, RTC_COMMAND, RTC_RECEIVE, RTC_SEND };
 
 void cupid_rtc_reset_bus(struct CupidRTC* rtc) {
     rtc->pins = 1;
+    rtc->driveMask = 0;
     rtc->inputLatch = rtc->inputByte = rtc->bit = rtc->byte = rtc->length = 0;
     rtc->state = RTC_IDLE;
     rtc->output = true;
@@ -223,7 +224,11 @@ static bool receive_command(struct CupidRTC* rtc) {
     const uint8_t command = rtc->inputByte;
     rtc->state = RTC_IDLE;
     rtc->bit = rtc->byte = 0;
-    if ((command & 15) != 6) return false;
+    if ((command & 15) != 6) {
+        rtc->inputByte = 0;
+        rtc->state = RTC_COMMAND;
+        return false;
+    }
     rtc->command = (command >> 4) & 7;
     switch (rtc->command) {
     case 0:
@@ -257,6 +262,15 @@ static bool receive_command(struct CupidRTC* rtc) {
 }
 
 static void receive_payload(struct CupidRTC* rtc, bool data) {
+    if (rtc->command == 4) {
+        /* The status shift register retains its contents between bytes. */
+        rtc->inputByte = (uint8_t)((rtc->inputByte >> 1) | (data ? 0x80 : 0));
+        ++rtc->bit;
+        if ((rtc->byte && rtc->bit == 1) || rtc->bit == 8)
+            cupid_rtc_write_control(rtc, rtc->inputByte);
+        if (rtc->bit == 8) { rtc->bit = 0; rtc->byte = 1; }
+        return;
+    }
     if (data) rtc->inputByte |= (uint8_t)(1u << rtc->bit);
     if (++rtc->bit != 8) return;
     rtc->transfer[rtc->byte++] = rtc->inputByte;
@@ -271,11 +285,13 @@ static void receive_payload(struct CupidRTC* rtc, bool data) {
     rtc->state = RTC_IDLE;
 }
 
-bool cupid_rtc_write_pins(struct CupidRTC* rtc, uint8_t pins, uint64_t clock) {
+bool cupid_rtc_write_pins_direction(struct CupidRTC* rtc, uint8_t pins, uint8_t driveMask, uint64_t clock) {
     cupid_rtc_sync(rtc, clock);
     pins &= 7;
     const uint8_t previous = rtc->pins;
+    const uint8_t previousDrive = rtc->driveMask;
     rtc->pins = pins;
+    rtc->driveMask = driveMask & 7;
     if (!(pins & 4)) {
         cupid_rtc_reset_bus(rtc);
         return false;
@@ -295,14 +311,27 @@ bool cupid_rtc_write_pins(struct CupidRTC* rtc, uint8_t pins, uint64_t clock) {
             if (rtc->inputLatch) rtc->inputByte |= (uint8_t)(1u << rtc->bit);
             if (++rtc->bit == 8) return receive_command(rtc);
         }
-    } else if (rtc->state == RTC_RECEIVE && falling) {
-        receive_payload(rtc, pins & 2);
+    } else if (rtc->state == RTC_RECEIVE) {
+        if (!(pins & 1)) rtc->inputLatch = (pins >> 1) & 1;
+        /* A simultaneous data change at the rising edge can only clear a bit. */
+        if (rising) receive_payload(rtc, rtc->inputLatch && (pins & 2));
     } else if (rtc->state == RTC_SEND && falling) {
+        /* A driven low level suppresses the previously output shift bit. */
+        if (((previousDrive & 2) && !(previous & 2)) || ((driveMask & 2) && !(pins & 2))) {
+            const unsigned previousByte = rtc->bit ? rtc->byte : (rtc->byte + rtc->length - 1) % rtc->length;
+            const unsigned previousBit = (rtc->bit + 7) % 8;
+            rtc->transfer[previousByte] &= (uint8_t)~(1u << previousBit);
+        }
         rtc->output = (rtc->transfer[rtc->byte] >> rtc->bit) & 1;
         if (++rtc->bit == 8) {
             rtc->bit = 0;
-            if (++rtc->byte == rtc->length) rtc->state = RTC_IDLE;
+            if (++rtc->byte == rtc->length) rtc->byte = 0;
         }
     }
     return false;
+}
+
+bool cupid_rtc_write_pins(struct CupidRTC* rtc, uint8_t pins, uint64_t clock) {
+    /* Direct wire callers leave data as input while the device sends. */
+    return cupid_rtc_write_pins_direction(rtc, pins, rtc->state == RTC_SEND ? 5 : 7, clock);
 }

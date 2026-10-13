@@ -126,8 +126,8 @@ bool cupid_cartridge_gpio_write(struct CupidGBA* gba, uint32_t address, uint16_t
     }
     if (gba->cartridge.rtcPresent) {
         const bool previousLow = gba->cartridge.rtc.minuteLow;
-        if (cupid_rtc_write_pins(&gba->cartridge.rtc, port_pins(&gba->cartridge),
-                                 cupid_timing_global_time(&gba->timing)))
+        if (cupid_rtc_write_pins_direction(&gba->cartridge.rtc, port_pins(&gba->cartridge),
+                                           gba->cartridge.direction, cupid_timing_global_time(&gba->timing)))
             cupid_raise_irq_at(gba, IRQ_GAMEPAK, cupid_timing_global_time(&gba->timing));
         rtc_output_changed(gba, previousLow);
     }

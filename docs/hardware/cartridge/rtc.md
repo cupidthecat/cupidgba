@@ -21,11 +21,21 @@ port. Byte stores currently leave the port unchanged. That byte policy and
 the alias decoder still need direct hardware qualification.
 
 The RTC accepts control, date and time transactions over clock, serial-data
-and chip-select pins. Command bits are sampled on rising clock edges; payload
-writes and outgoing data advance on falling edges. Reads capture a response
-when the command completes. Chip-select release aborts a transaction. Date
-writes commit after a complete frame; partial-write behavior needs a hardware
-capture. Extra clocks after a response do not restart it.
+and chip-select pins. Command and payload bits are sampled on rising clock
+edges. Commands use data latched while the clock is low; a simultaneous data
+change on a payload's rising edge can only clear that bit. Outgoing data
+advances on falling edges. Reads capture a response when the command completes
+and repeat that response while chip select remains high. Driving data low
+during a read suppresses the previously output shift bit. It corrupts the
+response snapshot, while the underlying calendar/control register stays intact.
+
+Chip-select release aborts a transaction. Invalid command prefixes discard
+their byte and allow another aligned command without chip-select release.
+Status writes commit at the eighth rising edge and can accept more bytes in
+the same transaction. The first bit after each completed status byte also
+publishes the shifted byte; an incomplete continuation retains that value.
+Date writes commit after a complete frame; their partial and overrun behavior
+still needs qualification.
 
 Date and time use BCD with a two-digit year, leap-year rollover and a separately
 stored weekday. In 12-hour mode, midnight and noon use hour zero; bit seven
@@ -121,6 +131,14 @@ still required to qualify that edge and writes during minute-carry processing.
 Native tests cover calendar correction and rollover, wire commands, complete
 responses, directions, ARM/Thumb instruction accesses, ROM preservation,
 CPU/DMA word endpoints, burst addressing, reset and battery persistence.
+An unchanged local status/state corpus checks 17 printed results plus its
+presence/write guard. It exposed six failures in write completion, repeated
+transfers, incomplete continuation, read corruption and invalid-command
+recovery; the implemented state machine passes those original comparisons.
+Five native groups retain rising-edge visibility, repeating frames, partial
+status shifts, invalid-prefix recovery and all previous-bit suppression
+positions with three data-transition patterns. The original source, inputs
+and diagnostic transport stay private.
 GPIO opcode prefetch now retains each port value sampled at its halfword
 strobe. An owned scheduler event observes the input before a later CPU read;
 buffered and in-flight ARM/Thumb fetches consume those saved values. RAM data

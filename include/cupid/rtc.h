@@ -18,7 +18,7 @@ struct CupidRTC {
     bool invalidSecond;
     bool powerSampling;
     bool minuteLow;
-    uint8_t pins, inputLatch, inputByte, bit, byte, length, command;
+    uint8_t pins, driveMask, inputLatch, inputByte, bit, byte, length, command;
     uint8_t transfer[7];
     uint8_t state;
     bool output;
@@ -45,6 +45,7 @@ void cupid_rtc_write_time(struct CupidRTC* rtc, const uint8_t data[3]);
 void cupid_rtc_reset_bus(struct CupidRTC* rtc);
 /* Physical GPIO levels: bit 0 clock, bit 1 serial data, bit 2 chip select. */
 bool cupid_rtc_write_pins(struct CupidRTC* rtc, uint8_t pins, uint64_t clock);
+bool cupid_rtc_write_pins_direction(struct CupidRTC* rtc, uint8_t pins, uint8_t driveMask, uint64_t clock);
 uint8_t cupid_rtc_output_pins(const struct CupidRTC* rtc);
 
 #endif
