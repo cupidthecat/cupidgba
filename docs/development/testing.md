@@ -228,6 +228,19 @@ ctest --test-dir build-thread -R '^platform.audio$' --output-on-failure
 
 ThreadSanitizer and AddressSanitizer require separate build directories.
 
+`gba.save-file` checks complete replacements and reloads at every supported
+capacity, inferred expansion, explicit type choices, invalid inputs, companion
+files and failed writes. Linux uses a temporary file-size resource limit to
+exercise a real delayed write failure; the previous save must remain intact and
+dirty state must survive. Windows checks replacement while another reader holds
+the destination. Fixtures are created in an exclusive test directory and only
+those owned files are removed. Failed tests retain their directory for inspection.
+
+`platform.save-startup` uses a small generated ROM to check invalid-save startup,
+explicit capacity mismatch, dotted directories and path-length handling. It
+requires Python 3 and SDL2. No game, BIOS or save input is distributed. See
+[save files](../hardware/cartridge/save-files.md) for behavior and remaining limits.
+
 The local BIOS math suite checks 615 register observations across 123 inputs:
 
 ```sh
