@@ -4,6 +4,7 @@
 @ Fixed ARM offsets are covered by tests/bios/verify_hle.py.
 .equ SWI_TABLE_OFFSET, 0x198
 .equ STALL_CALL_OFFSET, 0x3FC
+.equ UTILITY_SOURCE_OFFSET, 0xBA4
 
 .text
 hle_start:
@@ -122,14 +123,6 @@ Stop:
 GetBiosChecksum:
 BgAffineSet:
 ObjAffineSet:
-BitUnPack:
-HuffmanUnComp:
-RlUnCompWram:
-RlUnCompVram:
-Diff8BitUnFilterWram:
-Diff8BitUnFilterVram:
-Diff16BitUnFilter:
-SoundBias:
 SoundDriverInit:
 SoundDriverMode:
 SoundDriverMain:
@@ -238,6 +231,7 @@ adr r3, copySourceValid
 mov r12, r4
 bx r3
 .ltorg
+
 .balign 4, 0
 .arm
 
@@ -305,9 +299,6 @@ ldmfd  sp!, {r4-r10}
 bx     lr
 
 .ltorg
-
-Lz77UnCompWram:
-Lz77UnCompVram:
 
 StallCall:
 subs r11, #4
@@ -609,3 +600,5 @@ movs  pc, lr
 .word 0xE129F000
 
 .ltorg
+
+.include "src/gba/bios/data-services.s"

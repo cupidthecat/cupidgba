@@ -25,7 +25,18 @@ static void lz77_backreferences_preserve_high_bits(void) {
         memcpy(gba->memory.ewram, compressed, sizeof(compressed));
         gba->cpu.gprs[0] = GBA_BASE_EWRAM;
         gba->cpu.gprs[1] = destinations[i];
-        cupid_bios_swi(gba, calls[i]);
+        const uint32_t code[] = {UINT32_C(0xEF000000) | (uint32_t)calls[i] << 16,
+                                 UINT32_C(0xEAFFFFFE)};
+        memcpy(gba->memory.iwram, code, sizeof(code));
+        gba->cpu.gprs[ARM_PC] = GBA_BASE_IWRAM;
+        CupidARMWritePC(&gba->cpu);
+        unsigned steps;
+        for (steps = 0; steps < 1000; steps++) {
+            cupid_gba_step(gba);
+            if (gba->cpu.executionMode == MODE_ARM &&
+                (uint32_t)gba->cpu.gprs[ARM_PC] == GBA_BASE_IWRAM + 8) break;
+        }
+        CHECK(steps < 1000);
         const uint8_t* output = i == 1 ? (const uint8_t*)gba->video.vram : gba->memory.ewram + 0x100;
         CHECK(!memcmp(output, expected, sizeof(expected)));
         CHECK((uint32_t)gba->cpu.gprs[0] == GBA_BASE_EWRAM + sizeof(compressed));
@@ -148,7 +159,7 @@ int main(int argc, char** argv) {
         fprintf(stderr, "Usage: %s [--external-bios-waits FILE]\n", argv[0]);
         return 2;
     }
-    if (!externalBios) RUN(lz77_backreferences_preserve_high_bits);
+    RUN(lz77_backreferences_preserve_high_bits);
     RUN(interrupt_wait_ready_flags_and_return_state);
     RUN(interrupt_wait_discards_old_flags_and_ignores_unrelated_wakeups);
     return 0;
