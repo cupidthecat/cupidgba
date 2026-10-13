@@ -34,6 +34,7 @@ static unsigned stop(struct CupidGBA* gba) {
     memory->prefetchUnit.active = false;
     memory->prefetchUnit.count = 0;
     memory->prefetchUnit.remaining = 0;
+    cupid_cartridge_prefetch_cancel(gba);
     return penalty;
 }
 
@@ -53,6 +54,7 @@ unsigned cupid_prefetch_fetch(struct CupidGBA* gba, uint32_t address, unsigned w
                 memory->prefetchUnit.remaining = memory->prefetchUnit.duty;
             }
             memory->prefetchUnit.fetchKind = CUPID_PREFETCH_CACHED;
+            cupid_cartridge_prefetch_schedule(gba);
             return 1;
         }
         if (memory->prefetchUnit.remaining && address == memory->prefetchUnit.tail) {
@@ -91,6 +93,7 @@ void cupid_prefetch_finish_fetch(struct CupidGBA* gba) {
     }
     memory->prefetchUnit.busy = false;
     memory->prefetchUnit.fetchKind = CUPID_PREFETCH_NONE;
+    cupid_cartridge_prefetch_schedule(gba);
 }
 
 unsigned cupid_prefetch_before_data(struct CupidGBA* gba, uint32_t address) {

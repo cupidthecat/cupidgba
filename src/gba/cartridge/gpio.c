@@ -1,9 +1,14 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "cupid/gba.h"
 
+static void prefetch_sample(struct CupidTiming* timing, void* context, uint32_t late);
+
 void cupid_cartridge_init(struct CupidGBA* gba) {
+    cupid_cartridge_prefetch_cancel(gba);
     memset(&gba->cartridge, 0, sizeof(gba->cartridge));
     cupid_rtc_init(&gba->cartridge.rtc, cupid_timing_global_time(&gba->timing));
+    gba->cartridge.prefetchEvent = (struct CupidTimingEvent){.context = gba,
+        .callback = prefetch_sample, .name = "Cartridge prefetch sample", .priority = 0x70};
 }
 
 void cupid_cartridge_enable_rtc(struct CupidGBA* gba, bool enabled) {
@@ -37,6 +42,7 @@ void cupid_cartridge_attach(struct CupidGBA* gba, const uint8_t* rom, size_t siz
 }
 
 void cupid_cartridge_reset_bus(struct CupidGBA* gba) {
+    cupid_cartridge_prefetch_cancel(gba);
     gba->cartridge.output = gba->cartridge.direction = 0;
     gba->cartridge.readable = false;
     gba->cartridge.opcodeValid = false;
@@ -97,8 +103,76 @@ bool cupid_cartridge_fetch_opcode(struct CupidARM* cpu, uint32_t address, unsign
         }
     }
     if (!cupid_cartridge_gpio_address(gba, address)) return false;
+    const unsigned slot = ((address & (GBA_SIZE_ROM - 2)) - 0xC4) / 2;
+    struct CupidCartridge* cart = &gba->cartridge;
+    if (address == cart->prefetchBase + 0xC4 + slot * 2 && (cart->prefetchMask & (1u << slot))) {
+        *value = cart->prefetchPorts[slot];
+        if (width == 4) {
+            const uint16_t high = slot == 0 && (cart->prefetchMask & 2)
+                ? cart->prefetchPorts[1] : (uint16_t)cupid_memory_loadU16(cpu, address + 2, NULL);
+            *value |= (uint32_t)high << 16;
+        }
+        cart->prefetchMask &= (uint8_t)~(width == 4 && slot == 0 ? 3u : 1u << slot);
+        return true;
+    }
     *value = width == 4 ? cupid_memory_load32(cpu, address, NULL) : cupid_memory_loadU16(cpu, address, NULL);
     return true;
+}
+
+void cupid_cartridge_prefetch_cancel(struct CupidGBA* gba) {
+    struct CupidCartridge* cart = &gba->cartridge;
+    if (cart->prefetchScheduled) cupid_timing_deschedule(&gba->timing, &cart->prefetchEvent);
+    cart->prefetchScheduled = false;
+    cart->prefetchMask = 0;
+}
+
+void cupid_cartridge_prefetch_schedule(struct CupidGBA* gba) {
+    struct CupidCartridge* cart = &gba->cartridge;
+    const struct CupidPrefetch* unit = &gba->memory.prefetchUnit;
+    if (cart->prefetchScheduled || !cart->readable || !unit->active || !unit->remaining ||
+        (unit->width != 2 && unit->width != 4)) return;
+    if (unit->busy && unit->fetchKind != CUPID_PREFETCH_PENDING) return;
+    /* Only the next sixteen physical ROM bytes can enter this FIFO. */
+    const uint32_t physical = unit->tail & (GBA_SIZE_ROM - 1);
+    if (physical > 0xC8 || physical + 16 <= 0xC4) return;
+    const uint32_t base = unit->tail & ~(uint32_t)(GBA_SIZE_ROM - 1);
+    const unsigned capacity = 16 / unit->width;
+    for (unsigned slot = 0; slot < 3; slot++) {
+        const uint32_t address = base + 0xC4 + slot * 2;
+        if (address < unit->tail || !cupid_cartridge_gpio_address(gba, address) ||
+            (cart->prefetchBase == base && (cart->prefetchMask & (1u << slot)))) continue;
+        const unsigned distance = (address - unit->tail) / unit->width;
+        if (unit->count + distance >= capacity) continue;
+        uint64_t when = unit->epoch + unit->remaining + (uint64_t)distance * unit->duty;
+        if (unit->width == 4 && !(address & 2))
+            when -= unit->duty / 2;
+        /* Never reconstruct a past sample from the provider's current level. */
+        if (when < cupid_timing_global_time(&gba->timing)) continue;
+        if (cart->prefetchBase != base) { cart->prefetchBase = base; cart->prefetchMask = 0; }
+        cart->prefetchAddress = address;
+        cart->prefetchScheduled = true;
+        cupid_timing_schedule_absolute(&gba->timing, &cart->prefetchEvent, (int32_t)(uint32_t)when);
+        return;
+    }
+}
+
+static void prefetch_sample(struct CupidTiming* timing, void* context, uint32_t late) {
+    (void)timing;
+    (void)late;
+    struct CupidGBA* gba = context;
+    struct CupidCartridge* cart = &gba->cartridge;
+    const struct CupidPrefetch* unit = &gba->memory.prefetchUnit;
+    cart->prefetchScheduled = false;
+    if (!cart->readable || !unit->active || (unit->busy && unit->fetchKind != CUPID_PREFETCH_PENDING)) return;
+    uint16_t value;
+    if (!cupid_cartridge_gpio_read(gba, cart->prefetchAddress, &value)) return;
+    const unsigned slot = ((cart->prefetchAddress & (GBA_SIZE_ROM - 2)) - 0xC4) / 2;
+    cart->prefetchPorts[slot] = value;
+    cart->prefetchMask |= (uint8_t)(1u << slot);
+    /* PENDING freezes the fill counter while the CPU waits for that access.
+     * Its epoch and remaining clocks still identify the original strobes. */
+    if (!unit->busy) cupid_prefetch_update(gba, cupid_timing_global_time(&gba->timing));
+    cupid_cartridge_prefetch_schedule(gba);
 }
 
 bool cupid_cartridge_fetch_bus(struct CupidGBA* gba, uint32_t address, unsigned width, unsigned cycles) {

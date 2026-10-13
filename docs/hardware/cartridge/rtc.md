@@ -89,6 +89,15 @@ If recovery is needed, preserve the rejected file before starting with a fresh
 Native tests cover calendar correction and rollover, wire commands, complete
 responses, directions, ARM/Thumb instruction accesses, ROM preservation,
 CPU/DMA word endpoints, burst addressing, reset and battery persistence.
+GPIO opcode prefetch now retains each port value sampled at its halfword
+strobe. An owned scheduler event observes the input before a later CPU read;
+buffered and in-flight ARM/Thumb fetches consume those saved values. RAM data
+accesses leave sampling active, while Game Pak data accesses, branch/width
+changes, console reset and cartridge replacement discard it. Native tests
+cover every FIFO position, the three ROM windows, both sequential waits,
+bulk versus single-clock dispatch, clock wrap and DMA cancellation. The model
+retains the existing prefetch counter timing; these tests are not physical
+captures of the remaining WAITCNT and full-buffer timing edges.
 An authorized gameplay replay has executed the cartridge's startup RTC reads
 and reached the normal new-game flow. These results do not establish complete
 peripheral accuracy.
@@ -100,6 +109,7 @@ those modes retain their values without scheduling periodic interrupts.
 
 The power detector exposes an explicit sample input: a failure latches the
 flag and stops sampling; reading control rearms it. Voltage thresholds and
-physical sampling phases are not scheduled. Prefetched GPIO opcode sampling,
-partial writes, electrical contention, floating inputs and invalid wire
+physical sampling phases are not scheduled. Mid-stream WAITCNT changes,
+full-buffer restart and page-boundary timing still need hardware qualification.
+Partial writes, electrical contention, floating inputs and invalid wire
 timing also need further work. Issue #28 remains open for these gaps.

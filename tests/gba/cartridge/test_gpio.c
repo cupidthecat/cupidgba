@@ -371,6 +371,173 @@ static void uncached_arm_gpio_fetch_samples_the_low_halfword_first(void) {
     }
 }
 
+static struct CupidGBA* prefetch_machine(unsigned width, unsigned bank, unsigned sequential,
+                                         unsigned distance, struct Observation* observed) {
+    struct CupidGBA* gba = machine(false);
+    *observed = (struct Observation){.gba = gba, .input = 1};
+    cupid_cartridge_set_input(gba, input_pins, &observed->input);
+    cupid_memory_store16(&gba->cpu, 0x080000C8, 1, NULL);
+    cupid_memory_store16(&gba->cpu, 0x080000C6, 4, NULL);
+    cupid_memory_update_waitstates(gba, (uint16_t)(0x4000 | sequential << (bank * 3 + 4)));
+    gba->cpu.cpsr.t = width == 2;
+    _CupidSetMode(&gba->cpu, width == 2 ? MODE_THUMB : MODE_ARM);
+    const uint32_t preceding = 0x080000C4 + bank * 0x02000000 - width * (distance + 1);
+    gba->cpu.gprs[ARM_PC] = (int32_t)preceding;
+    gba->cpu.memory.setActiveRegion(&gba->cpu, preceding);
+    gba->cpu.memory.timed = true;
+    cupid_bus_fetch(&gba->cpu, preceding, width, false);
+    (void)CupidReadOpcode(&gba->cpu, preceding, width);
+    cupid_bus_finish(&gba->cpu);
+    return gba;
+}
+
+static void cached_gpio_preserves_each_strobe_and_consumes_the_sample(void) {
+    for (unsigned width = 2; width <= 4; width += 2) {
+        for (unsigned bank = 0; bank < 3; bank++) {
+            for (unsigned sequential = 0; sequential < 2; sequential++) {
+                const unsigned capacity = 16 / width;
+                for (unsigned distance = 0; distance < capacity; distance++) {
+                    struct Observation observed;
+                    struct CupidGBA* gba = prefetch_machine(width, bank, sequential, distance, &observed);
+                    const unsigned half = (unsigned)GBA_ROM_WAITSTATES_SEQ[bank * 2 + sequential] + 1;
+                    const unsigned duty = gba->memory.prefetchUnit.duty;
+                    struct CupidTimingEvent event = {.context = &observed, .callback = change_input, .priority = 0x60};
+                    cupid_timing_schedule(&gba->timing, &event, (int32_t)(distance * duty + half + 1));
+                    cupid_timing_tick(&gba->timing, (int32_t)(duty * capacity));
+                    for (unsigned i = 0; i <= distance; i++) {
+                        const uint32_t address = gba->memory.prefetchUnit.head;
+                        cupid_bus_fetch(&gba->cpu, address, width, true);
+                        const uint32_t opcode = CupidReadOpcode(&gba->cpu, address, width);
+                        cupid_bus_finish(&gba->cpu);
+                        if (i == distance) CHECK(opcode == (width == 4 ? 0x00040001u : 1u));
+                    }
+                    CHECK(observed.input == 9);
+                    CHECK(!(gba->cartridge.prefetchMask & 1));
+                    CHECK(cupid_memory_loadU16(&gba->cpu, 0x080000C4, NULL) == 9);
+                    destroy(gba);
+                }
+            }
+        }
+    }
+}
+
+static void pending_gpio_sampling_keeps_the_original_strobe_deadlines(void) {
+    for (unsigned width = 2; width <= 4; width += 2) {
+        for (unsigned before = 0; before < 3; before++) {
+            struct Observation observed;
+            struct CupidGBA* gba = prefetch_machine(width, 0, 0, 0, &observed);
+            struct CupidTimingEvent event = {.context = &observed, .callback = change_input, .priority = 0x60};
+            const uint64_t start = cupid_timing_global_time(&gba->timing);
+            cupid_timing_schedule(&gba->timing, &event, 4);
+            cupid_timing_tick(&gba->timing, (int32_t)before);
+            cupid_bus_fetch(&gba->cpu, 0x080000C4, width, true);
+            CHECK((gba->cartridge.prefetchMask & (width == 4 ? 3 : 1)) == (width == 4 ? 3 : 1));
+            const uint32_t opcode = CupidReadOpcode(&gba->cpu, 0x080000C4, width);
+            cupid_bus_finish(&gba->cpu);
+            CHECK(opcode == (width == 4 ? 0x00040001u : 1u));
+            CHECK(cupid_timing_global_time(&gba->timing) == start + (width == 4 ? 6 : 3));
+            if (width == 4) CHECK(!(gba->cartridge.prefetchMask & 3));
+            CHECK(gba->cartridge.prefetchScheduled);
+            CHECK(gba->cartridge.prefetchEvent.when == (uint32_t)(start + (width == 4 ? 9 : 6)));
+            destroy(gba);
+        }
+    }
+}
+
+static void prefetch_sampling_has_identical_bulk_and_single_clock_dispatch(void) {
+    const uint64_t clocks[] = {0, UINT32_MAX - 12u, UINT64_C(0x300000000)};
+    for (unsigned i = 0; i < sizeof(clocks) / sizeof(*clocks); i++) {
+        for (unsigned width = 2; width <= 4; width += 2) {
+            struct Observation a, b;
+            struct CupidGBA* bulk = prefetch_machine(width, 0, 0, 0, &a);
+            struct CupidGBA* one = prefetch_machine(width, 0, 0, 0, &b);
+            struct CupidGBA* machines[] = {bulk, one};
+            for (unsigned m = 0; m < 2; m++) {
+                struct CupidGBA* gba = machines[m];
+                const uint64_t previous = cupid_timing_global_time(&gba->timing);
+                cupid_timing_clear(&gba->timing);
+                gba->timing.globalCycles = clocks[i];
+                gba->timing.masterCycles = (uint32_t)clocks[i];
+                gba->memory.prefetchUnit.epoch = clocks[i];
+                gba->cartridge.prefetchScheduled = false;
+                gba->cartridge.prefetchMask = 0;
+                CHECK(previous > 0);
+                cupid_cartridge_prefetch_schedule(gba);
+            }
+            struct CupidTimingEvent eventA = {.context = &a, .callback = change_input, .priority = 0x60};
+            struct CupidTimingEvent eventB = {.context = &b, .callback = change_input, .priority = 0x60};
+            cupid_timing_schedule(&bulk->timing, &eventA, 4);
+            cupid_timing_schedule(&one->timing, &eventB, 4);
+            cupid_timing_tick(&bulk->timing, 24);
+            for (unsigned clock = 0; clock < 24; clock++) cupid_timing_tick(&one->timing, 1);
+            CHECK(bulk->cartridge.prefetchMask == 7 && one->cartridge.prefetchMask == 7);
+            CHECK(!memcmp(bulk->cartridge.prefetchPorts, one->cartridge.prefetchPorts,
+                          sizeof(bulk->cartridge.prefetchPorts)));
+            CHECK(bulk->cartridge.prefetchPorts[0] == 1 && bulk->cartridge.prefetchPorts[1] == 4);
+            CHECK(bulk->cartridge.prefetchPorts[2] == 1);
+            CHECK(!bulk->cartridge.prefetchScheduled && !one->cartridge.prefetchScheduled);
+            destroy(bulk); destroy(one);
+        }
+    }
+}
+
+static void stopping_resetting_or_replacing_a_cartridge_cancels_prefetch_samples(void) {
+    for (unsigned action = 0; action < 5; action++) {
+        struct Observation observed;
+        struct CupidGBA* gba = prefetch_machine(4, 0, 0, 0, &observed);
+        CHECK(gba->cartridge.prefetchScheduled);
+        if (action == 0) {
+            cupid_prefetch_before_data(gba, 0x08000100);
+            cupid_prefetch_after_data(gba);
+        } else if (action == 1) cupid_gba_reset(gba);
+        else if (action == 2) cupid_cartridge_enable_rtc(gba, false);
+        else if (action == 3) {
+            const uint8_t image[] = "SIIRTC_V001";
+            cupid_cartridge_attach(gba, image, sizeof(image));
+        } else {
+            cupid_bus_fetch(&gba->cpu, 0x08000100, 2, false);
+            (void)CupidReadOpcode(&gba->cpu, 0x08000100, 2);
+            cupid_bus_finish(&gba->cpu);
+        }
+        CHECK(!gba->cartridge.prefetchScheduled && !gba->cartridge.prefetchMask);
+        CHECK(!cupid_timing_is_scheduled(&gba->timing, &gba->cartridge.prefetchEvent));
+        cupid_timing_tick(&gba->timing, 24);
+        CHECK(!gba->cartridge.prefetchMask);
+        destroy(gba);
+    }
+}
+
+static void ram_access_keeps_sampling_and_gamepak_dma_discards_the_fill(void) {
+    struct Observation observed;
+    struct CupidGBA* gba = prefetch_machine(4, 0, 0, 0, &observed);
+    struct CupidTimingEvent event = {.context = &observed, .callback = change_input, .priority = 0x60};
+    cupid_timing_schedule(&gba->timing, &event, 4);
+    cupid_memory_store32(&gba->cpu, GBA_BASE_EWRAM, 0x12345678, NULL);
+    int cycles = 0;
+    CHECK(cupid_memory_load32(&gba->cpu, GBA_BASE_EWRAM, &cycles) == 0x12345678);
+    CHECK(cycles == 1 && (gba->cartridge.prefetchMask & 3) == 3);
+    cupid_bus_fetch(&gba->cpu, 0x080000C4, 4, true);
+    CHECK(CupidReadOpcode(&gba->cpu, 0x080000C4, 4) == 0x00040001);
+    cupid_bus_finish(&gba->cpu);
+    destroy(gba);
+
+    gba = prefetch_machine(4, 0, 0, 0, &observed);
+    event = (struct CupidTimingEvent){.context = &observed, .callback = change_input, .priority = 0x60};
+    cupid_timing_schedule(&gba->timing, &event, 4);
+    cupid_dma_write_sad(gba, 3, GBA_BASE_IWRAM);
+    cupid_dma_write_dad(gba, 3, 0x08000100);
+    cupid_dma_write_cnt_lo(gba, 3, 1);
+    cupid_dma_write_cnt(gba, 3, 0x8000);
+    cupid_timing_tick(&gba->timing, 20);
+    CHECK(!gba->memory.dmaRunning && !gba->memory.prefetchUnit.active);
+    CHECK(!gba->cartridge.prefetchScheduled && !gba->cartridge.prefetchMask);
+    CHECK(!cupid_timing_is_scheduled(&gba->timing, &gba->cartridge.prefetchEvent));
+    cupid_bus_fetch(&gba->cpu, 0x080000C4, 4, false);
+    CHECK(CupidReadOpcode(&gba->cpu, 0x080000C4, 4) == 0x00040009);
+    cupid_bus_finish(&gba->cpu);
+    destroy(gba);
+}
+
 int main(void) {
     RUN(directions_latches_input_and_pristine_cartridge);
     RUN(word_lanes_opcode_fetch_and_read_control);
@@ -381,5 +548,10 @@ int main(void) {
     RUN(rtc_driver_runs_through_arm_and_thumb_instructions);
     RUN(marker_bounds_and_physical_rom_windows);
     RUN(uncached_arm_gpio_fetch_samples_the_low_halfword_first);
+    RUN(cached_gpio_preserves_each_strobe_and_consumes_the_sample);
+    RUN(pending_gpio_sampling_keeps_the_original_strobe_deadlines);
+    RUN(prefetch_sampling_has_identical_bulk_and_single_clock_dispatch);
+    RUN(stopping_resetting_or_replacing_a_cartridge_cancels_prefetch_samples);
+    RUN(ram_access_keeps_sampling_and_gamepak_dma_discards_the_fill);
     return 0;
 }
