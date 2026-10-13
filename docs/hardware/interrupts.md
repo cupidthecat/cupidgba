@@ -35,5 +35,7 @@ the same hardware cycle remains unverified. Queued IF changes retain their
 acceptance deadlines and apply assertions and acknowledgements in request
 order. Reassertions after a queued acknowledgement remain pending. See
 [DMA and bus ownership](dma.md) for transfer arbitration and its tested limits.
-Game Pak prefetch interactions and STOP wake-up need separate hardware coverage.
+Game Pak prefetch interactions and precise STOP wake-up latency need separate
+hardware coverage. STOP now freezes the system clock and accepts enabled
+external wake sources; see [serial and GPIO](serial/normal-and-gpio.md).
 Both BIOS paths pass the listed count-up and IRQ suite on the pinned local input.

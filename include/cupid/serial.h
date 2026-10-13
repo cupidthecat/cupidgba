@@ -1,0 +1,63 @@
+#ifndef CUPID_SERIAL_H
+#define CUPID_SERIAL_H
+
+#include "cupid/timing.h"
+
+struct CupidGBA;
+
+enum CupidSerialPin {
+    SERIAL_SC = 1,
+    SERIAL_SD = 2,
+    SERIAL_SI = 4,
+    SERIAL_SO = 8
+};
+
+enum CupidSerialMode {
+    SERIAL_NORMAL8,
+    SERIAL_NORMAL32,
+    SERIAL_MULTI,
+    SERIAL_UART,
+    SERIAL_GPIO,
+    SERIAL_JOY
+};
+
+struct CupidSerial {
+    struct CupidGBA* gba;
+    struct CupidTimingEvent edgeEvent;
+    uint16_t control;
+    uint16_t rcnt;
+    uint32_t transmit;
+    uint32_t receive;
+    unsigned remaining;
+    unsigned halfPeriod;
+    bool active;
+    bool internalClock;
+    bool clockHigh;
+    bool outputHigh;
+    bool length32;
+    uint8_t inputMask;
+    uint8_t inputLevels;
+    uint8_t outputMask;
+    uint8_t outputLevels;
+
+    /* Reports driven levels and directions at emulated clock timestamps.
+     * A connected device may change its inputs synchronously in this callback. */
+    void (*outputChanged)(void* context, uint8_t mask, uint8_t levels, uint64_t timestamp);
+    void* outputContext;
+};
+
+void cupid_serial_init(struct CupidSerial* serial, struct CupidGBA* gba);
+void cupid_serial_reset(struct CupidSerial* serial);
+enum CupidSerialMode cupid_serial_mode(const struct CupidSerial* serial);
+uint16_t cupid_serial_read(struct CupidSerial* serial, uint32_t address);
+void cupid_serial_write(struct CupidSerial* serial, uint32_t address, uint16_t value);
+void cupid_serial_write8(struct CupidSerial* serial, uint32_t address, uint8_t value);
+
+/* Call at the device's current emulated timestamp, after dispatching preceding
+ * events. Bits outside mask are undriven. GPIO inputs have pull-up levels. */
+void cupid_serial_set_input(struct CupidSerial* serial, uint8_t mask, uint8_t levels);
+uint8_t cupid_serial_pins(const struct CupidSerial* serial);
+void cupid_serial_set_output_callback(struct CupidSerial* serial,
+    void (*callback)(void*, uint8_t, uint8_t, uint64_t), void* context);
+
+#endif

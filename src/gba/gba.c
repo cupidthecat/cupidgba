@@ -81,6 +81,7 @@ void cupid_gba_create(struct CupidGBA* gba) {
 
     /** Init timing scheduler and wire CPU cycle and next-event counters. */
     cupid_timing_init(&gba->timing, &gba->cpu.cycles, &gba->cpu.nextEvent);
+    cupid_serial_init(&gba->serial, gba);
 
 }
 
@@ -138,6 +139,7 @@ static void _cupidGBAReset(struct CupidARM* cpu) {
     cupid_audio_reset(&gba->audio);
     cupid_io_init(gba);    /** IO init runs during reset. */
     cupid_timer_init(gba); /** Timer init runs during reset. */
+    cupid_serial_reset(&gba->serial);
 
     /** Clear GBA-level state. */
     gba->ime = 0;
@@ -156,6 +158,7 @@ static void _cupidGBAReset(struct CupidARM* cpu) {
     gba->idleDetectionStep = 0;
     gba->idleDetectionFailures = 0;
     cpu->halted = 0;
+    gba->stopped = false;
     gba->keysLast = 0x0400;
 
     /**
@@ -205,6 +208,25 @@ void cupid_gba_skip_bios(struct CupidGBA* gba) {
 void cupid_gba_halt(struct CupidGBA* gba) {
     gba->cpu.nextEvent = gba->cpu.cycles;
     gba->cpu.halted = 1;
+}
+
+static unsigned stop_sources(struct CupidGBA* gba) {
+    unsigned sources = IRQ_KEYPAD | IRQ_GAMEPAK;
+    if (cupid_serial_mode(&gba->serial) == SERIAL_GPIO) sources |= IRQ_SIO;
+    return sources & gba->ie;
+}
+
+void cupid_gba_stop(struct CupidGBA* gba) {
+    /* Finish the bus clocks preceding acceptance of STOP, then leave all
+     * peripheral deadlines in place while the system clock is frozen. */
+    gba->cpu.nextEvent = gba->cpu.cycles;
+    gba->cpu.irqh.processEvents(&gba->cpu);
+    cupid_gba_halt(gba);
+    gba->stopped = (stop_sources(gba) & gba->irqf) == 0;
+}
+
+void cupid_gba_wake_stop(struct CupidGBA* gba, enum CupidIRQ sources) {
+    if (gba->stopped && (stop_sources(gba) & sources)) gba->stopped = false;
 }
 
 /**
@@ -263,6 +285,8 @@ void cupid_gba_test_keypad_irq(struct CupidGBA* gba) {
 void cupid_gba_step(struct CupidGBA* gba) {
     struct CupidARM* cpu = &gba->cpu;
 
+    if (gba->stopped) return;
+
     if (cpu->halted && gba->irq.available) {
         cpu->halted = 0;
         cpu->cycles++; /* Wake-up consumes one clock before the next fetch. */
@@ -292,7 +316,7 @@ void cupid_gba_step(struct CupidGBA* gba) {
 void cupid_gba_run_frame(struct CupidGBA* gba) {
     gba->frameReady = false;
 
-    while (!gba->frameReady) {
+    while (!gba->frameReady && !gba->stopped) {
         cupid_gba_step(gba);
     }
 }

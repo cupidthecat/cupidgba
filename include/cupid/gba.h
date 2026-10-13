@@ -13,6 +13,7 @@
 #include "cupid/video.h"
 #include "cupid/audio.h"
 #include "cupid/timer.h"
+#include "cupid/serial.h"
 #include "cupid/timing.h"
 #include "cupid/io.h"
 #include "cupid/irq.h"
@@ -65,6 +66,7 @@ struct CupidGBA {
     struct CupidVideo  video;
     struct CupidAudio  audio;
     struct CupidTimer  timers[4];
+    struct CupidSerial serial;
 
     /** Cycle-accurate event scheduler */
     struct CupidTiming timing;
@@ -95,6 +97,7 @@ struct CupidGBA {
     /** CPU flow control */
     bool cpuBlocked;     /**< True while DMA owns the bus */
     bool earlyExit;      /**< Break out of the run loop (for sync) */
+    bool stopped;        /**< System clock is frozen until an eligible external IRQ */
     uint32_t biosStall;  /**< Extra stall cycles added by BIOS reads */
     uint32_t dmaPC;      /**< PC snapshot when DMA started */
 
@@ -124,11 +127,13 @@ void cupid_gba_reset(struct CupidGBA* gba);
 void cupid_gba_destroy(struct CupidGBA* gba);
 void cupid_gba_skip_bios(struct CupidGBA* gba);
 void cupid_gba_halt(struct CupidGBA* gba);
+void cupid_gba_stop(struct CupidGBA* gba);
+void cupid_gba_wake_stop(struct CupidGBA* gba, enum CupidIRQ sources);
 
 /** Test and fire keypad IRQ based on KEYCNT (call after key state changes) */
 void cupid_gba_test_keypad_irq(struct CupidGBA* gba);
 
-/** Run one frame's worth of cycles (~280896 cycles) */
+/** Run to the next frame, or return while the system clock is stopped. */
 void cupid_gba_run_frame(struct CupidGBA* gba);
 
 /** Run a single CPU step + process events */

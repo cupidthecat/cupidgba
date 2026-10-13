@@ -13,6 +13,7 @@ set(CUPID_DMA_SUITE_ROM "" CACHE FILEPATH "Locally built DMA transfer suite ROM"
 set(CUPID_BUS_SUITE_ROM "" CACHE FILEPATH "Locally built CPU and bus timing suite ROM")
 set(CUPID_BIOS_MATH_SUITE_ROM "" CACHE FILEPATH "Locally built BIOS math register suite ROM")
 set(CUPID_IO_SUITE_ROM "" CACHE FILEPATH "Locally built I/O register-read suite ROM")
+set(CUPID_SERIAL_SUITE_ROM "" CACHE FILEPATH "Locally built serial timing and register suite ROM")
 set(CUPID_AUDIO_TEST_ROM "" CACHE FILEPATH "Locally built audio signal cartridge ROM")
 set(CUPID_TEST_BIOS "" CACHE FILEPATH "External BIOS for local hardware suite checks")
 
@@ -39,7 +40,7 @@ add_library(cupid_core STATIC
     src/core/timing.c
     src/gba/gba.c src/gba/memory.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
     src/gba/audio.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c
-    src/gba/hle-bios.c src/gba/savedata.c src/gba/save/file.c
+    src/gba/hle-bios.c src/gba/savedata.c src/gba/save/file.c src/gba/serial/serial.c
     src/gba/render/software.c src/gba/render/composite.c
     src/gba/render/mode0.c src/gba/render/mode2.c
     src/gba/render/mode3.c src/gba/render/mode4.c
@@ -88,6 +89,11 @@ if(BUILD_TESTING)
     target_link_libraries(test_audio PRIVATE cupid_core)
     add_test(NAME gba.audio COMMAND test_audio)
     set_tests_properties(gba.audio PROPERTIES TIMEOUT 10)
+
+    add_executable(test_serial tests/gba/serial/test_serial.c)
+    target_link_libraries(test_serial PRIVATE cupid_core)
+    add_test(NAME gba.serial COMMAND test_serial)
+    set_tests_properties(gba.serial PROPERTIES TIMEOUT 10)
 
     if(CUPID_BUILD_FRONTEND)
         add_executable(test_audio_output tests/platform/test_audio_output.c src/platform/audio.c)
@@ -250,6 +256,21 @@ if(BUILD_TESTING)
                 --rom ${CUPID_IO_SUITE_ROM} --bios ${CUPID_TEST_BIOS}
                 --runner $<TARGET_FILE:cupidgba-headless>)
             set_tests_properties(rom.io-suite-external PROPERTIES TIMEOUT 100)
+        endif()
+    endif()
+
+    if(CUPID_SERIAL_SUITE_ROM)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        add_test(NAME rom.serial-suite COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_serial_suite.py
+            --rom ${CUPID_SERIAL_SUITE_ROM} --runner $<TARGET_FILE:cupidgba-headless>)
+        set_tests_properties(rom.serial-suite PROPERTIES TIMEOUT 100)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME rom.serial-suite-external COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_serial_suite.py
+                --rom ${CUPID_SERIAL_SUITE_ROM} --bios ${CUPID_TEST_BIOS}
+                --runner $<TARGET_FILE:cupidgba-headless>)
+            set_tests_properties(rom.serial-suite-external PROPERTIES TIMEOUT 100)
         endif()
     endif()
 
