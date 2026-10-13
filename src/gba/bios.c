@@ -7,9 +7,6 @@
 #include <math.h>
 #include <stdlib.h>
 
-/* C11 does not require the nonstandard M_PI macro. */
-static const float CUPID_PI = 3.14159265358979323846f;
-
 /**
  * @brief SWI 0x00: SoftReset.
  */
@@ -173,71 +170,6 @@ static void _GetBiosChecksum(struct CupidGBA* gba) {
 }
 
 /**
- * @brief SWI 0x0E: BgAffineSet.
- *
- */
-static void _BgAffineSet(struct CupidGBA* gba) {
-    int i = (int)gba->cpu.gprs[2];
-    uint32_t offset = gba->cpu.gprs[0];
-    uint32_t destination = gba->cpu.gprs[1];
-
-    while (i--) {
-        float ox = (int32_t)cupid_memory_load32(&gba->cpu, offset, NULL) / 256.f;
-        float oy = (int32_t)cupid_memory_load32(&gba->cpu, offset + 4, NULL) / 256.f;
-        float cx = (int16_t)cupid_memory_load16(&gba->cpu, offset + 8, NULL);
-        float cy = (int16_t)cupid_memory_load16(&gba->cpu, offset + 10, NULL);
-        float sx = (int16_t)cupid_memory_load16(&gba->cpu, offset + 12, NULL) / 256.f;
-        float sy = (int16_t)cupid_memory_load16(&gba->cpu, offset + 14, NULL) / 256.f;
-        float theta = (cupid_memory_loadU16(&gba->cpu, offset + 16, NULL) >> 8) / 128.f * CUPID_PI;
-        offset += 20;
-
-        float a = cosf(theta) * sx;
-        float b = -sinf(theta) * sx;
-        float c = sinf(theta) * sy;
-        float d = cosf(theta) * sy;
-        float rx = ox - (a * cx + b * cy);
-        float ry = oy - (c * cx + d * cy);
-
-        cupid_memory_store16(&gba->cpu, destination + 0, (int16_t)(a * 256), NULL);
-        cupid_memory_store16(&gba->cpu, destination + 2, (int16_t)(b * 256), NULL);
-        cupid_memory_store16(&gba->cpu, destination + 4, (int16_t)(c * 256), NULL);
-        cupid_memory_store16(&gba->cpu, destination + 6, (int16_t)(d * 256), NULL);
-        cupid_memory_store32(&gba->cpu, destination + 8, (int32_t)(rx * 256), NULL);
-        cupid_memory_store32(&gba->cpu, destination + 12, (int32_t)(ry * 256), NULL);
-        destination += 16;
-    }
-}
-
-/**
- * @brief SWI 0x0F: ObjAffineSet.
- *
- */
-static void _ObjAffineSet(struct CupidGBA* gba) {
-    int i = (int)gba->cpu.gprs[2];
-    uint32_t offset = gba->cpu.gprs[0];
-    uint32_t destination = gba->cpu.gprs[1];
-    int diff = (int)gba->cpu.gprs[3];
-
-    while (i--) {
-        float sx = (int16_t)cupid_memory_load16(&gba->cpu, offset, NULL) / 256.f;
-        float sy = (int16_t)cupid_memory_load16(&gba->cpu, offset + 2, NULL) / 256.f;
-        float theta = (cupid_memory_loadU16(&gba->cpu, offset + 4, NULL) >> 8) / 128.f * CUPID_PI;
-        offset += 8;
-
-        float a = cosf(theta) * sx;
-        float b = -sinf(theta) * sx;
-        float c = sinf(theta) * sy;
-        float d = cosf(theta) * sy;
-
-        cupid_memory_store16(&gba->cpu, destination, (int16_t)(a * 256), NULL);
-        cupid_memory_store16(&gba->cpu, destination + diff, (int16_t)(b * 256), NULL);
-        cupid_memory_store16(&gba->cpu, destination + diff * 2, (int16_t)(c * 256), NULL);
-        cupid_memory_store16(&gba->cpu, destination + diff * 3, (int16_t)(d * 256), NULL);
-        destination += diff * 4;
-    }
-}
-
-/**
  * @brief SWI 0x1F: MidiKey2Freq.
  *
  */
@@ -264,8 +196,10 @@ void cupid_bios_swi(struct CupidGBA* gba, uint8_t comment) {
         cupid_arm_raise_swi(&gba->cpu);
         break;
     case 0x0D: _GetBiosChecksum(gba); break;
-    case 0x0E: _BgAffineSet(gba); break;
-    case 0x0F: _ObjAffineSet(gba); break;
+    case 0x0E: case 0x0F:
+        /* Affine instructions retain integer rounding, caller state and bus timing. */
+        cupid_arm_raise_swi(&gba->cpu);
+        break;
     case 0x10: case 0x11: case 0x12: case 0x13: case 0x14:
     case 0x15: case 0x16: case 0x17: case 0x18: case 0x19:
         /* Utility instructions expose their memory accesses and peripheral clocks. */
