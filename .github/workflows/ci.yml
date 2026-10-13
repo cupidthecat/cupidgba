@@ -49,6 +49,13 @@ jobs:
         run: cmake --build build --parallel 2
       - name: Test
         run: ctest --test-dir build --output-on-failure
+      - name: Check live audio threading
+        if: matrix.compiler == 'clang'
+        run: |
+          cmake -S . -B build-thread -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_BUILD_TYPE=Debug -DCUPID_THREAD_SANITIZER=ON
+          cmake --build build-thread --target test_audio_output --parallel 2
+          ctest --test-dir build-thread -R '^platform.audio$' --output-on-failure
       - name: Verify Makefile build
         if: matrix.compiler == 'gcc'
         run: make --jobs=2

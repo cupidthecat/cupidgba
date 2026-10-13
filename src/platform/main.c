@@ -264,8 +264,10 @@ int main(int argc, char* argv[]) {
         /** Poll input. */
         if (!cupid_platform_poll_events(&plat, &gba)) break;
 
-        /** Run one frame of emulation. */
+        /* The SDL callback consumes the same queue that emulation produces. */
+        if (plat.audioDevice) SDL_LockAudioDevice(plat.audioDevice);
         cupid_gba_run_frame(&gba);
+        if (plat.audioDevice) SDL_UnlockAudioDevice(plat.audioDevice);
 
         /** Present framebuffer. */
         cupid_platform_render_frame(&plat, gba.video.outputBuffer);

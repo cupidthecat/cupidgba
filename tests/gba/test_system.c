@@ -64,8 +64,10 @@ static void signed_fifo_samples(void) {
     gba->audio.chBRight = true;
     gba->audio.volumeChA = true;
     gba->audio.volumeChB = true;
-    gba->audio.chA.samples[0] = -128;
-    gba->audio.chB.samples[0] = -1;
+    cupid_io_write(gba, REG_SOUNDCNT_X, 0x80);
+    cupid_memory_store32(&gba->cpu, GBA_BASE_IO + REG_FIFO_A_LO, 0x80, NULL);
+    cupid_memory_store32(&gba->cpu, GBA_BASE_IO + REG_FIFO_B_LO, 0xFF, NULL);
+    cupid_audio_timer_overflow(&gba->audio, 0, 0);
     cupid_audio_sample(&gba->audio, gba->audio.lastSample + 512);
     CHECK(gba->audio.currentSamples[0].left == -24576);
     CHECK(gba->audio.currentSamples[0].right == -192);

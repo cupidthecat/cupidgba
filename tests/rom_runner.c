@@ -22,6 +22,19 @@ static bool screenshot(const struct CupidGBA* gba, const char* path) {
     return fclose(file) == 0;
 }
 
+struct AudioTrace { FILE* file; bool failed; };
+
+static void audio_sample(void* context, uint64_t clock, int16_t left, int16_t right) {
+    struct AudioTrace* trace = context;
+    uint8_t record[12];
+    for (unsigned i = 0; i < 8; i++) record[i] = (uint8_t)(clock >> (i * 8));
+    record[8] = (uint8_t)left;
+    record[9] = (uint8_t)((uint16_t)left >> 8);
+    record[10] = (uint8_t)right;
+    record[11] = (uint8_t)((uint16_t)right >> 8);
+    if (fwrite(record, 1, sizeof(record), trace->file) != sizeof(record)) trace->failed = true;
+}
+
 int main(int argc, char** argv) {
     struct KeyEvent { uint64_t frame; uint16_t keys; } keyEvents[64];
     unsigned keyEventCount = 0, nextKeyEvent = 0;
@@ -32,6 +45,8 @@ int main(int argc, char** argv) {
     const char* ioOutput = NULL;
     const char* ewramOutput = NULL;
     const char* saveOutput = NULL;
+    const char* audioOutput = NULL;
+    struct AudioTrace audioTrace = {0};
     uint64_t frames = 120, cycleLimit = UINT64_C(280896) * 120, stepLimit = 50000000;
     uint64_t terminalAddress = 0;
     int expectedRegister = -1;
@@ -42,6 +57,7 @@ int main(int argc, char** argv) {
         else if (!strcmp(argv[i], "--dump-io") && i + 1 < argc) ioOutput = argv[++i];
         else if (!strcmp(argv[i], "--dump-ewram") && i + 1 < argc) ewramOutput = argv[++i];
         else if (!strcmp(argv[i], "--dump-save") && i + 1 < argc) saveOutput = argv[++i];
+        else if (!strcmp(argv[i], "--dump-audio") && i + 1 < argc) audioOutput = argv[++i];
         else if (!strcmp(argv[i], "--terminal-address") && i + 1 < argc) {
             if (!number(argv[++i], &terminalAddress) || terminalAddress > UINT32_MAX) return 2;
         }
@@ -62,7 +78,7 @@ int main(int argc, char** argv) {
             expectedRegister = (int)index;
         } else if (argv[i][0] != '-' && !rom) rom = argv[i];
         else {
-            fprintf(stderr, "Usage: %s ROM [--bios FILE] [--frames N] [--steps N] [--key-event FRAME MASK] [--screenshot FILE.ppm] [--dump-vram FILE] [--dump-io FILE] [--dump-ewram FILE] [--dump-save FILE] [--expect-loop-register N] [--terminal-address ADDRESS]\n", argv[0]);
+            fprintf(stderr, "Usage: %s ROM [--bios FILE] [--frames N] [--steps N] [--key-event FRAME MASK] [--screenshot FILE.ppm] [--dump-vram FILE] [--dump-io FILE] [--dump-ewram FILE] [--dump-save FILE] [--dump-audio FILE] [--expect-loop-register N] [--terminal-address ADDRESS]\n", argv[0]);
             return 2;
         }
     }
@@ -73,6 +89,13 @@ int main(int argc, char** argv) {
     int result = 2;
     if (!cupid_load_rom(gba, rom) || (bios && !cupid_load_bios(gba, bios))) goto cleanup;
     cupid_gba_reset(gba);
+    if (audioOutput) {
+        audioTrace.file = fopen(audioOutput, "wb");
+        if (!audioTrace.file) { perror(audioOutput); goto cleanup; }
+        if (fwrite("CPDPCM01", 1, 8, audioTrace.file) != 8) goto cleanup;
+        gba->audio.sampleSink = audio_sample;
+        gba->audio.sampleSinkContext = &audioTrace;
+    }
     uint64_t completed = 0, steps = 0;
     bool terminal = false;
     while (completed < frames && steps < stepLimit &&
@@ -113,6 +136,7 @@ int main(int argc, char** argv) {
         if (fclose(file) != 0 || !written) result = 2;
     }
 cleanup:
+    if (audioTrace.file && (fclose(audioTrace.file) != 0 || audioTrace.failed)) result = 2;
     cupid_gba_destroy(gba);
     free(gba);
     return result;

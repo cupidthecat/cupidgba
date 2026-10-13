@@ -18,6 +18,7 @@ static void destroy(struct CupidGBA* gba) {
 
 static void reserved_bits_do_not_enter_register_state(void) {
     struct CupidGBA* gba = fresh();
+    cupid_io_write(gba, REG_SOUNDCNT_X, 0x80);
     static const struct { uint32_t address; uint16_t mask; } registers[] = {
         {REG_BG0CNT, 0xDFFF}, {REG_BG1CNT, 0xDFFF},
         {REG_WININ, 0x3F3F}, {REG_WINOUT, 0x3F3F},

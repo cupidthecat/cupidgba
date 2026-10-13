@@ -188,6 +188,46 @@ local suite; `CUPID_TEST_BIOS` adds the external path. Native `gba.io` checks
 register state and CPU bus reads at each width, ARM/Thumb prefetch, DMA handover
 and FIFO reset readback. See [I/O registers](../hardware/io-registers.md).
 
+The optional local audio cartridge observer selects ten unchanged signal tests:
+
+```sh
+python3 tests/roms/check_audio.py --runner build/cupidgba-headless \
+  --rom /path/to/audio-test.gba
+```
+
+Use `--test tone`, `stereo`, `sweep`, `steps`, `dynamic`, `noise`, `wave`, `bias`,
+`fifo` or `silence` to run one selection. `CUPID_AUDIO_TEST_ROM` registers each
+selection separately in CTest. The observer requires the pinned digest, complete
+execution and capture timestamps, and the original source-defined signals.
+Software frequency sequences must complete in their declared order and spacing.
+Wave and polynomial checks require the complete pattern up to an unknown phase.
+The FIFO selection checks every signed source table level, stereo routing and
+timer hold changes. It does not establish the complete FIFO/DMA waveform.
+Existing instruction limits apply; each selection retains a 120-second process
+deadline and a 130-second CTest deadline. The private source revision and build
+recipe stay with the research checkout; the ROM is not committed.
+
+The headless runner's `--dump-audio FILE` exports every mixer capture through a
+sample sink. It begins with the eight ASCII bytes `CPDPCM01`, followed by packed
+little-endian records containing a 64-bit CPU clock and signed 16-bit left and
+right values (`<Qhh`, 12 bytes). The sink records frames independently of host
+queue overflow. It fails the run on file write or close errors. See
+[audio registers](../hardware/audio/registers.md) and
+[audio timing](../hardware/audio/timing.md) for coverage and qualification limits.
+
+`platform.audio` checks interpolation and a live SDL2 dummy device with a
+concurrent consumer. Linux CI also runs this check in a separate ThreadSanitizer
+build. To reproduce it locally:
+
+```sh
+cmake -S . -B build-thread -DCMAKE_C_COMPILER=clang \
+  -DCMAKE_BUILD_TYPE=Debug -DCUPID_THREAD_SANITIZER=ON
+cmake --build build-thread --target test_audio_output --parallel 2
+ctest --test-dir build-thread -R '^platform.audio$' --output-on-failure
+```
+
+ThreadSanitizer and AddressSanitizer require separate build directories.
+
 The local BIOS math suite checks 615 register observations across 123 inputs:
 
 ```sh
