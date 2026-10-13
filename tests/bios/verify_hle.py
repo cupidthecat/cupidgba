@@ -21,7 +21,7 @@ if guard != 0xBA4 or struct.unpack_from("<I", actual, guard)[0] != 0xE35C0000:
     raise SystemExit("HLE observable utility guard address is invalid")
 if len(actual) > 0x4000 or struct.unpack_from("<I", actual, stall)[0] != 0xE25BB004:
     raise SystemExit("HLE image size or internal stall entry is invalid")
-for call in (1, *range(6, 13), *range(0x0E, 0x1A)):
+for call in (0, 1, *range(6, 13), *range(0x0E, 0x1A)):
     target = struct.unpack_from("<I", actual, table + call * 4)[0]
     aligned = target & ~1
     valid_mode = target & 1 if call in (1, 0x0A, 0x0B, *range(0x14, 0x1A)) else target % 4 == 0

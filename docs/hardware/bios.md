@@ -5,6 +5,11 @@ CupidGBA uses its embedded replacement image and C helpers for services that
 do not yet run in firmware. The replacement assembly and embedded bytes
 are checked together; see [rebuilding the BIOS](../development/rebuilding-bios.md).
 
+SoftReset executes timed firmware, latches the restart byte before clearing
+its work area, resets the visible registers and stacks, and refills the ARM
+pipeline at the selected entry address. See [soft reset](bios-soft-reset.md)
+for caller state, interrupt preconditions, DMA checks and qualification limits.
+
 RegisterRamReset executes timed Thumb firmware for its selected memory and
 device reset groups. Its block fills, register writes and shared transfer
 routine allow timers, IRQs and DMA to run during the call. See
