@@ -118,6 +118,7 @@ void cupid_platform_audio_callback(void* userdata, uint8_t* stream, int len) {
 
     audio->sampleReadPos = readPos;
     pa->resamplePos = srcPos;
+    if (pa->outputSink) pa->outputSink(pa->outputSinkContext, out, outFrames, framesWritten);
 }
 
 /**
