@@ -19,14 +19,14 @@
 /**
  * @name Audio Resampler State
  *
- * Tracks fractional position for linear interpolation
- * from GBA_AUDIO_SAMPLE_RATE (32768 Hz) → host rate (48000 Hz).
+ * Tracks elapsed CPU clocks for interpolation between captured stereo frames.
  */
 struct CupidPlatformAudio {
     struct CupidAudio* audio;   /**< Pointer to emulator audio state */
     int    hostRate;            /**< Actual device rate (may differ from requested) */
-    double resampleStep;        /**< srcRate / dstRate (≈0.6827 for 32768→48000) */
-    double resamplePos;         /**< Fractional position in source ring buffer */
+    double resampleStep;        /**< CPU clocks per host frame */
+    double resamplePos;         /**< Clocks elapsed since the source anchor frame */
+    uint64_t sampleOverruns;    /**< Last observed producer overrun count */
     int16_t lastSampleL;        /**< Last output sample (for underrun fade) */
     int16_t lastSampleR;
 };

@@ -32,6 +32,8 @@ failures are required. These runs qualify the source expectations; they do not
 provide a new hardware capture.
 
 This coverage does not establish every I/O edge or complete audio behavior.
-PSG trigger writes, wave RAM banking and playback, FIFO partial writes, sound
-power transitions, waveform precision and host audio synchronization remain
-part of the broader audit in [issue 1](https://github.com/cupidthecat/cupidgba/issues/1).
+Sound register and wave access checks are described in
+[audio registers](audio/registers.md); capture and host interpolation checks
+are described in [audio timing](audio/timing.md). FIFO partial writes, oscillator
+edges and output precision remain part of the broader audit in
+[issue 1](https://github.com/cupidthecat/cupidgba/issues/1).

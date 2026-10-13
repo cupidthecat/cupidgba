@@ -4,15 +4,14 @@
  *
  *
  * Architecture:
- *   - PSG engine (inherited from GB): ch1 (square+sweep), ch2 (square),
+ *   - PSG engine: ch1 (square+sweep), ch2 (square),
  *     ch3 (wave), ch4 (noise), mixed via NR50/NR51
- *   - timingFactor = 4 (GBA ARM runs 4x SM83 speed, all PSG periods x4)
+ *   - timingFactor = 4 converts internal PSG periods to CPU clocks
  *   - Two Direct Sound FIFO channels (A, B): 8x uint32_t ring buffers
  *     that feed int8_t samples one byte at a time
- *   - _sample event fires every SAMPLE_INTERVAL (1024) CPU cycles
- *   - Inside _sample, cupid_audio_sample produces 2<<resolution sub-samples
- *     spaced sampleInterval (default 512) cycles apart
- *   - FIFO bytes are distributed across sub-sample slots by timer overflow
+ *   - Mixer captures run at sampleInterval (default 512) CPU cycles
+ *   - FIFO bytes latch on timer overflow and are held until the next overflow
+ *   - Each output frame retains its elapsed clocks for host resampling
  *   - Frame sequencer at 512 Hz updates length, envelope, sweep
  */
 
@@ -27,17 +26,13 @@ struct CupidDMA;
 
 /** @name Constants */
 #define GBA_AUDIO_FIFO_SIZE      8       /**< 8 x uint32_t = 32 bytes per FIFO */
-#define GBA_MAX_SAMPLES          16      /**< Max sub-samples per 1024-cycle window */
 #define GBA_AUDIO_SAMPLES        8192    /**< SDL output ring buffer size (stereo frames) */
 #define GBA_AUDIO_SAMPLE_RATE    32768   /**< Default output rate at resolution 0 */
 #define GBA_AUDIO_VOLUME_MAX     0x100   /**< Master volume 1.0 in fixed point */
 
-/** SAMPLE_INTERVAL: the _sample event period = GBA_CLOCK_FREQ / 0x4000 = 1024 */
-#define GBA_AUDIO_SAMPLE_INTERVAL  (GBA_CLOCK_FREQ / 0x4000)  /**< 1024 */
-
 /**
- * Frame sequencer: SM83 FRAME_CYCLES = DMG_FREQ >> 9 = 8192 SM83 cycles.
- * GBA timingFactor = 4, so GBA frame interval = 8192 * 4 = 32768 ARM cycles.
+ * The 512 Hz frame sequencer advances every 32768 CPU clocks.
+ * Internal PSG periods use timingFactor = 4, giving 8192 internal ticks.
  */
 #define DMG_SM83_FREQUENCY       0x400000u
 #define GBA_AUDIO_TIMING_FACTOR  4
@@ -167,7 +162,6 @@ struct CupidAudioFIFO {
     int internalRemaining;
     int dmaSource;
     int8_t latchedSample;            /**< Most recent timer-selected byte */
-    int8_t samples[GBA_MAX_SAMPLES]; /**< Per-sub-sample output */
 };
 
 /** @name GBA Audio */
@@ -194,17 +188,21 @@ struct CupidAudio {
     /** SOUNDBIAS */
     uint16_t soundbias;
 
-    /** Sub-sampling state */
-    int32_t sampleInterval;  /**< Cycles per sub-sample (default 512) */
-    uint64_t lastSample;     /**< Cycles since power-on at current window start */
-    int sampleIndex;         /**< Next sub-sample index within window */
-
-    struct CupidStereoSample currentSamples[GBA_MAX_SAMPLES];
+    /** Mixer clock and most recent captured value */
+    int32_t sampleInterval;  /**< Clocks per capture: 512, 256, 128 or 64 */
+    uint64_t lastSample;     /**< Timestamp of the last captured frame */
+    uint64_t nextSample;     /**< Already queued capture deadline */
+    uint64_t sampleOrigin;   /**< Divider phase at reset */
+    struct CupidStereoSample currentSamples[1];
 
     /** Output ring buffer for SDL */
     int16_t sampleBuffer[GBA_AUDIO_SAMPLES * 2];
-    volatile int sampleWritePos;
-    volatile int sampleReadPos;
+    uint16_t sampleClocks[GBA_AUDIO_SAMPLES]; /**< Elapsed clocks preceding each frame */
+    uint64_t sampleOverruns; /**< Output frames dropped when the host queue fills */
+    int sampleWritePos;
+    int sampleReadPos;
+    void (*sampleSink)(void* context, uint64_t clock, int16_t left, int16_t right);
+    void* sampleSinkContext;
 
     uint16_t soundcntL;
     uint16_t soundcntH;
@@ -224,6 +222,7 @@ void cupid_audio_timer_overflow(struct CupidAudio* audio, int timer, uint64_t ti
 void cupid_audio_sample_fifo(struct CupidAudio* audio, int fifoId, uint64_t timestamp);
 
 void cupid_audio_write_register(struct CupidAudio* audio, uint32_t addr, uint16_t val);
+void cupid_audio_write_register8(struct CupidAudio* audio, uint32_t addr, uint8_t val);
 uint16_t cupid_audio_read_register(struct CupidAudio* audio, uint32_t addr);
 
 void cupid_audio_fifo_write(struct CupidAudioFIFO* fifo, uint32_t value);

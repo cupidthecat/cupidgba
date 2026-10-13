@@ -11,6 +11,9 @@ static struct CupidGBA* machine(uint64_t clock) {
     cupid_timing_clear(&gba->timing);
     gba->timing.globalCycles = clock;
     gba->timing.masterCycles = (uint32_t)clock;
+    gba->audio.lastSample = clock;
+    gba->audio.sampleOrigin = clock;
+    gba->audio.nextSample = clock + 512;
     gba->cpu.cpsr.i = 1;
     gba->cpu.irqDisableLatch = true;
     return gba;

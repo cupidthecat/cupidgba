@@ -6,9 +6,9 @@
  *   - PSG engine: ch1 (square+sweep), ch2 (square), ch3 (wave), ch4 (noise)
  *   - @c timingFactor = 4 so PSG periods are scaled to the GBA CPU clock
  *   - Two Direct Sound FIFO channels (A and B) backed by ring buffers
- *   - A periodic sample event fires every @c SAMPLE_INTERVAL CPU cycles
- *   - Each sample event generates @c 2 << resolution sub-samples
- *   - FIFO bytes are distributed across sub-sample slots on timer overflow
+ *   - A mixer event captures PSG and FIFO values on the same sample clock
+ *   - Captures retain their elapsed clocks across sampling-rate changes
+ *   - FIFO bytes latch on timer overflow and hold between overflows
  *   - A 512 Hz frame sequencer updates length, envelope, and sweep state
  */
 
@@ -17,9 +17,6 @@
 #include <stdarg.h>
 
 /** @section audio_constants Constants */
-
-/** @brief Sample event period in CPU cycles. */
-static const int32_t SAMPLE_INTERVAL = GBA_AUDIO_SAMPLE_INTERVAL;
 
 /** @brief Square-wave duty table indexed by duty mode and phase. */
 static const int8_t _squareChannelDuty[4][8] = {
@@ -129,7 +126,7 @@ void cupid_audio_init(struct CupidAudio* audio, struct CupidGBA* gba) {
     audio->gba = gba;
     _audioDebugInit();
 
-    /** Sample event (periodic, fires every SAMPLE_INTERVAL). */
+    /** Mixer capture event. */
     audio->sampleEvent.name     = "CupidAudio Sample";
     audio->sampleEvent.callback = _sampleCallback;
     audio->sampleEvent.context  = audio;
@@ -187,7 +184,7 @@ void cupid_audio_reset(struct CupidAudio* audio) {
     cupid_timing_deschedule(timing, &audio->psg.frameEvent);
     cupid_timing_deschedule(timing, &audio->sampleEvent);
     cupid_timing_schedule(timing, &audio->psg.frameEvent, 0);
-    cupid_timing_schedule(timing, &audio->sampleEvent, 0);
+    cupid_timing_schedule(timing, &audio->sampleEvent, 512);
 
     /** Reset FIFO A. */
     audio->chA.dmaSource = 1;
@@ -197,7 +194,6 @@ void cupid_audio_reset(struct CupidAudio* audio) {
     audio->chA.internalRemaining = 0;
     audio->chA.latchedSample = 0;
     memset(audio->chA.fifo, 0, sizeof(audio->chA.fifo));
-    memset(audio->chA.samples, 0, sizeof(audio->chA.samples));
 
     /** Reset FIFO B. */
     audio->chB.dmaSource = 2;
@@ -207,7 +203,6 @@ void cupid_audio_reset(struct CupidAudio* audio) {
     audio->chB.internalRemaining = 0;
     audio->chB.latchedSample = 0;
     memset(audio->chB.fifo, 0, sizeof(audio->chB.fifo));
-    memset(audio->chB.samples, 0, sizeof(audio->chB.samples));
 
     /** SOUNDBIAS default = 0x200. */
     audio->soundbias = 0x200;
@@ -228,7 +223,8 @@ void cupid_audio_reset(struct CupidAudio* audio) {
     audio->soundcntH  = 0;
 
     audio->lastSample   = 0;
-    audio->sampleIndex  = 0;
+    audio->nextSample = 512;
+    audio->sampleOrigin = 0;
 
     /** Reset sample interval to default. */
     audio->sampleInterval = GBA_CLOCK_FREQ / 0x8000;  /* 512 */
@@ -236,7 +232,9 @@ void cupid_audio_reset(struct CupidAudio* audio) {
     /** Clear output ring buffer. */
     audio->sampleWritePos = 0;
     audio->sampleReadPos  = 0;
+    audio->sampleOverruns = 0;
     memset(audio->sampleBuffer, 0, sizeof(audio->sampleBuffer));
+    memset(audio->sampleClocks, 0, sizeof(audio->sampleClocks));
     memset(audio->currentSamples, 0, sizeof(audio->currentSamples));
 
     _audioDebugSampleCbCount = 0;
@@ -338,10 +336,10 @@ void cupid_audio_psg_run(struct CupidAudioPSG* psg, uint64_t timestamp,
                     for (uint64_t s = 0; s < steps; s++) {
                         /**
                          * Rotate nibbles through the wavedata array.
-                         * The low nibble of the first word's low byte
-                         * is consumed as the current sample.
+                         * The first byte's high nibble is read first. Its
+                         * value wraps into the final byte's low nibble.
                          */
-                        uint32_t bitsCarry = 0;
+                        uint32_t bitsCarry = ch3->wavedata32[start] & 0xF0;
                         uint32_t old;
 
                         for (int j = end - 1; j >= start; j--) {
@@ -350,9 +348,9 @@ void cupid_audio_psg_run(struct CupidAudioPSG* psg, uint64_t timestamp,
                                 ((old & 0x0F0F0F0F) << 4) |
                                 ((old & 0xF0F0F000) >> 12) |
                                 (bitsCarry << 20);
-                            bitsCarry = (old >> 8) & 0xF;
+                            bitsCarry = old & 0xF0;
                         }
-                        sample = (int8_t)bitsCarry;
+                        sample = (int8_t)(bitsCarry >> 4);
                     }
 
                     /** Apply volume. */
@@ -614,14 +612,15 @@ void cupid_audio_schedule_fifo_dma(struct CupidAudio* audio, int dmaNumber,
 /**
  * @brief Consume one Direct Sound FIFO byte on timer overflow.
  *
- * Pops a byte from the FIFO's staged 32-bit word, fills the remaining
- * sub-sample slots for the current sample event period with that byte, and
- * triggers DMA refill when the FIFO depth drops below the threshold.
+ * Captures due mixer values before replacing the byte held by this channel,
+ * pops from its staged word, and requests DMA refill at the existing threshold.
  *
  * @param audio  Audio subsystem state.
  * @param fifoId FIFO selector: 0 for channel A, 1 for channel B.
  */
 void cupid_audio_sample_fifo(struct CupidAudio* audio, int fifoId, uint64_t timestamp) {
+    /* Capture the old hold value before this timer changes either FIFO latch. */
+    cupid_audio_sample(audio, timestamp);
     struct CupidAudioFIFO* channel;
     if (fifoId == 0) {
         channel = &audio->chA;
@@ -662,21 +661,9 @@ void cupid_audio_sample_fifo(struct CupidAudio* audio, int fifoId, uint64_t time
         }
     }
 
-    int resolution = (audio->soundbias >> 14) & 3;
-    int maxSamples = 2 << resolution;
-    uint64_t offset = timestamp >= audio->lastSample ? timestamp - audio->lastSample : 0;
-    uint64_t slot = offset / audio->sampleInterval;
-    int startSlot = slot < (unsigned)maxSamples ? (int)slot : maxSamples;
-
-    /** Fill sub-sample slots with current byte. */
     int8_t currentByte = (int8_t)(channel->internalSample & 0xFF);
     channel->latchedSample = currentByte;
-    for (int i = startSlot; i < maxSamples; i++) {
-        channel->samples[i] = currentByte;
-    }
-
-    _audioDebugLog(audio, "fifo%d byte=%d slots=%d..%d", fifoId, (int)currentByte,
-        startSlot, maxSamples ? (maxSamples - 1) : 0);
+    _audioDebugLog(audio, "fifo%d byte=%d", fifoId, (int)currentByte);
 
     /** Advance to next byte in the internal 4-byte buffer. */
     if (channel->internalRemaining > 0) {
@@ -730,35 +717,24 @@ static int16_t _applyBias(struct CupidAudio* audio, int32_t sample) {
 }
 
 /**
- * @brief Produce any pending sub-samples up to @p timestamp.
+ * @brief Capture every pending mixer deadline up to @p timestamp.
  *
  * Advances the PSG state, mixes PSG and FIFO channels, applies bias and master
- * volume, and stores the generated stereo sub-samples in
- * @c currentSamples[] for later emission.
+ * volume, and appends stereo frames with their elapsed clocks to the ring.
  *
  * @param audio     Audio subsystem state.
  * @param timestamp Target timestamp in CPU cycles.
  */
 void cupid_audio_sample(struct CupidAudio* audio, uint64_t timestamp) {
-    int resolution = (audio->soundbias >> 14) & 3;
-    int maxSample = 2 << resolution;
-    int32_t interval = audio->sampleInterval;
-
-    uint64_t sampled = audio->lastSample + (unsigned)audio->sampleIndex * interval;
-    if (timestamp < sampled) return;
-    uint64_t elapsed = timestamp - sampled;
-
-    int sample = audio->sampleIndex;
-
-    while (sample < maxSample && elapsed >= (uint64_t)interval) {
+    while (audio->nextSample <= timestamp) {
+        uint64_t sampleClock = audio->nextSample;
         /** PSG volume shift: SOUNDCNT_H bits 0-1. */
         int psgShift = 4 - audio->volume;
         if (psgShift < 0) psgShift = 0;
         if (psgShift > 4) psgShift = 4;
 
-        /** Run PSG channels to this sub-sample's timestamp. */
-        uint64_t subTimestamp = audio->lastSample + (unsigned)sample * interval;
-        cupid_audio_psg_run(&audio->psg, subTimestamp, 0xF);
+        /** Run PSG channels to this capture deadline. */
+        cupid_audio_psg_run(&audio->psg, sampleClock, 0xF);
 
         /** Read PSG mixed output. */
         int16_t psgLeft, psgRight;
@@ -769,7 +745,7 @@ void cupid_audio_sample(struct CupidAudio* audio, uint64_t timestamp) {
 
         /** Mix FIFO A. */
         {
-            int8_t fifoSample = audio->chA.samples[sample];
+            int8_t fifoSample = audio->chA.latchedSample;
             int32_t scaled = (int32_t)fifoSample * 4;
             if (!audio->volumeChA) scaled >>= 1;  /* 50% */
             if (audio->chALeft)  sampleLeft  += scaled;
@@ -778,7 +754,7 @@ void cupid_audio_sample(struct CupidAudio* audio, uint64_t timestamp) {
 
         /** Mix FIFO B. */
         {
-            int8_t fifoSample = audio->chB.samples[sample];
+            int8_t fifoSample = audio->chB.latchedSample;
             int32_t scaled = (int32_t)fifoSample * 4;
             if (!audio->volumeChB) scaled >>= 1;  /* 50% */
             if (audio->chBLeft)  sampleLeft  += scaled;
@@ -786,28 +762,33 @@ void cupid_audio_sample(struct CupidAudio* audio, uint64_t timestamp) {
         }
 
         /** Apply bias and master volume. */
-        audio->currentSamples[sample].left  = _applyBias(audio, sampleLeft);
-        audio->currentSamples[sample].right = _applyBias(audio, sampleRight);
-
-        ++sample;
-        elapsed -= interval;
-    }
-
-    audio->sampleIndex = sample;
-
-    /** If we've completed all sub-samples for this period, advance. */
-    if (sample >= maxSample) {
-        audio->lastSample += SAMPLE_INTERVAL;
-        audio->sampleIndex = 0;
+        audio->currentSamples[0].left = audio->enable ? _applyBias(audio, sampleLeft) : 0;
+        audio->currentSamples[0].right = audio->enable ? _applyBias(audio, sampleRight) : 0;
+        int wp = audio->sampleWritePos;
+        audio->sampleBuffer[wp] = audio->currentSamples[0].left;
+        audio->sampleBuffer[wp + 1] = audio->currentSamples[0].right;
+        audio->sampleClocks[wp / 2] = (uint16_t)(sampleClock - audio->lastSample);
+        int next = (wp + 2) % (GBA_AUDIO_SAMPLES * 2);
+        if (next == audio->sampleReadPos) {
+            audio->sampleReadPos = (audio->sampleReadPos + 2) % (GBA_AUDIO_SAMPLES * 2);
+            ++audio->sampleOverruns;
+        }
+        audio->sampleWritePos = next;
+        audio->lastSample = sampleClock;
+        /* Keep an already queued deadline through a resolution write, then
+         * align later captures to the selected divider. */
+        uint64_t interval = (unsigned)audio->sampleInterval;
+        audio->nextSample = sampleClock + interval -
+            ((sampleClock - audio->sampleOrigin) & (interval - 1));
+        if (audio->sampleSink) audio->sampleSink(audio->sampleSinkContext, sampleClock,
+            audio->currentSamples[0].left, audio->currentSamples[0].right);
     }
 }
 
 /**
  * @brief Timing callback for the periodic audio sample event.
  *
- * Generates the current period's sub-samples, writes them into the public
- * output ring buffer, propagates FIFO hold values, and reschedules the next
- * sample event.
+ * Captures due frames and schedules the next divider deadline.
  *
  * @param timing     Timing scheduler.
  * @param context    Pointer to the owning audio subsystem.
@@ -818,44 +799,24 @@ static void _sampleCallback(struct CupidTiming* timing, void* context,
 {
     struct CupidAudio* audio = (struct CupidAudio*)context;
 
-    /** Generate all sub-samples for this period. */
     uint64_t currentTime = timing->globalCycles - cyclesLate;
     cupid_audio_sample(audio, currentTime);
-
-    /** Carry forward the last FIFO sample into all slots for next period. */
-    int resolution = (audio->soundbias >> 14) & 3;
-    int samples = 2 << resolution;
-
-    int8_t lastA = audio->chA.latchedSample;
-    int8_t lastB = audio->chB.latchedSample;
-    memset(audio->chA.samples, lastA, sizeof(audio->chA.samples));
-    memset(audio->chB.samples, lastB, sizeof(audio->chB.samples));
-
-    /** Write sub-samples to output ring buffer. */
-    int cap = GBA_AUDIO_SAMPLES * 2;  /* stereo interleaved */
-    for (int i = 0; i < samples; i++) {
-        int wp = audio->sampleWritePos;
-        audio->sampleBuffer[wp]     = audio->currentSamples[i].left;
-        audio->sampleBuffer[wp + 1] = audio->currentSamples[i].right;
-        audio->sampleWritePos = (wp + 2) % cap;
-    }
 
     ++_audioDebugSampleCbCount;
     if (_audioDebugEnabled && (_audioDebugSampleCbCount & 0xFF) == 0) {
         _audioDebugLog(audio,
-            "sample cb #%u: res=%d samples=%d wr=%d rd=%d lastL=%d lastR=%d",
+            "sample cb #%u: interval=%d wr=%d rd=%d lastL=%d lastR=%d",
             _audioDebugSampleCbCount,
-            resolution,
-            samples,
+            audio->sampleInterval,
             audio->sampleWritePos,
             audio->sampleReadPos,
-            audio->currentSamples[samples - 1].left,
-            audio->currentSamples[samples - 1].right);
+            audio->currentSamples[0].left,
+            audio->currentSamples[0].right);
     }
 
     /** Reschedule. */
     cupid_timing_schedule_absolute(timing, &audio->sampleEvent,
-                                   (int32_t)(uint32_t)(currentTime + SAMPLE_INTERVAL));
+                                   (int32_t)(uint32_t)audio->nextSample);
 }
 
 /**
@@ -1430,22 +1391,14 @@ static void _writeNR52(struct CupidAudioPSG* psg, uint8_t value) {
         psg->playingCh3 = false;
         psg->playingCh4 = false;
 
-        /** Zero all channel state. */
-        memset(&psg->ch1.envelope, 0, sizeof(psg->ch1.envelope));
-        memset(&psg->ch1.control, 0, sizeof(psg->ch1.control));
-        memset(&psg->ch1.sweep, 0, sizeof(psg->ch1.sweep));
-        psg->ch1.sample = 0;
-
-        memset(&psg->ch2.envelope, 0, sizeof(psg->ch2.envelope));
-        memset(&psg->ch2.control, 0, sizeof(psg->ch2.control));
-        psg->ch2.sample = 0;
-
-        psg->ch3.sample = 0;
-        psg->ch3.length = 0;
-
-        memset(&psg->ch4.envelope, 0, sizeof(psg->ch4.envelope));
-        psg->ch4.sample = 0;
-        psg->ch4.length = 0;
+        /** Sound mode registers reset; both waveform banks remain stored. */
+        uint8_t wave[32];
+        memcpy(wave, psg->ch3.wavedata8, sizeof(wave));
+        memset(&psg->ch1, 0, sizeof(psg->ch1));
+        memset(&psg->ch2, 0, sizeof(psg->ch2));
+        memset(&psg->ch3, 0, sizeof(psg->ch3));
+        memset(&psg->ch4, 0, sizeof(psg->ch4));
+        memcpy(psg->ch3.wavedata8, wave, sizeof(wave));
 
         psg->volumeLeft = 0;
         psg->volumeRight = 0;
@@ -1472,11 +1425,14 @@ static void _writeNR52(struct CupidAudioPSG* psg, uint8_t value) {
 void cupid_audio_write_register(struct CupidAudio* audio, uint32_t addr,
                                 uint16_t val)
 {
+    if (addr >= REG_SOUND1CNT_L && addr < REG_SOUNDCNT_H && !audio->enable) return;
     struct CupidAudioPSG* psg = &audio->psg;
     uint64_t timestamp = cupid_timing_global_time(&audio->gba->timing);
 
     /** Flush pending audio. */
     cupid_audio_sample(audio, timestamp);
+    if (addr >= REG_SOUND1CNT_L && addr < REG_SOUNDCNT_L)
+        cupid_audio_psg_run(psg, timestamp, 1 << ((addr - REG_SOUND1CNT_L) >> 3));
 
     _audioDebugLog(audio, "reg write: addr=0x%03X val=0x%04X", (unsigned)addr, val);
 
@@ -1593,6 +1549,7 @@ void cupid_audio_write_register(struct CupidAudio* audio, uint32_t addr,
         _writeNR52(psg, (uint8_t)val);
 
         if (!audio->enable && oldEnable) {
+            audio->soundcntL = 0;
             /** Disable: clear SOUNDCNT_H fields too. */
             audio->volume    = 0;
             audio->volumeChA = false;
@@ -1619,15 +1576,7 @@ void cupid_audio_write_register(struct CupidAudio* audio, uint32_t addr,
         int resolution = (val >> 14) & 3;
         int32_t newInterval = 0x200 >> resolution;
 
-        if (newInterval != audio->sampleInterval) {
-            /** Recalculate sampleIndex for the new resolution. */
-            uint64_t elapsed = timestamp >= audio->lastSample ? timestamp - audio->lastSample : 0;
-            audio->sampleInterval = newInterval;
-            audio->sampleIndex = elapsed >> (9 - resolution);
-            if (audio->sampleIndex >= GBA_MAX_SAMPLES) {
-                audio->sampleIndex = GBA_MAX_SAMPLES - 1;
-            }
-        }
+        audio->sampleInterval = newInterval;
         _audioDebugLog(audio, "SOUNDBIAS: val=0x%04X bias=%d res=%d interval=%d",
             val,
             val & 0x3FF,
@@ -1648,26 +1597,10 @@ void cupid_audio_write_register(struct CupidAudio* audio, uint32_t addr,
          * GBA: write to the non-selected bank.
          * If audio is disabled, write to bank 1.
          */
-        int bankOffset = 0;
-        if (audio->enable) {
-            bankOffset = psg->ch3.bank ? 0 : 4;  /* invert bank */
-        } else {
-            bankOffset = 4;  /* bank 1 when disabled */
-        }
-
-        /**
-         * Map I/O address to wave data offset:
-         * 0x090 = wave_ram[0], 0x092 = wave_ram[1], etc.
-         */
-        int waveIndex = ((addr - REG_WAVE_RAM0_LO) >> 1) + bankOffset;
-        if (waveIndex >= 0 && waveIndex < 8) {
-            /** Store as 16-bit into the 32-bit wavedata array's byte view. */
-            int byteOff = waveIndex * 2;
-            if (byteOff + 1 < 32) {
-                psg->ch3.wavedata8[byteOff]     = (uint8_t)(val & 0xFF);
-                psg->ch3.wavedata8[byteOff + 1] = (uint8_t)(val >> 8);
-            }
-        }
+        unsigned bankOffset = audio->enable && psg->ch3.bank ? 0 : 16;
+        unsigned byteOff = addr - REG_WAVE_RAM0_LO + bankOffset;
+        psg->ch3.wavedata8[byteOff] = (uint8_t)val;
+        psg->ch3.wavedata8[byteOff + 1] = (uint8_t)(val >> 8);
 
         /** Also mirror to I/O register space. */
         audio->gba->memory.io[addr >> 1] = val;
@@ -1684,6 +1617,64 @@ void cupid_audio_write_register(struct CupidAudio* audio, uint32_t addr,
     }
 }
 
+/* Byte accesses update only the addressed PSG field. Wave RAM merges against
+ * the actual CPU-visible bank; mixer controls retain their masked shadow. */
+void cupid_audio_write_register8(struct CupidAudio* audio, uint32_t addr, uint8_t val) {
+    if (addr >= REG_SOUND1CNT_L && addr < REG_SOUNDCNT_H && !audio->enable) return;
+    if (addr >= REG_WAVE_RAM0_LO && addr <= REG_WAVE_RAM3_HI + 1) {
+        uint32_t half = addr & ~1u;
+        uint16_t old = cupid_audio_read_register(audio, half);
+        uint16_t merged = addr & 1 ? (old & 255) | ((uint16_t)val << 8)
+                                  : (old & 0xFF00) | val;
+        cupid_audio_write_register(audio, half, merged);
+        return;
+    }
+    struct CupidAudioPSG* psg = &audio->psg;
+    uint64_t timestamp = cupid_timing_global_time(&audio->gba->timing);
+    cupid_audio_sample(audio, timestamp);
+    if (addr >= REG_SOUND1CNT_L && addr < REG_SOUNDCNT_L)
+        cupid_audio_psg_run(psg, timestamp, 1 << ((addr - REG_SOUND1CNT_L) >> 3));
+    switch (addr) {
+    case REG_SOUND1CNT_L: _writeNR10(psg, val); break;
+    case REG_SOUND1CNT_H: _writeNR11(psg, val); break;
+    case REG_SOUND1CNT_H + 1: _writeNR12(psg, val); break;
+    case REG_SOUND1CNT_X: _writeNR13(psg, val); break;
+    case REG_SOUND1CNT_X + 1: _writeNR14(psg, val, timestamp); break;
+    case REG_SOUND2CNT_L: _writeNR21(psg, val); break;
+    case REG_SOUND2CNT_L + 1: _writeNR22(psg, val); break;
+    case REG_SOUND2CNT_H: _writeNR23(psg, val); break;
+    case REG_SOUND2CNT_H + 1: _writeNR24(psg, val, timestamp); break;
+    case REG_SOUND3CNT_L:
+        psg->ch3.size = (val >> 5) & 1;
+        psg->ch3.bank = (val >> 6) & 1;
+        _writeNR30(psg, val);
+        break;
+    case REG_SOUND3CNT_H: _writeNR31(psg, val); break;
+    case REG_SOUND3CNT_H + 1: psg->ch3.volume = (val >> 5) & 7; break;
+    case REG_SOUND3CNT_X: _writeNR33(psg, val); break;
+    case REG_SOUND3CNT_X + 1: _writeNR34(psg, val, timestamp); break;
+    case REG_SOUND4CNT_L: _writeNR41(psg, val); break;
+    case REG_SOUND4CNT_L + 1: _writeNR42(psg, val); break;
+    case REG_SOUND4CNT_H: _writeNR43(psg, val); break;
+    case REG_SOUND4CNT_H + 1: _writeNR44(psg, val, timestamp); break;
+    case REG_SOUNDCNT_L: case REG_SOUNDCNT_L + 1:
+    case REG_SOUNDCNT_H: case REG_SOUNDCNT_H + 1:
+    case REG_SOUNDCNT_X:
+    case REG_SOUNDBIAS: case REG_SOUNDBIAS + 1: {
+        uint32_t half = addr & ~1u;
+        uint16_t old = audio->gba->memory.io[half >> 1];
+        uint16_t merged = addr & 1 ? (old & 255) | ((uint16_t)val << 8)
+                                  : (old & 0xFF00) | val;
+        cupid_audio_write_register(audio, half, merged);
+        return;
+    }
+    default: return;
+    }
+    uint16_t* shadow = &audio->gba->memory.io[(addr & ~1u) >> 1];
+    *shadow = addr & 1 ? (*shadow & 255) | ((uint16_t)val << 8)
+                      : (*shadow & 0xFF00) | val;
+}
+
 /**
  * @brief Read the current value of an audio I/O register.
  *
@@ -1696,6 +1687,14 @@ void cupid_audio_write_register(struct CupidAudio* audio, uint32_t addr,
  */
 uint16_t cupid_audio_read_register(struct CupidAudio* audio, uint32_t addr) {
     struct CupidAudioPSG* psg = &audio->psg;
+    if (addr >= REG_WAVE_RAM0_LO && addr <= REG_WAVE_RAM3_HI) {
+        uint64_t timestamp = cupid_timing_global_time(&audio->gba->timing);
+        cupid_audio_sample(audio, timestamp);
+        cupid_audio_psg_run(psg, timestamp, 0x4);
+        unsigned bankOffset = audio->enable && psg->ch3.bank ? 0 : 16;
+        unsigned byteOff = addr - REG_WAVE_RAM0_LO + bankOffset;
+        return psg->ch3.wavedata8[byteOff] | ((uint16_t)psg->ch3.wavedata8[byteOff + 1] << 8);
+    }
 
     switch (addr) {
 
