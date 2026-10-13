@@ -216,7 +216,11 @@ queue overflow. It fails the run on file write or close errors. See
 [audio timing](../hardware/audio/timing.md) for coverage and qualification limits.
 
 `platform.audio` checks interpolation and a live SDL2 dummy device with a
-concurrent consumer. Linux CI also runs this check in a separate ThreadSanitizer
+concurrent consumer, including a producer slower than playback. The optional
+host output sink observes each playback buffer and its source-backed prefix.
+The live checks require every source-backed frame to retain the expected PCM;
+the slower case must also exercise underrun. The final faded sample is not a
+fixed-value observation. Linux CI also runs this check in a separate ThreadSanitizer
 build. To reproduce it locally:
 
 ```sh
