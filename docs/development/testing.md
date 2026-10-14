@@ -1,5 +1,10 @@
 # Testing
 
+The `gba.rom-bus-*` groups cover address-derived data outside the ROM image,
+ARM/Thumb loads, DMA rollover and save-device selection. They retain mapped
+ROM boundaries and EEPROM output checks. Each group has a ten-second deadline;
+see [Game Pak ROM reads](../hardware/rom-bus.md) for the scope.
+
 The `platform.input-*` groups run real SDL2 virtual-controller state through
 the frontend event poll. They cover bindings, mixed source ownership, strict
 stick boundaries, focus/hotplug and keypad IRQ/STOP interactions. Every group

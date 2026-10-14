@@ -80,6 +80,13 @@ if(BUILD_TESTING)
     add_test(NAME gba.io COMMAND test_io)
     set_tests_properties(gba.io PROPERTIES TIMEOUT 10)
 
+    add_executable(test_rom_bus tests/gba/test_rom_bus.c)
+    target_link_libraries(test_rom_bus PRIVATE cupid_core)
+    foreach(group reads cpu dma eeprom)
+        add_test(NAME gba.rom-bus-${group} COMMAND test_rom_bus ${group})
+        set_tests_properties(gba.rom-bus-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
     add_executable(test_save_file tests/gba/save/test_file.c)
     target_link_libraries(test_save_file PRIVATE cupid_core)
     add_test(NAME gba.save-file COMMAND test_save_file ${CMAKE_CURRENT_BINARY_DIR})
