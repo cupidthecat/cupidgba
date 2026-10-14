@@ -4,7 +4,6 @@
  */
 
 #include "cupid/gba.h"
-#include <math.h>
 #include <stdlib.h>
 
 /**
@@ -23,15 +22,6 @@ static void _GetBiosChecksum(struct CupidGBA* gba) {
     gba->cpu.gprs[0] = GBA_BIOS_CHECKSUM;
     gba->cpu.gprs[1] = 1;
     gba->cpu.gprs[3] = GBA_SIZE_BIOS;
-}
-
-/**
- * @brief SWI 0x1F: MidiKey2Freq.
- *
- */
-static void _MidiKey2Freq(struct CupidGBA* gba) {
-    uint32_t key = cupid_memory_load32(&gba->cpu, gba->cpu.gprs[0] + 4, NULL);
-    gba->cpu.gprs[0] = (uint32_t)(key / exp2f((180.f - gba->cpu.gprs[1] - gba->cpu.gprs[2] / 256.f) / 12.f));
 }
 
 /**
@@ -67,7 +57,10 @@ void cupid_bios_swi(struct CupidGBA* gba, uint8_t comment) {
         /* Utility instructions expose their memory accesses and peripheral clocks. */
         cupid_arm_raise_swi(&gba->cpu);
         break;
-    case 0x1F: _MidiKey2Freq(gba); break;
+    case 0x1F:
+        /* Fixed-point interpolation and the wave read run through firmware. */
+        cupid_arm_raise_swi(&gba->cpu);
+        break;
     default: break;    /** Unknown SWI */
     }
 }

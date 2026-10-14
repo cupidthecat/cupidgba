@@ -31,7 +31,7 @@ RegisterRamReset:
     adds r1, r5, #4
     movs r2, #8
     bl resetFill
-    subs r1, r1, #4
+    .inst.n 0x1F09 @ subs r1, r1, #4; retain the three-operand Thumb encoding.
     movs r2, #16
     bl resetFill
     movs r1, #0xB0
