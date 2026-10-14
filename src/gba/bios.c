@@ -7,13 +7,6 @@
 #include <stdlib.h>
 
 /**
- * @brief SWI 0x03: Stop the system clock.
- */
-static void _Stop(struct CupidGBA* gba) {
-    cupid_gba_stop(gba);
-}
-
-/**
  * @brief SWI 0x0D: GetBiosChecksum.
  */
 #define GBA_BIOS_CHECKSUM 0xBAAE187Fu
@@ -41,7 +34,10 @@ void cupid_bios_swi(struct CupidGBA* gba, uint8_t comment) {
         /* Execute the replacement BIOS wait loop through the CPU pipeline. */
         cupid_arm_raise_swi(&gba->cpu);
         break;
-    case 0x03: _Stop(gba); break;
+    case 0x03: case 0x27:
+        /* Sleep's register strobe and return execute through timed firmware. */
+        cupid_arm_raise_swi(&gba->cpu);
+        break;
     case 0x06: case 0x07: case 0x08: case 0x09: case 0x0A:
     case 0x0B: case 0x0C:
         /* Execute math and copy services through the timed CPU and bus. */
