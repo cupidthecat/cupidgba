@@ -383,7 +383,14 @@ static void stop_freezes_peripherals_and_filters_wake_sources(void) {
     gba->memory.activeRegion = GBA_REGION_ROM0;
     cupid_io_write8(gba, REG_HALTCNT, 0x80);
     CHECK(!gba->stopped);
-    cupid_bios_swi(gba, 3);
+    /* Enter STOP through a real RAM caller and its timed BIOS strobe. */
+    const uint32_t sleepCall[] = {0xEF030000, 0xEAFFFFFE};
+    memcpy(gba->memory.iwram, sleepCall, sizeof(sleepCall));
+    gba->cpu.gprs[ARM_PC] = GBA_BASE_IWRAM;
+    CupidARMWritePC(&gba->cpu);
+    unsigned steps;
+    for (steps = 0; steps < 2000 && !gba->stopped; steps++) cupid_gba_step(gba);
+    CHECK(steps < 2000);
     CHECK(gba->stopped && gba->cpu.halted);
     uint64_t clock = cupid_timing_global_time(&gba->timing);
     uint16_t timer = cupid_io_read(gba, REG_TM0CNT_L);
