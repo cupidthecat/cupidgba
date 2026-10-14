@@ -83,21 +83,21 @@ static void initial_fetch_pending_completion_and_cache_consumption(void) {
     for (unsigned width = 2; width <= 4; width += 2) {
         struct CupidGBA* gba = machine(0);
         struct CupidPrefetch* unit = &gba->memory.prefetchUnit;
-        unsigned duty = width == 4 ? 6 : 3;
+        unsigned transfer = width == 4 ? 6 : 3;
         CHECK(fetch(gba, GBA_BASE_ROM0 + 0x100, width, false) == (width == 4 ? 8 : 5));
-        CHECK(unit->active && unit->count == 0 && unit->duty == duty);
+        CHECK(unit->active && unit->count == 0 && unit->duty == 3);
         CHECK(unit->head == GBA_BASE_ROM0 + 0x100 + width && unit->tail == unit->head);
-        idle(gba, duty - 1);
-        CHECK(unit->remaining == 1 && unit->count == 0);
+        idle(gba, transfer - 1);
+        CHECK(unit->remaining == 1 && unit->count == width / 2 - 1);
         CHECK(fetch(gba, unit->head, width, true) == 1);
-        CHECK(unit->count == 0 && unit->remaining == duty);
-        idle(gba, duty * 2 - 1);
-        CHECK(unit->count == 1 && unit->remaining == 1);
+        CHECK(unit->count == 0 && unit->remaining == 3);
+        idle(gba, transfer * 2 - 1);
+        CHECK(unit->count == width - 1 && unit->remaining == 1);
         uint32_t next = unit->head + width;
         CHECK(fetch(gba, unit->head, width, true) == 1);
-        CHECK(unit->count == 1 && unit->head == next && unit->remaining == duty);
+        CHECK(unit->count == width / 2 && unit->head == next && unit->remaining == 3);
         CHECK(fetch(gba, next, width, true) == 1);
-        CHECK(unit->count == 0 && unit->remaining == duty - 1);
+        CHECK(unit->count == 0 && unit->remaining == 2);
         destroy(gba);
     }
 }
@@ -108,20 +108,20 @@ static void queue_capacity_is_bounded_and_reset_clears_pending_state(void) {
         struct CupidPrefetch* unit = &gba->memory.prefetchUnit;
         fetch(gba, GBA_BASE_ROM0 + 0x100, width, false);
         idle(gba, 1000000);
-        CHECK(unit->count == 16 / width && unit->remaining == 0);
+        CHECK(unit->count == 8 && unit->remaining == 0);
         CHECK(unit->tail - unit->head == 16);
         uint32_t first = unit->head;
         idle(gba, 1000000);
-        CHECK(unit->count == 16 / width && unit->head == first);
+        CHECK(unit->count == 8 && unit->head == first);
         CHECK(fetch(gba, first, width, true) == 1);
-        CHECK(unit->count == 16 / width - 1);
+        CHECK(unit->count == 8 - width / 2);
         CHECK(unit->remaining == unit->duty - 1);
         /* A full buffer cannot supply an unlimited stream at one clock per
          * opcode: newly fetched opcodes still use the cartridge bandwidth. */
         for (unsigned i = 1; i < 32; i++) {
             uint64_t clocks = fetch(gba, first + i * width, width, true);
-            CHECK(unit->count <= 16 / width);
-            if (i >= 16) CHECK(clocks == unit->duty);
+            CHECK(unit->count <= 8);
+            if (i >= 16) CHECK(clocks == unit->duty * width / 2);
         }
         cupid_gba_reset(gba);
         CHECK(!unit->active && !unit->busy && !unit->disabled && unit->count == 0);
@@ -137,11 +137,11 @@ static void cpu_ram_data_fills_and_gamepak_data_cancels(void) {
     gba->cpu.memory.timed = true;
     int cycles = 0;
     cupid_memory_load32(&gba->cpu, GBA_BASE_EWRAM, &cycles);
-    CHECK(cycles == 1 && unit->count == 1 && unit->remaining == 6);
+    CHECK(cycles == 1 && unit->count == 2 && unit->remaining == 3);
     CHECK(cupid_timing_global_time(&gba->timing) == 14);
     gba->cpu.cycles += cycles;
     cupid_bus_finish(&gba->cpu);
-    CHECK(unit->remaining == 5);
+    CHECK(unit->remaining == 2);
     cycles = 0;
     cupid_memory_load16(&gba->cpu, GBA_BASE_ROM0 + 0x200, &cycles);
     CHECK(!unit->active && unit->count == 0 && !unit->busy);
@@ -170,10 +170,78 @@ static void completing_halfword_arbitration_and_branch_width_changes(void) {
     idle(gba, 12);
     CHECK(fetch(gba, GBA_BASE_ROM0 + 0x200, 4, false) == 8);
     CHECK(gba->memory.prefetchUnit.head == GBA_BASE_ROM0 + 0x204);
-    /* Switching ARM/Thumb refills from a new stream, not a mismatched entry. */
+    /* An unrelated target starts a new stream regardless of fetch width. */
     CHECK(fetch(gba, GBA_BASE_ROM0 + 0x300, 2, false) == 5);
     CHECK(gba->memory.prefetchUnit.width == 2 && gba->memory.prefetchUnit.duty == 3);
     destroy(gba);
+}
+
+static void partial_words_and_mixed_instruction_widths(void) {
+    const uint64_t clocks[] = {0, UINT32_MAX - 10u, UINT64_C(0x300000000)};
+    const unsigned second_halfword[] = {3, 3, 3, 2, 1, 1};
+    for (unsigned c = 0; c < sizeof(clocks) / sizeof(*clocks); c++) {
+        for (unsigned elapsed = 0; elapsed < 6; elapsed++) {
+            struct CupidGBA* gba = machine(clocks[c]);
+            CHECK(fetch(gba, GBA_BASE_ROM0 + 0x100, 4, false) == 8);
+            idle(gba, elapsed);
+            CHECK(gba->memory.prefetchUnit.count == elapsed / 3);
+            CHECK(fetch(gba, GBA_BASE_ROM0 + 0x104, 4, true) == 6 - elapsed);
+            destroy(gba);
+
+            gba = machine(clocks[c]);
+            CHECK(fetch(gba, GBA_BASE_ROM0 + 0x100, 4, false) == 8);
+            idle(gba, elapsed);
+            CHECK(fetch(gba, GBA_BASE_ROM0 + 0x104, 2, false) == (elapsed < 3 ? 3 - elapsed : 1));
+            CHECK(fetch(gba, GBA_BASE_ROM0 + 0x106, 2, true) == second_halfword[elapsed]);
+            CHECK(gba->memory.prefetchUnit.head == GBA_BASE_ROM0 + 0x108);
+            destroy(gba);
+        }
+        struct CupidGBA* gba = machine(clocks[c]);
+        CHECK(fetch(gba, GBA_BASE_ROM0 + 0x102, 2, false) == 5);
+        idle(gba, 6);
+        CHECK(fetch(gba, GBA_BASE_ROM0 + 0x104, 4, false) == 1);
+        CHECK(fetch(gba, GBA_BASE_ROM0 + 0x108, 4, true) == 5);
+        destroy(gba);
+    }
+}
+
+static void arm_exception_return_retains_thumb_halfwords(void) {
+    const uint64_t clocks[] = {0, UINT32_MAX - 10u, UINT64_C(0x300000000)};
+    const uint16_t program[] = {0x2001, 0x2002, 0x2003, 0x2004}; /* MOVS r0, #1..4 */
+    const uint32_t nop = 0xE1A00000;
+    for (unsigned c = 0; c < sizeof(clocks) / sizeof(*clocks); c++) {
+        for (unsigned ram = 0; ram < 2; ram++) {
+            struct CupidGBA* gba = machine(clocks[c]);
+            struct CupidARM* cpu = &gba->cpu;
+            memcpy(gba->memory.rom + 0x104, program, sizeof(program));
+            CHECK(fetch(gba, GBA_BASE_ROM0 + 0x100, 4, false) == 8);
+            idle(gba, 6);
+            /* Fetches outside ROM retain the FIFO. This owned exception
+             * epilogue restores Thumb execution at the first buffered halfword. */
+            const uint32_t handler = ram ? GBA_BASE_IWRAM + 0x100 : 0x100;
+            memcpy((ram ? gba->memory.iwram : gba->memory.bios) + 0x108, &nop, sizeof(nop));
+            cupid_arm_set_priv_mode(cpu, MODE_IRQ);
+            cpu->cpsr.priv = MODE_IRQ;
+            cpu->cpsr.i = 1;
+            cpu->spsr.packed = MODE_SYS | 0x20;
+            cpu->gprs[ARM_LR] = GBA_BASE_ROM0 + 0x108;
+            cpu->gprs[ARM_PC] = handler + 4;
+            cpu->prefetch[0] = 0xE25EF004; /* SUBS pc, lr, #4 */
+            cpu->prefetch[1] = nop;
+            cupid_memory_set_active_region(cpu, handler);
+            const uint64_t before = cupid_timing_global_time(&gba->timing);
+            cupid_arm_step(cpu);
+            CHECK(cupid_timing_global_time(&gba->timing) == before + 3);
+            CHECK(cpu->executionMode == MODE_THUMB && cpu->privilegeMode == MODE_SYS);
+            CHECK(cpu->prefetch[0] == program[0] && cpu->prefetch[1] == program[1]);
+            CHECK((uint32_t)cpu->gprs[ARM_PC] == GBA_BASE_ROM0 + 0x106);
+            cupid_thumb_step(cpu);
+            CHECK(cpu->gprs[0] == 1 && cupid_timing_global_time(&gba->timing) == before + 4);
+            cupid_thumb_step(cpu);
+            CHECK(cpu->gprs[0] == 2 && cupid_timing_global_time(&gba->timing) == before + 6);
+            destroy(gba);
+        }
+    }
 }
 
 static void disabled_prefetch_drains_and_restarts_the_burst(void) {
@@ -181,7 +249,7 @@ static void disabled_prefetch_drains_and_restarts_the_burst(void) {
     struct CupidPrefetch* unit = &gba->memory.prefetchUnit;
     fetch(gba, GBA_BASE_ROM0 + 0x100, 4, false);
     idle(gba, 6);
-    CHECK(unit->count == 1);
+    CHECK(unit->count == 2);
     cupid_memory_update_waitstates(gba, 0);
     CHECK(unit->disabled && !gba->memory.prefetch);
     CHECK(fetch(gba, GBA_BASE_ROM0 + 0x104, 4, true) == 1);
@@ -206,7 +274,7 @@ static void sequential_costs_waitcnt_and_page_restart(void) {
     CHECK(fetch(gba, GBA_BASE_ROM2 + 0x104, 4, true) == 18);
     cupid_memory_update_waitstates(gba, 0x4018);
     CHECK(fetch(gba, GBA_BASE_ROM0 + 0x100, 4, false) == 5);
-    CHECK(gba->memory.prefetchUnit.duty == 4);
+    CHECK(gba->memory.prefetchUnit.duty == 2);
     CHECK(fetch(gba, GBA_BASE_ROM0 + 0x104, 4, true) == 4);
     destroy(gba);
 }
@@ -240,7 +308,7 @@ static void dma_clock_accounting_matches_late_and_punctual_dispatch(void) {
             CHECK(late->irqf == punctual->irqf && late->irq.line == punctual->irq.line);
             CHECK(cupid_io_read(late, REG_TM0CNT_L) == cupid_io_read(punctual, REG_TM0CNT_L));
             CHECK(!late->memory.dmaRunning && !punctual->memory.dmaRunning);
-            CHECK(external ? !a->active : a->count == 4);
+            CHECK(external ? !a->active : a->count == 8);
             destroy(late);
             destroy(punctual);
         }
@@ -274,6 +342,8 @@ int main(void) {
     RUN(queue_capacity_is_bounded_and_reset_clears_pending_state);
     RUN(cpu_ram_data_fills_and_gamepak_data_cancels);
     RUN(completing_halfword_arbitration_and_branch_width_changes);
+    RUN(partial_words_and_mixed_instruction_widths);
+    RUN(arm_exception_return_retains_thumb_halfwords);
     RUN(disabled_prefetch_drains_and_restarts_the_burst);
     RUN(sequential_costs_waitcnt_and_page_restart);
     RUN(dma_clock_accounting_matches_late_and_punctual_dispatch);
