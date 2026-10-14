@@ -129,9 +129,13 @@ void cupid_rtc_sync(struct CupidRTC* rtc, uint64_t clock) {
     }
     const uint64_t elapsed = clock - rtc->lastClock;
     rtc->lastClock = clock;
-    const uint64_t remainder = rtc->fraction + elapsed % CUPID_RTC_CLOCK_HZ;
+    cupid_rtc_advance_clocks(rtc, elapsed);
+}
+
+void cupid_rtc_advance_clocks(struct CupidRTC* rtc, uint64_t clocks) {
+    const uint64_t remainder = rtc->fraction + clocks % CUPID_RTC_CLOCK_HZ;
     rtc->fraction = (uint32_t)(remainder % CUPID_RTC_CLOCK_HZ);
-    advance_seconds(rtc, elapsed / CUPID_RTC_CLOCK_HZ + remainder / CUPID_RTC_CLOCK_HZ);
+    advance_seconds(rtc, clocks / CUPID_RTC_CLOCK_HZ + remainder / CUPID_RTC_CLOCK_HZ);
     refresh_output(rtc);
 }
 

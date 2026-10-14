@@ -32,6 +32,7 @@ void cupid_cartridge_reset_bus(struct CupidGBA* gba);
 /* Reconfigure the battery clock without replaying edges from powered-off time. */
 void cupid_cartridge_rtc_reschedule(struct CupidGBA* gba);
 void cupid_cartridge_rtc_sync(struct CupidGBA* gba);
+uint64_t cupid_cartridge_advance_stopped_time(struct CupidGBA* gba, uint64_t clocks);
 bool cupid_cartridge_gpio_address(const struct CupidGBA* gba, uint32_t address);
 bool cupid_cartridge_gpio_read(struct CupidGBA* gba, uint32_t address, uint16_t* value);
 bool cupid_cartridge_gpio_write(struct CupidGBA* gba, uint32_t address, uint16_t value);

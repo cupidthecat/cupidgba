@@ -29,6 +29,28 @@ void cupid_cartridge_rtc_reschedule(struct CupidGBA* gba) {
     schedule_rtc_interrupt(gba);
 }
 
+uint64_t cupid_cartridge_advance_stopped_time(struct CupidGBA* gba, uint64_t clocks) {
+    if (!gba->stopped || !clocks) return 0;
+    struct CupidCartridge* cart = &gba->cartridge;
+    if (!cart->rtcPresent) return clocks;
+    uint64_t elapsed = 0;
+    while (elapsed < clocks && gba->stopped) {
+        const uint64_t remaining = clocks - elapsed;
+        uint64_t amount = cupid_rtc_next_interrupt(&cart->rtc);
+        /* Once an ineligible source is pending, more releases have no observable
+         * IRQ effect until execution resumes. The final divider/calendar still
+         * advances over the complete supplied interval. */
+        if (!amount || (!(gba->ie & IRQ_GAMEPAK) && (gba->irq.pendingIF & IRQ_GAMEPAK)))
+            amount = remaining;
+        if (amount > remaining) amount = remaining;
+        const bool previousLow = cart->rtc.interruptLow;
+        cupid_rtc_advance_clocks(&cart->rtc, amount);
+        elapsed += amount;
+        rtc_output_changed(gba, previousLow);
+    }
+    return elapsed;
+}
+
 static void rtc_interrupt(struct CupidTiming* timing, void* context, uint32_t late) {
     (void)timing;
     (void)late;

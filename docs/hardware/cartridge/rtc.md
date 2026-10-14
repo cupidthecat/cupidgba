@@ -78,6 +78,24 @@ repeatable runs with a fixed seed and the same initial battery state. Wall mode
 adds an explicit host input at startup and is not repeatable without recording
 that input. Headless runs do not load or write frontend battery files.
 
+The RTC has its own oscillator and continues during live console STOP. The
+core accepts an explicit interval through `cupid_gba_advance_stopped_time`;
+one supplied clock is 1/16777216 second of battery time. This leaves the CPU,
+timers, video, audio, DMA and serial clocks and their deadlines frozen. The
+call returns the clocks consumed, ending at the first eligible Game Pak
+release edge even if IME is clear or CPU interrupts are masked. A disabled wake source
+can retain a pending request while STOP continues. The request enters the
+ordinary IF/available/IRQ pipeline when the system clock resumes.
+
+The SDL2 frontend supplies one frame-length interval through
+`cupid_gba_run_interval`. It consumes the stopped part on the battery clock and
+the remainder on the system clock after wake. Completed CPU steps can cross an
+interval endpoint; the next call charges that overshoot before running more
+clocks. The headless runner also supplies deterministic STOP time and counts
+it against its existing elapsed-clock budget. It reports `stopped_cycles`
+separately; STOP creates no video frames or audio samples. Single CPU steps and
+`cupid_gba_run_frame` still return while stopped and do not infer elapsed time.
+
 ## Battery files
 
 The SDL2 frontend keeps a separate `.rtc` file beside the cartridge, using the
@@ -101,7 +119,7 @@ versions load; version 1 supplies zero parameters. Saves use version 2 when
 parameters or an alarm/frequency latch require it, and version 1 otherwise.
 Loading a battery or
 advancing its offline clock schedules future transitions without replaying
-console IRQs from the interval when execution was stopped.
+console IRQs from the interval when the frontend was closed.
 
 Invalid size, calendar, reserved fields, checksum or cartridge identity stops
 startup before SDL initialization. Failed writes preserve the previous file.
@@ -209,8 +227,15 @@ battery versions, console reset, disable/replacement and frontend offline
 resume preserve parameters and output state without replaying past requests.
 These are documented-model regressions; the local original corpus does not
 exercise alarm or frequency timing. Direct cartridge timing remains unqualified.
-Minute hold rearming within the chip's 10 ms carry interval, time writes during
-an active output and STOP wake timing also need physical evidence.
+STOP regressions cover the independent fractional clock, all divider selections,
+minute/alarm output latches, wake filtering and IRQ visibility, ARM/Thumb SWI
+return on both BIOS paths, timer/video/audio/serial freezing, clock wrap, reset,
+live versus offline persistence and chunked paced intervals. A generated
+cartridge exercises GPIO configuration, STOP wake and a frozen timer through
+the headless runner. Physical output phase, the cartridge inverter and the
+system oscillator's stabilization delay remain unqualified.
+Minute hold rearming within the chip's 10 ms carry interval and time writes during
+an active output also need further work.
 
 The power detector exposes an explicit sample input: a failure latches the
 flag and stops sampling; reading control rearms it. Voltage thresholds and

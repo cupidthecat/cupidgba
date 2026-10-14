@@ -327,7 +327,7 @@ int main(int argc, char* argv[]) {
     /**
      * Main loop (single-threaded):
      * 1. Poll SDL events and map keys.
-     * 2. Run one full emulation frame.
+     * 2. Run one frame-length interval, including the battery clock in STOP.
      * 3. Present framebuffer.
      * 4. Periodically flush dirty save data.
      */
@@ -338,7 +338,7 @@ int main(int argc, char* argv[]) {
 
         /* The SDL callback consumes the same queue that emulation produces. */
         if (plat.audioDevice) SDL_LockAudioDevice(plat.audioDevice);
-        cupid_gba_run_frame(&gba);
+        cupid_gba_run_interval(&gba, VIDEO_TOTAL_LENGTH);
         if (plat.audioDevice) SDL_UnlockAudioDevice(plat.audioDevice);
 
         /** Present framebuffer. */

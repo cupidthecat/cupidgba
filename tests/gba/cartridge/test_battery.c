@@ -227,6 +227,36 @@ static void failed_save_preserves_the_existing_file(void) {
     destroy(gba);
 }
 
+static void live_stop_clock_roundtrips_without_replaying_its_pending_request(void) {
+    struct CupidGBA* gba = machine();
+    cupid_gba_stop(gba);
+    CHECK(gba->stopped);
+    const struct CupidRTCDateTime date = {26, 10, 13, 2, 23, 59, 59};
+    CHECK(cupid_rtc_set_datetime(&gba->cartridge.rtc, &date));
+    cupid_rtc_write_interrupt_parameters(&gba->cartridge.rtc, 1);
+    cupid_rtc_write_control(&gba->cartridge.rtc, 0x42);
+    cupid_cartridge_rtc_reschedule(gba);
+    const uint64_t interval = 2 * CUPID_RTC_CLOCK_HZ + 123;
+    CHECK(cupid_gba_advance_stopped_time(gba, interval) == interval);
+    CHECK(gba->stopped && gba->irq.pendingIF == IRQ_GAMEPAK && !gba->irqf);
+    CHECK(gba->cartridge.rtc.date.day == 14 && gba->cartridge.rtc.date.second == 1);
+    CHECK(gba->cartridge.rtc.fraction == 123);
+    CHECK(cupid_cartridge_save_rtc(gba, statePath, 456));
+    destroy(gba);
+    gba = machine();
+    uint64_t stamp = 0;
+    CHECK(cupid_cartridge_load_rtc(gba, statePath, &stamp));
+    CHECK(stamp == 456 && gba->cartridge.rtc.date.day == 14 && gba->cartridge.rtc.date.second == 1);
+    CHECK(gba->cartridge.rtc.fraction == 123 && gba->cartridge.rtc.interruptParameters == 1);
+    CHECK(!gba->stopped && !gba->irq.pendingIF && !gba->irqf);
+    CHECK(cupid_timing_until(&gba->timing, &gba->cartridge.rtcInterruptEvent) == 133);
+    cupid_timing_tick(&gba->timing, 132);
+    CHECK(!gba->irq.pendingIF);
+    cupid_timing_tick(&gba->timing, 1);
+    CHECK(gba->irq.pendingIF == IRQ_GAMEPAK);
+    destroy(gba);
+}
+
 int main(int argc, char** argv) {
     CHECK(argc == 2);
 #ifdef _WIN32
@@ -254,6 +284,7 @@ int main(int argc, char** argv) {
     RUN(failed_save_preserves_the_existing_file);
     RUN(minute_output_latch_roundtrips_without_an_extra_irq);
     RUN(extended_interrupt_state_roundtrips_and_validates_both_versions);
+    RUN(live_stop_clock_roundtrips_without_replaying_its_pending_request);
     CHECK(remove(statePath) == 0 && remove(savePath) == 0);
 #ifdef _WIN32
     CHECK(_rmdir(directory) == 0);

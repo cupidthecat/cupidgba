@@ -94,10 +94,10 @@ int main(int argc, char** argv) {
         gba->audio.sampleSink = audio_sample;
         gba->audio.sampleSinkContext = &audioTrace;
     }
-    uint64_t completed = 0, steps = 0;
+    uint64_t completed = 0, steps = 0, stoppedClocks = 0;
     bool terminal = false;
     while (completed < frames && steps < stepLimit &&
-           cupid_timing_global_time(&gba->timing) < cycleLimit) {
+           cupid_timing_global_time(&gba->timing) + stoppedClocks < cycleLimit) {
         if (expectedRegister >= 0 && gba->cpu.executionMode == MODE_ARM &&
             (uint32_t)gba->cpu.gprs[ARM_PC] >= GBA_BASE_ROM0 &&
             (!terminalAddress || (uint32_t)gba->cpu.gprs[ARM_PC] - 4 == terminalAddress) &&
@@ -109,12 +109,17 @@ int main(int argc, char** argv) {
             gba->keysActive = keyEvents[nextKeyEvent++].keys;
             cupid_gba_test_keypad_irq(gba);
         }
-        cupid_gba_step(gba);
+        if (gba->stopped) {
+            uint64_t clocks = cycleLimit - cupid_timing_global_time(&gba->timing) - stoppedClocks;
+            if (clocks > VIDEO_TOTAL_LENGTH) clocks = VIDEO_TOTAL_LENGTH;
+            stoppedClocks += cupid_gba_advance_stopped_time(gba, clocks);
+        } else cupid_gba_step(gba);
         steps++;
         if (gba->frameReady) { completed++; gba->frameReady = false; }
     }
     printf("frames=%" PRIu64 " cycles=%" PRIu64 " steps=%" PRIu64 " pc=%08" PRIx32 "\n",
            completed, cupid_timing_global_time(&gba->timing), steps, (uint32_t)gba->cpu.gprs[ARM_PC]);
+    if (stoppedClocks) printf("stopped_cycles=%" PRIu64 "\n", stoppedClocks);
     if (expectedRegister >= 0) {
         uint32_t value = (uint32_t)gba->cpu.gprs[expectedRegister];
         printf("terminal=%s r%d=%" PRIu32 " result=%s\n", terminal ? "yes" : "no", expectedRegister,

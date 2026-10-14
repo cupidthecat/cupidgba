@@ -338,6 +338,15 @@ clock wrap, reset, both battery versions and offline state. These tests preserve
 the model's specified behavior; physical cartridge edge/phase timing still
 needs qualification. See [RTC behavior and limits](../hardware/cartridge/rtc.md).
 
+`gba.rtc-stop` checks explicit battery time during STOP, frozen system
+peripherals, release-edge wake eligibility, resumed IRQ stages, calendar and
+clock wrap, SWI return in ARM/Thumb mode and paced-interval equivalence.
+Supplying `CUPID_TEST_BIOS` adds the external-firmware path. `rom.rtc-stop`
+generates a CupidGBA cartridge that configures the RTC over GPIO, enters STOP
+and checks a frozen timer after wake. It uses the replacement BIOS. The runner
+reports elapsed battery clocks separately and includes them in its existing
+observation budget. These checks do not measure physical oscillator recovery.
+
 Optional standalone serial and HALT probes use their original cartridge bytes
 and comparisons. Set `CUPID_SERIAL_PROBE_DIR` for the nine serial IRQ, data and
 start-bit probes. Set `CUPID_HALT_PROBE_DIR` and `CUPID_TEST_BIOS` for four HALT

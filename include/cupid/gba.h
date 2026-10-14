@@ -102,6 +102,7 @@ struct CupidGBA {
     bool stopped;        /**< System clock is frozen until an eligible external IRQ */
     bool haltIRQSample;  /**< IRQ line before the HALT acceptance clock */
     bool haltIRQSampleValid;
+    uint64_t intervalOvershoot; /**< Completed-step clocks charged to the next paced interval */
     uint32_t biosStall;  /**< Extra stall cycles added by BIOS reads */
     uint32_t dmaPC;      /**< PC snapshot when DMA started */
 
@@ -133,12 +134,18 @@ void cupid_gba_skip_bios(struct CupidGBA* gba);
 void cupid_gba_halt(struct CupidGBA* gba);
 void cupid_gba_stop(struct CupidGBA* gba);
 void cupid_gba_wake_stop(struct CupidGBA* gba, enum CupidIRQ sources);
+/* Consume explicit elapsed clocks in STOP, returning early at an eligible wake.
+ * CPU, timer, video, audio and DMA clocks remain frozen. No host clock is read. */
+uint64_t cupid_gba_advance_stopped_time(struct CupidGBA* gba, uint64_t clocks);
 
 /** Test and fire keypad IRQ based on KEYCNT (call after key state changes) */
 void cupid_gba_test_keypad_irq(struct CupidGBA* gba);
 
 /** Run to the next frame, or return while the system clock is stopped. */
 void cupid_gba_run_frame(struct CupidGBA* gba);
+/* Run a paced interval including RTC time in STOP. A CPU step can finish beyond
+ * its endpoint; the next interval consumes that overshoot before running again. */
+void cupid_gba_run_interval(struct CupidGBA* gba, uint32_t clocks);
 
 /** Run a single CPU step + process events */
 void cupid_gba_step(struct CupidGBA* gba);
