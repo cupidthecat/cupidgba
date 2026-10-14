@@ -36,6 +36,12 @@ Music-frequency fixtures cover caller banks,
 fractional interpolation, upper-key clamps, source alignment/waits and live
 timer/DMA/IRQ progress, including late callbacks and clock wrap. A local
 external BIOS enables paired register, clock and protection comparisons.
+Sleep-entrypoint regressions require 1,724 ARM/Thumb cases for HALT, STOP and
+CustomHalt. They cover every control byte, ignored upper bits, caller masks
+and banks, ready requests, IME, frozen STOP state, external wake filters,
+video/audio/timer/DMA progress during HALT, overdue DMA and clock wrap.
+An external BIOS adds paired register, timer, IRQ and callback comparisons.
+See [sleep entrypoints](../hardware/bios-sleep.md) for timing and hardware limits.
 BIOS regressions check LZ77 backreferences with bytes whose high bit is set
 through both byte and halfword output paths. They also execute ARM/Thumb
 interrupt waits, check ready-flag consumption and register preservation,

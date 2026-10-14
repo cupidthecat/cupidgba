@@ -25,6 +25,9 @@ include and `--check` verifies it. No external firmware data is needed.
 contains its direct Thumb-to-ARM bridge and the shared block-transfer code.
 `soft-reset.s` contains restart selection, bank setup and the timed work-area
 clear, followed by an ARM pipeline refill at the selected entry address.
+`power-control.s` contains the shared ARM HALTCNT byte strobe and return for
+HALT, STOP and CustomHalt. Unused space after HALT's branch preserves the
+fixed internal entry offsets without adding executed delay instructions.
 `music-frequency.s` contains timed Thumb interpolation and its ARM multiply-high
 bridge. `music-pitch.inc` provides 180 octave/semitone indices and 12 Q31
 semitone factors reproduced with decimal arithmetic. Its generator supports
