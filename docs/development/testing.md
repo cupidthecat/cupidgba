@@ -1,5 +1,10 @@
 # Testing
 
+The `gba.bios-file-*`, `runner.bios-startup` and `platform.bios-startup` groups
+check complete firmware input, state preservation on failure, reset execution
+and the startup boundary. The native fixtures and process images use owned
+instructions; no BIOS dump is required. See [BIOS image loading](../hardware/bios/image-loading.md).
+
 The `gba.cartridge-image-*` groups cover EEPROM address selection, complete
 DMA3 serial frames, original image size and replacement ownership. They retain
 the ten-second deadlines; see [cartridge image mapping](../hardware/cartridge/image-mapping.md).
