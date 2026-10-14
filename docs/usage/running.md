@@ -33,3 +33,9 @@ Keyboard controls are Z for A, X for B, Enter for Start, Backspace for Select,
 the arrow keys for the D-pad, A for L, S for R, and Escape to quit. SDL2
 controllers use A/B, Back, Start, the D-pad, and the shoulder buttons. The left
 stick also controls the D-pad.
+
+Keyboard, controller buttons and stick directions combine, so a button remains
+held until all sources release it. Removing the selected controller selects
+the next available one. Window focus loss releases keyboard holds. See
+[input handling](../hardware/input.md) for device ownership and regression
+coverage.

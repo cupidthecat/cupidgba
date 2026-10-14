@@ -68,27 +68,35 @@ static const struct {
 #define CTRL_BTN_MAP_SIZE (sizeof(ctrlBtnMap) / sizeof(ctrlBtnMap[0]))
 
 /**
- * @brief Analog stick to d-pad mapping.
+ * @brief Selected controller buttons and stick directions.
  *
  * Left-stick X and Y use a +/-0x4000 dead-zone.
  */
-static void cupid_input_update_axes(struct CupidPlatform* plat, struct CupidGBA* gba) {
-    if (!plat->controller) return;
+static uint16_t controller_keys(const struct CupidPlatform* plat) {
+    if (!plat->controller) return 0;
 
     int16_t lx = SDL_GameControllerGetAxis(plat->controller, SDL_CONTROLLER_AXIS_LEFTX);
     int16_t ly = SDL_GameControllerGetAxis(plat->controller, SDL_CONTROLLER_AXIS_LEFTY);
 
-    uint16_t axisBits = 0;
-    if (lx >  CUPID_AXIS_DEADZONE) axisBits |= (1 << GBA_KEY_RIGHT);
-    if (lx < -CUPID_AXIS_DEADZONE) axisBits |= (1 << GBA_KEY_LEFT);
-    if (ly >  CUPID_AXIS_DEADZONE) axisBits |= (1 << GBA_KEY_DOWN);
-    if (ly < -CUPID_AXIS_DEADZONE) axisBits |= (1 << GBA_KEY_UP);
+    uint16_t pressed = 0;
+    for (size_t i = 0; i < CTRL_BTN_MAP_SIZE; i++) {
+        if (SDL_GameControllerGetButton(plat->controller, ctrlBtnMap[i].button))
+            pressed |= (uint16_t)(1u << ctrlBtnMap[i].bit);
+    }
+    if (lx >  CUPID_AXIS_DEADZONE) pressed |= (1 << GBA_KEY_RIGHT);
+    if (lx < -CUPID_AXIS_DEADZONE) pressed |= (1 << GBA_KEY_LEFT);
+    if (ly >  CUPID_AXIS_DEADZONE) pressed |= (1 << GBA_KEY_DOWN);
+    if (ly < -CUPID_AXIS_DEADZONE) pressed |= (1 << GBA_KEY_UP);
+    return pressed;
+}
 
-    /** Clear d-pad bits then set those past the dead-zone threshold. */
-    uint16_t mask = (1 << GBA_KEY_RIGHT) | (1 << GBA_KEY_LEFT)
-                  | (1 << GBA_KEY_UP)    | (1 << GBA_KEY_DOWN);
-    gba->keysActive &= ~mask;      /** release all d-pad */
-    gba->keysActive |= axisBits;   /** press those past dead-zone */
+static void open_controller(struct CupidPlatform* plat, int index) {
+    if (!SDL_IsGameController(index)) return;
+    plat->controller = SDL_GameControllerOpen(index);
+    if (!plat->controller) return;
+    plat->controllerIndex = SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(plat->controller));
+    cupid_platform_rumble_refresh(plat);
+    printf("CUPID: Controller connected: %s\n", SDL_GameControllerName(plat->controller));
 }
 
 /**
@@ -96,6 +104,7 @@ static void cupid_input_update_axes(struct CupidPlatform* plat, struct CupidGBA*
  */
 
 bool cupid_platform_poll_events(struct CupidPlatform* plat, struct CupidGBA* gba) {
+    SDL_JoystickID removed = -1;
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         switch (event.type) {
@@ -117,7 +126,7 @@ bool cupid_platform_poll_events(struct CupidPlatform* plat, struct CupidGBA* gba
             }
             for (size_t i = 0; i < KEY_MAP_SIZE; i++) {
                 if (event.key.keysym.scancode == keyMap[i].scancode) {
-                    gba->keysActive |= (1 << keyMap[i].bit);    /** bit=1 pressed */
+                    plat->keyboardKeys |= (uint16_t)(1u << keyMap[i].bit);
                 }
             }
             break;
@@ -125,52 +134,27 @@ bool cupid_platform_poll_events(struct CupidPlatform* plat, struct CupidGBA* gba
         case SDL_KEYUP:
             for (size_t i = 0; i < KEY_MAP_SIZE; i++) {
                 if (event.key.keysym.scancode == keyMap[i].scancode) {
-                    gba->keysActive &= ~(1 << keyMap[i].bit);   /** bit=0 released */
+                    plat->keyboardKeys &= (uint16_t)~(1u << keyMap[i].bit);
                 }
             }
             break;
 
-        /** Controller button events. */
-        case SDL_CONTROLLERBUTTONDOWN:
-            for (size_t i = 0; i < CTRL_BTN_MAP_SIZE; i++) {
-                if (event.cbutton.button == ctrlBtnMap[i].button) {
-                    gba->keysActive |= (1 << ctrlBtnMap[i].bit);
-                }
-            }
-            break;
-
-        case SDL_CONTROLLERBUTTONUP:
-            for (size_t i = 0; i < CTRL_BTN_MAP_SIZE; i++) {
-                if (event.cbutton.button == ctrlBtnMap[i].button) {
-                    gba->keysActive &= ~(1 << ctrlBtnMap[i].bit);
-                }
-            }
-            break;
-
-        case SDL_CONTROLLERAXISMOTION:
-            /** Handled after all events are drained. */
+        case SDL_WINDOWEVENT:
+            if (event.window.event == SDL_WINDOWEVENT_FOCUS_LOST &&
+                (!plat->window || event.window.windowID == SDL_GetWindowID(plat->window)))
+                plat->keyboardKeys = 0;
             break;
 
         /** Hot-plug events. */
         case SDL_CONTROLLERDEVICEADDED:
-            if (!plat->controller) {
-                int idx = event.cdevice.which;
-                if (SDL_IsGameController(idx)) {
-                    plat->controller = SDL_GameControllerOpen(idx);
-                    if (plat->controller) {
-                        plat->controllerIndex = SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(plat->controller));
-                        cupid_platform_rumble_refresh(plat);
-                        printf("CUPID: Controller connected: %s\n",
-                               SDL_GameControllerName(plat->controller));
-                    }
-                }
-            }
+            if (!plat->controller) open_controller(plat, event.cdevice.which);
             break;
 
         case SDL_CONTROLLERDEVICEREMOVED:
             if (plat->controller &&
                 event.cdevice.which == plat->controllerIndex) {
                 printf("CUPID: Controller disconnected\n");
+                removed = event.cdevice.which;
                 cupid_platform_rumble_stop(plat);
                 SDL_GameControllerClose(plat->controller);
                 plat->controller = NULL;
@@ -180,8 +164,14 @@ bool cupid_platform_poll_events(struct CupidPlatform* plat, struct CupidGBA* gba
         }
     }
 
-    /** Apply analog-stick to d-pad mapping. */
-    cupid_input_update_axes(plat, gba);
+    if (!plat->controller) {
+        for (int index = 0; index < SDL_NumJoysticks() && !plat->controller; index++) {
+            if (SDL_JoystickGetDeviceInstanceID(index) != removed) open_controller(plat, index);
+        }
+    }
+    /* Controller state is sampled from its selected handle. Keyboard, button
+     * and stick holds combine without releasing another source's key. */
+    gba->keysActive = plat->keyboardKeys | controller_keys(plat);
 
     /** Test keypad IRQ after key state changes. */
     cupid_gba_test_keypad_irq(gba);

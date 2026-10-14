@@ -44,6 +44,7 @@ struct CupidPlatform {
 
     SDL_GameController* controller;   /**< First attached controller, or NULL */
     int controllerIndex;              /**< SDL joystick instance ID of `controller` */
+    uint16_t keyboardKeys;            /**< Held GBA keys from keyboard events */
     bool rumbleActive, rumbleDriving;
     uint32_t rumbleRefresh;
 

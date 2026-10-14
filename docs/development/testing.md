@@ -1,5 +1,11 @@
 # Testing
 
+The `platform.input-*` groups run real SDL2 virtual-controller state through
+the frontend event poll. They cover bindings, mixed source ownership, strict
+stick boundaries, focus/hotplug and keypad IRQ/STOP interactions. Every group
+has a ten-second deadline. See [input handling](../hardware/input.md) for the
+complete observations and scope.
+
 Cartridge peripheral checks include `gba.solar-*`, `gba.cartridge-rumble`,
 `platform.cartridge-peripherals` and `rom.cartridge-peripherals`. An external
 BIOS adds paired bus/interaction and generated-cartridge groups. Native groups

@@ -147,8 +147,58 @@ static void virtual_controller_output_hotplug_expiry_and_shutdown(void) {
     SDL_Quit();
 }
 
+static void an_existing_controller_inherits_active_motor_output(void) {
+    SDL_SetMainReady();
+    CHECK(SDL_Init(SDL_INIT_GAMECONTROLLER) == 0);
+    struct HostMotor first = {0}, second = {0};
+    SDL_VirtualJoystickDesc desc = {0};
+    desc.version = SDL_VIRTUAL_JOYSTICK_DESC_VERSION;
+    desc.type = SDL_JOYSTICK_TYPE_GAMECONTROLLER;
+    desc.naxes = SDL_CONTROLLER_AXIS_MAX;
+    desc.nbuttons = SDL_CONTROLLER_BUTTON_MAX;
+    desc.name = "CupidGBA fallback controller";
+    desc.Rumble = host_motor;
+    desc.userdata = &first;
+    const int firstIndex = SDL_JoystickAttachVirtualEx(&desc);
+    CHECK(firstIndex >= 0);
+    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+    CHECK(gba);
+    cupid_gba_create(gba);
+    gba->memory.rom = calloc(1, 0x4000);
+    CHECK(gba->memory.rom);
+    gba->memory.romSize = 0x4000;
+    gba->memory.romMask = 0x3FFF;
+    cupid_gba_reset(gba);
+    cupid_cartridge_enable_rumble(gba, true);
+    struct CupidPlatform plat = {.controllerIndex = -1, .running = true};
+    CHECK(cupid_platform_poll_events(&plat, gba) && plat.controller);
+    const int firstId = plat.controllerIndex;
+    desc.userdata = &second;
+    const int secondIndex = SDL_JoystickAttachVirtualEx(&desc);
+    CHECK(secondIndex >= 0);
+    CHECK(cupid_platform_poll_events(&plat, gba) && plat.controllerIndex == firstId);
+    cupid_cartridge_set_rumble_output(gba, cupid_platform_rumble_changed, &plat);
+    cupid_memory_store16(&gba->cpu, 0x080000C6, 8, NULL);
+    cupid_memory_store16(&gba->cpu, 0x080000C4, 8, NULL);
+    CHECK(first.low && first.high && !second.low && !second.high);
+    controller_event(SDL_CONTROLLERDEVICEREMOVED, firstId);
+    CHECK(cupid_platform_poll_events(&plat, gba) && plat.controller);
+    CHECK(plat.controllerIndex == SDL_JoystickGetDeviceInstanceID(secondIndex));
+    CHECK(!first.low && !first.high && second.low && second.high);
+    CHECK(plat.rumbleActive && gba->cartridge.rumbleActive);
+    cupid_cartridge_set_rumble_output(gba, NULL, NULL);
+    CHECK(!second.low && !second.high);
+    SDL_GameControllerClose(plat.controller);
+    CHECK(SDL_JoystickDetachVirtual(secondIndex) == 0);
+    CHECK(SDL_JoystickDetachVirtual(firstIndex) == 0);
+    cupid_gba_destroy(gba);
+    free(gba);
+    SDL_Quit();
+}
+
 int main(void) {
     RUN(configuration_and_strict_input_parsing);
     RUN(virtual_controller_output_hotplug_expiry_and_shutdown);
+    RUN(an_existing_controller_inherits_active_motor_output);
     return 0;
 }
