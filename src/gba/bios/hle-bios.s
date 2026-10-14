@@ -118,7 +118,6 @@ subs   pc, lr, #4
 .word 0x03A0E004
 
 @ Unimplemented
-GetBiosChecksum:
 SoundDriverInit:
 SoundDriverMode:
 SoundDriverMain:
@@ -533,4 +532,9 @@ subs pc, lr, #4
 .include "src/gba/bios/copy-fast.s"
 .include "src/gba/bios/soft-reset.s"
 .include "src/gba/bios/power-control.s"
+.include "src/gba/bios/checksum.s"
 .include "src/gba/bios/music-frequency.s"
+
+@ The final word records the embedded image's additive identity.
+.org 0x3FFC
+.include "src/gba/bios/checksum-identity.inc"
