@@ -77,6 +77,13 @@ if(BUILD_TESTING)
     add_test(NAME gba.system COMMAND test_system)
     set_tests_properties(gba.system PROPERTIES TIMEOUT 10)
 
+    add_executable(test_reset_entry tests/arm/test_reset_entry.c)
+    target_link_libraries(test_reset_entry PRIVATE cupid_core)
+    foreach(group external fast irq repeat)
+        add_test(NAME arm.reset-entry-${group} COMMAND test_reset_entry ${group})
+        set_tests_properties(arm.reset-entry-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
     add_executable(test_io tests/gba/test_io.c)
     target_link_libraries(test_io PRIVATE cupid_core)
     add_test(NAME gba.io COMMAND test_io)
