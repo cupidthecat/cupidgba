@@ -317,11 +317,7 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
 
     /** SIO 0x120-0x15A. */
     case REG_SIOCNT:
-        value &= 0x7FFF;
-        break;
     case REG_RCNT:
-        value &= 0xC1FF;
-        break;
     case REG_SIODATA32_LO:
     case REG_SIODATA32_HI:
     case REG_SIOMULTI2:
@@ -333,8 +329,8 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
     case REG_JOY_TRANS_LO:
     case REG_JOY_TRANS_HI:
     case REG_JOYSTAT:
-        /** SIO stub; just store. */
-        break;
+        cupid_serial_write(&gba->serial, addr, value);
+        return;
 
     /** INPUT 0x130-0x132. */
     case REG_KEYINPUT:
@@ -371,7 +367,7 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
             if (gba->memory.io[addr >> 1]) {
                 if (value & 0x8000) {
                     /** Stop (deep halt). */
-                    cupid_gba_halt(gba);
+                    cupid_gba_stop(gba);
                 } else {
                     cupid_gba_halt(gba);
                 }
@@ -401,7 +397,7 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
 /**
  * @brief Write an 8-bit IO register.
  *
- * Sound, timers and IRQ registers have byte dispatch so untouched fields do
+ * Sound, serial, timers and IRQ registers have byte dispatch so untouched fields do
  * not repeat side effects. Other writes merge into their register halfword.
  * HALTCNT at 0x301 is byte-only.
  */
@@ -416,6 +412,13 @@ void cupid_io_write8(struct CupidGBA* gba, uint32_t addr, uint8_t value) {
         cupid_timer_write_byte(gba, (addr - REG_TM0CNT_L) >> 2, addr & 3, value);
         return;
     }
+    if ((addr >= REG_SIODATA32_LO && addr <= REG_SIOMLT_SEND + 1) ||
+        (addr >= REG_RCNT && addr <= REG_RCNT + 1) ||
+        (addr >= REG_JOYCNT && addr <= REG_JOYCNT + 1) ||
+        (addr >= REG_JOY_RECV_LO && addr <= REG_JOYSTAT + 1)) {
+        cupid_serial_write8(&gba->serial, addr, value);
+        return;
+    }
 
     if ((addr >= REG_IE && addr <= REG_IF + 1) || (addr >= REG_IME && addr <= REG_IME + 1)) {
         cupid_irq_write8(gba, addr, value);
@@ -424,11 +427,18 @@ void cupid_io_write8(struct CupidGBA* gba, uint32_t addr, uint8_t value) {
 
     /** HALTCNT is at odd byte 0x301; entering halt or stop. */
     if (addr == (REG_HALTCNT & 0x3FF)) {
+        if (gba->memory.activeRegion != GBA_REGION_BIOS) return;
         if (value & 0x80) {
-            /** Stop mode (deep sleep); treat as halt for now. */
-            cupid_gba_halt(gba);
+            cupid_gba_stop(gba);
         } else {
             cupid_gba_halt(gba);
+            if (gba->cpu.memory.timed) {
+                /* HALT accepts one internal clock after the register strobe.
+                 * Retain the IRQ sample from before that acceptance clock. */
+                gba->haltIRQSample = gba->irq.line;
+                gba->haltIRQSampleValid = true;
+                cupid_bus_advance(&gba->cpu, 1, false);
+            }
         }
         return;
     }
@@ -537,8 +547,8 @@ uint16_t cupid_io_read(struct CupidGBA* gba, uint32_t addr) {
         return gba->memory.io[addr >> 1];
 
     /** SIO. */
-    case REG_SIOCNT:   return gba->memory.io[addr >> 1];
-    case REG_RCNT:     return gba->memory.io[addr >> 1];
+    case REG_SIOCNT:
+    case REG_RCNT:
     case REG_SIODATA32_LO: case REG_SIODATA32_HI:
     case REG_SIOMULTI2: case REG_SIOMULTI3:
     case REG_SIOMLT_SEND:
@@ -546,7 +556,7 @@ uint16_t cupid_io_read(struct CupidGBA* gba, uint32_t addr) {
     case REG_JOY_RECV_LO: case REG_JOY_RECV_HI:
     case REG_JOY_TRANS_LO: case REG_JOY_TRANS_HI:
     case REG_JOYSTAT:
-        return gba->memory.io[addr >> 1];
+        return cupid_serial_read(&gba->serial, addr);
 
     /** Input. */
     case REG_KEYINPUT: {

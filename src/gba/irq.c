@@ -125,6 +125,7 @@ void cupid_irq_write8(struct CupidGBA* gba, uint32_t address, uint8_t value) {
 }
 
 void cupid_raise_irq_at(struct CupidGBA* gba, enum CupidIRQ source, uint64_t timestamp) {
+    cupid_gba_wake_stop(gba, source);
     gba->irq.pendingIF |= source;
     queue_write(gba, timestamp + 1, 0, source, 0);
 }

@@ -12,6 +12,10 @@ Interrupt regressions cover register visibility, byte masks and acknowledgements
 successive IRQ line changes, HALT wake-up with IME clear, the CPU's sampled
 CPSR mask, Thumb exception return, ARM/Thumb MMIO access widths, DMA completion
 bits for all four channels, and late dispatch across clock wrap.
+Serial regressions exercise both widths and clock rates, all 256 transmitted
+8-bit patterns, driven input data, external clock edges, two connected core
+instances, GPIO directions and falling-input IRQs, ARM/Thumb bus writes,
+untouched byte fields, late dispatch, clock wrap, reset and power-state behavior.
 CPU regressions check block-transfer bus costs and the final load internal cycle.
 DMA regressions check read/write phase boundaries, priority and preemption,
 CPU bus stalls, internal-cycle overlap, swap locking, masks, maximum counts,
@@ -200,6 +204,23 @@ local suite; `CUPID_TEST_BIOS` adds the external path. Native `gba.io` checks
 register state and CPU bus reads at each width, ARM/Thumb prefetch, DMA handover
 and FIFO reset readback. See [I/O registers](../hardware/io-registers.md).
 
+The optional local serial suite retains four counted normal timing results,
+90 register observations and four original multiplayer timeouts:
+
+```sh
+python3 tests/roms/check_serial_suite.py --runner build/cupidgba-headless \
+  --rom /path/to/serial-suite.gba --bios /path/to/gba-bios.bin
+```
+
+Set `CUPID_SERIAL_SUITE_ROM` to register the built-in path and `CUPID_TEST_BIOS`
+to add the external path. The observer requires its pinned digest, terminal
+R12=0, complete counts, every case flag and zero failure logs. The multiplayer
+timeouts remain skipped and are never counted as working transfers. The private
+wrapper initializes normal data registers between the timing and read suites,
+so the read suite starts from its original reset-state precondition; it retains
+all timed code and expectations. Additional single-write startup timing failures
+are described in [serial behavior](../hardware/serial/normal-and-gpio.md).
+
 The optional local audio cartridge observer selects ten unchanged signal tests:
 
 ```sh
@@ -299,6 +320,15 @@ The example explicitly allows at most one instruction per emulated clock for
 can stop a valid long run when prefetch permits more instructions per frame.
 This changes the observation budget; it does not change emulation timing or
 any hardware test expectation.
+
+Optional standalone serial and HALT probes use their original cartridge bytes
+and comparisons. Set `CUPID_SERIAL_PROBE_DIR` for the nine serial IRQ, data and
+start-bit probes. Set `CUPID_HALT_PROBE_DIR` and `CUPID_TEST_BIOS` for four HALT
+timer/return-address probes that observe the original firmware's internal
+addresses. The observer checks each input digest and passing terminal result.
+It retains the 360-frame, 150-million-step and 90-second observation budgets.
+Native IRQ tests cover the acceptance and wake samples in ARM/Thumb mode,
+their saved return addresses and clock wrap.
 
 Passing these checks establishes the listed cases. They do not cover every CPU
 encoding, every bus or arbitration edge, every timer/IRQ interaction, raster

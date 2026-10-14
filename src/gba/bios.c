@@ -8,10 +8,10 @@
 #include <stdlib.h>
 
 /**
- * @brief SWI 0x02: Halt.
+ * @brief SWI 0x03: Stop the system clock.
  */
-static void _Halt(struct CupidGBA* gba) {
-    cupid_gba_halt(gba);
+static void _Stop(struct CupidGBA* gba) {
+    cupid_gba_stop(gba);
 }
 
 /**
@@ -51,7 +51,7 @@ void cupid_bios_swi(struct CupidGBA* gba, uint8_t comment) {
         /* Execute the replacement BIOS wait loop through the CPU pipeline. */
         cupid_arm_raise_swi(&gba->cpu);
         break;
-    case 0x03: _Halt(gba); break;  /** Stop -- treat as halt */
+    case 0x03: _Stop(gba); break;
     case 0x06: case 0x07: case 0x08: case 0x09: case 0x0A:
     case 0x0B: case 0x0C:
         /* Execute math and copy services through the timed CPU and bus. */

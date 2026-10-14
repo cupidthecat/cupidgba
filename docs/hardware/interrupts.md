@@ -19,6 +19,14 @@ instruction fetch, saves CPSR and the return address, enters ARM IRQ mode,
 and refills the exception vector. `subs pc, lr, #4` restores the saved state
 and resumes the interrupted ARM or Thumb instruction.
 
+HALT accepts a timed control write one internal clock after its data strobe.
+An immediate wake retains the IRQ line sampled before that acceptance
+clock; a later wake samples the line before the wake clock. A line that becomes
+asserted during these clocks is accepted after the resumed instruction. An
+already asserted line can enter immediately, subject to the sampled CPSR mask.
+These clocks advance peripheral events. Untimed observer accesses keep their
+existing clock position, and console reset clears the retained HALT sample.
+
 Timed MMIO reads and writes dispatch due peripheral events after the data-bus
 cycle. Loads retain their final internal cycle. Untimed observer accesses do
 not advance the CPU. Timer interrupts keep their original overflow timestamps
@@ -35,5 +43,7 @@ the same hardware cycle remains unverified. Queued IF changes retain their
 acceptance deadlines and apply assertions and acknowledgements in request
 order. Reassertions after a queued acknowledgement remain pending. See
 [DMA and bus ownership](dma.md) for transfer arbitration and its tested limits.
-Game Pak prefetch interactions and STOP wake-up need separate hardware coverage.
+Game Pak prefetch interactions and precise STOP wake-up latency need separate
+hardware coverage. STOP now freezes the system clock and accepts enabled
+external wake sources; see [serial and GPIO](serial/normal-and-gpio.md).
 Both BIOS paths pass the listed count-up and IRQ suite on the pinned local input.
