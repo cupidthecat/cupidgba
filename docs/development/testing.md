@@ -30,7 +30,8 @@ CPU bus stalls, internal-cycle overlap, swap locking, masks, maximum counts,
 address stepping, repeat reloads, cancellation, FIFO requests, timed I/O and
 clock wrap. They compare late dispatch with advancing one clock at a time.
 Prefetch regressions check pending/cached fetches, queue capacity and sustained
-bandwidth, fill/cancellation clocks, disable/restart behavior, width changes,
+bandwidth, fill/cancellation clocks, disable/restart behavior, partially buffered
+words, both instruction-width changes and BIOS/RAM exception returns,
 uncached page boundaries and DMA/timer/IRQ interactions across clock wrap.
 They also write wait controls before the first fetch, after a firmware reset
 and after an invalid jump, then require the configured costs on a valid fetch.

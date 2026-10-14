@@ -219,12 +219,14 @@ positions with three data-transition patterns. The original source, inputs
 and diagnostic transport stay private.
 GPIO opcode prefetch now retains each port value sampled at its halfword
 strobe. An owned scheduler event observes the input before a later CPU read;
-buffered and in-flight ARM/Thumb fetches consume those saved values. RAM data
-accesses leave sampling active, while Game Pak data accesses, branch/width
-changes, console reset and cartridge replacement discard it. Native tests
-cover every FIFO position, the three ROM windows, both sequential waits,
-bulk versus single-clock dispatch, clock wrap and DMA cancellation. The model
-retains the existing prefetch counter timing; these tests are not physical
+buffered and in-flight ARM/Thumb fetches consume those saved values. A matching
+entry survives an instruction-width change, including a word whose low halfword
+has already completed. RAM data accesses leave sampling active, while Game Pak
+data accesses, unrelated branch targets, console reset and cartridge replacement
+discard it. Native tests cover every FIFO position, both width changes, partially
+buffered GPIO words, the three ROM windows, both sequential waits, bulk versus
+single-clock dispatch, clock wrap and DMA cancellation. Sampling uses the same
+eight-halfword FIFO deadlines as CPU fetches; these tests are not physical
 captures of the remaining WAITCNT and full-buffer timing edges.
 An authorized gameplay replay has executed the cartridge's startup RTC reads
 and reached the normal new-game flow. These results do not establish complete

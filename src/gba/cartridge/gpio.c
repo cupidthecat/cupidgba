@@ -199,16 +199,14 @@ void cupid_cartridge_prefetch_schedule(struct CupidGBA* gba) {
     const uint32_t physical = unit->tail & (GBA_SIZE_ROM - 1);
     if (physical > 0xC8 || physical + 16 <= 0xC4) return;
     const uint32_t base = unit->tail & ~(uint32_t)(GBA_SIZE_ROM - 1);
-    const unsigned capacity = 16 / unit->width;
+    const unsigned capacity = 8;
     for (unsigned slot = 0; slot < 3; slot++) {
         const uint32_t address = base + 0xC4 + slot * 2;
         if (address < unit->tail || !cupid_cartridge_gpio_address(gba, address) ||
             (cart->prefetchBase == base && (cart->prefetchMask & (1u << slot)))) continue;
-        const unsigned distance = (address - unit->tail) / unit->width;
+        const unsigned distance = (address - unit->tail) / 2;
         if (unit->count + distance >= capacity) continue;
         uint64_t when = unit->epoch + unit->remaining + (uint64_t)distance * unit->duty;
-        if (unit->width == 4 && !(address & 2))
-            when -= unit->duty / 2;
         /* Never reconstruct a past sample from the provider's current level. */
         if (when < cupid_timing_global_time(&gba->timing)) continue;
         if (cart->prefetchBase != base) { cart->prefetchBase = base; cart->prefetchMask = 0; }

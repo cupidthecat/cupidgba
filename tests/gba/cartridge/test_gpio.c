@@ -400,7 +400,9 @@ static void cached_gpio_preserves_each_strobe_and_consumes_the_sample(void) {
                     struct Observation observed;
                     struct CupidGBA* gba = prefetch_machine(width, bank, sequential, distance, &observed);
                     const unsigned half = (unsigned)GBA_ROM_WAITSTATES_SEQ[bank * 2 + sequential] + 1;
-                    const unsigned duty = gba->memory.prefetchUnit.duty;
+                    /* Keep the fixture's original instruction-sized delays
+                     * independent of the FIFO's halfword accounting. */
+                    const unsigned duty = half * width / 2;
                     struct CupidTimingEvent event = {.context = &observed, .callback = change_input, .priority = 0x60};
                     cupid_timing_schedule(&gba->timing, &event, (int32_t)(distance * duty + half + 1));
                     cupid_timing_tick(&gba->timing, (int32_t)(duty * capacity));
@@ -415,6 +417,86 @@ static void cached_gpio_preserves_each_strobe_and_consumes_the_sample(void) {
                     CHECK(!(gba->cartridge.prefetchMask & 1));
                     CHECK(cupid_memory_loadU16(&gba->cpu, 0x080000C4, NULL) == 9);
                     destroy(gba);
+                }
+            }
+        }
+    }
+}
+
+static void rebase_prefetch_clock(struct CupidGBA* gba, uint64_t clock) {
+    cupid_timing_clear(&gba->timing);
+    gba->timing.globalCycles = clock;
+    gba->timing.masterCycles = (uint32_t)clock;
+    gba->memory.prefetchUnit.epoch = clock;
+    gba->cartridge.prefetchScheduled = false;
+    gba->cartridge.prefetchMask = 0;
+    cupid_cartridge_prefetch_schedule(gba);
+}
+
+static void cached_gpio_survives_instruction_width_changes(void) {
+    const uint64_t clocks[] = {0, UINT32_MAX - 12u, UINT64_C(0x300000000)};
+    for (unsigned c = 0; c < sizeof(clocks) / sizeof(*clocks); c++) {
+        for (unsigned width = 2; width <= 4; width += 2) {
+            for (unsigned bank = 0; bank < 3; bank++) {
+                for (unsigned sequential = 0; sequential < 2; sequential++) {
+                    struct Observation observed;
+                    struct CupidGBA* gba = prefetch_machine(width, bank, sequential, 0, &observed);
+                    rebase_prefetch_clock(gba, clocks[c]);
+                    const unsigned half = (unsigned)GBA_ROM_WAITSTATES_SEQ[bank * 2 + sequential] + 1;
+                    cupid_timing_tick(&gba->timing, (int32_t)(half * 8));
+                    CHECK(gba->cartridge.prefetchMask == 7);
+                    observed.input = 9;
+                    const unsigned nextWidth = 6 - width;
+                    _CupidSetMode(&gba->cpu, nextWidth == 2 ? MODE_THUMB : MODE_ARM);
+                    const uint32_t first = 0x080000C4 + bank * 0x02000000;
+                    const uint64_t before = cupid_timing_global_time(&gba->timing);
+                    cupid_bus_fetch(&gba->cpu, first, nextWidth, false);
+                    uint32_t opcode = CupidReadOpcode(&gba->cpu, first, nextWidth);
+                    cupid_bus_finish(&gba->cpu);
+                    CHECK(cupid_timing_global_time(&gba->timing) == before + 1);
+                    CHECK(opcode == (nextWidth == 4 ? 0x00040001u : 1u));
+                    cupid_bus_fetch(&gba->cpu, first + nextWidth, nextWidth, true);
+                    opcode = CupidReadOpcode(&gba->cpu, first + nextWidth, nextWidth);
+                    cupid_bus_finish(&gba->cpu);
+                    CHECK(cupid_timing_global_time(&gba->timing) == before + 2);
+                    CHECK(opcode == (nextWidth == 4 ? 0xA55A0001u : 4u));
+                    CHECK(!(gba->cartridge.prefetchMask & (nextWidth == 4 ? 7 : 3)));
+                    CHECK(cupid_memory_loadU16(&gba->cpu, first, NULL) == 9);
+                    destroy(gba);
+                }
+            }
+        }
+    }
+}
+
+static void partial_gpio_words_preserve_the_completed_halfword(void) {
+    const uint64_t clocks[] = {0, UINT32_MAX - 12u, UINT64_C(0x300000000)};
+    for (unsigned c = 0; c < sizeof(clocks) / sizeof(*clocks); c++) {
+        for (unsigned width = 2; width <= 4; width += 2) {
+            for (unsigned bank = 0; bank < 3; bank++) {
+                for (unsigned sequential = 0; sequential < 2; sequential++) {
+                    const unsigned half = (unsigned)GBA_ROM_WAITSTATES_SEQ[bank * 2 + sequential] + 1;
+                    for (unsigned elapsed = 0; elapsed < half; elapsed++) {
+                        struct Observation observed;
+                        struct CupidGBA* gba = prefetch_machine(width, bank, sequential, 0, &observed);
+                        rebase_prefetch_clock(gba, clocks[c]);
+                        cupid_timing_tick(&gba->timing, (int32_t)(half + elapsed));
+                        CHECK(gba->cartridge.prefetchMask == 1);
+                        observed.input = 9;
+                        _CupidSetMode(&gba->cpu, MODE_ARM);
+                        const uint32_t address = 0x080000C4 + bank * 0x02000000;
+                        const uint64_t before = cupid_timing_global_time(&gba->timing);
+                        cupid_bus_fetch(&gba->cpu, address, 4, true);
+                        const uint32_t opcode = CupidReadOpcode(&gba->cpu, address, 4);
+                        cupid_bus_finish(&gba->cpu);
+                        CHECK(cupid_timing_global_time(&gba->timing) == before + half - elapsed);
+                        CHECK(opcode == 0x00040001u);
+                        CHECK(!(gba->cartridge.prefetchMask & 3));
+                        CHECK(gba->cartridge.prefetchScheduled);
+                        CHECK(gba->cartridge.prefetchEvent.when == (uint32_t)(clocks[c] + half * 3));
+                        CHECK(cupid_memory_loadU16(&gba->cpu, address, NULL) == 9);
+                        destroy(gba);
+                    }
                 }
             }
         }
@@ -549,6 +631,8 @@ int main(void) {
     RUN(marker_bounds_and_physical_rom_windows);
     RUN(uncached_arm_gpio_fetch_samples_the_low_halfword_first);
     RUN(cached_gpio_preserves_each_strobe_and_consumes_the_sample);
+    RUN(cached_gpio_survives_instruction_width_changes);
+    RUN(partial_gpio_words_preserve_the_completed_halfword);
     RUN(pending_gpio_sampling_keeps_the_original_strobe_deadlines);
     RUN(prefetch_sampling_has_identical_bulk_and_single_clock_dispatch);
     RUN(stopping_resetting_or_replacing_a_cartridge_cancels_prefetch_samples);
