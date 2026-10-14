@@ -159,6 +159,8 @@ static void _cupidGBAReset(struct CupidARM* cpu) {
     gba->idleDetectionFailures = 0;
     cpu->halted = 0;
     gba->stopped = false;
+    gba->haltIRQSample = false;
+    gba->haltIRQSampleValid = false;
     gba->keysLast = 0x0400;
 
     /**
@@ -206,6 +208,7 @@ void cupid_gba_skip_bios(struct CupidGBA* gba) {
  * @brief Halt the CPU until the next event.
  */
 void cupid_gba_halt(struct CupidGBA* gba) {
+    gba->haltIRQSampleValid = false;
     gba->cpu.nextEvent = gba->cpu.cycles;
     gba->cpu.halted = 1;
 }
@@ -287,6 +290,10 @@ void cupid_gba_step(struct CupidGBA* gba) {
 
     if (gba->stopped) return;
 
+    /* Sample before HALT's wake clock; a line arriving during that clock is
+     * accepted after the resumed instruction, at its next boundary. */
+    const bool irqLine = gba->haltIRQSampleValid ? gba->haltIRQSample : gba->irq.line;
+    gba->haltIRQSampleValid = false;
     if (cpu->halted && gba->irq.available) {
         cpu->halted = 0;
         cpu->cycles++; /* Wake-up consumes one clock before the next fetch. */
@@ -295,7 +302,7 @@ void cupid_gba_step(struct CupidGBA* gba) {
     if (cpu->halted) {
         cpu->cycles = cpu->nextEvent;
     } else {
-        if (gba->irq.line && !cpu->irqDisableLatch) {
+        if (irqLine && !cpu->irqDisableLatch) {
             cpu->memory.timed = true;
             cupid_arm_take_irq(cpu);
             cpu->memory.timed = false;

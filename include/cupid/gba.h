@@ -98,6 +98,8 @@ struct CupidGBA {
     bool cpuBlocked;     /**< True while DMA owns the bus */
     bool earlyExit;      /**< Break out of the run loop (for sync) */
     bool stopped;        /**< System clock is frozen until an eligible external IRQ */
+    bool haltIRQSample;  /**< IRQ line before the HALT acceptance clock */
+    bool haltIRQSampleValid;
     uint32_t biosStall;  /**< Extra stall cycles added by BIOS reads */
     uint32_t dmaPC;      /**< PC snapshot when DMA started */
 

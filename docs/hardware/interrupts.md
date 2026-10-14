@@ -19,6 +19,14 @@ instruction fetch, saves CPSR and the return address, enters ARM IRQ mode,
 and refills the exception vector. `subs pc, lr, #4` restores the saved state
 and resumes the interrupted ARM or Thumb instruction.
 
+HALT accepts a timed control write one internal clock after its data strobe.
+An immediate wake retains the IRQ line sampled before that acceptance
+clock; a later wake samples the line before the wake clock. A line that becomes
+asserted during these clocks is accepted after the resumed instruction. An
+already asserted line can enter immediately, subject to the sampled CPSR mask.
+These clocks advance peripheral events. Untimed observer accesses keep their
+existing clock position, and console reset clears the retained HALT sample.
+
 Timed MMIO reads and writes dispatch due peripheral events after the data-bus
 cycle. Loads retain their final internal cycle. Untimed observer accesses do
 not advance the CPU. Timer interrupts keep their original overflow timestamps

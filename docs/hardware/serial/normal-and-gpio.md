@@ -45,12 +45,18 @@ untouched fields and do not restart a busy transfer. JOY control status bits
 use write-one acknowledgement. Register access alone does not implement
 multiplayer, UART or JOY bus transactions.
 
-Six additional IRQ timing cartridges still read their timer three clocks below
-their original expectations, through either BIOS path. They select the clock
-and set start in the same write. Two separate start-bit boundary cartridges and
-the upper-byte/received-data cartridge pass. The single-write startup and its
-IRQ/ROM bus interactions need further qualification; these failures remain
-part of [issue 24](https://github.com/cupidthecat/cupidgba/issues/24).
+The CPU samples the IRQ line before HALT's wake clock. If the line becomes
+asserted during that clock, the resumed instruction completes before IRQ entry.
+An already asserted line can enter immediately. A timed HALTCNT write also
+accepts one internal clock after its data strobe and retains the earlier IRQ
+sample for an immediate wake. Native regressions cover both caller modes,
+return addresses, reset and clock wrap.
+
+Nine unchanged standalone cartridges pass their IRQ timer, received-data and
+one-clock start-bit comparisons with both BIOS paths. Four further HALT probes
+pass their timer and saved return-address comparisons with an external BIOS.
+Those four observe firmware-internal addresses and require that BIOS input;
+the replacement firmware places some internal routines at different addresses.
 
 The [programming manual](https://archive.org/download/NintendoGbaManualV1.1/Nintendo%20Gba%20Manual%20V1.1.pdf)
 describes mode selection, pin polarity and power states in chapters 13 and 16.

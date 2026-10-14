@@ -14,6 +14,8 @@ set(CUPID_BUS_SUITE_ROM "" CACHE FILEPATH "Locally built CPU and bus timing suit
 set(CUPID_BIOS_MATH_SUITE_ROM "" CACHE FILEPATH "Locally built BIOS math register suite ROM")
 set(CUPID_IO_SUITE_ROM "" CACHE FILEPATH "Locally built I/O register-read suite ROM")
 set(CUPID_SERIAL_SUITE_ROM "" CACHE FILEPATH "Locally built serial timing and register suite ROM")
+set(CUPID_SERIAL_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified serial cartridge probes")
+set(CUPID_HALT_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified firmware HALT probes")
 set(CUPID_AUDIO_TEST_ROM "" CACHE FILEPATH "Locally built audio signal cartridge ROM")
 set(CUPID_TEST_BIOS "" CACHE FILEPATH "External BIOS for local hardware suite checks")
 
@@ -325,6 +327,35 @@ if(BUILD_TESTING)
                 --runner $<TARGET_FILE:cupidgba-headless>)
             set_tests_properties(rom.io-suite-external PROPERTIES TIMEOUT 100)
         endif()
+    endif()
+
+    if(CUPID_HALT_PROBE_DIR AND CUPID_TEST_BIOS)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        foreach(case halt_pc halt_pc_2 halt_pc_3 halt_pc_4)
+            add_test(NAME rom.halt-probe-${case}-external COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_serial_probe.py
+                --directory ${CUPID_HALT_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless>
+                --bios ${CUPID_TEST_BIOS} --test ${case})
+            set_tests_properties(rom.halt-probe-${case}-external PROPERTIES TIMEOUT 100)
+        endforeach()
+    endif()
+
+    if(CUPID_SERIAL_PROBE_DIR)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        foreach(case serial_time serial_time_2 serial_time_3 serial_time_2M serial_time_2M_2
+                     serial_time_2M_3 serial_read_data serial_time_start_bit serial_time_start_bit_2)
+            add_test(NAME rom.serial-probe-${case} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_serial_probe.py
+                --directory ${CUPID_SERIAL_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless> --test ${case})
+            set_tests_properties(rom.serial-probe-${case} PROPERTIES TIMEOUT 100)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.serial-probe-${case}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_serial_probe.py
+                    --directory ${CUPID_SERIAL_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless>
+                    --bios ${CUPID_TEST_BIOS} --test ${case})
+                set_tests_properties(rom.serial-probe-${case}-external PROPERTIES TIMEOUT 100)
+            endif()
+        endforeach()
     endif()
 
     if(CUPID_SERIAL_SUITE_ROM)

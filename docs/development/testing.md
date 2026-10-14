@@ -321,6 +321,15 @@ can stop a valid long run when prefetch permits more instructions per frame.
 This changes the observation budget; it does not change emulation timing or
 any hardware test expectation.
 
+Optional standalone serial and HALT probes use their original cartridge bytes
+and comparisons. Set `CUPID_SERIAL_PROBE_DIR` for the nine serial IRQ, data and
+start-bit probes. Set `CUPID_HALT_PROBE_DIR` and `CUPID_TEST_BIOS` for four HALT
+timer/return-address probes that observe the original firmware's internal
+addresses. The observer checks each input digest and passing terminal result.
+It retains the 360-frame, 150-million-step and 90-second observation budgets.
+Native IRQ tests cover the acceptance and wake samples in ARM/Thumb mode,
+their saved return addresses and clock wrap.
+
 Passing these checks establishes the listed cases. They do not cover every CPU
 encoding, every bus or arbitration edge, every timer/IRQ interaction, raster
 effects, audio fidelity, cartridge peripherals, save persistence, or link

@@ -91,8 +91,13 @@ static struct Result* execute(uint32_t flags, unsigned configuration, const char
     cupid_io_write(gba, REG_SOUND3CNT_L, 0x60);
     memset(gba->audio.psg.ch3.wavedata8, pattern, 32);
     cupid_io_write(gba, REG_SOUNDBIAS, 0xC156);
+    /* Seed readable 32-bit data before testing serial retention/reset. */
+    cupid_io_write(gba, REG_RCNT, 0);
+    cupid_io_write(gba, REG_SIOCNT, 0x1000);
     cupid_io_write(gba, REG_SIODATA32_LO, 0xABCD);
     cupid_io_write(gba, REG_SIODATA32_HI, 0x1234);
+    CHECK(cupid_io_read(gba, REG_SIODATA32_LO) == 0xABCD);
+    CHECK(cupid_io_read(gba, REG_SIODATA32_HI) == 0x1234);
     cupid_io_write(gba, REG_KEYCNT, 0x8201);
     const bool interactions = configuration & 16;
     gba->irqf = interactions ? 0 : 0x3FFF;
