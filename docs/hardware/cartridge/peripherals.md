@@ -56,6 +56,13 @@ host output; the logical cartridge state is retained for a new subscriber.
 Cartridge replacement preserves the subscriber and illumination setting,
 then detects the new board with a cleared port.
 
+Loading a replacement ROM reads and validates its candidate image before
+releasing the current ROM. A failed open, seek, allocation or read preserves
+the attached image, port, motor, battery/save state and CPU mapping. A
+successful replacement stops the previous board and rebinds a cached CPU ROM
+mapping to the new allocation. The caller still resets the console before
+executing a newly loaded cartridge.
+
 The SDL2 frontend uses the connected controller's rumble output when supported.
 It renews a 250 ms effect every 100 ms while the emulated motor is enabled.
 The effect expires if the frontend stalls. Controller removal and shutdown
@@ -73,6 +80,8 @@ five input levels, reset, repeated levels, live input and shared RTC use.
 Interaction checks cover DMA sample strobes and completion IRQ, prefetch
 history, bulk dispatch and clock wrap. Motor checks cover port directions,
 read control, repeated writes, timed CPU/DMA edges and output ownership.
+An invalid replacement image must leave the previous cartridge intact; a
+successful replacement must bind the CPU cache to the new image.
 
 Generated cartridges run both ARM and Thumb loops, require all 256 comparisons
 per device and verify the complete timestamped motor trace. These probes use

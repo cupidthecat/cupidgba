@@ -147,10 +147,64 @@ static void timed_word_and_dma_motor_transitions(void) {
     }
 }
 
-int main(void) {
+static void failed_load_preserves_cartridge_and_success_rebinds_cache(const char* directory) {
+    char emptyPath[1024], validPath[1024], missingPath[1024];
+    const int emptySize = snprintf(emptyPath, sizeof(emptyPath), "%s/rumble-empty.generated.gba", directory);
+    const int validSize = snprintf(validPath, sizeof(validPath), "%s/rumble-valid.generated.gba", directory);
+    const int missingSize = snprintf(missingPath, sizeof(missingPath), "%s/rumble-absent.generated.gba", directory);
+    CHECK(emptySize > 0 && (size_t)emptySize < sizeof(emptyPath));
+    CHECK(validSize > 0 && (size_t)validSize < sizeof(validPath));
+    CHECK(missingSize > 0 && (size_t)missingSize < sizeof(missingPath));
+    FILE* file = fopen(emptyPath, "wb");
+    CHECK(file && fclose(file) == 0);
+    uint8_t image[1024] = {0};
+    memcpy(image + 0xAC, "V49E", 4);
+    const uint32_t nop = 0xE1A00000;
+    memcpy(image + 0x200, &nop, sizeof(nop));
+    file = fopen(validPath, "wb");
+    CHECK(file && fwrite(image, 1, sizeof(image), file) == sizeof(image) && fclose(file) == 0);
+    struct CupidGBA* gba = machine();
+    struct MotorTrace trace = {0};
+    cupid_cartridge_enable_rumble(gba, true);
+    cupid_cartridge_set_rumble_output(gba, motor, &trace);
+    cupid_memory_store16(&gba->cpu, 0x080000C6, 8, NULL);
+    cupid_memory_store16(&gba->cpu, 0x080000C4, 8, NULL);
+    cupid_cartridge_set_solar_level(gba, 73);
+    cupid_savedata_force_type(&gba->memory.savedata, SAVE_SRAM);
+    gba->memory.savedata.data[7] = 31;
+    gba->memory.savedata.dirty = true;
+    gba->cpu.gprs[ARM_PC] = 0x08000200;
+    gba->cpu.memory.setActiveRegion(&gba->cpu, 0x08000200);
+    const uint8_t* previous = gba->memory.rom;
+    const uintptr_t previousAddress = (uintptr_t)previous;
+    const uint32_t* active = gba->cpu.memory.activeRegion;
+    const uint64_t identity = gba->cartridge.identity;
+    const unsigned count = trace.count;
+    CHECK(!cupid_load_rom(gba, emptyPath));
+    CHECK(gba->memory.rom && gba->memory.rom == previous && gba->memory.romSize == 0x4000 && gba->memory.romMask == 0x3FFF);
+    CHECK(gba->cpu.memory.activeRegion == active && gba->cartridge.identity == identity);
+    CHECK(trace.count == count && gba->cartridge.rumbleActive && gba->cartridge.direction == 8);
+    CHECK(gba->memory.savedata.data[7] == 31 && gba->memory.savedata.dirty);
+    CHECK(!cupid_load_rom(gba, missingPath));
+    CHECK(gba->memory.rom == previous && trace.count == count && gba->cartridge.rumbleActive);
+    CHECK(cupid_load_rom(gba, validPath));
+    CHECK((uintptr_t)gba->memory.rom != previousAddress && gba->memory.romSize == sizeof(image) && gba->memory.romMask == 1023);
+    CHECK(gba->cpu.memory.activeRegion == (const uint32_t*)gba->memory.rom);
+    CHECK(cupid_memory_load32(&gba->cpu, 0x08000200, NULL) == nop);
+    CHECK(trace.count == count + 1 && !trace.active[count] && !gba->cartridge.rumbleActive);
+    CHECK(gba->cartridge.rumblePresent && gba->cartridge.rumbleChanged == motor);
+    CHECK(!gba->cartridge.direction && gba->cartridge.solar.threshold == 182);
+    destroy(gba);
+    CHECK(remove(emptyPath) == 0 && remove(validPath) == 0);
+    puts("PASS failed_load_preserves_cartridge_and_success_rebinds_cache");
+}
+
+int main(int argc, char** argv) {
+    if (argc != 2) return 2;
     RUN(port_directions_repeated_writes_and_read_control);
     RUN(reset_replacement_subscription_and_destroy_stop_output);
     RUN(documented_board_detection_and_bounds);
     RUN(timed_word_and_dma_motor_transitions);
+    failed_load_preserves_cartridge_and_success_rebinds_cache(argv[1]);
     return 0;
 }
