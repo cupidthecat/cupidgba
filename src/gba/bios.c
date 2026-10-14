@@ -7,17 +7,6 @@
 #include <stdlib.h>
 
 /**
- * @brief SWI 0x0D: GetBiosChecksum.
- */
-#define GBA_BIOS_CHECKSUM 0xBAAE187Fu
-
-static void _GetBiosChecksum(struct CupidGBA* gba) {
-    gba->cpu.gprs[0] = GBA_BIOS_CHECKSUM;
-    gba->cpu.gprs[1] = 1;
-    gba->cpu.gprs[3] = GBA_SIZE_BIOS;
-}
-
-/**
  * @brief SWI dispatcher.
  */
 void cupid_bios_swi(struct CupidGBA* gba, uint8_t comment) {
@@ -43,7 +32,10 @@ void cupid_bios_swi(struct CupidGBA* gba, uint8_t comment) {
         /* Execute math and copy services through the timed CPU and bus. */
         cupid_arm_raise_swi(&gba->cpu);
         break;
-    case 0x0D: _GetBiosChecksum(gba); break;
+    case 0x0D:
+        /* Read and sum the firmware through the CPU and bus. */
+        cupid_arm_raise_swi(&gba->cpu);
+        break;
     case 0x0E: case 0x0F:
         /* Affine instructions retain integer rounding, caller state and bus timing. */
         cupid_arm_raise_swi(&gba->cpu);
