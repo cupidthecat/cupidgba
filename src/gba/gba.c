@@ -246,6 +246,7 @@ uint64_t cupid_gba_advance_stopped_time(struct CupidGBA* gba, uint64_t clocks) {
  * @brief Destroy a GBA instance.
  */
 void cupid_gba_destroy(struct CupidGBA* gba) {
+    cupid_cartridge_deinit(gba);
     cupid_video_deinit(&gba->video);
     cupid_memory_deinit(gba);
     cupid_timing_deinit(&gba->timing);

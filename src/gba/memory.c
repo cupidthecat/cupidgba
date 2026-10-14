@@ -989,62 +989,43 @@ bool cupid_load_rom(struct CupidGBA* gba, const char* path) {
         return false;
     }
 
-    /** Free any previously loaded ROM. */
-    if (gba->memory.rom) {
-        free(gba->memory.rom);
-        gba->memory.rom = NULL;
-        gba->memory.romSize = 0;
-        gba->memory.romMask = 0;
-    }
-
-    fseek(f, 0, SEEK_END);
+    /* Read a candidate before changing the currently attached cartridge. */
+    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return false; }
     long fileSize = ftell(f);
-    fseek(f, 0, SEEK_SET);
 
     if (fileSize <= 0 || (size_t)fileSize > GBA_SIZE_ROM) {
         fprintf(stderr, "CUPID: Invalid ROM size: %ld\n", fileSize);
         fclose(f);
         return false;
     }
+    if (fseek(f, 0, SEEK_SET) != 0) { fclose(f); return false; }
 
     size_t pristineSize = (size_t)fileSize;
-
-    /** Cap at 32 MiB (one ROM mirror region). */
-    if (pristineSize > GBA_SIZE_ROM) {
-        pristineSize = GBA_SIZE_ROM;
+    uint8_t* candidate = calloc(1, GBA_SIZE_ROM);
+    if (!candidate) { fclose(f); return false; }
+    const size_t readSize = fread(candidate, 1, pristineSize, f);
+    const bool readFailed = ferror(f) != 0;
+    const int closeResult = fclose(f);
+    if (readSize != pristineSize || readFailed || closeResult != 0) {
+        fprintf(stderr, "CUPID: Failed ROM read: %zu / %zu\n", readSize, pristineSize);
+        free(candidate);
+        return false;
     }
+
+    size_t mappedSize = pristineSize;
 
     /** 1 MiB ROMs (Classic NES series) appear as 4x mirrored. */
     if (pristineSize == 0x00100000) {
-        gba->memory.romSize = 0x00400000;
-        gba->memory.rom = calloc(1, GBA_SIZE_ROM);
-        if (!gba->memory.rom) { fclose(f); return false; }
-
-        size_t rd = fread(gba->memory.rom, 1, pristineSize, f);
-        fclose(f);
-        if (rd != pristineSize) {
-            fprintf(stderr, "CUPID: Short ROM read: %zu / %zu\n", rd, pristineSize);
-            free(gba->memory.rom); gba->memory.rom = NULL;
-            return false;
-        }
+        mappedSize = 0x00400000;
         /** Mirror 4x: copy the 1 MiB image three more times. */
-        memcpy(gba->memory.rom + 0x100000, gba->memory.rom, 0x100000);
-        memcpy(gba->memory.rom + 0x200000, gba->memory.rom, 0x100000);
-        memcpy(gba->memory.rom + 0x300000, gba->memory.rom, 0x100000);
-    } else {
-        /** Normal ROM: allocate rounded up to a power of two size. */
-        gba->memory.romSize = pristineSize;
-        gba->memory.rom = calloc(1, GBA_SIZE_ROM);
-        if (!gba->memory.rom) { fclose(f); return false; }
-
-        size_t rd = fread(gba->memory.rom, 1, pristineSize, f);
-        fclose(f);
-        if (rd != pristineSize) {
-            fprintf(stderr, "CUPID: Short ROM read: %zu / %zu\n", rd, pristineSize);
-            free(gba->memory.rom); gba->memory.rom = NULL;
-            return false;
-        }
+        memcpy(candidate + 0x100000, candidate, 0x100000);
+        memcpy(candidate + 0x200000, candidate, 0x100000);
+        memcpy(candidate + 0x300000, candidate, 0x100000);
     }
+
+    free(gba->memory.rom);
+    gba->memory.rom = candidate;
+    gba->memory.romSize = mappedSize;
 
     /** Compute romMask as next power-of-two minus one. */
     gba->memory.romMask = cupid_to_pow2((uint32_t)gba->memory.romSize) - 1;
@@ -1077,6 +1058,8 @@ bool cupid_load_rom(struct CupidGBA* gba, const char* path) {
 
     /** If CPU is already initialized and PC is in ROM, re-arm active region. */
     if (gba->memory.activeRegion >= GBA_REGION_ROM0) {
+        /* The same-region shortcut still refers to the previous allocation. */
+        gba->memory.activeRegion = -1;
         gba->cpu.memory.setActiveRegion(&gba->cpu, gba->cpu.gprs[15]);
     }
 

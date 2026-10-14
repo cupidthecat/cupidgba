@@ -6,6 +6,7 @@
 #include "cupid/gba.h"
 #include "cupid/platform.h"
 #include "cupid/platform/rtc.h"
+#include "cupid/platform/peripherals.h"
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -105,7 +106,7 @@ bool cupid_platform_init(struct CupidPlatform* plat, int scale) {
         if (SDL_IsGameController(i)) {
             plat->controller = SDL_GameControllerOpen(i);
             if (plat->controller) {
-                plat->controllerIndex = i;
+                plat->controllerIndex = SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(plat->controller));
                 printf("CUPID: Opened controller: %s\n",
                        SDL_GameControllerName(plat->controller));
                 break;
@@ -117,6 +118,7 @@ bool cupid_platform_init(struct CupidPlatform* plat, int scale) {
 }
 
 void cupid_platform_deinit(struct CupidPlatform* plat) {
+    cupid_platform_rumble_stop(plat);
     if (plat->audioDevice) SDL_CloseAudioDevice(plat->audioDevice);
     if (plat->controller) SDL_GameControllerClose(plat->controller);
     if (plat->texture) SDL_DestroyTexture(plat->texture);
@@ -157,9 +159,12 @@ static void printUsage(const char* progname) {
     fprintf(stderr, "\nSave types (GBA): sram, sram512, flash512, flash1m, eeprom, eeprom512, none\n");
     fprintf(stderr, "\nRTC: --rtc auto|on|off  --rtc-time YYYY-MM-DDTHH:MM:SS\n");
     fprintf(stderr, "     --rtc-offline pause|wall (default: pause; wall includes powered-off time)\n");
+    fprintf(stderr, "\nPeripherals: --solar auto|on|off  --sunlight 0..255 (default: 128)\n");
+    fprintf(stderr, "             --rumble auto|on|off\n");
     fprintf(stderr, "\nControls:\n");
     fprintf(stderr, "  Z=A  X=B  Enter=Start  Backspace=Select\n");
     fprintf(stderr, "  Arrow keys=D-Pad  A=L  S=R  Esc=Quit\n");
+    fprintf(stderr, "  F5=Less sunlight  F6=More sunlight\n");
 }
 
 /**
@@ -174,6 +179,7 @@ int main(int argc, char* argv[]) {
     int rtcPresence = -1;
     struct CupidRTCDateTime rtcSeed;
     struct CupidPlatformRTC rtcConfig = {0};
+    struct CupidPlatformPeripherals peripherals = {-1, -1, 128};
 
     /** Parse CLI arguments. */
     for (int i = 1; i < argc; i++) {
@@ -185,6 +191,15 @@ int main(int argc, char* argv[]) {
             if (scale > 10) scale = 10;
         } else if (strcmp(argv[i], "-S") == 0 && i + 1 < argc) {
             saveTypeStr = argv[++i];
+        } else if ((!strcmp(argv[i], "--solar") || !strcmp(argv[i], "--rumble")) && i + 1 < argc) {
+            int* presence = !strcmp(argv[i], "--solar") ? &peripherals.solarPresence : &peripherals.rumblePresence;
+            if (!cupid_platform_peripheral_mode(argv[++i], presence)) {
+                fprintf(stderr, "Error: Peripheral mode must be auto, on or off\n"); return 1;
+            }
+        } else if (!strcmp(argv[i], "--sunlight") && i + 1 < argc) {
+            if (!cupid_platform_solar_level(argv[++i], &peripherals.solarLevel)) {
+                fprintf(stderr, "Error: Sunlight must be an integer from 0 through 255\n"); return 1;
+            }
         } else if (strcmp(argv[i], "--rtc") == 0 && i + 1 < argc) {
             const char* mode = argv[++i];
             if (!strcmp(mode, "auto")) rtcPresence = -1;
@@ -240,6 +255,7 @@ int main(int argc, char* argv[]) {
     }
     printf("Loaded ROM: %s (%zu bytes)\n", romPath, gba.memory.romSize);
     if (rtcPresence >= 0) cupid_cartridge_enable_rtc(&gba, rtcPresence != 0);
+    cupid_platform_peripherals_configure(&gba, &peripherals);
 
     /** Override save type if specified on CLI. */
     if (saveTypeStr) {
@@ -304,6 +320,7 @@ int main(int argc, char* argv[]) {
         cupid_gba_destroy(&gba);
         return 1;
     }
+    cupid_cartridge_set_rumble_output(&gba, cupid_platform_rumble_changed, &plat);
 
     /** Initialize audio. */
     if (!cupid_platform_init_audio(&plat, &gba)) {
@@ -335,6 +352,7 @@ int main(int argc, char* argv[]) {
     while (plat.running) {
         /** Poll input. */
         if (!cupid_platform_poll_events(&plat, &gba)) break;
+        cupid_platform_rumble_refresh(&plat);
 
         /* The SDL callback consumes the same queue that emulation produces. */
         if (plat.audioDevice) SDL_LockAudioDevice(plat.audioDevice);
@@ -388,6 +406,7 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "Error: Cannot save RTC state %s: %s\n", rtcPath, strerror(errno));
         result = 1;
     }
+    cupid_cartridge_set_rumble_output(&gba, NULL, NULL);
     cupid_platform_deinit(&plat);
     cupid_gba_destroy(&gba);
     printf("CupidGBA exited.\n");

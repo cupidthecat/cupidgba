@@ -3,6 +3,25 @@
 
 static void prefetch_sample(struct CupidTiming* timing, void* context, uint32_t late);
 static void rtc_interrupt(struct CupidTiming* timing, void* context, uint32_t late);
+static uint8_t port_pins(const struct CupidCartridge* cart);
+
+static void rumble_output(struct CupidGBA* gba, bool active) {
+    struct CupidCartridge* cart = &gba->cartridge;
+    if (cart->rumbleActive == active) return;
+    cart->rumbleActive = active;
+    if (cart->rumbleChanged) cart->rumbleChanged(cart->rumbleContext, active,
+        cupid_timing_global_time(&gba->timing));
+}
+
+void cupid_cartridge_set_rumble_output(struct CupidGBA* gba,
+    void (*output)(void*, bool, uint64_t), void* context) {
+    if (gba->cartridge.rumbleChanged)
+        gba->cartridge.rumbleChanged(gba->cartridge.rumbleContext, false,
+            cupid_timing_global_time(&gba->timing));
+    gba->cartridge.rumbleChanged = output;
+    gba->cartridge.rumbleContext = context;
+    if (output) output(context, gba->cartridge.rumbleActive, cupid_timing_global_time(&gba->timing));
+}
 
 static void schedule_rtc_interrupt(struct CupidGBA* gba) {
     struct CupidCartridge* cart = &gba->cartridge;
@@ -59,18 +78,43 @@ static void rtc_interrupt(struct CupidTiming* timing, void* context, uint32_t la
 }
 
 void cupid_cartridge_init(struct CupidGBA* gba) {
+    rumble_output(gba, false);
     cupid_cartridge_prefetch_cancel(gba);
     cupid_timing_deschedule(&gba->timing, &gba->cartridge.rtcInterruptEvent);
     memset(&gba->cartridge, 0, sizeof(gba->cartridge));
     cupid_rtc_init(&gba->cartridge.rtc, cupid_timing_global_time(&gba->timing));
+    cupid_solar_init(&gba->cartridge.solar);
     gba->cartridge.prefetchEvent = (struct CupidTimingEvent){.context = gba,
         .callback = prefetch_sample, .name = "Cartridge prefetch sample", .priority = 0x70};
     gba->cartridge.rtcInterruptEvent = (struct CupidTimingEvent){.context = gba,
         .callback = rtc_interrupt, .name = "Cartridge RTC interrupt", .priority = 0x40};
 }
 
+void cupid_cartridge_deinit(struct CupidGBA* gba) {
+    rumble_output(gba, false);
+    gba->cartridge.rumbleChanged = NULL;
+    gba->cartridge.rumbleContext = NULL;
+    cupid_cartridge_prefetch_cancel(gba);
+    cupid_timing_deschedule(&gba->timing, &gba->cartridge.rtcInterruptEvent);
+}
+
 void cupid_cartridge_enable_rtc(struct CupidGBA* gba, bool enabled) {
     gba->cartridge.rtcPresent = enabled;
+    cupid_cartridge_reset_bus(gba);
+}
+
+void cupid_cartridge_enable_solar(struct CupidGBA* gba, bool enabled) {
+    gba->cartridge.solarPresent = enabled;
+    cupid_cartridge_reset_bus(gba);
+}
+
+void cupid_cartridge_set_solar_level(struct CupidGBA* gba, uint8_t level) {
+    cupid_solar_set_level(&gba->cartridge.solar, level);
+}
+
+void cupid_cartridge_enable_rumble(struct CupidGBA* gba, bool enabled) {
+    gba->cartridge.rumblePresent = enabled;
+    if (!enabled) rumble_output(gba, false);
     cupid_cartridge_reset_bus(gba);
 }
 
@@ -90,27 +134,55 @@ void cupid_cartridge_attach(struct CupidGBA* gba, const uint8_t* rom, size_t siz
                    version[2] >= '0' && version[2] <= '9';
         if (detected) break;
     }
+    /* Host output ownership and illumination survive cartridge replacement.
+     * The previous board's motor stops before any state is cleared. */
+    void (*rumbleChanged)(void*, bool, uint64_t) = gba->cartridge.rumbleChanged;
+    void* rumbleContext = gba->cartridge.rumbleContext;
+    const uint8_t solarLevel = (uint8_t)(255 - gba->cartridge.solar.threshold);
     cupid_cartridge_init(gba);
+    gba->cartridge.rumbleChanged = rumbleChanged;
+    gba->cartridge.rumbleContext = rumbleContext;
+    cupid_solar_set_level(&gba->cartridge.solar, solarLevel);
     gba->cartridge.identity = UINT64_C(14695981039346656037);
     for (size_t i = 0; i < size; i++) {
         gba->cartridge.identity ^= rom[i];
         gba->cartridge.identity *= UINT64_C(1099511628211);
     }
+    if (size >= 0xB0) {
+        static const char solarBoards[][5] = {
+            "U3IJ", "U3IE", "U3IP", "U32J", "U32E", "U32P", "U33J"
+        };
+        static const char rumbleBoards[][5] = {
+            "V49J", "V49E", "V49P", "2GBP", "RZWJ", "RZWE", "RZWP"
+        };
+        for (size_t i = 0; i < sizeof(solarBoards) / sizeof(solarBoards[0]); i++) {
+            if (!memcmp(rom + 0xAC, solarBoards[i], 4)) {
+                gba->cartridge.solarPresent = true;
+                detected = true;
+            }
+        }
+        for (size_t i = 0; i < sizeof(rumbleBoards) / sizeof(rumbleBoards[0]); i++) {
+            if (!memcmp(rom + 0xAC, rumbleBoards[i], 4)) gba->cartridge.rumblePresent = true;
+        }
+    }
     cupid_cartridge_enable_rtc(gba, detected);
 }
 
 void cupid_cartridge_reset_bus(struct CupidGBA* gba) {
+    rumble_output(gba, false);
     cupid_cartridge_prefetch_cancel(gba);
     gba->cartridge.output = gba->cartridge.direction = 0;
     gba->cartridge.readable = false;
     gba->cartridge.opcodeValid = false;
     gba->cpu.memory.readOpcode = NULL;
     cupid_rtc_reset_bus(&gba->cartridge.rtc);
+    cupid_solar_reset_bus(&gba->cartridge.solar);
     cupid_cartridge_rtc_reschedule(gba);
 }
 
 bool cupid_cartridge_gpio_address(const struct CupidGBA* gba, uint32_t address) {
-    if ((!gba->cartridge.rtcPresent && !gba->cartridge.inputPins) || !gba->memory.rom) return false;
+    if ((!gba->cartridge.rtcPresent && !gba->cartridge.solarPresent &&
+         !gba->cartridge.rumblePresent && !gba->cartridge.inputPins) || !gba->memory.rom) return false;
     const unsigned region = address >> GBA_BASE_OFFSET;
     if (region < GBA_REGION_ROM0 || region > GBA_REGION_ROM2_EX) return false;
     const uint32_t physical = address & (GBA_SIZE_ROM - 2);
@@ -120,6 +192,7 @@ bool cupid_cartridge_gpio_address(const struct CupidGBA* gba, uint32_t address) 
 static uint8_t port_pins(const struct CupidCartridge* cart) {
     uint8_t input = cart->inputPins ? cart->inputPins(cart->inputContext) : 0;
     if (cart->rtcPresent) input = (input & ~2) | cupid_rtc_output_pins(&cart->rtc);
+    if (cart->solarPresent) input = (input & ~8) | cupid_solar_output_pins(&cart->solar);
     return (cart->output & cart->direction) | (input & ~cart->direction & 15);
 }
 
@@ -153,6 +226,9 @@ bool cupid_cartridge_gpio_write(struct CupidGBA* gba, uint32_t address, uint16_t
             cupid_raise_irq_at(gba, IRQ_GAMEPAK, cupid_timing_global_time(&gba->timing));
         rtc_output_changed(gba, previousLow);
     }
+    const uint8_t pins = port_pins(&gba->cartridge);
+    if (gba->cartridge.solarPresent) cupid_solar_write_pins(&gba->cartridge.solar, pins);
+    if (gba->cartridge.rumblePresent) rumble_output(gba, (pins & 8) != 0);
     return true;
 }
 

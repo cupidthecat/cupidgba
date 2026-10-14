@@ -1,6 +1,6 @@
 /**
  * @file input.c
- * @brief Keyboard and controller to GBA and GB key mapping.
+ * @brief Keyboard and controller to GBA key mapping.
  *
  * GBA KEYINPUT register (0x04000130) is active-low:
  * bit 0 = A, 1 = B, 2 = Select, 3 = Start,
@@ -109,6 +109,12 @@ bool cupid_platform_poll_events(struct CupidPlatform* plat, struct CupidGBA* gba
                 plat->running = false;
                 return false;
             }
+            if (gba->cartridge.solarPresent &&
+                (event.key.keysym.scancode == SDL_SCANCODE_F5 || event.key.keysym.scancode == SDL_SCANCODE_F6)) {
+                int level = 255 - gba->cartridge.solar.threshold;
+                level += event.key.keysym.scancode == SDL_SCANCODE_F5 ? -16 : 16;
+                cupid_cartridge_set_solar_level(gba, (uint8_t)(level < 0 ? 0 : level > 255 ? 255 : level));
+            }
             for (size_t i = 0; i < KEY_MAP_SIZE; i++) {
                 if (event.key.keysym.scancode == keyMap[i].scancode) {
                     gba->keysActive |= (1 << keyMap[i].bit);    /** bit=1 pressed */
@@ -152,7 +158,8 @@ bool cupid_platform_poll_events(struct CupidPlatform* plat, struct CupidGBA* gba
                 if (SDL_IsGameController(idx)) {
                     plat->controller = SDL_GameControllerOpen(idx);
                     if (plat->controller) {
-                        plat->controllerIndex = idx;
+                        plat->controllerIndex = SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(plat->controller));
+                        cupid_platform_rumble_refresh(plat);
                         printf("CUPID: Controller connected: %s\n",
                                SDL_GameControllerName(plat->controller));
                     }
@@ -164,6 +171,7 @@ bool cupid_platform_poll_events(struct CupidPlatform* plat, struct CupidGBA* gba
             if (plat->controller &&
                 event.cdevice.which == plat->controllerIndex) {
                 printf("CUPID: Controller disconnected\n");
+                cupid_platform_rumble_stop(plat);
                 SDL_GameControllerClose(plat->controller);
                 plat->controller = NULL;
                 plat->controllerIndex = -1;
