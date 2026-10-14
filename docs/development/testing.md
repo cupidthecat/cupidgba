@@ -1,5 +1,11 @@
 # Testing
 
+The four `arm.reset-entry-*` groups check guest-visible reset control, prior
+ARM/Thumb and privilege state, pending IRQs, repeated reset and the built-in
+fast entry with owned instructions. Each retains a ten-second deadline. Native
+BIOS service fixtures prepare their application caller explicitly without
+booting firmware or changing peripheral clocks; see [reset entry](../hardware/bios/reset-entry.md).
+
 The `gba.bios-file-*`, `runner.bios-startup` and `platform.bios-startup` groups
 check complete firmware input, state preservation on failure, reset execution
 and the startup boundary. The native fixtures and process images use owned

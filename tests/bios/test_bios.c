@@ -2,6 +2,7 @@
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
 #include "../test.h"
+#include "caller.h"
 
 static const char* externalBios;
 
@@ -11,6 +12,7 @@ static struct CupidGBA* wait_machine(void) {
     cupid_gba_create(gba);
     if (externalBios) CHECK(cupid_load_bios(gba, externalBios));
     cupid_gba_reset(gba);
+    cupid_test_bios_caller(gba);
     return gba;
 }
 

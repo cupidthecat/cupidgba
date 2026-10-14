@@ -134,8 +134,10 @@ void cupid_arm_reset(struct CupidARM* cpu) {
 		cpu->bankedSPSRs[i] = 0;
 	}
 
-	cpu->privilegeMode = MODE_SYS;
-	cpu->cpsr.packed = MODE_SYS;
+	/* Reset enters ARM Supervisor mode with both interrupt classes masked. */
+	cpu->privilegeMode = MODE_SVC;
+	cpu->cpsr.packed = MODE_SVC | 0xC0;
+	cpu->irqDisableLatch = true;
 	cpu->spsr.packed = 0;
 
 	cpu->shifterOperand = 0;
