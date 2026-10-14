@@ -114,9 +114,14 @@ preceding 40 bytes. These checks detect mismatches and accidental corruption.
 Flag-byte bit 2 retains the low interrupt output. `CPDRTC01` reserves bytes
 29 through 31 as zero and requires control bit 3 for a low output. `CPDRTC02`
 stores the two interrupt-parameter bytes at offsets 29 and 30, reserves byte
-31 as zero, and permits a low output with any interrupt mode enabled. Both
-versions load; version 1 supplies zero parameters. Saves use version 2 when
-parameters or an alarm/frequency latch require it, and version 1 otherwise.
+31 as zero, and permits a low output with any interrupt mode enabled.
+`CPDRTC03` keeps that layout and uses flag-byte bit 3 for the retained minute
+carry signal. That flag requires a valid second zero and a fraction inside
+the nominal 10 ms window; a minute mode enabled during that signal must have
+low output. All three versions load. Versions 1 and 2 supply no retained carry
+signal, and version 1 supplies zero parameters. Saves use version 3 while the
+carry signal is active, version 2 when parameters or an alarm/frequency latch
+require it, and version 1 otherwise.
 Loading a battery or
 advancing its offline clock schedules future transitions without replaying
 console IRQs from the interval when the frontend was closed.
@@ -129,17 +134,31 @@ If recovery is needed, preserve the rejected file before starting with a fresh
 ## Minute interrupts
 
 Control bit 3 enables the minute output. With bit 1 clear, the chip output goes
-low at the next minute carry and stays low until a complete control write or
-reset releases it. With bit 1 set, the output goes low at the minute carry and
-returns high 30 seconds later. Enabling the mode waits for the next carry.
+low at the next minute carry and stays low until a control write or reset
+acknowledges it. With bit 1 set, the output goes low at the minute carry and
+returns high 30 seconds later. Enabling a mode waits for the next carry unless
+the previous carry signal is still active.
 Reading control or aborting an incomplete write does not acknowledge the latch.
+
+The actual minute carry retains a processing signal for a nominal 10 ms.
+Rewriting an enabled minute mode inside that interval reasserts the low output.
+Disabling the mode releases it; enabling again inside the same interval makes
+it low again. A write after that interval releases either minute mode until
+the next carry, even during the steady mode's 30-second low phase. The window
+starts at the calendar carry, not at the most recent control write. At the
+core's clock rate, clock 167772 is inside the interval and clock 167773 is
+outside it. The exact physical duration remains unmeasured.
+
+A separate signal flag distinguishes a real carry from a new seed, reset or
+time write with second zero. Clock advancement expires it using the original
+fraction; console reset and pause-mode persistence retain the remaining window.
 
 The cartridge's inverter passes the chip's rising release edge to the falling
 Game Pak IRQ input. That edge requests IF bit 13 through the ordinary interrupt
 pipeline. The first low transition does not request it. In steady mode, the
 request occurs at second 30; in held mode, it occurs when software releases the
-output. Changing or disabling the mode with a complete control write releases
-a low output. GPIO read-control and pin direction do not disable this separate
+output. Disabling the mode or acknowledging it after the retained interval
+releases a low output. GPIO read-control and pin direction do not disable this separate
 interrupt connection.
 
 An owned scheduler event dispatches each transition at its original deadline,
@@ -151,7 +170,8 @@ the event. IRQ acknowledgement does not create another chip edge.
 This model follows the minute-output waveforms in the chip data sheet and the
 inverter connection in the GBA RTC register description linked above. Its board
 edge is an inference from those descriptions. Direct cartridge captures are
-still required to qualify that edge and writes during minute-carry processing.
+still required to qualify that edge, the exact carry width and any transient
+pulses while a status write acknowledges and reasserts output.
 
 ## Alarm and frequency interrupts
 
@@ -222,8 +242,8 @@ waveforms over a complete divider cycle, every hour in both formats, mode
 priority, matching-minute reenable, held output, daily/calendar carries,
 long-wait checkpoints and large offline intervals. ARM/Thumb parameter and
 control stores check IRQ visibility and acknowledgement. Repeated frequency
-edges retain timer/DMA chronology through late dispatch and clock wrap. Both
-battery versions, console reset, disable/replacement and frontend offline
+edges retain timer/DMA chronology through late dispatch and clock wrap. The
+battery formats, console reset, disable/replacement and frontend offline
 resume preserve parameters and output state without replaying past requests.
 These are documented-model regressions; the local original corpus does not
 exercise alarm or frequency timing. Direct cartridge timing remains unqualified.
@@ -234,8 +254,14 @@ live versus offline persistence and chunked paced intervals. A generated
 cartridge exercises GPIO configuration, STOP wake and a frozen timer through
 the headless runner. Physical output phase, the cartridge inverter and the
 system oscillator's stabilization delay remain unqualified.
-Minute hold rearming within the chip's 10 ms carry interval and time writes during
-an active output also need further work.
+Minute rearming tests cover both sides of the nominal 10 ms boundary, both
+minute modes, disable/enable, fresh-zero versus real-carry state, mode priority,
+power flags and bulk/chunked/offline clock input. ARM/Thumb GPIO completion
+strobes retain the original deadline through late dispatch and clock wrap;
+live STOP and console reset preserve the window. Version 3 roundtrips it with
+output enabled or disabled, rejects impossible windows and preserves legacy
+semantics without replaying powered-off requests. Time writes during an active
+output still need further qualification.
 
 The power detector exposes an explicit sample input: a failure latches the
 flag and stops sampling; reading control rearms it. Voltage thresholds and

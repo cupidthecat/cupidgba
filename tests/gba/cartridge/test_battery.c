@@ -173,7 +173,7 @@ static void extended_interrupt_state_roundtrips_and_validates_both_versions(void
         }
         destroy(gba);
         const unsigned invalidAt[] = {7, 28, 31};
-        const uint8_t invalidValue[] = {'3', 8, 1};
+        const uint8_t invalidValue[] = {'4', 8, 1};
         for (unsigned i = 0; i < 3; i++) {
             uint8_t bad[44]; memcpy(bad, data, sizeof(bad));
             bad[invalidAt[i]] = invalidValue[i]; repair_checksum(bad);
@@ -257,6 +257,93 @@ static void live_stop_clock_roundtrips_without_replaying_its_pending_request(voi
     destroy(gba);
 }
 
+static void retained_carry_roundtrips_with_output_enabled_or_disabled(void) {
+    for (unsigned steady = 0; steady < 2; steady++) for (unsigned disabled = 0; disabled < 2; disabled++) {
+        struct CupidGBA* gba = machine();
+        const struct CupidRTCDateTime date = {26, 10, 13, 2, 12, 34, 59};
+        CHECK(cupid_rtc_set_datetime(&gba->cartridge.rtc, &date));
+        gba->cartridge.rtc.fraction = CUPID_RTC_CLOCK_HZ - 1;
+        cupid_rtc_write_interrupt_parameters(&gba->cartridge.rtc, 0xAAAA);
+        cupid_rtc_write_control(&gba->cartridge.rtc, steady ? 0x4A : 0x48);
+        cupid_cartridge_rtc_reschedule(gba);
+        cupid_timing_tick(&gba->timing, 1);
+        CHECK(gba->cartridge.rtc.minuteCarryActive && gba->cartridge.rtc.interruptLow);
+        if (disabled) {
+            cupid_rtc_write_control(&gba->cartridge.rtc, 0x40);
+            cupid_cartridge_rtc_reschedule(gba);
+        }
+        cupid_timing_tick(&gba->timing, 111);
+        CHECK(cupid_cartridge_save_rtc(gba, statePath, 456));
+        uint8_t data[44];
+        CHECK(cupid_file_read_exact(statePath, data, sizeof(data)));
+        CHECK(!memcmp(data, "CPDRTC03", 8) && (data[28] & 8) && !data[31]);
+        destroy(gba);
+        gba = machine();
+        cupid_timing_tick(&gba->timing, 1234);
+        uint64_t stamp = 0;
+        CHECK(cupid_cartridge_load_rtc(gba, statePath, &stamp));
+        CHECK(stamp == 456 && gba->cartridge.rtc.lastClock == 1234);
+        CHECK(gba->cartridge.rtc.minuteCarryActive && gba->cartridge.rtc.fraction == 111);
+        CHECK(gba->cartridge.rtc.interruptParameters == 0xAAAA);
+        CHECK(gba->cartridge.rtc.interruptLow == !disabled && !gba->irq.pendingIF && !gba->irqf);
+        cupid_rtc_write_control(&gba->cartridge.rtc, steady ? 0x4A : 0x48);
+        CHECK(gba->cartridge.rtc.interruptLow);
+        cupid_timing_tick(&gba->timing, CUPID_RTC_MINUTE_CARRY_CLOCKS - 111);
+        cupid_cartridge_rtc_sync(gba);
+        CHECK(!gba->cartridge.rtc.minuteCarryActive && gba->cartridge.rtc.interruptLow);
+        cupid_rtc_write_control(&gba->cartridge.rtc, steady ? 0x4A : 0x48);
+        CHECK(!gba->cartridge.rtc.interruptLow);
+        CHECK(cupid_cartridge_save_rtc(gba, statePath, 457));
+        CHECK(cupid_file_read_exact(statePath, data, sizeof(data)));
+        CHECK(!memcmp(data, "CPDRTC02", 8) && !(data[28] & 8));
+        destroy(gba);
+    }
+}
+
+static void carry_format_validates_the_window_and_preserves_legacy_semantics(void) {
+    uint8_t data[44];
+    memcpy(data, valid, sizeof(data));
+    memcpy(data, "CPDRTC03", 8);
+    data[22] = 0;
+    data[24] = 111; data[25] = data[26] = data[27] = 0;
+    data[28] = (uint8_t)((data[28] & ~1) | 12);
+    repair_checksum(data);
+    write_bytes(data, sizeof(data));
+    struct CupidGBA* gba = machine();
+    CHECK(cupid_cartridge_load_rtc(gba, statePath, NULL));
+    CHECK(gba->cartridge.rtc.minuteCarryActive && gba->cartridge.rtc.interruptLow);
+    cupid_rtc_write_control(&gba->cartridge.rtc, 0x4A);
+    CHECK(gba->cartridge.rtc.interruptLow);
+    destroy(gba);
+    for (unsigned version = 1; version < 3; version++) {
+        uint8_t old[44]; memcpy(old, data, sizeof(old));
+        old[7] = (uint8_t)('0' + version);
+        old[28] &= ~8;
+        repair_checksum(old); write_bytes(old, sizeof(old));
+        gba = machine();
+        CHECK(cupid_cartridge_load_rtc(gba, statePath, NULL));
+        CHECK(!gba->cartridge.rtc.minuteCarryActive && gba->cartridge.rtc.interruptLow);
+        cupid_rtc_write_control(&gba->cartridge.rtc, 0x4A);
+        CHECK(!gba->cartridge.rtc.interruptLow); /* Legacy files do not claim a carry signal. */
+        destroy(gba);
+        old[28] |= 8; repair_checksum(old);
+        reject_without_changing_battery(old, sizeof(old));
+    }
+    const unsigned offset[] = {7, 22, 28, 28, 31};
+    const uint8_t value[] = {'4', 1, (uint8_t)(data[28] | 16), (uint8_t)(data[28] & ~4), 1};
+    for (unsigned i = 0; i < sizeof(offset) / sizeof(*offset); i++) {
+        uint8_t bad[44]; memcpy(bad, data, sizeof(bad));
+        bad[offset[i]] = value[i]; repair_checksum(bad);
+        reject_without_changing_battery(bad, sizeof(bad));
+    }
+    uint8_t bad[44]; memcpy(bad, data, sizeof(bad));
+    const uint32_t expired = CUPID_RTC_MINUTE_CARRY_CLOCKS;
+    for (unsigned i = 0; i < 4; i++) bad[24 + i] = (uint8_t)(expired >> (8 * i));
+    repair_checksum(bad); reject_without_changing_battery(bad, sizeof(bad));
+    memcpy(bad, data, sizeof(bad)); bad[28] |= 1; bad[22] = 0x6A;
+    repair_checksum(bad); reject_without_changing_battery(bad, sizeof(bad));
+}
+
 int main(int argc, char** argv) {
     CHECK(argc == 2);
 #ifdef _WIN32
@@ -285,6 +372,8 @@ int main(int argc, char** argv) {
     RUN(minute_output_latch_roundtrips_without_an_extra_irq);
     RUN(extended_interrupt_state_roundtrips_and_validates_both_versions);
     RUN(live_stop_clock_roundtrips_without_replaying_its_pending_request);
+    RUN(retained_carry_roundtrips_with_output_enabled_or_disabled);
+    RUN(carry_format_validates_the_window_and_preserves_legacy_semantics);
     CHECK(remove(statePath) == 0 && remove(savePath) == 0);
 #ifdef _WIN32
     CHECK(_rmdir(directory) == 0);

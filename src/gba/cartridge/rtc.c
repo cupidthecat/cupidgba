@@ -42,6 +42,8 @@ static uint64_t alarm_seconds(const struct CupidRTC* rtc) {
 }
 
 static void refresh_output(struct CupidRTC* rtc) {
+    if (rtc->invalidSecond || rtc->date.second || rtc->fraction >= CUPID_RTC_MINUTE_CARRY_CLOCKS)
+        rtc->minuteCarryActive = false;
     switch (output_mode(rtc)) {
     case OUTPUT_DISABLED: rtc->interruptLow = false; break;
     case OUTPUT_FREQUENCY:
@@ -50,6 +52,11 @@ static void refresh_output(struct CupidRTC* rtc) {
         break;
     case OUTPUT_ALARM:
         if (!alarm_seconds(rtc)) rtc->interruptLow = true;
+        break;
+    case OUTPUT_MINUTE:
+        /* A status write acknowledges output, while the actual carry signal
+         * remains active for 10 ms and can assert either minute mode again. */
+        if (rtc->minuteCarryActive) rtc->interruptLow = true;
         break;
     default: break;
     }
@@ -101,6 +108,8 @@ static void advance_seconds(struct CupidRTC* rtc, uint64_t seconds) {
     const uint64_t hours = minutes / 60 + rtc->date.hour;
     rtc->date.hour = (uint8_t)(hours % 24);
     advance_days(&rtc->date, hours / 24);
+    rtc->minuteCarryActive = minuteCarry && !rtc->date.second &&
+        rtc->fraction < CUPID_RTC_MINUTE_CARRY_CLOCKS;
     if (rtc->control & 8) {
         if (rtc->control & 2) {
             /* Steady output starts with a minute carry, then releases after 30s. */
@@ -188,6 +197,7 @@ bool cupid_rtc_set_datetime(struct CupidRTC* rtc, const struct CupidRTCDateTime*
     rtc->date = *date;
     rtc->fraction = 0;
     rtc->invalidSecond = false;
+    rtc->minuteCarryActive = false;
     refresh_output(rtc);
     return true;
 }
@@ -226,6 +236,7 @@ void cupid_rtc_reset_registers(struct CupidRTC* rtc) {
     rtc->invalidSecond = false;
     rtc->powerSampling = true;
     rtc->interruptLow = false;
+    rtc->minuteCarryActive = false;
 }
 
 uint8_t cupid_rtc_read_control(struct CupidRTC* rtc) {
@@ -237,7 +248,8 @@ uint8_t cupid_rtc_read_control(struct CupidRTC* rtc) {
 void cupid_rtc_write_control(struct CupidRTC* rtc, uint8_t value) {
     const unsigned previousMode = output_mode(rtc);
     rtc->control = (rtc->control & 0x80) | (value & 0x6A);
-    /* Minute writes acknowledge the latch; an alarm stays held until disabled. */
+    /* Minute writes acknowledge the latch; the retained carry may reassert it.
+     * An alarm stays held until disabled. */
     if (previousMode != OUTPUT_ALARM || output_mode(rtc) != OUTPUT_ALARM)
         rtc->interruptLow = false;
     refresh_output(rtc);
@@ -275,6 +287,7 @@ static void write_clock(struct CupidRTC* rtc, const uint8_t data[3]) {
     rtc->invalidSecond = decoded == 60;
     rtc->date.second = rtc->invalidSecond ? second : (uint8_t)decoded;
     rtc->fraction = 0;
+    rtc->minuteCarryActive = false;
     refresh_output(rtc);
 }
 

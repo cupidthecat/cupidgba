@@ -133,6 +133,9 @@ static void held_minute_output_releases_on_a_complete_control_write(void) {
         send_byte(gba, thumb != 0, 0x46);
         port_write(gba, thumb != 0, 0, 1);
         CHECK(gba->cartridge.rtc.interruptLow && !gba->irqf);
+        /* The retained carry reasserts output during the first 10 ms. This
+         * existing release case acknowledges after that interval. */
+        cupid_timing_tick(&gba->timing, CUPID_RTC_MINUTE_CARRY_CLOCKS);
         control_write(gba, thumb != 0, 0x48);
         CHECK(!gba->cartridge.rtc.interruptLow && gba->irqf == IRQ_GAMEPAK);
         CHECK(cupid_timing_is_scheduled(&gba->timing, &gba->cartridge.rtcInterruptEvent));
@@ -436,7 +439,107 @@ static void frequency_and_alarm_outputs_survive_console_reset_and_cancel_on_repl
     }
 }
 
+struct ControlCompletion {
+    struct CupidGBA* gba;
+    uint64_t clock;
+};
+
+static void finish_control_byte(struct CupidTiming* timing, void* context, uint32_t late) {
+    (void)late;
+    struct ControlCompletion* completion = context;
+    completion->clock = cupid_timing_global_time(timing);
+    CHECK(cupid_cartridge_gpio_write(completion->gba, 0x080000C4, 5));
+}
+
+static void minute_rearm_uses_the_final_gpio_strobe_through_late_dispatch_and_clock_wrap(void) {
+    const unsigned late[] = {0, 1, 2, 3, 64};
+    for (unsigned thumb = 0; thumb < 2; thumb++) for (unsigned steady = 0; steady < 2; steady++)
+        for (unsigned outside = 0; outside < 2; outside++) for (unsigned wrap = 0; wrap < 2; wrap++)
+            for (unsigned sample = 0; sample < sizeof(late) / sizeof(*late); sample++) {
+                struct CupidGBA* gba = machine();
+                if (wrap) {
+                    cupid_timing_clear(&gba->timing);
+                    gba->timing.globalCycles = UINT32_MAX - CUPID_RTC_MINUTE_CARRY_CLOCKS / 2;
+                    gba->timing.masterCycles = (uint32_t)gba->timing.globalCycles;
+                    cupid_irq_init(gba);
+                }
+                const uint8_t control = steady ? 0x4A : 0x48;
+                control_write(gba, thumb != 0, control);
+                cupid_irq_write(gba, REG_IE, IRQ_GAMEPAK);
+                cupid_irq_write(gba, REG_IME, 1);
+                cupid_timing_tick(&gba->timing, 4);
+                phase(gba, 59, false, 1);
+                cupid_timing_tick(&gba->timing, 1);
+                CHECK(gba->cartridge.rtc.minuteCarryActive && gba->cartridge.rtc.interruptLow);
+                port_write(gba, thumb != 0, 2, 7);
+                port_write(gba, thumb != 0, 0, 1);
+                port_write(gba, thumb != 0, 0, 5);
+                send_byte(gba, thumb != 0, 0x46);
+                for (unsigned bit = 0; bit < 7; bit++) {
+                    const uint16_t pins = (uint16_t)(4 | ((control >> bit) & 1) << 1);
+                    port_write(gba, thumb != 0, 0, pins);
+                    port_write(gba, thumb != 0, 0, pins | 1);
+                }
+                port_write(gba, thumb != 0, 0, 4);
+                cupid_cartridge_rtc_sync(gba);
+                CHECK(gba->cartridge.rtc.minuteCarryActive && !gba->irq.pendingIF);
+                CHECK(gba->cartridge.rtc.fraction < CUPID_RTC_MINUTE_CARRY_CLOCKS - 1);
+                const uint32_t delay = CUPID_RTC_MINUTE_CARRY_CLOCKS - gba->cartridge.rtc.fraction -
+                    (outside ? 0u : 1u);
+                const uint64_t expected = cupid_timing_global_time(&gba->timing) + delay;
+                struct ControlCompletion completion = {.gba = gba};
+                struct CupidTimingEvent event = {.context = &completion, .callback = finish_control_byte,
+                    .name = "RTC status completion", .priority = 0x30};
+                cupid_timing_schedule(&gba->timing, &event, (int32_t)delay);
+                cupid_timing_tick(&gba->timing, (int32_t)(delay + late[sample]));
+                CHECK(completion.clock == expected && gba->cartridge.rtc.control == control);
+                CHECK(gba->cartridge.rtc.interruptLow == !outside);
+                CHECK(gba->irq.pendingIF == (outside ? IRQ_GAMEPAK : 0));
+                CHECK(gba->irqf == (outside && late[sample] >= 1 ? IRQ_GAMEPAK : 0));
+                CHECK(gba->irq.available == (outside && late[sample] >= 2));
+                CHECK(gba->irq.line == (outside && late[sample] >= 3));
+                if (!outside) {
+                    /* Catch up to observation time without acknowledging output. */
+                    cupid_cartridge_rtc_sync(gba);
+                    CHECK(gba->cartridge.rtc.interruptLow && !gba->irq.pendingIF);
+                    if (late[sample]) CHECK(!gba->cartridge.rtc.minuteCarryActive);
+                }
+                destroy(gba);
+            }
+}
+
+static void live_stop_and_console_reset_preserve_the_remaining_carry_window(void) {
+    for (unsigned thumb = 0; thumb < 2; thumb++) for (unsigned steady = 0; steady < 2; steady++) {
+        struct CupidGBA* gba = machine();
+        const uint8_t control = steady ? 0x4A : 0x48;
+        control_write(gba, thumb != 0, control);
+        phase(gba, 59, false, 1);
+        cupid_timing_tick(&gba->timing, 1);
+        CHECK(gba->cartridge.rtc.minuteCarryActive);
+        cupid_gba_stop(gba);
+        const uint64_t clock = cupid_timing_global_time(&gba->timing);
+        CHECK(cupid_gba_advance_stopped_time(gba, 1000) == 1000);
+        CHECK(gba->stopped && gba->cartridge.rtc.minuteCarryActive);
+        CHECK(cupid_timing_global_time(&gba->timing) == clock && !gba->irq.pendingIF);
+        cupid_gba_reset(gba);
+        CHECK(gba->cartridge.rtc.minuteCarryActive && gba->cartridge.rtc.fraction == 1000);
+        control_write(gba, thumb != 0, control);
+        CHECK(gba->cartridge.rtc.interruptLow && !gba->irq.pendingIF);
+        cupid_gba_stop(gba);
+        cupid_cartridge_rtc_sync(gba);
+        const uint32_t remaining = CUPID_RTC_MINUTE_CARRY_CLOCKS - gba->cartridge.rtc.fraction;
+        CHECK(cupid_gba_advance_stopped_time(gba, remaining) == remaining);
+        CHECK(gba->stopped && !gba->cartridge.rtc.minuteCarryActive && !gba->irq.pendingIF);
+        cupid_gba_reset(gba);
+        control_write(gba, thumb != 0, control);
+        CHECK(!gba->cartridge.rtc.interruptLow && gba->irqf == IRQ_GAMEPAK);
+        destroy(gba);
+    }
+}
+
 int main(void) {
+    RUN(minute_rearm_uses_the_final_gpio_strobe_through_late_dispatch_and_clock_wrap);
+    RUN(live_stop_and_console_reset_preserve_the_remaining_carry_window);
     RUN(frequency_and_alarm_outputs_survive_console_reset_and_cancel_on_replacement);
     RUN(repeated_frequency_edges_keep_timer_dma_and_late_wrap_chronology);
     RUN(every_frequency_releases_through_arm_thumb_gpio_and_the_irq_pipeline);

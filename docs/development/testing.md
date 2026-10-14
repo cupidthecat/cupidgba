@@ -334,9 +334,16 @@ all 16 divider clocks, mixed masks across the complete divider phase, output
 priority, both hour formats, held alarm output, daily carries and long waits.
 `gba.rtc-irq`, `gba.rtc-battery` and `platform.rtc-config` cover parameter stores,
 interrupt visibility, repeated edges across timer/DMA work, late dispatch,
-clock wrap, reset, both battery versions and offline state. These tests preserve
+clock wrap, reset, battery formats and offline state. These tests preserve
 the model's specified behavior; physical cartridge edge/phase timing still
 needs qualification. See [RTC behavior and limits](../hardware/cartridge/rtc.md).
+
+`gba.rtc-minute` checks acknowledgement and disable/enable on both sides of
+the retained 10 ms carry signal, both minute modes, mode priority, power flags,
+clock partitioning and fresh-zero versus actual-carry state. GPIO/IRQ groups
+complete ARM/Thumb control bytes at the original strobe deadline during late
+dispatch and clock wrap. Battery tests cover version 3 carry retention and
+validation, legacy files and offline load without past requests.
 
 `gba.rtc-stop` checks explicit battery time during STOP, frozen system
 peripherals, release-edge wake eligibility, resumed IRQ stages, calendar and

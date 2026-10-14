@@ -5,6 +5,8 @@
 #include "cupid/types.h"
 
 #define CUPID_RTC_CLOCK_HZ UINT64_C(16777216)
+/* First whole master clock at or beyond the nominal 10 ms carry interval. */
+#define CUPID_RTC_MINUTE_CARRY_CLOCKS ((uint32_t)((CUPID_RTC_CLOCK_HZ + 99) / 100))
 
 struct CupidRTCDateTime {
     uint8_t year, month, day, weekday, hour, minute, second;
@@ -19,6 +21,7 @@ struct CupidRTC {
     bool invalidSecond;
     bool powerSampling;
     bool interruptLow;
+    bool minuteCarryActive;
     uint8_t pins, driveMask, inputLatch, inputByte, bit, byte, length, command;
     uint8_t transfer[7];
     uint8_t state;
