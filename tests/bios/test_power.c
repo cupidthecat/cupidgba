@@ -2,6 +2,7 @@
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
 #include "../test.h"
+#include "caller.h"
 
 static const char* externalBios;
 
@@ -11,6 +12,7 @@ static struct CupidGBA* machine(uint64_t clock) {
     cupid_gba_create(gba);
     if (externalBios) CHECK(cupid_load_bios(gba, externalBios));
     cupid_gba_reset(gba);
+    cupid_test_bios_caller(gba);
     cupid_timing_clear(&gba->timing);
     gba->timing.globalCycles = clock;
     gba->timing.masterCycles = (uint32_t)clock;
@@ -249,6 +251,7 @@ static void stopped_peripherals_and_external_wake_filters(void) {
         for (unsigned w = 0; w < 3; w++) {
             struct CupidGBA* gba = machine(0);
             cupid_gba_reset(gba); /* Retain actual video and audio queues. */
+            cupid_test_bios_caller(gba);
             prepare(gba, custom ? 0x27 : 3, 0x80, thumb != 0, MODE_SYS, true,
                 (enum CupidIRQ)(wakes[w] | IRQ_TIMER0));
             if (w == 2) cupid_io_write(gba, REG_RCNT, 0x8100);
@@ -359,6 +362,7 @@ static void halted_video_audio_timer_and_dma_continue(void) {
       for (unsigned custom = 0; custom < 2; custom++) {
         struct CupidGBA* gba = machine(0);
         cupid_gba_reset(gba);
+        cupid_test_bios_caller(gba);
         prepare(gba, custom ? 0x27 : 2, 0, thumb != 0, MODE_SYS, true, IRQ_TIMER0);
         cupid_io_write(gba, REG_TM0CNT_L, 0xF000);
         cupid_io_write(gba, REG_TM0CNT_H, 0xC0);
