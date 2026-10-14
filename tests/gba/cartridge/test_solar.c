@@ -146,6 +146,7 @@ static void live_input_direction_reset_and_shared_rtc(void) {
     cupid_cartridge_enable_rtc(gba, true);
     const struct CupidRTCDateTime date = {26, 10, 14, 3, 12, 34, 56};
     CHECK(cupid_rtc_set_datetime(&gba->cartridge.rtc, &date));
+    cupid_rtc_write_control(&gba->cartridge.rtc, 0x40);
     cupid_memory_store16(&gba->cpu, 0x080000C8, 1, NULL);
     cupid_memory_store16(&gba->cpu, 0x080000C6, 3, NULL);
     cupid_memory_store16(&gba->cpu, 0x080000C4, 1, NULL);
@@ -187,7 +188,7 @@ static void live_input_direction_reset_and_shared_rtc(void) {
         cupid_timing_tick(&gba->timing, 128);
         if (cupid_memory_loadU16(&gba->cpu, 0x080000C4, NULL) & 2) control |= 1u << bit;
     }
-    CHECK(control == gba->cartridge.rtc.control);
+    CHECK(control == 0x40);
     destroy(gba);
 }
 
