@@ -42,7 +42,7 @@ add_library(cupid_core STATIC
     src/core/timing.c
     src/gba/gba.c src/gba/memory.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
     src/gba/audio.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c
-    src/gba/hle-bios.c src/gba/savedata.c src/gba/save/file.c src/gba/serial/serial.c
+    src/gba/hle-bios.c src/gba/bios/file.c src/gba/savedata.c src/gba/save/file.c src/gba/serial/serial.c
     src/gba/render/software.c src/gba/render/composite.c
     src/gba/render/mode0.c src/gba/render/mode2.c
     src/gba/render/mode3.c src/gba/render/mode4.c
@@ -82,6 +82,18 @@ if(BUILD_TESTING)
     add_test(NAME gba.io COMMAND test_io)
     set_tests_properties(gba.io PROPERTIES TIMEOUT 10)
 
+    add_executable(test_bios_file tests/bios/test_file.c)
+    target_link_libraries(test_bios_file PRIVATE cupid_core)
+    foreach(group builtin external valid nonregular)
+        add_test(NAME gba.bios-file-${group} COMMAND test_bios_file ${group} ${CMAKE_CURRENT_BINARY_DIR})
+        set_tests_properties(gba.bios-file-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME runner.bios-startup COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_bios_startup.py
+        --runner $<TARGET_FILE:cupidgba-headless>)
+    set_tests_properties(runner.bios-startup PROPERTIES TIMEOUT 10)
+
     add_executable(test_cartridge_image tests/gba/cartridge/test_image.c)
     target_link_libraries(test_cartridge_image PRIVATE cupid_core)
     foreach(group decoder dma sizes replacement)
@@ -112,6 +124,10 @@ if(BUILD_TESTING)
     set_tests_properties(gba.serial PROPERTIES TIMEOUT 10)
 
     if(CUPID_BUILD_FRONTEND)
+        add_test(NAME platform.bios-startup COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_bios_startup.py
+            --frontend $<TARGET_FILE:cupidgba>)
+        set_tests_properties(platform.bios-startup PROPERTIES TIMEOUT 10)
         add_executable(test_input tests/platform/test_input.c src/platform/input.c)
         target_link_libraries(test_input PRIVATE cupid_core SDL2::SDL2)
         foreach(group bindings mixed axes lifecycle irq)
