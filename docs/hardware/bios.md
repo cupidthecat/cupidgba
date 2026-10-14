@@ -47,6 +47,11 @@ need separate hardware validation. See [serial and GPIO](serial/normal-and-gpio.
 
 ## Math and memory transfers
 
+SWI 1F performs fixed-point music-frequency conversion through timed firmware,
+including the wave read, upper-key clamp, fractional-byte interpolation and
+caller-register results. See [music-frequency conversion](bios-music-frequency.md)
+for numerical, source-bus and interrupt qualification.
+
 SWIs 06 through 0C execute through the CPU pipeline. Div, DivArm, Sqrt, ArcTan
 and CpuFastSet use ARM instructions; ArcTan2 and CpuSet use Thumb instructions
 and enter ARM helpers through BX. Their internal clocks, loads/stores and
