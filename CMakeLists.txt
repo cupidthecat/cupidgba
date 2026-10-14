@@ -80,6 +80,13 @@ if(BUILD_TESTING)
     add_test(NAME gba.io COMMAND test_io)
     set_tests_properties(gba.io PROPERTIES TIMEOUT 10)
 
+    add_executable(test_cartridge_image tests/gba/cartridge/test_image.c)
+    target_link_libraries(test_cartridge_image PRIVATE cupid_core)
+    foreach(group decoder dma sizes replacement)
+        add_test(NAME gba.cartridge-image-${group} COMMAND test_cartridge_image ${group} ${CMAKE_CURRENT_BINARY_DIR})
+        set_tests_properties(gba.cartridge-image-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
     add_executable(test_rom_bus tests/gba/test_rom_bus.c)
     target_link_libraries(test_rom_bus PRIVATE cupid_core)
     foreach(group reads cpu dma eeprom)

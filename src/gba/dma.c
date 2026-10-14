@@ -41,7 +41,7 @@ static unsigned access_cycles(struct CupidMemory* memory, struct CupidDMA* dma,
          * A source/destination crossover continues that same bus burst. */
         if (!sequential) memory->dmaROMAddress = address & 0x01FFFFFF;
         if (!(memory->dmaROMAddress & 0x1FFFF)) sequential = false;
-        bool eeprom = region == GBA_REGION_ROM2_EX &&
+        bool eeprom = cupid_memory_is_eeprom_address(memory, address) &&
             (memory->savedata.type == SAVE_EEPROM || memory->savedata.type == SAVE_EEPROM512);
         if (!eeprom) dma->accessAddress = (address & 0xFE000000) | memory->dmaROMAddress;
         memory->dmaROMAddress = (memory->dmaROMAddress + (dma->transferWord ? 4 : 2)) & 0x01FFFFFF;
@@ -146,7 +146,7 @@ static void write_value(struct CupidGBA* gba, struct CupidDMA* dma) {
         cupid_memory_store32(&gba->cpu, dma->nextDest, (int32_t)value, NULL);
     } else {
         value >>= (dma->nextDest & 2) * 8;
-        if ((dma->nextDest >> GBA_BASE_OFFSET) == GBA_REGION_ROM2_EX) {
+        if (cupid_memory_is_eeprom_address(&gba->memory, dma->nextDest)) {
             struct CupidSavedata* save = &gba->memory.savedata;
             if (save->type == SAVE_AUTODETECT) {
                 save->type = SAVE_EEPROM512;
