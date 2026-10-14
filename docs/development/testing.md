@@ -37,6 +37,9 @@ and banks, ready requests, IME, frozen STOP state, external wake filters,
 video/audio/timer/DMA progress during HALT, overdue DMA and clock wrap.
 An external BIOS adds paired register, timer, IRQ and callback comparisons.
 See [sleep entrypoints](../hardware/bios-sleep.md) for timing and hardware limits.
+The 1,560 control observations run in four complete groups; the other 164
+state/interaction observations run separately. Every group retains a
+ten-second deadline and both BIOS paths use the same partition.
 Checksum regressions require 180 observations per BIOS path. They cover all
 seven caller banks, IRQ/FIQ masks, ARM/Thumb, RAM/cartridge callers and waits,
 changed image words, read-only guest access, timer/DMA progress, deferred IRQs,
