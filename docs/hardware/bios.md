@@ -41,8 +41,9 @@ The local count-up suite passes 936/936 checks with both BIOS paths, including
 the divided clocks, and both pass 90/90 IRQ checks. The same CPU wait
 regressions also run against a local external BIOS when one is configured.
 This establishes the tested wait and timer interactions; it does not prove
-complete BIOS parity. STOP behavior and the remaining SWI routines need
-separate validation.
+complete BIOS parity. STOP clock suspension and eligible external wake sources
+have native regressions; precise wake latency and the remaining SWI routines
+need separate hardware validation. See [serial and GPIO](serial/normal-and-gpio.md).
 
 ## Math and memory transfers
 
