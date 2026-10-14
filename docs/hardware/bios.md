@@ -16,7 +16,12 @@ routine allow timers, IRQs and DMA to run during the call. See
 [register and memory reset](bios-register-reset.md) for flags, write order,
 caller state and qualification cases.
 
-Halt, IntrWait and VBlankIntrWait execute the replacement assembly through
+Halt, Stop and CustomHalt execute timed firmware, including the HALTCNT byte
+write, caller stack and normal SWI return. CustomHalt selects the power state
+from bit 7 of R2's low byte. See [sleep entrypoints](bios-sleep.md) for the
+caller, peripheral and wake checks and their hardware limits.
+
+IntrWait and VBlankIntrWait execute the replacement assembly through
 the normal CPU pipeline. IntrWait takes a discard-old-flags argument in R0
 and an interrupt mask in R1. With R0 clear, flags already recorded in the BIOS
 mirror can satisfy the wait immediately. With R0 set, the routine clears
@@ -87,7 +92,7 @@ The unchanged local math suite passes 615/615 register observations on both
 paths. Both also pass the complete 2020/2020 CPU/bus timing matrix, including
 its division, square-root, angle and copy cases. The observers reject partial
 counts and logged failures. These results cover the listed calls and inputs;
-sound-driver, multiboot, STOP and other services still need separate
+sound-driver, multiboot and other services still need separate
 execution and timing work.
 
 ## Affine conversion

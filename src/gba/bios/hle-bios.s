@@ -118,7 +118,6 @@ subs   pc, lr, #4
 .word 0x03A0E004
 
 @ Unimplemented
-Stop:
 GetBiosChecksum:
 SoundDriverInit:
 SoundDriverMode:
@@ -132,7 +131,6 @@ MusicPlayerContinue:
 MusicPlayerFadeOut:
 MultiBoot:
 HardReset:
-CustomHalt:
 SoundDriverVsyncOff:
 SoundDriverVsyncOn:
 
@@ -140,10 +138,10 @@ NopCall:
 bx lr
 
 Halt:
-mov    r11, #0
-mov    r12, #0x04000000
-strb   r11, [r12, #0x301]
-bx     lr
+mov    r2, #0
+b      CustomHalt
+@ Retain the fixed internal entry offsets beyond this non-fallthrough branch.
+.space 8, 0
 
 VBlankIntrWait:
 mov    r0, #1
@@ -534,4 +532,5 @@ subs pc, lr, #4
 
 .include "src/gba/bios/copy-fast.s"
 .include "src/gba/bios/soft-reset.s"
+.include "src/gba/bios/power-control.s"
 .include "src/gba/bios/music-frequency.s"
