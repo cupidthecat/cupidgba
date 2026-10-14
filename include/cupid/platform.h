@@ -43,7 +43,8 @@ struct CupidPlatform {
     SDL_AudioDeviceID audioDevice;
 
     SDL_GameController* controller;   /**< First attached controller, or NULL */
-    int controllerIndex;              /**< SDL joystick index of `controller` */
+    int controllerIndex;              /**< SDL joystick instance ID of `controller` */
+    uint16_t keyboardKeys;            /**< Held GBA keys from keyboard events */
 
     struct CupidPlatformAudio platformAudio;
 

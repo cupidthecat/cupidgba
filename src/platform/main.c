@@ -83,7 +83,7 @@ bool cupid_platform_init(struct CupidPlatform* plat, int scale) {
         if (SDL_IsGameController(i)) {
             plat->controller = SDL_GameControllerOpen(i);
             if (plat->controller) {
-                plat->controllerIndex = i;
+                plat->controllerIndex = SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(plat->controller));
                 printf("CUPID: Opened controller: %s\n",
                        SDL_GameControllerName(plat->controller));
                 break;

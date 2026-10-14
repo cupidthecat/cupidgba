@@ -1,5 +1,11 @@
 # Testing
 
+The `platform.input-*` groups run real SDL2 virtual-controller state through
+the frontend event poll. They cover bindings, mixed source ownership, strict
+stick boundaries, focus/hotplug and keypad IRQ/STOP interactions. Every group
+has a ten-second deadline. See [input handling](../hardware/input.md) for the
+complete observations and scope.
+
 The native regression executables check event scheduling, clock wrap and reset,
 video event deadlines, CPU dispatch coverage, SWI exception entry, arithmetic
 boundaries, block transfers, I/O dispatch bounds, signed audio samples, and

@@ -1,6 +1,7 @@
 # Building
 
-The emulator uses C11 and SDL2. The core and headless test runner have no SDL2
+The emulator uses C11 and SDL2 2.24 or later. The input regressions use SDL2's
+extended virtual joystick API. The core and headless test runner have no SDL2
 dependency. CMake keeps generated files in the chosen build directory. The
 Makefile is also supported on Linux and tracks header dependencies.
 
