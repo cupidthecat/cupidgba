@@ -32,6 +32,10 @@ endpoints, coefficient saturation and matching red/blue precision. Scanout
 checks retain the extra green bit through direct and palette fetches, backdrop
 alpha and semi-transparent OBJ effects. Physical fractional rounding and bit 15
 remain unqualified.
+Music-frequency fixtures cover caller banks,
+fractional interpolation, upper-key clamps, source alignment/waits and live
+timer/DMA/IRQ progress, including late callbacks and clock wrap. A local
+external BIOS enables paired register, clock and protection comparisons.
 BIOS regressions check LZ77 backreferences with bytes whose high bit is set
 through both byte and halfword output paths. They also execute ARM/Thumb
 interrupt waits, check ready-flag consumption and register preservation,

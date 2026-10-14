@@ -125,7 +125,6 @@ SoundDriverMode:
 SoundDriverMain:
 SoundDriverVsync:
 SoundChannelClear:
-MidiKey2Freq:
 MusicPlayerOpen:
 MusicPlayerStart:
 MusicPlayerStop:
@@ -535,3 +534,4 @@ subs pc, lr, #4
 
 .include "src/gba/bios/copy-fast.s"
 .include "src/gba/bios/soft-reset.s"
+.include "src/gba/bios/music-frequency.s"
