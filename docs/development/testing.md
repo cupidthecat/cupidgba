@@ -37,6 +37,11 @@ and banks, ready requests, IME, frozen STOP state, external wake filters,
 video/audio/timer/DMA progress during HALT, overdue DMA and clock wrap.
 An external BIOS adds paired register, timer, IRQ and callback comparisons.
 See [sleep entrypoints](../hardware/bios-sleep.md) for timing and hardware limits.
+Checksum regressions require 180 observations per BIOS path. They cover all
+seven caller banks, IRQ/FIQ masks, ARM/Thumb, RAM/cartridge callers and waits,
+changed image words, read-only guest access, timer/DMA progress, deferred IRQs,
+overdue callbacks and clock wrap. Eleven groups retain ten-second deadlines
+and require their full counts. See [firmware checksum](../hardware/bios-checksum.md).
 BIOS regressions check LZ77 backreferences with bytes whose high bit is set
 through both byte and halfword output paths. They also execute ARM/Thumb
 interrupt waits, check ready-flag consumption and register preservation,
