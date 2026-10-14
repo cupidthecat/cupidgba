@@ -35,6 +35,10 @@ words, both instruction-width changes and BIOS/RAM exception returns,
 uncached page boundaries and DMA/timer/IRQ interactions across clock wrap.
 They also write wait controls before the first fetch, after a firmware reset
 and after an invalid jump, then require the configured costs on a valid fetch.
+Music-frequency fixtures cover caller banks,
+fractional interpolation, upper-key clamps, source alignment/waits and live
+timer/DMA/IRQ progress, including late callbacks and clock wrap. A local
+external BIOS enables paired register, clock and protection comparisons.
 BIOS regressions check LZ77 backreferences with bytes whose high bit is set
 through both byte and halfword output paths. They also execute ARM/Thumb
 interrupt waits, check ready-flag consumption and register preservation,
