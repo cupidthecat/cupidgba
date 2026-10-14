@@ -85,11 +85,14 @@ static void caller_state(struct CupidGBA* gba, uint32_t control, bool thumb, enu
     CHECK(gba->memory.biosPrefetch == 0xE3A02004);
 }
 
-static void complete_control_bytes_and_upper_aliases(void) {
+static void complete_control_bytes_and_upper_aliases(unsigned batch) {
+    CHECK(batch < 4);
     const uint32_t aliases[] = {0x100, 0xFFFFFF80, 0x80000000, 0x1234007F};
+    const unsigned first = batch * 64, last = batch == 3 ? 260 : first + 64;
+    unsigned count = 0;
     for (unsigned thumb = 0; thumb < 2; thumb++) {
         for (unsigned service = 0; service < 3; service++) {
-            for (unsigned i = 0; i < 260; i++) {
+            for (unsigned i = first; i < last; i++) {
                 const uint32_t control = i < 256 ? i : aliases[i - 256];
                 const unsigned call = service == 0 ? 2 : service == 1 ? 3 : 0x27;
                 const bool stop = service == 1 || (service == 2 && (control & 0x80));
@@ -105,9 +108,12 @@ static void complete_control_bytes_and_upper_aliases(void) {
                 caller_state(gba, control, thumb != 0, MODE_SYS, true);
                 CHECK(cupid_timer_read_counter(gba, 0) == clocks + 24);
                 destroy(gba);
+                count++;
             }
         }
     }
+    CHECK(count == 6 * (last - first));
+    printf("PASS complete controls: %u cases\n", count);
 }
 
 static void caller_masks_banks_and_clock_wrap(void) {
@@ -378,9 +384,25 @@ static void halted_video_audio_timer_and_dma_continue(void) {
 }
 
 int main(int argc, char** argv) {
-    if (argc == 3 && !strcmp(argv[1], "--external-bios")) externalBios = argv[2];
-    else if (argc != 1) return 2;
-    RUN(complete_control_bytes_and_upper_aliases);
+    int batch = -1;
+    bool state = false;
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "--external-bios") && i + 1 < argc) externalBios = argv[++i];
+        else if (!strcmp(argv[i], "--controls") && i + 1 < argc) {
+            const char* value = argv[++i];
+            if (strlen(value) != 1 || *value < '0' || *value > '3') return 2;
+            batch = *value - '0';
+        } else if (!strcmp(argv[i], "--state")) state = true;
+        else return 2;
+    }
+    if (batch >= 0) {
+        if (state) return 2;
+        complete_control_bytes_and_upper_aliases((unsigned)batch);
+        return 0;
+    }
+    if (!state) {
+        for (unsigned group = 0; group < 4; group++) complete_control_bytes_and_upper_aliases(group);
+    }
     RUN(caller_masks_banks_and_clock_wrap);
     RUN(ready_requests_and_irq_delivery);
     RUN(stopped_peripherals_and_external_wake_filters);
