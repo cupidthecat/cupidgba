@@ -22,6 +22,13 @@ the hardware; `--rtc-time YYYY-MM-DDTHH:MM:SS` supplies a calendar seed.
 host time while the frontend is closed. The default is pause. See
 [cartridge RTC](../hardware/cartridge/rtc.md) for persistence and current limits.
 
+`--solar auto|on|off` and `--rumble auto|on|off` select cartridge peripherals.
+`--sunlight 0..255` sets relative illumination (default 128); larger values
+represent more light. F5 lowers sunlight and F6 raises it while running.
+A connected SDL2 controller provides rumble when supported. See
+[cartridge peripherals](../hardware/cartridge/peripherals.md) for detection
+and current hardware limits.
+
 Keyboard controls are Z for A, X for B, Enter for Start, Backspace for Select,
 the arrow keys for the D-pad, A for L, S for R, and Escape to quit. SDL2
 controllers use A/B, Back, Start, the D-pad, and the shoulder buttons. The left

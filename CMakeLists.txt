@@ -43,7 +43,7 @@ add_library(cupid_core STATIC
     src/gba/gba.c src/gba/memory.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
     src/gba/audio.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c
     src/gba/hle-bios.c src/gba/savedata.c src/gba/save/file.c src/gba/serial/serial.c
-    src/gba/cartridge/rtc.c src/gba/cartridge/gpio.c src/gba/cartridge/battery.c
+    src/gba/cartridge/rtc.c src/gba/cartridge/gpio.c src/gba/cartridge/battery.c src/gba/cartridge/solar.c
     src/gba/render/software.c src/gba/render/composite.c
     src/gba/render/mode0.c src/gba/render/mode2.c
     src/gba/render/mode3.c src/gba/render/mode4.c
@@ -55,19 +55,50 @@ if(NOT WIN32)
 endif()
 
 if(CUPID_BUILD_FRONTEND)
-    find_package(SDL2 REQUIRED CONFIG)
-    add_executable(cupidgba src/platform/main.c src/platform/audio.c src/platform/input.c src/platform/rtc.c)
+    find_package(SDL2 2.24 REQUIRED CONFIG)
+    add_executable(cupidgba src/platform/main.c src/platform/audio.c src/platform/input.c src/platform/rtc.c src/platform/peripherals.c src/platform/rumble.c)
     if(TARGET SDL2::SDL2main)
         target_link_libraries(cupidgba PRIVATE SDL2::SDL2main)
     endif()
     target_link_libraries(cupidgba PRIVATE cupid_core SDL2::SDL2)
 endif()
 
-add_executable(cupidgba-headless tests/rom_runner.c)
+add_executable(cupidgba-headless tests/rom_runner.c src/platform/peripherals.c)
 target_link_libraries(cupidgba-headless PRIVATE cupid_core)
 
 include(CTest)
 if(BUILD_TESTING)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME rom.cartridge-peripherals COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_peripherals.py --runner $<TARGET_FILE:cupidgba-headless>)
+    set_tests_properties(rom.cartridge-peripherals PROPERTIES TIMEOUT 30)
+    if(CUPID_TEST_BIOS)
+        add_test(NAME rom.cartridge-peripherals-external COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_peripherals.py --runner $<TARGET_FILE:cupidgba-headless>
+            --bios ${CUPID_TEST_BIOS})
+        set_tests_properties(rom.cartridge-peripherals-external PROPERTIES TIMEOUT 30)
+    endif()
+    if(CUPID_BUILD_FRONTEND)
+        add_executable(test_peripherals tests/platform/test_peripherals.c
+            src/platform/peripherals.c src/platform/rumble.c src/platform/input.c)
+        target_link_libraries(test_peripherals PRIVATE cupid_core SDL2::SDL2)
+        add_test(NAME platform.cartridge-peripherals COMMAND test_peripherals)
+        set_tests_properties(platform.cartridge-peripherals PROPERTIES TIMEOUT 10)
+    endif()
+    add_executable(test_rumble tests/gba/cartridge/test_rumble.c)
+    target_link_libraries(test_rumble PRIVATE cupid_core)
+    add_test(NAME gba.cartridge-rumble COMMAND test_rumble)
+    set_tests_properties(gba.cartridge-rumble PROPERTIES TIMEOUT 10)
+    add_executable(test_solar tests/gba/cartridge/test_solar.c)
+    target_link_libraries(test_solar PRIVATE cupid_core)
+    foreach(group component bus interactions)
+        add_test(NAME gba.solar-${group} COMMAND test_solar --${group})
+        set_tests_properties(gba.solar-${group} PROPERTIES TIMEOUT 10)
+        if(CUPID_TEST_BIOS AND NOT group STREQUAL "component")
+            add_test(NAME gba.solar-${group}-external COMMAND test_solar --${group} ${CUPID_TEST_BIOS})
+            set_tests_properties(gba.solar-${group}-external PROPERTIES TIMEOUT 10)
+        endif()
+    endforeach()
     add_executable(test_rtc tests/gba/cartridge/test_rtc.c)
     target_link_libraries(test_rtc PRIVATE cupid_core)
     add_test(NAME gba.rtc-calendar COMMAND test_rtc)

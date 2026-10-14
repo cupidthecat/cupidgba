@@ -1,5 +1,18 @@
 # Testing
 
+Cartridge peripheral checks include `gba.solar-*`, `gba.cartridge-rumble`,
+`platform.cartridge-peripherals` and `rom.cartridge-peripherals`. An external
+BIOS adds paired bus/interaction and generated-cartridge groups. Native groups
+have ten-second deadlines; generated cartridge groups have thirty seconds.
+The headless runner can start a probe at `--start-address` (an aligned ARM
+cartridge address) and record motor edges with `--dump-rumble`. The output
+starts with `CPDRMB01`, followed by twelve-byte records: a little-endian
+64-bit emulated clock, a one-byte active flag and three reserved zero bytes.
+Registration and removal also report the current/stopped output. Explicit
+probe entry does not exercise the BIOS boot sequence. See
+[cartridge peripherals](../hardware/cartridge/peripherals.md) for coverage
+and physical measurement limits.
+
 Cartridge minute-interrupt regressions check held and steady RTC outputs,
 ARM/Thumb control writes, the inverted board edge, IF/IME/HALT sequencing,
 timer/DMA ordering, late dispatch, clock wrap and reset. Calendar tests compare

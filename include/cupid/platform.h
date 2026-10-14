@@ -43,7 +43,9 @@ struct CupidPlatform {
     SDL_AudioDeviceID audioDevice;
 
     SDL_GameController* controller;   /**< First attached controller, or NULL */
-    int controllerIndex;              /**< SDL joystick index of `controller` */
+    int controllerIndex;              /**< SDL joystick instance ID of `controller` */
+    bool rumbleActive, rumbleDriving;
+    uint32_t rumbleRefresh;
 
     struct CupidPlatformAudio platformAudio;
 
@@ -63,6 +65,10 @@ void cupid_platform_render_frame(struct CupidPlatform* plat, const uint32_t* fra
 
 /** Poll SDL events, update key state. Returns false if quit requested. */
 bool cupid_platform_poll_events(struct CupidPlatform* plat, struct CupidGBA* gba);
+
+void cupid_platform_rumble_changed(void* context, bool active, uint64_t clock);
+void cupid_platform_rumble_refresh(struct CupidPlatform* plat);
+void cupid_platform_rumble_stop(struct CupidPlatform* plat);
 
 /** Audio callback */
 void cupid_platform_audio_callback(void* userdata, uint8_t* stream, int len);
