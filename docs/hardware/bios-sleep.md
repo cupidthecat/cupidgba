@@ -20,7 +20,7 @@ the firmware completes the ordinary SWI return.
 
 ## Regression coverage
 
-`gba.bios-power` executes 1,724 ARM/Thumb cases, including all 256 control
+The `gba.bios-power-*` groups execute 1,724 ARM/Thumb cases, including all 256 control
 bytes and four upper-bit aliases, system and IRQ callers, saved status and
 registers, both CPU IRQ masks, IME, ready requests and clock wrap. It checks
 the entry boundary separately from the actual unhalted return. For the
@@ -48,8 +48,12 @@ DMA write before return. Other cases transfer data with DMA during sleep
 entry or while halted, record IRQ handler requests, and check an overdue
 callback and deadlines across two clock-wrap boundaries.
 
-Configuring `CUPID_TEST_BIOS` adds `gba.bios-power-external`. It executes the
-same corpus with a local external BIOS and compares entry/return clocks,
+Four control-byte groups require 384, 384, 384 and 408 complete observations.
+The separate state group retains the other 164 observations. Each group has
+the original ten-second deadline; all control bytes and aliases still run.
+
+Configuring `CUPID_TEST_BIOS` adds the corresponding external groups. They execute the
+same corpus with a local external BIOS and compare entry/return clocks,
 all registers, status, protected BIOS reads, timer/IF state, handler results
 and DMA callback lateness for the paired interaction cases. The BIOS input
 is not distributed.

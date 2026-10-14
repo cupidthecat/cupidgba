@@ -52,6 +52,12 @@ need separate hardware validation. See [serial and GPIO](serial/normal-and-gpio.
 
 ## Math and memory transfers
 
+GetBiosChecksum executes timed ARM reads across the complete 16 KiB firmware
+image and adds every word. Its mask changes, address result and normal SWI
+return participate in CPU, timer and DMA execution. See
+[firmware checksum](bios-checksum.md) for the embedded identity, caller state
+and interrupt checks.
+
 SWI 1F performs fixed-point music-frequency conversion through timed firmware,
 including the wave read, upper-key clamp, fractional-byte interpolation and
 caller-register results. See [music-frequency conversion](bios-music-frequency.md)
