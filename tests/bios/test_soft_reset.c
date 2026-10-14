@@ -2,6 +2,7 @@
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
 #include "../test.h"
+#include "caller.h"
 
 static const char* externalBios;
 static uint8_t externalImage[GBA_SIZE_BIOS];
@@ -61,6 +62,7 @@ static struct CupidGBA* machine(const char* bios) {
         }
     }
     cupid_gba_reset(gba);
+    cupid_test_bios_caller(gba);
     cupid_video_reset(&gba->video);
     cupid_io_write(gba, REG_POSTFLG, 1);
     return gba;

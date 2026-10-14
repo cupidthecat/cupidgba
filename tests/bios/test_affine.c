@@ -2,6 +2,7 @@
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
 #include "../test.h"
+#include "caller.h"
 #include <math.h>
 
 static const char* externalBios;
@@ -124,6 +125,7 @@ static struct CupidGBA* machine(const char* bios) {
         }
     }
     cupid_gba_reset(gba);
+    cupid_test_bios_caller(gba);
     for (unsigned r = 0; r < 15; r++) gba->cpu.gprs[r] = (int32_t)(0x11220000 + r);
     gba->cpu.gprs[ARM_SP] = GBA_SP_BASE_SYSTEM;
     return gba;

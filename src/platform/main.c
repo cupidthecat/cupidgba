@@ -279,7 +279,9 @@ int main(int argc, char* argv[]) {
     /** Load BIOS (optional). */
     if (biosPath) {
         if (!cupid_load_bios(&gba, biosPath)) {
-            fprintf(stderr, "Warning: Failed to load BIOS: %s (using HLE)\n", biosPath);
+            fprintf(stderr, "Error: Failed to load BIOS: %s\n", biosPath);
+            cupid_gba_destroy(&gba);
+            return 1;
         } else {
             gba.biosHLE = false;
             printf("Loaded BIOS: %s\n", biosPath);

@@ -1,6 +1,6 @@
 /**
  * @file memory.c
- * @brief GBA memory bus: init, load, store, region switching, ROM/BIOS loading.
+ * @brief GBA memory bus, region switching, ROM loading and BIOS buffer setup.
  */
 
 #include "cupid/gba.h"
@@ -1080,40 +1080,6 @@ bool cupid_load_rom(struct CupidGBA* gba, const char* path) {
     /** Detect save type from ROM strings. */
     cupid_savedata_detect_type(&gba->memory.savedata, gba->memory.rom, pristineSize);
 
-    return true;
-}
-
-/**
- * @brief Load a BIOS image and enable full BIOS mode.
- */
-bool cupid_load_bios(struct CupidGBA* gba, const char* path) {
-    FILE* f = fopen(path, "rb");
-    if (!f) {
-        fprintf(stderr, "CUPID: Failed to open BIOS: %s: %s\n", path, strerror(errno));
-        return false;
-    }
-
-    /**
-     * The BIOS buffer is already allocated by cupid_memory_init with HLE
-     * stub data. Overwrite it with the real BIOS image.
-     */
-    if (!gba->memory.bios) {
-        gba->memory.bios = calloc(1, GBA_SIZE_BIOS);
-    }
-    memset(gba->memory.bios, 0, GBA_SIZE_BIOS);
-    size_t nread = fread(gba->memory.bios, 1, GBA_SIZE_BIOS, f);
-    fclose(f);
-
-    if (nread != GBA_SIZE_BIOS) {
-        fprintf(stderr, "CUPID: BIOS file too small: %zu bytes (expected %d)\n", nread, GBA_SIZE_BIOS);
-        /** Still usable, but may be incomplete. */
-    }
-
-    gba->memory.fullBios = 1;
-    gba->memory.biosLoaded = true;
-    gba->hasBios = true;
-    gba->biosHLE = false;
-    printf("CUPID: Loaded real BIOS: %s (%zu bytes)\n", path, nread);
     return true;
 }
 

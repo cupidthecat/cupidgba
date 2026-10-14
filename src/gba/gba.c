@@ -90,7 +90,8 @@ void cupid_gba_create(struct CupidGBA* gba) {
  * @brief Reset the full system (public entry point).
  *
  * Clears timing, then calls cupid_arm_reset which invokes _cupidGBAReset
- * (the irqh.reset callback) to set SPs and reinitialise subsystems.
+ * (the irqh.reset callback) to reinitialize subsystems. The selected boot path
+ * supplies either reset-vector control or the built-in post-boot state.
  */
 void cupid_gba_reset(struct CupidGBA* gba) {
     /** Ensure master pointer is valid. */
@@ -103,8 +104,8 @@ void cupid_gba_reset(struct CupidGBA* gba) {
     cupid_cartridge_reset_bus(gba);
 
     /**
-     * Reset CPU - zero registers, set mode to SYS, fill pipeline, then
-     * call irqh.reset (_cupidGBAReset) to set SPs and reset subsystems.
+     * Reset the CPU into masked ARM Supervisor mode and refill the reset vector.
+     * The platform callback resets subsystems without applying fast-boot state.
      */
     cupid_arm_reset(&gba->cpu);
 
@@ -127,14 +128,6 @@ void cupid_gba_reset(struct CupidGBA* gba) {
  */
 static void _cupidGBAReset(struct CupidARM* cpu) {
     struct CupidGBA* gba = cpu->master;
-
-    /** Set stack pointers via privilege-mode switching. */
-    cupid_arm_set_priv_mode(cpu, MODE_IRQ);
-    cpu->gprs[ARM_SP] = GBA_SP_BASE_IRQ;
-    cupid_arm_set_priv_mode(cpu, MODE_SVC);
-    cpu->gprs[ARM_SP] = GBA_SP_BASE_SUPERVISOR;
-    cupid_arm_set_priv_mode(cpu, MODE_SYS);
-    cpu->gprs[ARM_SP] = GBA_SP_BASE_SYSTEM;
 
     /** Reset subsystems (memory, video, audio, IO, timers). */
     cupid_memory_reset(gba);
@@ -175,9 +168,9 @@ static void _cupidGBAReset(struct CupidARM* cpu) {
 }
 
 /**
- * @brief Skip BIOS when no real BIOS is loaded.
+ * @brief Apply post-boot state at the reset vector.
  *
- * Sets post-boot state: vcount = 0x7E, POSTFLG = 1, PC at ROM entry.
+ * Sets System mode and stack banks, vcount = 0x7E, POSTFLG = 1 and entry PC.
  * Only acts if PC is still at the reset vector (start of BIOS).
  */
 void cupid_gba_skip_bios(struct CupidGBA* gba) {
@@ -187,6 +180,16 @@ void cupid_gba_skip_bios(struct CupidGBA* gba) {
     if (cpu->gprs[ARM_PC] != BASE_RESET + WORD_SIZE_ARM) {
         return;
     }
+
+    /* Only the deliberate fast entry installs post-boot control and stacks. */
+    cupid_arm_set_priv_mode(cpu, MODE_IRQ);
+    cpu->gprs[ARM_SP] = GBA_SP_BASE_IRQ;
+    cupid_arm_set_priv_mode(cpu, MODE_SVC);
+    cpu->gprs[ARM_SP] = GBA_SP_BASE_SUPERVISOR;
+    cupid_arm_set_priv_mode(cpu, MODE_SYS);
+    cpu->gprs[ARM_SP] = GBA_SP_BASE_SYSTEM;
+    cpu->cpsr.packed = MODE_SYS;
+    cpu->irqDisableLatch = false;
 
     if (gba->memory.rom) {
         cpu->gprs[ARM_PC] = GBA_BASE_ROM0;

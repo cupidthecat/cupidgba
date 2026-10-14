@@ -2,6 +2,7 @@
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
 #include "../test.h"
+#include "caller.h"
 
 static const char* externalBios;
 static const uint32_t identity = 0xBAAE187F;
@@ -31,6 +32,7 @@ static struct CupidGBA* machine(uint64_t clock) {
     cupid_gba_create(gba);
     if (externalBios) CHECK(cupid_load_bios(gba, externalBios));
     cupid_gba_reset(gba);
+    cupid_test_bios_caller(gba);
     cupid_timing_clear(&gba->timing);
     gba->timing.globalCycles = clock;
     gba->timing.masterCycles = (uint32_t)clock;

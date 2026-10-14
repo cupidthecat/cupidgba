@@ -4,7 +4,9 @@
 cupidgba game.gba [-b bios.bin] [-s scale] [-S savetype]
 ```
 
-`-b` loads an external GBA BIOS dump. Without it, the emulator uses its built-in
+`-b` loads an external GBA BIOS dump containing exactly 16,384 bytes. An invalid
+requested BIOS stops startup with an error; see [BIOS image loading](../hardware/bios/image-loading.md).
+Without it, the emulator uses its built-in
 replacement BIOS and HLE calls. `-s` selects integer window scaling from 1 to 10
 (default 3). Supply a BIOS and ROM you are authorized to use.
 

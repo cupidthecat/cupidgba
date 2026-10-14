@@ -5,6 +5,10 @@ CupidGBA uses its embedded replacement image and C helpers for services that
 do not yet run in firmware. The replacement assembly and embedded bytes
 are checked together; see [rebuilding the BIOS](../development/rebuilding-bios.md).
 
+External firmware receives the masked ARM Supervisor reset state. The built-in
+fast entry supplies its post-boot control and stacks through the BIOS skip
+path. See [reset entry](bios/reset-entry.md) for defined state and test scope.
+
 SoftReset executes timed firmware, latches the restart byte before clearing
 its work area, resets the visible registers and stacks, and refills the ARM
 pipeline at the selected entry address. See [soft reset](bios-soft-reset.md)
