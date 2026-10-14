@@ -31,7 +31,7 @@ Music-frequency fixtures cover caller banks,
 fractional interpolation, upper-key clamps, source alignment/waits and live
 timer/DMA/IRQ progress, including late callbacks and clock wrap. A local
 external BIOS enables paired register, clock and protection comparisons.
-Sleep-entrypoint regressions require 1,716 ARM/Thumb cases for HALT, STOP and
+Sleep-entrypoint regressions require 1,724 ARM/Thumb cases for HALT, STOP and
 CustomHalt. They cover every control byte, ignored upper bits, caller masks
 and banks, ready requests, IME, frozen STOP state, external wake filters,
 video/audio/timer/DMA progress during HALT, overdue DMA and clock wrap.

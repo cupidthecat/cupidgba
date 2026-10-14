@@ -20,7 +20,7 @@ the firmware completes the ordinary SWI return.
 
 ## Regression coverage
 
-`gba.bios-power` executes 1,716 ARM/Thumb cases, including all 256 control
+`gba.bios-power` executes 1,724 ARM/Thumb cases, including all 256 control
 bytes and four upper-bit aliases, system and IRQ callers, saved status and
 registers, both CPU IRQ masks, IME, ready requests and clock wrap. It checks
 the entry boundary separately from the actual unhalted return. For the
@@ -34,7 +34,9 @@ isolated IWRAM caller, these entry clocks are required:
 | CustomHalt selecting STOP | 33 |
 
 The same isolated cases require 24 clocks from a new eligible request to
-the restored caller. Ready requests and delivered IRQs have separate checks.
+the restored caller. Ready requests and delivered IRQs have separate checks,
+including an unmasked ready IRQ that is handled before sleep and a second
+request that wakes the caller afterward.
 These counts include the emulated exception and firmware instructions; they
 are not measurements of physical power or oscillator recovery.
 

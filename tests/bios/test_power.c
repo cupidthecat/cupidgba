@@ -33,6 +33,7 @@ static void prepare(struct CupidGBA* gba, unsigned service, uint32_t control, bo
     gba->cpu.gprs[2] = (int32_t)control;
     gba->cpu.gprs[ARM_SP] = mode == MODE_IRQ ? GBA_SP_BASE_IRQ : GBA_SP_BASE_SYSTEM;
     gba->cpu.cpsr.packed = 0xA0000000u | mode | (masked ? 0x80u : 0u);
+    gba->cpu.irqDisableLatch = masked;
     gba->cpu.spsr.packed = 0x6000003F;
     _CupidSetMode(&gba->cpu, thumb ? MODE_THUMB : MODE_ARM);
     gba->cpu.gprs[ARM_PC] = GBA_BASE_IWRAM;
@@ -199,9 +200,7 @@ static void ready_requests_and_irq_delivery(void) {
         for (unsigned ime = 0; ime < 2; ime++) {
           for (unsigned masked = 0; masked < 2; masked++) {
             for (unsigned ready = 0; ready < 2; ready++) {
-                /* An unmasked ready IRQ runs before the SWI. Exercise delivery
-                 * after entry here, and ready requests with either IRQ mask. */
-                if (ready && ime && !masked) continue;
+                const bool deliveredBeforeSleep = ready && ime && !masked;
                 struct CupidGBA* gba = machine(0);
                 const unsigned call = service == 0 ? 2 : service == 1 ? 3 : 0x27;
                 const uint32_t control = service == 3 ? 0x80 : 0;
@@ -214,12 +213,17 @@ static void ready_requests_and_irq_delivery(void) {
                     CHECK(gba->irq.available);
                 }
                 const uint64_t entry = sleep(gba);
-                CHECK(entry == (service == 0 ? 38u : service == 3 ? 33u : 34u));
-                CHECK(gba->stopped == ((service == 1 || service == 3) && !ready));
-                const uint64_t returned = ready ? return_to_caller(gba, thumb != 0)
+                const unsigned ordinaryEntry = service == 0 ? 38u : service == 3 ? 33u : 34u;
+                if (deliveredBeforeSleep) {
+                    CHECK(entry > ordinaryEntry);
+                    CHECK(word(gba->memory.ewram + 0x2B00) == 1);
+                    CHECK(word(gba->memory.ewram + 0x2B04) == IRQ_KEYPAD);
+                } else CHECK(entry == ordinaryEntry);
+                CHECK(gba->stopped == ((service == 1 || service == 3) && (!ready || deliveredBeforeSleep)));
+                const uint64_t returned = ready && !deliveredBeforeSleep ? return_to_caller(gba, thumb != 0)
                     : resume(gba, thumb != 0, IRQ_KEYPAD);
                 caller_state(gba, control, thumb != 0, MODE_SYS, masked != 0);
-                CHECK(word(gba->memory.ewram + 0x2B00) == (ime && !masked ? 1u : 0u));
+                CHECK(word(gba->memory.ewram + 0x2B00) == (ime && !masked ? deliveredBeforeSleep ? 2u : 1u : 0u));
                 CHECK(word(gba->memory.ewram + 0x2B04) == (ime && !masked ? IRQ_KEYPAD : 0));
                 const struct PowerProgress result = progress(gba, entry, returned, 0);
                 if (externalBios) same_progress(&result, &readyProgress[thumb][service][ime][masked][ready]);
