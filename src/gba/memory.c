@@ -587,8 +587,7 @@ uint32_t cupid_memory_load16(struct CupidARM* cpu, uint32_t address, int* cycleC
         } else if ((address & (GBA_SIZE_ROM - 2)) < memory->romSize) {
             LOAD_16(value, address & (GBA_SIZE_ROM - 2), memory->rom);
         } else {
-            /** ROM address past real data returns open-bus-compatible value. */
-            value = 1;  /** EEPROM ready bit. */
+            value = (address >> 1) & 0xFFFF;
         }
         break;
     case GBA_REGION_SRAM:
