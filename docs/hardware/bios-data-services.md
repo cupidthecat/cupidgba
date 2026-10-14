@@ -79,5 +79,6 @@ duration.
 These tests establish the listed inputs on the current CPU, bus and peripheral
 model. They do not constitute new physical-hardware captures or complete BIOS
 qualification. Truncated streams, invalid Huffman trees, unsupported unit
-widths and arbitrary misalignment have no general acceptance claim. Affine,
-music-driver, multiboot and other unfinished services remain separate work.
+widths and arbitrary misalignment have no general acceptance claim.
+[Affine conversion](bios-affine-services.md) has separate numeric and timing
+checks. Music-driver, multiboot and other unfinished services remain separate work.
