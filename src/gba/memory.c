@@ -192,12 +192,23 @@ void cupid_memory_deinit(struct CupidGBA* gba) {
     }
 }
 
+/* A reset or invalid jump has no mapped CPU region to refresh yet. */
+static void refresh_active_waitstates(struct CupidGBA* gba) {
+    struct CupidMemory* memory = &gba->memory;
+    struct CupidARM* cpu = &gba->cpu;
+    const size_t region = (size_t)memory->activeRegion;
+    if (region >= sizeof(memory->waitstatesSeq32) / sizeof(memory->waitstatesSeq32[0])) return;
+    cpu->memory.activeSeqCycles32 = memory->waitstatesSeq32[region];
+    cpu->memory.activeSeqCycles16 = memory->waitstatesSeq16[region];
+    cpu->memory.activeNonseqCycles32 = memory->waitstatesNonseq32[region];
+    cpu->memory.activeNonseqCycles16 = memory->waitstatesNonseq16[region];
+}
+
 /**
  * @brief Update wait-state tables from WAITCNT register fields.
  */
 void cupid_memory_update_waitstates(struct CupidGBA* gba, uint16_t parameters) {
     struct CupidMemory* memory = &gba->memory;
-    struct CupidARM* cpu = &gba->cpu;
     int sram   = parameters & 0x0003;
     int ws0    = (parameters & 0x000C) >> 2;
     int ws0seq = (parameters & 0x0010) >> 4;
@@ -232,10 +243,7 @@ void cupid_memory_update_waitstates(struct CupidGBA* gba, uint16_t parameters) {
     if (memory->prefetch && !prefetch) memory->prefetchUnit.disabled = true;
     memory->prefetch = prefetch;
 
-    cpu->memory.activeSeqCycles32    = memory->waitstatesSeq32[memory->activeRegion];
-    cpu->memory.activeSeqCycles16    = memory->waitstatesSeq16[memory->activeRegion];
-    cpu->memory.activeNonseqCycles32 = memory->waitstatesNonseq32[memory->activeRegion];
-    cpu->memory.activeNonseqCycles16 = memory->waitstatesNonseq16[memory->activeRegion];
+    refresh_active_waitstates(gba);
 }
 
 /**
@@ -243,7 +251,6 @@ void cupid_memory_update_waitstates(struct CupidGBA* gba, uint16_t parameters) {
  */
 void cupid_memory_update_ewram_waitstates(struct CupidGBA* gba, uint16_t parameters) {
     struct CupidMemory* memory = &gba->memory;
-    struct CupidARM* cpu = &gba->cpu;
 
     int wait = 15 - ((parameters >> 8) & 0xF);
     if (wait) {
@@ -252,10 +259,7 @@ void cupid_memory_update_ewram_waitstates(struct CupidGBA* gba, uint16_t paramet
         memory->waitstatesNonseq32[GBA_REGION_EWRAM] = 2 * wait + 1;
         memory->waitstatesSeq32[GBA_REGION_EWRAM]    = 2 * wait + 1;
 
-        cpu->memory.activeSeqCycles32    = memory->waitstatesSeq32[memory->activeRegion];
-        cpu->memory.activeSeqCycles16    = memory->waitstatesSeq16[memory->activeRegion];
-        cpu->memory.activeNonseqCycles32 = memory->waitstatesNonseq32[memory->activeRegion];
-        cpu->memory.activeNonseqCycles16 = memory->waitstatesNonseq16[memory->activeRegion];
+        refresh_active_waitstates(gba);
     }
 }
 
@@ -384,10 +388,7 @@ void cupid_memory_set_active_region(struct CupidARM* cpu, uint32_t address) {
         return;
     }
 
-    cpu->memory.activeSeqCycles32    = memory->waitstatesSeq32[memory->activeRegion];
-    cpu->memory.activeSeqCycles16    = memory->waitstatesSeq16[memory->activeRegion];
-    cpu->memory.activeNonseqCycles32 = memory->waitstatesNonseq32[memory->activeRegion];
-    cpu->memory.activeNonseqCycles16 = memory->waitstatesNonseq16[memory->activeRegion];
+    refresh_active_waitstates(gba);
     cpu->memory.activeMask &= -(cpu->cpsr.t ? WORD_SIZE_THUMB : WORD_SIZE_ARM);
 }
 

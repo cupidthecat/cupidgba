@@ -250,8 +250,8 @@ struct CupidPrefetch {
     uint64_t epoch;           /**< Last clock accounted for by the fetch unit */
     uint32_t head, tail;      /**< Oldest cached and next in-flight addresses */
     uint32_t address;         /**< Current CPU fetch address */
-    unsigned count, width;   /**< Buffered instructions and bytes per instruction */
-    unsigned duty, remaining; /**< Full and remaining cartridge access clocks */
+    unsigned count, width;   /**< Buffered halfwords and current CPU fetch width */
+    unsigned duty, remaining; /**< Full and remaining cartridge halfword clocks */
     unsigned fetchKind;
     bool active, busy;        /**< Engaged stream and occupied Game Pak bus */
     bool disabled;            /**< Pending burst restart after WAITCNT disable */

@@ -147,7 +147,7 @@ static void effects_use_the_two_visible_layers_and_window_control(void) {
         for (unsigned effect = BLEND_BRIGHTEN; effect <= BLEND_DARKEN; effect++) {
             struct CupidGBA* gba = sprite_scene(effect, true, false, semi != 0, false);
             cupid_timing_tick(&gba->timing, 3 * 1232 + 1007);
-            unsigned expected = effect == BLEND_BRIGHTEN ? (23 | (15 << 5) | (15 << 10)) : 8;
+            unsigned expected = effect == BLEND_BRIGHTEN ? 0x4218 : 8;
             CHECK(gba->video.outputBuffer[3 * 240] == color16_to_rgba((uint16_t)expected));
             destroy(gba);
         }
@@ -164,6 +164,58 @@ static void effects_use_the_two_visible_layers_and_window_control(void) {
     cupid_timing_tick(&gba->timing, 3 * 1232 + 1007);
     CHECK(gba->video.outputBuffer[3 * 240] == color16_to_rgba(0x0010));
     destroy(gba);
+}
+
+static void color_precision_survives_direct_and_palette_fetches(void) {
+    for (unsigned mode = 3; mode <= 4; mode++) {
+        for (unsigned effect = BLEND_NONE; effect <= BLEND_DARKEN; effect++) {
+            struct CupidGBA* gba = bitmap(mode);
+            const uint16_t first = effect == BLEND_BRIGHTEN ? 0x8000 : 0x8020;
+            const uint16_t second = first & 0x7FFF;
+            if (mode == 3) {
+                gba->video.vram[0] = first;
+                gba->video.vram[1] = second;
+            } else {
+                gba->video.palette[1] = first;
+                gba->video.palette[2] = second;
+                gba->video.vram[0] = 0x0201;
+            }
+            cupid_io_write(gba, REG_BLDCNT, (uint16_t)((effect << 6) | 4 | 0x2000));
+            cupid_io_write(gba, REG_BLDALPHA, 8);
+            cupid_io_write(gba, REG_BLDY, effect == BLEND_BRIGHTEN ? 9 : 8);
+            cupid_timing_tick(&gba->timing, 3 * 1232 + 1007);
+            const uint16_t a = effect == BLEND_BRIGHTEN ? 0x4651 : 0x0020;
+            const uint16_t b = effect == BLEND_BRIGHTEN ? 0x4631 : (effect == BLEND_NONE ? 0x0020 : 0);
+            const uint32_t* row = gba->video.outputBuffer + 3 * 240;
+            CHECK(row[0] == color16_to_rgba(a));
+            CHECK(row[1] == color16_to_rgba(b));
+            destroy(gba);
+        }
+        for (unsigned extraGreen = 0; extraGreen < 2; extraGreen++) {
+            struct CupidGBA* gba = bitmap(mode);
+            gba->video.palette[0] = extraGreen ? 0x8020 : 0x0020;
+            if (mode == 3) gba->video.vram[0] = 1;
+            else {
+                gba->video.palette[1] = 1;
+                gba->video.vram[0] = 1;
+            }
+            cupid_io_write(gba, REG_BLDCNT, 0x2044);
+            cupid_io_write(gba, REG_BLDALPHA, 0x0800);
+            cupid_timing_tick(&gba->timing, 3 * 1232 + 1007);
+            CHECK(gba->video.outputBuffer[3 * 240] == color16_to_rgba(extraGreen ? 0x0020 : 0));
+            destroy(gba);
+        }
+    }
+}
+
+static void object_palette_precision_reaches_forced_alpha_blending(void) {
+    for (unsigned extraGreen = 0; extraGreen < 2; extraGreen++) {
+        struct CupidGBA* gba = sprite_scene(BLEND_NONE, false, true, true, true);
+        gba->video.palette[257] = extraGreen ? 0x8020 : 0x0020;
+        cupid_timing_tick(&gba->timing, 3 * 1232 + 1007);
+        CHECK(gba->video.outputBuffer[3 * 240] == color16_to_rgba(extraGreen ? 0x2020 : 0x2000));
+        destroy(gba);
+    }
 }
 
 static void display_memory_beats_wait_for_the_fetch_unit(void) {
@@ -452,6 +504,8 @@ int main(void) {
     RUN(fetches_and_palette_reads_retain_their_values);
     RUN(affine_steps_and_reference_writes_keep_separate_latches);
     RUN(effects_use_the_two_visible_layers_and_window_control);
+    RUN(color_precision_survives_direct_and_palette_fetches);
+    RUN(object_palette_precision_reaches_forced_alpha_blending);
     RUN(display_memory_beats_wait_for_the_fetch_unit);
     RUN(dma_word_writes_publish_each_display_bus_beat);
     RUN(object_attribute_fetches_are_retained_for_the_next_line);

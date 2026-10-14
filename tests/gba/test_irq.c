@@ -127,6 +127,90 @@ static void halt_wakes_with_ime_clear_and_cpsr_masked(void) {
     destroy(gba);
 }
 
+static void halt_samples_the_irq_line_before_its_wake_clock(void) {
+    const uint64_t clocks[] = {0, UINT32_MAX - UINT64_C(2)};
+    for (unsigned wrap = 0; wrap < 2; wrap++) for (unsigned thumb = 0; thumb < 2; thumb++)
+        for (unsigned asserted = 0; asserted < 2; asserted++) {
+            struct CupidGBA* gba = machine(clocks[wrap]);
+            gba->cpu.cpsr.packed = MODE_SYS;
+            const uint32_t arm[] = {0xE2855001, 0xE2855001, 0xE1A00000};
+            arm_program(gba, arm, sizeof(arm));
+            if (thumb) {
+                const uint16_t code[] = {0x3501, 0x3501, 0x46C0}; /* add r5, #1 */
+                memcpy(gba->memory.iwram, code, sizeof(code));
+                _CupidSetMode(&gba->cpu, MODE_THUMB);
+                gba->cpu.gprs[ARM_PC] = GBA_BASE_IWRAM;
+                CupidThumbWritePC(&gba->cpu);
+            }
+            gba->cpu.gprs[5] = 0;
+            cupid_io_write(gba, REG_IE, IRQ_TIMER0);
+            cupid_io_write(gba, REG_IME, 1);
+            cupid_raise_irq(gba, IRQ_TIMER0, 0);
+            tick(gba, asserted ? 3 : 2);
+            CHECK(gba->irq.available && gba->irq.line == (asserted != 0));
+            cupid_gba_halt(gba);
+            cupid_gba_step(gba);
+            CHECK(!gba->cpu.halted && gba->irq.line);
+            CHECK(gba->cpu.gprs[5] == (asserted ? 0 : 1));
+            if (!asserted) {
+                CHECK(gba->cpu.privilegeMode == MODE_SYS);
+                CHECK(gba->cpu.executionMode == (thumb ? MODE_THUMB : MODE_ARM));
+                cupid_gba_step(gba);
+            }
+            CHECK(gba->cpu.privilegeMode == MODE_IRQ && gba->cpu.executionMode == MODE_ARM);
+            CHECK(gba->cpu.gprs[3] == 99);
+            CHECK(gba->cpu.gprs[ARM_LR] == GBA_BASE_IWRAM + 4 + (asserted ? 0 : thumb ? 2 : 4));
+            CHECK(gba->cpu.spsr.t == (thumb != 0));
+            destroy(gba);
+        }
+}
+
+static void halt_control_acceptance_retains_the_earlier_irq_sample(void) {
+    const uint64_t clocks[] = {10, UINT32_MAX - UINT64_C(2)};
+    for (unsigned wrap = 0; wrap < 2; wrap++) for (unsigned thumb = 0; thumb < 2; thumb++)
+        for (unsigned asserted = 0; asserted < 2; asserted++) {
+            struct CupidGBA* gba = machine(clocks[wrap]);
+            gba->cpu.cpsr.packed = MODE_SYS;
+            const uint32_t handler = 0xE3A03063;
+            memcpy(gba->memory.bios + BASE_IRQ, &handler, sizeof(handler));
+            if (thumb) {
+                const uint16_t code[] = {0x7008, 0x3501, 0x46C0}; /* strb r0,[r1]; add r5,#1 */
+                memcpy(gba->memory.bios + 0x80, code, sizeof(code));
+                _CupidSetMode(&gba->cpu, MODE_THUMB);
+                gba->cpu.gprs[ARM_PC] = 0x80;
+                CupidThumbWritePC(&gba->cpu);
+            } else {
+                const uint32_t code[] = {0xE5C10000, 0xE2855001, 0xE1A00000};
+                memcpy(gba->memory.bios + 0x80, code, sizeof(code));
+                gba->cpu.gprs[ARM_PC] = 0x80;
+                CupidARMWritePC(&gba->cpu);
+            }
+            gba->cpu.gprs[0] = gba->cpu.gprs[5] = 0;
+            gba->cpu.gprs[1] = GBA_BASE_IO + REG_HALTCNT;
+            cupid_io_write(gba, REG_IE, IRQ_TIMER0);
+            cupid_io_write(gba, REG_IME, 1);
+            cupid_raise_irq_at(gba, IRQ_TIMER0, clocks[wrap] - asserted);
+            cupid_gba_step(gba);
+            CHECK(cupid_timing_global_time(&gba->timing) == clocks[wrap] + 3);
+            CHECK(gba->cpu.halted && gba->irq.available && gba->irq.line);
+            CHECK(gba->haltIRQSampleValid && gba->haltIRQSample == (asserted != 0));
+            cupid_gba_step(gba);
+            CHECK(!gba->cpu.halted && !gba->haltIRQSampleValid);
+            CHECK(gba->cpu.gprs[5] == (asserted ? 0 : 1));
+            if (!asserted) {
+                CHECK(gba->cpu.privilegeMode == MODE_SYS);
+                cupid_gba_step(gba);
+            }
+            CHECK(gba->cpu.privilegeMode == MODE_IRQ && gba->cpu.gprs[3] == 99);
+            CHECK(gba->cpu.gprs[ARM_LR] == 0x80 + 4 + (thumb ? 2 : 4) * (asserted ? 1 : 2));
+            CHECK(gba->cpu.spsr.t == (thumb != 0));
+            gba->haltIRQSampleValid = true;
+            cupid_gba_reset(gba);
+            CHECK(!gba->haltIRQSampleValid && !gba->cpu.halted);
+            destroy(gba);
+        }
+}
+
 static void cpsr_unmask_waits_for_the_sampled_instruction(void) {
     struct CupidGBA* gba = machine(0);
     const uint32_t code[] = {
@@ -296,6 +380,8 @@ int main(void) {
     RUN(byte_masks_and_acknowledgements);
     RUN(consecutive_line_changes_keep_their_deadlines);
     RUN(halt_wakes_with_ime_clear_and_cpsr_masked);
+    RUN(halt_samples_the_irq_line_before_its_wake_clock);
+    RUN(halt_control_acceptance_retains_the_earlier_irq_sample);
     RUN(cpsr_unmask_waits_for_the_sampled_instruction);
     RUN(thumb_irq_saves_state_and_returns_to_the_interrupted_instruction);
     RUN(mmio_reads_sample_after_the_data_bus_cycle);

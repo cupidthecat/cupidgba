@@ -13,6 +13,9 @@ set(CUPID_DMA_SUITE_ROM "" CACHE FILEPATH "Locally built DMA transfer suite ROM"
 set(CUPID_BUS_SUITE_ROM "" CACHE FILEPATH "Locally built CPU and bus timing suite ROM")
 set(CUPID_BIOS_MATH_SUITE_ROM "" CACHE FILEPATH "Locally built BIOS math register suite ROM")
 set(CUPID_IO_SUITE_ROM "" CACHE FILEPATH "Locally built I/O register-read suite ROM")
+set(CUPID_SERIAL_SUITE_ROM "" CACHE FILEPATH "Locally built serial timing and register suite ROM")
+set(CUPID_SERIAL_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified serial cartridge probes")
+set(CUPID_HALT_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified firmware HALT probes")
 set(CUPID_AUDIO_TEST_ROM "" CACHE FILEPATH "Locally built audio signal cartridge ROM")
 set(CUPID_TEST_BIOS "" CACHE FILEPATH "External BIOS for local hardware suite checks")
 
@@ -40,7 +43,7 @@ add_library(cupid_core STATIC
     src/core/timing.c
     src/gba/gba.c src/gba/memory.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
     src/gba/audio.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c
-    src/gba/hle-bios.c src/gba/savedata.c src/gba/save/file.c
+    src/gba/hle-bios.c src/gba/savedata.c src/gba/save/file.c src/gba/serial/serial.c
     src/gba/render/fetch.c src/gba/render/scanout.c src/gba/render/object-fetch.c)
 target_include_directories(cupid_core PUBLIC include)
 target_link_libraries(cupid_core PUBLIC cupid_build_options)
@@ -87,6 +90,11 @@ if(BUILD_TESTING)
     add_test(NAME gba.audio COMMAND test_audio)
     set_tests_properties(gba.audio PROPERTIES TIMEOUT 10)
 
+    add_executable(test_serial tests/gba/serial/test_serial.c)
+    target_link_libraries(test_serial PRIVATE cupid_core)
+    add_test(NAME gba.serial COMMAND test_serial)
+    set_tests_properties(gba.serial PROPERTIES TIMEOUT 10)
+
     if(CUPID_BUILD_FRONTEND)
         add_executable(test_audio_output tests/platform/test_audio_output.c src/platform/audio.c)
         target_link_libraries(test_audio_output PRIVATE cupid_core SDL2::SDL2)
@@ -129,6 +137,11 @@ if(BUILD_TESTING)
     add_test(NAME gba.render COMMAND test_render)
     set_tests_properties(gba.render PROPERTIES TIMEOUT 10)
 
+    add_executable(test_color tests/gba/test_color.c)
+    target_link_libraries(test_color PRIVATE cupid_core)
+    add_test(NAME gba.color COMMAND test_color)
+    set_tests_properties(gba.color PROPERTIES TIMEOUT 10)
+
     add_executable(test_cpu tests/arm/test_cpu.c)
     target_link_libraries(test_cpu PRIVATE cupid_core)
     add_test(NAME arm.cpu COMMAND test_cpu)
@@ -144,11 +157,79 @@ if(BUILD_TESTING)
     add_test(NAME gba.bios-math-copy COMMAND test_bios_math_copy)
     set_tests_properties(gba.bios-math-copy PROPERTIES TIMEOUT 10)
 
+    add_executable(test_bios_data_services tests/bios/test_data_services.c)
+    target_link_libraries(test_bios_data_services PRIVATE cupid_core)
+    add_test(NAME gba.bios-data-services COMMAND test_bios_data_services --ewram)
+    set_tests_properties(gba.bios-data-services PROPERTIES TIMEOUT 10)
+    add_test(NAME gba.bios-data-internal COMMAND test_bios_data_services --iwram)
+    set_tests_properties(gba.bios-data-internal PROPERTIES TIMEOUT 10)
+    add_test(NAME gba.bios-data-cartridge COMMAND test_bios_data_services --cartridge)
+    set_tests_properties(gba.bios-data-cartridge PROPERTIES TIMEOUT 10)
+    add_test(NAME gba.bios-bias COMMAND test_bios_data_services --bias)
+    set_tests_properties(gba.bios-bias PROPERTIES TIMEOUT 10)
+
+    add_executable(test_bios_affine tests/bios/test_affine.c)
+    add_executable(test_bios_soft_reset tests/bios/test_soft_reset.c)
+    target_link_libraries(test_bios_soft_reset PRIVATE cupid_core)
+    foreach(group RANGE 0 3)
+        add_test(NAME gba.bios-soft-reset-${group} COMMAND test_bios_soft_reset --bytes ${group})
+        set_tests_properties(gba.bios-soft-reset-${group} PROPERTIES TIMEOUT 10)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME gba.bios-soft-reset-${group}-external COMMAND test_bios_soft_reset --bytes ${group} --external-bios ${CUPID_TEST_BIOS})
+            set_tests_properties(gba.bios-soft-reset-${group}-external PROPERTIES TIMEOUT 10)
+        endif()
+    endforeach()
+    foreach(part states dma)
+        add_test(NAME gba.bios-soft-reset-${part} COMMAND test_bios_soft_reset --${part})
+        set_tests_properties(gba.bios-soft-reset-${part} PROPERTIES TIMEOUT 10)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME gba.bios-soft-reset-${part}-external COMMAND test_bios_soft_reset --${part} --external-bios ${CUPID_TEST_BIOS})
+            set_tests_properties(gba.bios-soft-reset-${part}-external PROPERTIES TIMEOUT 10)
+        endif()
+    endforeach()
+    add_executable(test_bios_register_reset tests/bios/test_register_reset.c)
+    target_link_libraries(test_bios_register_reset PRIVATE cupid_core)
+    foreach(group RANGE 0 15)
+        add_test(NAME gba.bios-register-reset-${group} COMMAND test_bios_register_reset --group ${group})
+        set_tests_properties(gba.bios-register-reset-${group} PROPERTIES TIMEOUT 10)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME gba.bios-register-reset-${group}-external COMMAND test_bios_register_reset --group ${group} --external-bios ${CUPID_TEST_BIOS})
+            set_tests_properties(gba.bios-register-reset-${group}-external PROPERTIES TIMEOUT 10)
+        endif()
+    endforeach()
+    add_test(NAME gba.bios-register-reset-interactions COMMAND test_bios_register_reset --interactions)
+    set_tests_properties(gba.bios-register-reset-interactions PROPERTIES TIMEOUT 10)
     if(CUPID_TEST_BIOS)
+        add_test(NAME gba.bios-register-reset-interactions-external COMMAND test_bios_register_reset --interactions --external-bios ${CUPID_TEST_BIOS})
+        set_tests_properties(gba.bios-register-reset-interactions-external PROPERTIES TIMEOUT 10)
+    endif()
+    target_link_libraries(test_bios_affine PRIVATE cupid_core)
+    if(WIN32)
+        target_link_libraries(test_bios_affine PRIVATE m)
+    endif()
+    add_test(NAME gba.bios-affine-background COMMAND test_bios_affine --background)
+    add_test(NAME gba.bios-affine-object COMMAND test_bios_affine --object)
+    set_tests_properties(gba.bios-affine-background gba.bios-affine-object PROPERTIES TIMEOUT 10)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME gba.bios-affine-table COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/bios/generate_affine_table.py --check)
+
+    if(CUPID_TEST_BIOS)
+        add_test(NAME gba.bios-affine-background-external COMMAND test_bios_affine --background --external-bios ${CUPID_TEST_BIOS})
+        add_test(NAME gba.bios-affine-object-external COMMAND test_bios_affine --object --external-bios ${CUPID_TEST_BIOS})
+        set_tests_properties(gba.bios-affine-background-external gba.bios-affine-object-external PROPERTIES TIMEOUT 10)
         add_test(NAME gba.bios-external COMMAND test_bios --external-bios-waits ${CUPID_TEST_BIOS})
         set_tests_properties(gba.bios-external PROPERTIES TIMEOUT 10)
         add_test(NAME gba.bios-math-copy-external COMMAND test_bios_math_copy --external-bios ${CUPID_TEST_BIOS})
         set_tests_properties(gba.bios-math-copy-external PROPERTIES TIMEOUT 10)
+        add_test(NAME gba.bios-data-services-external COMMAND test_bios_data_services --ewram --external-bios ${CUPID_TEST_BIOS})
+        set_tests_properties(gba.bios-data-services-external PROPERTIES TIMEOUT 10)
+        add_test(NAME gba.bios-data-internal-external COMMAND test_bios_data_services --iwram --external-bios ${CUPID_TEST_BIOS})
+        set_tests_properties(gba.bios-data-internal-external PROPERTIES TIMEOUT 10)
+        add_test(NAME gba.bios-data-cartridge-external COMMAND test_bios_data_services --cartridge --external-bios ${CUPID_TEST_BIOS})
+        set_tests_properties(gba.bios-data-cartridge-external PROPERTIES TIMEOUT 10)
+        add_test(NAME gba.bios-bias-external COMMAND test_bios_data_services --bias --external-bios ${CUPID_TEST_BIOS})
+        set_tests_properties(gba.bios-bias-external PROPERTIES TIMEOUT 10)
     endif()
 
     if(CUPID_TEST_ROM_DIR)
@@ -273,6 +354,50 @@ if(BUILD_TESTING)
                 --rom ${CUPID_IO_SUITE_ROM} --bios ${CUPID_TEST_BIOS}
                 --runner $<TARGET_FILE:cupidgba-headless>)
             set_tests_properties(rom.io-suite-external PROPERTIES TIMEOUT 100)
+        endif()
+    endif()
+
+    if(CUPID_HALT_PROBE_DIR AND CUPID_TEST_BIOS)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        foreach(case halt_pc halt_pc_2 halt_pc_3 halt_pc_4)
+            add_test(NAME rom.halt-probe-${case}-external COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_serial_probe.py
+                --directory ${CUPID_HALT_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless>
+                --bios ${CUPID_TEST_BIOS} --test ${case})
+            set_tests_properties(rom.halt-probe-${case}-external PROPERTIES TIMEOUT 100)
+        endforeach()
+    endif()
+
+    if(CUPID_SERIAL_PROBE_DIR)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        foreach(case serial_time serial_time_2 serial_time_3 serial_time_2M serial_time_2M_2
+                     serial_time_2M_3 serial_read_data serial_time_start_bit serial_time_start_bit_2)
+            add_test(NAME rom.serial-probe-${case} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_serial_probe.py
+                --directory ${CUPID_SERIAL_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless> --test ${case})
+            set_tests_properties(rom.serial-probe-${case} PROPERTIES TIMEOUT 100)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.serial-probe-${case}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_serial_probe.py
+                    --directory ${CUPID_SERIAL_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless>
+                    --bios ${CUPID_TEST_BIOS} --test ${case})
+                set_tests_properties(rom.serial-probe-${case}-external PROPERTIES TIMEOUT 100)
+            endif()
+        endforeach()
+    endif()
+
+    if(CUPID_SERIAL_SUITE_ROM)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        add_test(NAME rom.serial-suite COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_serial_suite.py
+            --rom ${CUPID_SERIAL_SUITE_ROM} --runner $<TARGET_FILE:cupidgba-headless>)
+        set_tests_properties(rom.serial-suite PROPERTIES TIMEOUT 100)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME rom.serial-suite-external COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_serial_suite.py
+                --rom ${CUPID_SERIAL_SUITE_ROM} --bios ${CUPID_TEST_BIOS}
+                --runner $<TARGET_FILE:cupidgba-headless>)
+            set_tests_properties(rom.serial-suite-external PROPERTIES TIMEOUT 100)
         endif()
     endif()
 

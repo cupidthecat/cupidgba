@@ -7,9 +7,11 @@ read waits for its remaining clocks; a miss uses the configured ROM wait states.
 The hardware buffer holds eight halfwords, as shown in the
 [programming manual, pages 16 and 21](https://www.manuallib.com/download/2023-10-17/AGB%20Programming%20Manual.pdf#page=16).
 
-The core tracks queue addresses, capacity, width and the current cartridge
-read's remaining clocks. ARM fetches consume words and Thumb fetches consume
-halfwords. Once a full queue drains, subsequent fetches return to the
+The core tracks eight halfword slots and the current cartridge halfword read's
+remaining clocks. ARM fetches consume two slots and Thumb fetches consume one.
+Each halfword becomes available independently. A word fetch with its first
+halfword already buffered waits only for the second halfword. Once a full queue
+drains, subsequent fetches return to the
 cartridge's rate. Internal and data clocks accrue from the scheduler's original
 event timestamps, including late DMA dispatch and clock wrap.
 
@@ -20,8 +22,9 @@ cancellation paths; it does not replace the CPU's buffered stream with a
 separate cycle estimate. See [DMA and bus ownership](dma.md).
 
 CPU fetch callbacks carry the actual fetch address, including branch pipeline
-refills and the discarded IRQ fetch. Branch targets and ARM/Thumb width changes
-cannot consume an unrelated queue entry. An uncached fetch at a 128 KiB ROM
+refills and the discarded IRQ fetch. A matching FIFO entry survives an ARM/Thumb
+width change, including an exception return from BIOS or RAM. An unrelated
+target starts a new stream. An uncached fetch at a 128 KiB ROM
 boundary uses nonsequential timing. WAITCNT changes update access costs and
 track a pending burst restart when prefetch is disabled.
 
@@ -36,13 +39,20 @@ input digest, its terminal instruction, R12=0 and an empty failure log.
 
 Native tests cover pending and cached fetches, bounded capacity, sustained
 fetch bandwidth, reset, RAM fill clocks, external-data cancellation,
-halfword arbitration, width changes, disable/restart behavior, configured
+halfword arbitration, partially buffered words, both instruction-width changes,
+BIOS/RAM exception returns, disable/restart behavior, configured
 wait states, uncached page boundaries and DMA/timer/IRQ equivalence between
 late dispatch and advancing one clock at a time.
 
 The firmware timing cases execute the built-in math and copy routines through
 the timed CPU. See [BIOS execution](bios.md) for their coverage. Both complete
 timing checks require all observations to pass.
+
+An additional original IRQ-return cartridge still times out with an external
+BIOS because its wait loop accepts an earlier return address than it expects.
+The FIFO correction preserves matching Thumb entries at the later exception
+return; it does not establish the earlier IRQ sampling point. This failure
+remains unresolved, with the original ROM, comparisons and run budget retained.
 
 Full-buffer backpressure, mid-stream WAITCNT changes and prefetched page-boundary
 edges need more hardware captures. The current disable/drain behavior has

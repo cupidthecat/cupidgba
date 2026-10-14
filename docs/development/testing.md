@@ -12,14 +12,26 @@ Interrupt regressions cover register visibility, byte masks and acknowledgements
 successive IRQ line changes, HALT wake-up with IME clear, the CPU's sampled
 CPSR mask, Thumb exception return, ARM/Thumb MMIO access widths, DMA completion
 bits for all four channels, and late dispatch across clock wrap.
+Serial regressions exercise both widths and clock rates, all 256 transmitted
+8-bit patterns, driven input data, external clock edges, two connected core
+instances, GPIO directions and falling-input IRQs, ARM/Thumb bus writes,
+untouched byte fields, late dispatch, clock wrap, reset and power-state behavior.
 CPU regressions check block-transfer bus costs and the final load internal cycle.
 DMA regressions check read/write phase boundaries, priority and preemption,
 CPU bus stalls, internal-cycle overlap, swap locking, masks, maximum counts,
 address stepping, repeat reloads, cancellation, FIFO requests, timed I/O and
 clock wrap. They compare late dispatch with advancing one clock at a time.
 Prefetch regressions check pending/cached fetches, queue capacity and sustained
-bandwidth, fill/cancellation clocks, disable/restart behavior, width changes,
+bandwidth, fill/cancellation clocks, disable/restart behavior, partially buffered
+words, both instruction-width changes and BIOS/RAM exception returns,
 uncached page boundaries and DMA/timer/IRQ interactions across clock wrap.
+They also write wait controls before the first fetch, after a firmware reset
+and after an invalid jump, then require the configured costs on a valid fetch.
+Color checks cover fractional numerical vectors, all 65,536 input-color
+endpoints, coefficient saturation and matching red/blue precision. Scanout
+checks retain the extra green bit through direct and palette fetches, backdrop
+alpha and semi-transparent OBJ effects. Physical fractional rounding and bit 15
+remain unqualified.
 BIOS regressions check LZ77 backreferences with bytes whose high bit is set
 through both byte and halfword output paths. They also execute ARM/Thumb
 interrupt waits, check ready-flag consumption and register preservation,
@@ -27,6 +39,51 @@ and distinguish a matching interrupt from an unrelated HALT wake-up.
 The wait cases also cover IRQ callers, their saved exception state, both saved
 CPSR IRQ masks and either initial IME value. They check the returned request
 in R0 and the cleared R3 alongside the preserved registers.
+
+The data-service regressions execute ARM/Thumb callers for SWIs 10 through 19.
+They check 2,043 unpacking, compression and differential-filter observations,
+including work-RAM and cartridge sources, two cartridge wait-state settings,
+complete output and guards, register preservation, timers and elapsed clocks.
+A separate 98-case bias check samples register changes during both ramp
+directions, preserves every sampling-resolution setting, and runs timer IRQs
+and a DMA transfer during a ramp. `CUPID_TEST_BIOS` registers the same checks
+against a local external BIOS and compares clocks and caller state directly.
+CTest splits the data corpus into 773 EWRAM, 728 IWRAM and 542 cartridge
+observations, each with the same ten-second deadline. Every group requires its
+full count.
+The BIOS input is not distributed. See [data services](../hardware/bios-data-services.md)
+for the fixtures and qualification limits.
+
+Affine regressions cover 382 background and 1,102 object observations,
+including every 16-bit angle for both services. They check complete output,
+signed product rounding, wrapped origins, preserved caller state, source and
+destination advancement, count/stride cases and memory regions. Four cases
+require timer/DMA interrupts, DMA replacement of a future input entry and
+sampled output-write chronology. `CUPID_TEST_BIOS` adds comparisons against
+the local external BIOS. Background and object groups retain separate
+ten-second deadlines, and a mathematical generator checks all sine values.
+See [affine services](../hardware/bios-affine-services.md).
+
+Register/memory reset checks cover 650 observations across all 256 masks,
+both caller modes, ignored upper bits, cartridge waits and safe RAM callers.
+They compare complete memory, retained regions, readable I/O, wave banks,
+FIFO state, preserved caller state, timers and elapsed clocks. Two clears
+require timer/DMA IRQs and sampled DMA writes that the CPU later overwrites.
+`CUPID_TEST_BIOS` adds the external comparison, including the sampled chronology.
+Each of the sixteen mask groups and the interaction group retains a ten-second
+deadline. The existing copy checks also require the observed CpuFastSet R3
+data result. See [register reset](../hardware/bios-register-reset.md).
+
+Soft-reset regressions require 768 observations across every restart byte,
+ARM/Thumb state, seven caller banks, three caller memory regions, cartridge
+wait settings and DMA before/after restart selection. They check complete
+architectural register banks, memory, I/O, elapsed clocks and entry pipeline,
+then execute the actual first entry instructions. DMA cases compare sampled
+work-area writes and pending timer/DMA requests with IME clear.
+`CUPID_TEST_BIOS` adds the external comparisons. Four restart-byte groups,
+the caller-state group and the DMA group each retain a ten-second deadline.
+See [soft reset](../hardware/bios-soft-reset.md), including the unresolved
+hardware status-register readback edge.
 
 ```sh
 cmake -S . -B build -DCUPID_BUILD_FRONTEND=OFF
@@ -188,6 +245,23 @@ local suite; `CUPID_TEST_BIOS` adds the external path. Native `gba.io` checks
 register state and CPU bus reads at each width, ARM/Thumb prefetch, DMA handover
 and FIFO reset readback. See [I/O registers](../hardware/io-registers.md).
 
+The optional local serial suite retains four counted normal timing results,
+90 register observations and four original multiplayer timeouts:
+
+```sh
+python3 tests/roms/check_serial_suite.py --runner build/cupidgba-headless \
+  --rom /path/to/serial-suite.gba --bios /path/to/gba-bios.bin
+```
+
+Set `CUPID_SERIAL_SUITE_ROM` to register the built-in path and `CUPID_TEST_BIOS`
+to add the external path. The observer requires its pinned digest, terminal
+R12=0, complete counts, every case flag and zero failure logs. The multiplayer
+timeouts remain skipped and are never counted as working transfers. The private
+wrapper initializes normal data registers between the timing and read suites,
+so the read suite starts from its original reset-state precondition; it retains
+all timed code and expectations. Additional single-write startup timing failures
+are described in [serial behavior](../hardware/serial/normal-and-gpio.md).
+
 The optional local audio cartridge observer selects ten unchanged signal tests:
 
 ```sh
@@ -287,6 +361,15 @@ The example explicitly allows at most one instruction per emulated clock for
 can stop a valid long run when prefetch permits more instructions per frame.
 This changes the observation budget; it does not change emulation timing or
 any hardware test expectation.
+
+Optional standalone serial and HALT probes use their original cartridge bytes
+and comparisons. Set `CUPID_SERIAL_PROBE_DIR` for the nine serial IRQ, data and
+start-bit probes. Set `CUPID_HALT_PROBE_DIR` and `CUPID_TEST_BIOS` for four HALT
+timer/return-address probes that observe the original firmware's internal
+addresses. The observer checks each input digest and passing terminal result.
+It retains the 360-frame, 150-million-step and 90-second observation budgets.
+Native IRQ tests cover the acceptance and wake samples in ARM/Thumb mode,
+their saved return addresses and clock wrap.
 
 Passing these checks establishes the listed cases. They do not cover every CPU
 encoding, every bus or arbitration edge, every timer/IRQ interaction, raster

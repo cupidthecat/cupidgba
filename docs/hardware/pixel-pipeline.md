@@ -18,6 +18,15 @@ alpha blending with a deeper target. Semi-transparent OBJ can force alpha
 blending with an eligible second layer. Brightness requires the first target
 and the window's effects enable, and is applied once.
 
+The color model normalizes red and blue to five bits and retains six green
+bits through the arithmetic stage. Input bit 15 supplies green's low bit;
+the final output reduces green to the displayed five bits. Coefficients 17
+through 31 saturate at 16. Alpha rounds the combined intensity before channel
+saturation. Brightness rounds the final increased or decreased intensity,
+so red and blue have the same precision. The
+[programming manual, page 83](https://www.manuallib.com/download/2023-10-17/AGB%20Programming%20Manual.pdf#page=83)
+uses a maximum of 63 for green in brightness arithmetic.
+
 The implemented bitmap pipeline exposes the following stages for the first pair:
 
 | Stage | Elapsed line clock |
@@ -107,8 +116,12 @@ required alongside these checks.
 
 The exact BG reference-DMA column and the first few pixels after display-latch
 changes still differ between diagnostic implementations and need targeted
-hardware qualification. Fractional effect rounding, color bit 15, prohibited
-OBJ shapes/modes, precise mosaic changes at counter boundaries, and reset or
+hardware qualification. Color regressions check fractional vectors, all raw-color
+endpoints, coefficient saturation and red/blue symmetry. Scanout tests retain
+the extra green bit through direct bitmap, background palette, backdrop and
+semi-transparent OBJ inputs. These qualify the implemented numerical model;
+direct hardware captures for fractional rounding and bit 15 remain open.
+Prohibited OBJ shapes/modes, precise mosaic changes at counter boundaries, and reset or
 BIOS-skipped phases also remain open. The ten selections do not qualify every
 scroll phase, layer combination, OBJ mode or contention pattern. These limits remain under
 [issue 16](https://github.com/cupidthecat/cupidgba/issues/16) and the complete
