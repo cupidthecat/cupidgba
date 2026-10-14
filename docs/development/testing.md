@@ -1,5 +1,9 @@
 # Testing
 
+The `gba.cartridge-image-*` groups cover EEPROM address selection, complete
+DMA3 serial frames, original image size and replacement ownership. They retain
+the ten-second deadlines; see [cartridge image mapping](../hardware/cartridge/image-mapping.md).
+
 The `gba.rom-bus-*` groups cover address-derived data outside the ROM image,
 ARM/Thumb loads, DMA rollover and save-device selection. They retain mapped
 ROM boundaries and EEPROM output checks. Each group has a ten-second deadline;

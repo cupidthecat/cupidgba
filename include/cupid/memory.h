@@ -270,6 +270,7 @@ struct CupidMemory {
     uint16_t io[512];            /**< IO registers (1 KiB as uint16 array) */
     uint8_t* rom;                /**< Game Pak ROM */
     size_t   romSize;
+    size_t   romImageSize;       /**< Original image bytes, before mapping padding */
     uint32_t romMask;
     uint16_t romID;              /**< Cartridge header ID */
     int      fullBios;           /**< Non-zero if a real BIOS is loaded */
@@ -323,6 +324,7 @@ void     cupid_memory_store32(struct CupidARM* cpu, uint32_t addr, int32_t val, 
 void     cupid_memory_store16(struct CupidARM* cpu, uint32_t addr, int16_t val, int* cyc);
 void     cupid_memory_store8(struct CupidARM* cpu, uint32_t addr, int8_t val, int* cyc);
 void     cupid_memory_set_active_region(struct CupidARM* cpu, uint32_t addr);
+bool     cupid_memory_is_eeprom_address(const struct CupidMemory* memory, uint32_t address);
 
 /** Block transfer (LDM/STM) */
 uint32_t cupid_memory_load_multiple(struct CupidARM* cpu, uint32_t addr, int mask,

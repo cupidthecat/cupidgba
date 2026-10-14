@@ -6,6 +6,14 @@
 #include "cupid/gba.h"
 #include <errno.h>
 
+/* Small-image boards select the upper ROM half; large boards also decode
+ * the upper seventeen halfword-address lines, reserving the last 256 bytes. */
+bool cupid_memory_is_eeprom_address(const struct CupidMemory* memory, uint32_t address) {
+    if ((address >> GBA_BASE_OFFSET) != GBA_REGION_ROM2_EX) return false;
+    size_t imageSize = memory->romImageSize ? memory->romImageSize : memory->romSize;
+    return imageSize <= 0x01000000 || address >= 0x0DFFFF00;
+}
+
 static void begin_data_access(struct CupidARM* cpu, uint32_t address,
                               unsigned width, int* cycles) {
     struct CupidMemory* memory = &((struct CupidGBA*)cpu->master)->memory;
@@ -478,7 +486,8 @@ uint32_t cupid_memory_load32(struct CupidARM* cpu, uint32_t address, int* cycleC
         break;
     case GBA_REGION_ROM2_EX:
         wait += waitstatesRegion[address >> GBA_BASE_OFFSET];
-        if (memory->savedata.type == SAVE_EEPROM || memory->savedata.type == SAVE_EEPROM512) {
+        if (cupid_memory_is_eeprom_address(memory, address) &&
+            (memory->savedata.type == SAVE_EEPROM || memory->savedata.type == SAVE_EEPROM512)) {
             value = cupid_savedata_read_eeprom(&memory->savedata);
         } else if ((address & (GBA_SIZE_ROM - 4)) < memory->romSize) {
             LOAD_32(value, address & (GBA_SIZE_ROM - 4), memory->rom);
@@ -582,7 +591,8 @@ uint32_t cupid_memory_load16(struct CupidARM* cpu, uint32_t address, int* cycleC
         break;
     case GBA_REGION_ROM2_EX:
         wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
-        if (memory->savedata.type == SAVE_EEPROM || memory->savedata.type == SAVE_EEPROM512) {
+        if (cupid_memory_is_eeprom_address(memory, address) &&
+            (memory->savedata.type == SAVE_EEPROM || memory->savedata.type == SAVE_EEPROM512)) {
             value = cupid_savedata_read_eeprom(&memory->savedata);
         } else if ((address & (GBA_SIZE_ROM - 2)) < memory->romSize) {
             LOAD_16(value, address & (GBA_SIZE_ROM - 2), memory->rom);
@@ -844,6 +854,7 @@ void cupid_memory_store16(struct CupidARM* cpu, uint32_t address, int16_t value,
         break;
     case GBA_REGION_ROM2_EX:
         /** EEPROM writes. */
+        if (!cupid_memory_is_eeprom_address(memory, address)) break;
         if (memory->savedata.type == SAVE_AUTODETECT) {
             memory->savedata.type = SAVE_EEPROM512;
             cupid_savedata_init_eeprom(&memory->savedata);
@@ -1025,6 +1036,7 @@ bool cupid_load_rom(struct CupidGBA* gba, const char* path) {
     free(gba->memory.rom);
     gba->memory.rom = candidate;
     gba->memory.romSize = mappedSize;
+    gba->memory.romImageSize = pristineSize;
 
     /** Compute romMask as next power-of-two minus one. */
     gba->memory.romMask = cupid_to_pow2((uint32_t)gba->memory.romSize) - 1;
@@ -1042,6 +1054,7 @@ bool cupid_load_rom(struct CupidGBA* gba, const char* path) {
      * Extract ROM header info for identification.
      * GBA header: title at 0xA0 (12 bytes), game code at 0xAC (4 bytes).
      */
+    gba->memory.romID = 0;
     char title[13] = {0};
     char gameCode[5] = {0};
     if (pristineSize >= 0xB0) {
