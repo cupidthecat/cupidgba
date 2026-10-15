@@ -118,8 +118,6 @@ subs   pc, lr, #4
 .word 0x03A0E004
 
 @ Unimplemented
-SoundDriverInit:
-SoundDriverMain:
 MusicPlayerOpen:
 MusicPlayerStart:
 MusicPlayerStop:

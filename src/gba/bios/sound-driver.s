@@ -1,6 +1,6 @@
 @ SPDX-License-Identifier: GPL-3.0-or-later
 @ Sound work-area and FIFO DMA changes execute through the ordinary CPU bus.
-.org 0x1E00
+.org 0x2600
 .thumb
 
 .thumb_func

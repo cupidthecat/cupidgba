@@ -121,13 +121,16 @@ the local external BIOS. Background and object groups retain separate
 ten-second deadlines, and a mathematical generator checks all sine values.
 See [affine services](../hardware/bios-affine-services.md).
 
-Eight `gba.bios-sound-*` groups cover work-area identifiers, mode fields, frame
-cadence, PCM disable/enable, channel clearing, ARM/Thumb extension callbacks,
-caller banks, all twelve playback rates and per-clock bus progress during
-timer/DMA IRQs and clock wrap. `CUPID_TEST_BIOS` adds matching external-firmware
-groups. The three rate batches retain all selectors and ten-second deadlines;
-their video engines start at the same explicit phase. Initialization and
-software mixing remain incomplete. See [sound-driver controls](../hardware/bios/sound-driver.md).
+Seventeen `gba.bios-sound-*` groups cover initialization, software mixing,
+envelopes, looping, reverb, work-area identifiers, mode fields, frame cadence,
+PCM disable/enable, channel clearing, ARM/Thumb callbacks, caller banks, all
+twelve playback rates and bus progress during timer/DMA IRQs and clock wrap.
+Owned wave fixtures compare complete state apart from six internal address
+words, and twelve-frame playback checks include every output sample and its
+timestamp. `CUPID_TEST_BIOS` adds matching external-firmware groups. All groups
+retain ten-second deadlines and fixed instruction guards; rate fixtures align
+both video engines explicitly. Undocumented music helpers and physical audio
+remain unqualified. See [the sound driver](../hardware/bios/sound-driver.md).
 
 Register/memory reset checks cover 650 observations across all 256 masks,
 both caller modes, ignored upper bits, cartridge waits and safe RAM callers.

@@ -53,7 +53,9 @@ musicMultiplyARM:
     adds r0, r3, #0
     bx lr
 
+.include "src/gba/bios/sound-mixer.s"
 .include "src/gba/bios/sound-driver.s"
+.include "src/gba/bios/sound-init.s"
 
 .org 0x3104
 .include "src/gba/bios/music-pitch.inc"

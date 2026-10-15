@@ -3,6 +3,7 @@
 #include "cupid/isa-inlines.h"
 #include "../test.h"
 #include "caller.h"
+#include "sound-frames.inc"
 
 enum { SOUND_MAGIC = 0x68736D53, AREA_SIZE = 0xFB0, PCM_OFFSET = 0x350 };
 static const char* externalBios;
@@ -286,6 +287,253 @@ static void nested_irq_preserves_busy_state(void) {
     destroy(gba);
 }
 
+static void initialized_work_area_and_hardware(void) {
+    const uint64_t clocks[] = {0, UINT32_MAX - 1000u, UINT64_C(0x300000000)};
+    for (unsigned c = 0; c < sizeof(clocks)/sizeof(*clocks); c++)
+      for (unsigned internal = 0; internal < 2; internal++)
+        for (unsigned thumb = 0; thumb < 2; thumb++) for (unsigned irq = 0; irq < 2; irq++) {
+            struct CupidGBA* gba = machine(clocks[c], internal != 0);
+            memset(area(gba), 0xA5, 0x1000);
+            cupid_io_write(gba, REG_SOUNDBIAS, 0x0200);
+            const uint64_t elapsed = call(gba, 0x1A, areaAddress, thumb != 0, irq ? MODE_IRQ : MODE_SYS);
+            if (!internal) CHECK(elapsed == 195947);
+            CHECK(word(gba->memory.iwram, 0x7FF0) == areaAddress);
+            CHECK(word(area(gba), 0) == SOUND_MAGIC);
+            CHECK(area(gba)[4] == 0 && area(gba)[5] == 0 && area(gba)[6] == 8 && area(gba)[7] == 15);
+            CHECK(area(gba)[8] == 4 && area(gba)[11] == 7);
+            CHECK(word(area(gba), 16) == 224 && word(area(gba), 20) == 13379 && word(area(gba), 24) == 627);
+            CHECK(!word(area(gba), 28) && !word(area(gba), 32) && !word(area(gba), 36));
+            const uint32_t empty = word(area(gba), 40);
+            CHECK((empty & 1) && empty < GBA_SIZE_BIOS);
+            CHECK(word(area(gba), 44) == empty && word(area(gba), 48) == empty && word(area(gba), 60) == empty);
+            CHECK((word(area(gba), 56) & 1) && word(area(gba), 56) < GBA_SIZE_BIOS);
+            const uint32_t table = word(area(gba), 52);
+            CHECK(!(table & 3) && table + 36 * 4 <= GBA_SIZE_BIOS);
+            for (unsigned entry = 0; entry < 36; entry++) CHECK(word(gba->memory.bios, table + entry * 4) < GBA_SIZE_BIOS);
+            for (unsigned byte = 0x40; byte < AREA_SIZE; byte++) CHECK(area(gba)[byte] == 0);
+            for (unsigned byte = AREA_SIZE; byte < 0x1000; byte++) CHECK(area(gba)[byte] == 0xA5);
+            CHECK(gba->memory.dma[1].source == areaAddress + 0x350 && gba->memory.dma[2].source == areaAddress + 0x980);
+            CHECK(gba->memory.dma[1].dest == 0x040000A0 && gba->memory.dma[2].dest == 0x040000A4);
+            CHECK(gba->memory.dma[1].reg == 0xB600 && gba->memory.dma[2].reg == 0xB600);
+            CHECK(gba->memory.io[REG_SOUNDCNT_H >> 1] == 0x210E);
+            CHECK(gba->memory.io[REG_SOUNDCNT_X >> 1] & 0x80);
+            CHECK(gba->memory.io[REG_SOUNDBIAS >> 1] == 0x4200);
+            CHECK(gba->timers[0].reload == 0xFB1A && gba->timers[0].control == 0x80);
+            CHECK(gba->video.vcount == 159 && (uint32_t)gba->cpu.gprs[0] == SOUND_MAGIC);
+            destroy(gba);
+        }
+}
+
+static unsigned scene_frames(unsigned scene) { return scene == 6 ? 16 : (scene == 7 ? 12 : 4); }
+
+static void prepare_sound_scene(struct CupidGBA* gba, unsigned scene) {
+    cupid_io_write(gba, REG_SOUNDBIAS, 0x0200);
+    call(gba, 0x1A, areaAddress, false, MODE_SYS);
+    cupid_io_write(gba, REG_TM0CNT_H, 0);
+    call(gba, 0x1D, 0, true, MODE_SYS);
+    if (!scene) return;
+    const unsigned voices = scene == 15 ? 12 : 1;
+    area(gba)[6] = scene == 15 ? 12 : 8;
+    for (unsigned voice = 0; voice < voices; voice++) {
+        uint8_t* channel = area(gba) + 0x50 + voice * 64;
+        uint8_t* wave = gba->memory.ewram + 0x5000 + voice * 0x2000;
+        unsigned length = 256, loop = 32;
+        const bool looping = scene == 3 || scene == 4 || scene == 7 || scene == 8 || scene == 14 || scene == 15;
+        if (scene == 6 || scene == 7) length = 4096;
+        if (scene == 8) length = 64;
+        if (scene == 11) length = 1;
+        if (scene == 12) length = 2;
+        if (scene == 13) length = 4;
+        if (scene == 14) { length = 5; loop = 4; }
+        if (scene == 15) { length = 257; loop = voice + 1; }
+        memset(wave, 0, length + 17);
+        put(wave, 4, 0x01000000); put(wave, 8, loop); put(wave, 12, length);
+        for (unsigned sample = 0; sample < length; sample++) wave[16 + sample] = (uint8_t)(sample * 73 + 19 + voice * 37);
+        wave[3] = looping ? 0x40 : 0;
+        wave[16 + length] = looping ? wave[16 + loop] : 0;
+        channel[1] = scene == 1 || scene == 2 || scene == 6 || scene == 7 || scene == 8 ||
+            scene == 11 || scene == 12 || (scene == 15 && !(voice & 1)) ? 8 : 0;
+        channel[2] = (uint8_t)(255 - voice * 7); channel[3] = (uint8_t)(128 + voice * 11);
+        channel[4] = scene == 2 ? 64 : (scene == 6 ? 32 : (scene == 8 ? 0 : 255));
+        channel[5] = 192; channel[6] = 64; channel[7] = 128;
+        if (scene == 7) { channel[12] = 16; channel[13] = 4; }
+        unsigned frequency = scene == 4 ? 7000 : 13379;
+        if (scene == 10) frequency = 1337901;
+        if (scene == 13) frequency = 50000;
+        if (scene == 14) frequency = 60000;
+        if (scene == 15) frequency = 1000 + voice * 4000;
+        put(channel, 32, frequency);
+        put(channel, 36, 0x02005000 + voice * 0x2000);
+        channel[0] = scene == 9 ? 0xC0 : 0x80;
+    }
+    if (scene == 5 || scene == 15) area(gba)[5] = 80;
+}
+
+static uint64_t scene_signature(struct CupidGBA* gba) {
+    uint64_t value = UINT64_C(14695981039346656037);
+    for (unsigned byte = 0; byte < 0x1000; byte++) {
+        /* Six reserved words contain firmware-internal addresses. Supported
+         * hooks and bounds are checked separately; all other bytes participate. */
+        if (byte >= 0x28 && byte < 0x40) continue;
+        value = (value ^ area(gba)[byte]) * UINT64_C(1099511628211);
+    }
+    return value;
+}
+
+static void sound_scene_batch(unsigned batch) {
+    for (unsigned scene = batch * 4; scene < (batch + 1) * 4; scene++) {
+        struct CupidGBA* gba = machine(0, false);
+        prepare_sound_scene(gba, scene);
+        for (unsigned frame = 0; frame < scene_frames(scene); frame++) {
+            if (scene == 7 && frame == 2) area(gba)[0x50] |= 0x40;
+            const struct SoundFrameExpected* expected = &soundFrameExpected[scene][frame];
+            const uint64_t clocks = call(gba, 0x1C, 0, (frame & 1) != 0, frame & 2 ? MODE_IRQ : MODE_SYS);
+            const uint64_t signature = scene_signature(gba);
+            if (clocks != expected->clocks || signature != expected->signature)
+                fprintf(stderr, "Sound scene %u frame %u clocks=%" PRIu64 "/%" PRIu64
+                    " signature=%016" PRIx64 "/%016" PRIx64 "\n", scene, frame,
+                    clocks, expected->clocks, signature, expected->signature);
+            CHECK(clocks == expected->clocks && signature == expected->signature);
+            CHECK((uint32_t)gba->cpu.gprs[0] == 0x11220008 && (uint32_t)gba->cpu.gprs[1] == 0x11220009);
+            call(gba, 0x1D, 0, false, MODE_SYS);
+        }
+        destroy(gba);
+    }
+}
+
+static void mixing_in_internal_ram(void) {
+    const uint64_t anchors[] = {UINT32_MAX - 200000u, UINT64_C(0x300000000)};
+    const unsigned clocks[] = {125317, 125252, 125230, 125232};
+    for (unsigned anchor = 0; anchor < 2; anchor++) {
+        struct CupidGBA* gba = machine(anchors[anchor], true);
+        prepare_sound_scene(gba, 15);
+        for (unsigned frame = 0; frame < 4; frame++) {
+            if (!anchor && !frame) CHECK(cupid_timing_global_time(&gba->timing) < UINT32_MAX);
+            CHECK(call(gba, 0x1C, 0, (frame & 1) != 0, frame & 2 ? MODE_IRQ : MODE_SYS) == clocks[frame]);
+            if (!anchor && !frame) CHECK(cupid_timing_global_time(&gba->timing) > UINT32_MAX);
+            CHECK(scene_signature(gba) == soundFrameExpected[15][frame].signature);
+            call(gba, 0x1D, 0, false, MODE_SYS);
+        }
+        destroy(gba);
+    }
+}
+
+static void mixing_at_all_playback_rates(void) {
+    for (unsigned rate = 1; rate <= 12; rate++) {
+        struct CupidGBA* gba = machine(0, false);
+        prepare_sound_scene(gba, 15);
+        call(gba, 0x1B, rate << 16, false, MODE_SYS);
+        cupid_io_write(gba, REG_TM0CNT_H, 0);
+        for (unsigned voice = 0; voice < 12; voice++) area(gba)[0x50 + voice * 64] = 0x80;
+        call(gba, 0x1D, 0, true, MODE_SYS);
+        for (unsigned frame = 0; frame < 3; frame++) {
+            const struct SoundFrameExpected* expected = &soundRateFrameExpected[rate - 1][frame];
+            CHECK(call(gba, 0x1C, 0, (frame & 1) != 0, MODE_SYS) == expected->clocks);
+            CHECK(scene_signature(gba) == expected->signature);
+            call(gba, 0x1D, 0, false, MODE_SYS);
+        }
+        destroy(gba);
+    }
+}
+
+static void frame_hooks_and_access_guards(void) {
+    const uint32_t callback[] = {0xE5901000, 0xE2811001, 0xE5801000, 0xE59F1014,
+        0xE5911000, 0xE5912000, 0xE5802004, 0xE3A0205A, 0xE5812040, 0xE12FFF1E, 0x03007FF0};
+    const uint16_t extension[] = {0x6801, 0x6441, 0x6C01, 0x6481, 0x4770};
+    for (unsigned thumb = 0; thumb < 2; thumb++) {
+        struct CupidGBA* gba = machine(0, false);
+        prepare_sound_scene(gba, 0);
+        memcpy(gba->memory.iwram + 0x400, callback, sizeof(callback));
+        memcpy(gba->memory.iwram + 0x500, extension, sizeof(extension));
+        memset(gba->memory.ewram + 0x3000, 0, 8);
+        put(area(gba), 32, 0x03000400); put(area(gba), 36, 0x02003000); put(area(gba), 40, 0x03000501);
+        call(gba, 0x1C, 0, thumb != 0, thumb ? MODE_IRQ : MODE_SYS);
+        CHECK(word(gba->memory.ewram, 0x3000) == 1 && word(gba->memory.ewram, 0x3004) == SOUND_MAGIC + 1);
+        CHECK(word(area(gba), 0x40) == 0x5A && word(area(gba), 0x44) == SOUND_MAGIC + 1 && word(area(gba), 0x48) == 0x5A);
+        CHECK(word(area(gba), 0) == SOUND_MAGIC);
+        put(area(gba), 0, SOUND_MAGIC + 1);
+        const uint64_t before = scene_signature(gba);
+        CHECK(call(gba, 0x1C, 0, thumb == 0, MODE_SYS) == 70);
+        CHECK(scene_signature(gba) == before && word(gba->memory.ewram, 0x3000) == 1);
+        destroy(gba);
+    }
+}
+
+static void mixing_survives_nested_irq(void) {
+    struct CupidGBA* gba = machine(UINT32_MAX - 200000u, false);
+    prepare_sound_scene(gba, 1);
+    const uint32_t handler[] = {0xE3A00301, 0xE2800C02, 0xE3A01010, 0xE1C010B2,
+        0xEF1D0000, 0xE59F1014, 0xE5912000, 0xE2822001, 0xE5812000,
+        0xE5902000, 0xE5812004, 0xE12FFF1E, 0x02003100};
+    memcpy(gba->memory.iwram + 0x600, handler, sizeof(handler));
+    put(gba->memory.iwram, 0x7FFC, 0x03000600);
+    memset(gba->memory.ewram + 0x3100, 0, 8);
+    cupid_io_write(gba, REG_IE, IRQ_TIMER1);
+    cupid_io_write(gba, REG_IME, 1);
+    cupid_io_write(gba, REG_TM1CNT_L, 0xF000);
+    cupid_io_write(gba, REG_TM1CNT_H, 0xC0);
+    unmaskedCaller = true;
+    CHECK(cupid_timing_global_time(&gba->timing) < UINT32_MAX);
+    CHECK(call(gba, 0x1C, 0, true, MODE_SYS) > soundFrameExpected[1][0].clocks);
+    CHECK(cupid_timing_global_time(&gba->timing) > UINT32_MAX);
+    unmaskedCaller = false;
+    CHECK(word(gba->memory.ewram, 0x3100) >= 2 && word(gba->memory.ewram, 0x3104) == SOUND_MAGIC + 1);
+    CHECK(scene_signature(gba) == soundFrameExpected[1][0].signature);
+    destroy(gba);
+}
+
+struct SoundOutputTrace { uint64_t origin, signature, count, nonzero; };
+static void record_sound_output(void* context, uint64_t clock, int16_t left, int16_t right) {
+    struct SoundOutputTrace* trace = context;
+    const uint64_t fields[] = {clock - trace->origin, (uint16_t)left, (uint16_t)right};
+    const unsigned widths[] = {8, 2, 2};
+    for (unsigned field = 0; field < 3; field++) for (unsigned byte = 0; byte < widths[field]; byte++)
+        trace->signature = (trace->signature ^ (uint8_t)(fields[field] >> (byte * 8))) * UINT64_C(1099511628211);
+    ++trace->count;
+    if (left || right) ++trace->nonzero;
+}
+
+static void playback_reaches_fifo_and_output(void) {
+    /* Independent observations use the same owned wave inputs, real timer
+     * overflows, FIFO refill bursts and twelve complete frame periods. */
+    const unsigned scenes[] = {3, 15};
+    const uint64_t origins[] = {0, UINT32_MAX - 200000u};
+    const uint64_t outputs[] = {UINT64_C(0xC1BA4C9839934FFE), UINT64_C(0x883CE24630E02C68)};
+    const uint64_t areas[] = {UINT64_C(0x0769CB27762A2CB4), UINT64_C(0x387119929D02A8A3)};
+    const uint64_t elapsed[] = {3370836, 3370837};
+    const unsigned nonzero[] = {11772, 11978};
+    for (unsigned fixture = 0; fixture < 2; fixture++) {
+        struct CupidGBA* gba = machine(origins[fixture], false);
+        prepare_sound_scene(gba, scenes[fixture]);
+        struct SoundOutputTrace trace = {cupid_timing_global_time(&gba->timing), UINT64_C(14695981039346656037), 0, 0};
+        gba->audio.sampleSink = record_sound_output;
+        gba->audio.sampleSinkContext = &trace;
+        if (fixture) CHECK(trace.origin < UINT32_MAX);
+        cupid_io_write(gba, REG_TM0CNT_H, 0x80);
+        for (unsigned frame = 0; frame < 12; frame++) {
+            call(gba, 0x1C, 0, (frame & 1) != 0, MODE_SYS);
+            const uint64_t deadline = trace.origin + (frame + 1) * UINT64_C(280896);
+            unsigned steps = 0;
+            while (cupid_timing_global_time(&gba->timing) < deadline && steps < 200000) {
+                cupid_gba_step(gba); ++steps;
+            }
+            CHECK(steps < 200000);
+            call(gba, 0x1D, 0, (frame & 1) == 0, MODE_SYS);
+            /* Model the host consuming each frame without changing samples. */
+            gba->audio.sampleReadPos = gba->audio.sampleWritePos;
+        }
+        CHECK(trace.count == 13168 && trace.nonzero == nonzero[fixture]);
+        CHECK(trace.signature == outputs[fixture] && scene_signature(gba) == areas[fixture]);
+        CHECK(cupid_timing_global_time(&gba->timing) - trace.origin == elapsed[fixture]);
+        if (fixture) CHECK(cupid_timing_global_time(&gba->timing) > UINT32_MAX);
+        CHECK(!gba->audio.sampleOverruns && area(gba)[4] == 2);
+        CHECK(gba->memory.dma[1].nextSource == areaAddress + 0x7B0);
+        CHECK(gba->memory.dma[2].nextSource == areaAddress + 0xDE0);
+        CHECK(gba->audio.chA.latchedSample != 0 && gba->audio.chB.latchedSample != 0);
+        destroy(gba);
+    }
+}
+
 int main(int argc, char** argv) {
     CHECK(argc == 2 || (argc == 4 && !strcmp(argv[2], "--external-bios")));
     if (argc == 4) externalBios = argv[3];
@@ -296,6 +544,15 @@ int main(int argc, char** argv) {
     else if (!strcmp(argv[1], "rates-0")) playback_rate_batch(0);
     else if (!strcmp(argv[1], "rates-1")) playback_rate_batch(1);
     else if (!strcmp(argv[1], "rates-2")) playback_rate_batch(2);
+    else if (!strcmp(argv[1], "init")) RUN(initialized_work_area_and_hardware);
+    else if (!strcmp(argv[1], "frames-0")) sound_scene_batch(0);
+    else if (!strcmp(argv[1], "frames-1")) sound_scene_batch(1);
+    else if (!strcmp(argv[1], "frames-2")) sound_scene_batch(2);
+    else if (!strcmp(argv[1], "frames-3")) { sound_scene_batch(3); RUN(mixing_in_internal_ram); }
+    else if (!strcmp(argv[1], "hooks")) RUN(frame_hooks_and_access_guards);
+    else if (!strcmp(argv[1], "mix-irq")) RUN(mixing_survives_nested_irq);
+    else if (!strcmp(argv[1], "playback")) RUN(playback_reaches_fifo_and_output);
+    else if (!strcmp(argv[1], "mix-rates")) RUN(mixing_at_all_playback_rates);
     else if (!strcmp(argv[1], "chronology")) {
         RUN(bus_progress_timer_dma_and_wrap);
         RUN(nested_irq_preserves_busy_state);
