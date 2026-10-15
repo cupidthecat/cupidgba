@@ -10,7 +10,8 @@ permissions:
 jobs:
   linux:
     name: Linux (${{ matrix.compiler }}, ${{ matrix.mode }})
-    runs-on: ubuntu-latest
+    # Keep compiler and sanitizer qualification on the tested Linux release.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -22,7 +23,7 @@ jobs:
             mode: Debug
             sanitizers: 'ON'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
       - name: Install SDL2
         run: sudo apt-get update && sudo apt-get install -y libsdl2-dev lld
       - name: Verify replacement BIOS source
@@ -72,7 +73,7 @@ jobs:
       run:
         shell: msys2 {0}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
       - uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64
