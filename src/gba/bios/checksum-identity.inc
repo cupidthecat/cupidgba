@@ -1,1 +1,1 @@
-.word 0x8B0907A4
+.word 0x343BCABC

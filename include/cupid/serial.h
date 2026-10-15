@@ -35,6 +35,15 @@ struct CupidSerial {
     bool clockHigh;
     bool outputHigh;
     bool length32;
+    enum CupidSerialMode transferMode;
+    unsigned multiplayerId;
+    uint8_t multiplayerPlayers;
+    bool multiplayerError;
+    uint16_t multiplayerData[4];
+    unsigned multiplayerSlot;
+    unsigned multiplayerLast;
+    unsigned multiplayerBaud;
+    unsigned multiplayerCompletion;
     uint8_t inputMask;
     uint8_t inputLevels;
     uint8_t outputMask;
@@ -44,6 +53,14 @@ struct CupidSerial {
      * A connected device may change its inputs synchronously in this callback. */
     void (*outputChanged)(void* context, uint8_t mask, uint8_t levels, uint64_t timestamp);
     void* outputContext;
+
+    /* A multiplayer device exchanges one latched 16-bit word per player.
+     * Returning false reports a transfer error. Receive slots publish in wire
+     * order while normal peripheral clocks run. Subframe phase estimates and
+     * electrical timing require separate qualification. */
+    bool (*multiplayerExchange)(void* context, uint16_t transmitted, unsigned baud,
+                                uint16_t received[4], uint64_t timestamp);
+    void* multiplayerContext;
 };
 
 void cupid_serial_init(struct CupidSerial* serial, struct CupidGBA* gba);
@@ -59,5 +76,16 @@ void cupid_serial_set_input(struct CupidSerial* serial, uint8_t mask, uint8_t le
 uint8_t cupid_serial_pins(const struct CupidSerial* serial);
 void cupid_serial_set_output_callback(struct CupidSerial* serial,
     void (*callback)(void*, uint8_t, uint8_t, uint64_t), void* context);
+
+/* Configure a device at the current emulated timestamp. Player masks contain
+ * a contiguous cable chain (1, 3, 7 or 15); zero disconnects it. Reconfiguration
+ * cancels an active multiplayer frame. This does not advance another core. */
+bool cupid_serial_set_multiplayer_peer(struct CupidSerial* serial, unsigned playerId,
+    uint8_t players, bool (*exchange)(void*, uint16_t, unsigned, uint16_t[4], uint64_t), void* context);
+
+/* Start a slave's incoming frame after dispatching preceding events to the
+ * same timestamp as its master. The caller owns synchronization between cores. */
+bool cupid_serial_multiplayer_receive(struct CupidSerial* serial, unsigned baud,
+    const uint16_t received[4], bool error);
 
 #endif

@@ -46,6 +46,9 @@ Mixing and reverb use ordinary signed integer instructions. `music-player.s`,
 `music-sequencer.s`, `music-commands.s` and `music-notes.s` implement lifecycle,
 track sequencing, exported commands and note allocation. `music-jump-table.s`
 provides the 36 callable entries at the observable BIOS data boundary.
+`multiboot.s` occupies the space after track-command data and before the fixed
+pitch table. It executes sender guards, word encryption, CRC, serial writes
+and completion polling through the CPU, retaining the 16 KiB image boundary.
 `checksum.s` reads all 4,096 image words through timed ARM loads and adds them.
 The reserved final word at `0x3FFC` comes from `checksum-identity.inc`. Its
 generator subtracts the sum of the preceding words from the replacement

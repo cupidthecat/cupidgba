@@ -60,6 +60,7 @@ musicMultiplyARM:
 .include "src/gba/bios/sound-driver.s"
 .include "src/gba/bios/sound-init.s"
 .include "src/gba/bios/music-commands.s"
+.include "src/gba/bios/multiboot.s"
 
 .org 0x3104
 .include "src/gba/bios/music-pitch.inc"
