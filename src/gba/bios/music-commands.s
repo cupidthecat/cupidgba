@@ -361,5 +361,6 @@ musicTickDurations:
     .byte 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
     .byte 16, 17, 18, 19, 20, 21, 22, 23, 24, 28, 30, 32, 36, 40, 42, 44
     .byte 48, 52, 54, 56, 60, 64, 66, 68, 72, 76, 78, 80, 84, 88, 90, 92, 96
-.balign 4, 0
+@ The 49-byte data table needs three literal zero bytes across assemblers.
+.byte 0, 0, 0
 .arm
