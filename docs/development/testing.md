@@ -1,5 +1,13 @@
 # Testing
 
+The eight `gba.save-programming-*` groups cover accepted operations, ready
+deadlines, polling, bus strobes, timer/DMA/IRQ chronology, clock wrap, STOP,
+reset, profile validation and complete save-file images through failures and
+replacement. An owned ARM driver also polls through the default byte-program
+interval from IWRAM and ROM. Synthetic operation durations separate scheduler correctness
+from chip calibration. Each group retains a ten-second deadline; see
+[save programming](../hardware/cartridge/programming.md).
+
 The six `arm.undefined-*` groups cover exception-entry clocks, caller banks
 and ARM/Thumb return, predicates, clock wrap and the internal-cycle timer/DMA
 interval. Each retains a ten-second deadline; see [undefined entry](../hardware/cpu/undefined-entry.md).

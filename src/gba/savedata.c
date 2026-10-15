@@ -23,15 +23,14 @@ void cupid_savedata_init(struct CupidSavedata* savedata) {
     savedata->readBitsRemaining = 0;
     savedata->readAddress = 0;
     savedata->writeAddress = 0;
-    savedata->settling = 0;
-    savedata->settling_active = false;
+    cupid_savedata_programming_init(savedata);
 }
 
 void cupid_savedata_reset(struct CupidSavedata* savedata) {
     savedata->command = FLASH_COMMAND_NONE;
     savedata->flashState = FLASH_STATE_RAW;
     savedata->readBitsRemaining = 0;
-    savedata->settling_active = false;
+    savedata->eepromWriteBits = 0;
     if (savedata->data && (savedata->type == SAVE_FLASH512 ||
                            savedata->type == SAVE_FLASH1M)) {
         savedata->flashBank = 0;
@@ -40,6 +39,7 @@ void cupid_savedata_reset(struct CupidSavedata* savedata) {
 }
 
 void cupid_savedata_deinit(struct CupidSavedata* savedata) {
+    cupid_savedata_cancel_programming(savedata);
     free(savedata->data);
     savedata->data = NULL;
     savedata->currentBank = NULL;
@@ -58,8 +58,10 @@ void cupid_savedata_force_type(struct CupidSavedata* savedata, enum CupidSaveTyp
         return;
     }
     if (savedata->type != SAVE_AUTODETECT) {
+        struct CupidTiming* timing = savedata->timing;
         cupid_savedata_deinit(savedata);
         cupid_savedata_init(savedata);
+        cupid_savedata_bind_timing(savedata, timing);
     }
     savedata->typeForced = type != SAVE_AUTODETECT;
     switch (type) {
@@ -174,13 +176,14 @@ static void _flashSwitchBank(struct CupidSavedata* savedata, int bank) {
 
 static void _flashErase(struct CupidSavedata* savedata) {
     size_t size = (savedata->type == SAVE_FLASH1M) ? GBA_SIZE_FLASH1M : GBA_SIZE_FLASH512;
-    savedata->dirty = true;
-    memset(savedata->data, 0xFF, size);
+    cupid_savedata_begin_programming(savedata, 0, (uint32_t)size, NULL,
+                                    savedata->flashChipEraseClocks);
 }
 
 static void _flashEraseSector(struct CupidSavedata* savedata, uint16_t sectorStart) {
-    savedata->dirty = true;
-    memset(&savedata->currentBank[sectorStart & ~0xFFFu], 0xFF, 0x1000);
+    uint32_t offset = (uint32_t)savedata->flashBank * 0x10000u + (sectorStart & ~0xFFFu);
+    cupid_savedata_begin_programming(savedata, offset, 0x1000, NULL,
+                                    savedata->flashSectorEraseClocks);
 }
 
 /**
@@ -188,6 +191,16 @@ static void _flashEraseSector(struct CupidSavedata* savedata, uint16_t sectorSta
  */
 
 uint8_t cupid_savedata_read_flash(struct CupidSavedata* savedata, uint16_t address) {
+    uint32_t offset = (uint32_t)savedata->flashBank * 0x10000u + address;
+    if (savedata->programming && offset >= savedata->programOffset &&
+        offset - savedata->programOffset < savedata->programLength) {
+        /* DQ7 complements the final data bit; DQ6 toggles on each read.
+         * The success-only model keeps the DQ5 error flag clear. */
+        uint8_t result = (savedata->erasing ? 0 : (savedata->programData[0] ^ 0x80)) & 0x80;
+        result |= savedata->pollToggle ? 0x40 : 0;
+        savedata->pollToggle = !savedata->pollToggle;
+        return result;
+    }
     if (savedata->command == FLASH_COMMAND_ID) {
         if (savedata->type == SAVE_FLASH512) {
             if (address < 2) {
@@ -207,12 +220,15 @@ uint8_t cupid_savedata_read_flash(struct CupidSavedata* savedata, uint16_t addre
  */
 
 void cupid_savedata_write_flash(struct CupidSavedata* savedata, uint16_t address, uint8_t value) {
+    /* Accepted self-timed operations own the chip until their ready edge. */
+    if (savedata->programming) return;
     switch (savedata->flashState) {
     case FLASH_STATE_RAW:
         switch (savedata->command) {
         case FLASH_COMMAND_PROGRAM:
-            savedata->dirty = true;
-            savedata->currentBank[address] = value;
+            cupid_savedata_begin_programming(savedata,
+                (uint32_t)savedata->flashBank * 0x10000u + address, 1, &value,
+                savedata->flashProgramClocks);
             savedata->command = FLASH_COMMAND_NONE;
             break;
         case FLASH_COMMAND_SWITCH_BANK:
@@ -308,6 +324,7 @@ static void _selectEepromCapacity(struct CupidSavedata* savedata, uint32_t remai
  */
 
 void cupid_savedata_write_eeprom(struct CupidSavedata* savedata, uint16_t value, uint32_t writeSize) {
+    if (savedata->programming) return;
     switch (savedata->command) {
     /** Read header, bit 0/1 of the 2-bit command prefix. */
     case EEPROM_COMMAND_NULL:
@@ -319,6 +336,8 @@ void cupid_savedata_write_eeprom(struct CupidSavedata* savedata, uint16_t value,
         _selectEepromCapacity(savedata, writeSize, savedata->command == EEPROM_COMMAND_WRITE);
         if (savedata->command == EEPROM_COMMAND_WRITE) {
             savedata->writeAddress = 0;
+            savedata->eepromWriteBits = 0;
+            memset(savedata->eepromData, 0, sizeof(savedata->eepromData));
         } else {
             savedata->readAddress = 0;
         }
@@ -334,14 +353,16 @@ void cupid_savedata_write_eeprom(struct CupidSavedata* savedata, uint16_t value,
              * the 8-KiB protocol still consumes all fourteen wire bits. */
             savedata->writeAddress &= (uint32_t)(savedata->size - 1) << 3;
         } else if (writeSize == 1) {
-            /** Stop bit, end of write. */
+            /* The stop bit accepts the complete block and starts programming. */
+            if (savedata->eepromWriteBits == 64) {
+                cupid_savedata_begin_programming(savedata, (savedata->writeAddress - 64) >> 3,
+                    8, savedata->eepromData, savedata->eepromProgramClocks);
+            }
             savedata->command = EEPROM_COMMAND_NULL;
-        } else if ((savedata->writeAddress >> 3) < savedata->size) {
-            uint8_t current = savedata->data[savedata->writeAddress >> 3];
-            current &= ~(1 << (0x7 - (savedata->writeAddress & 0x7)));
-            current |= (value & 0x1) << (0x7 - (savedata->writeAddress & 0x7));
-            savedata->dirty = true;
-            savedata->data[savedata->writeAddress >> 3] = current;
+        } else if (savedata->eepromWriteBits < 64 && (savedata->writeAddress >> 3) < savedata->size) {
+            savedata->eepromData[savedata->eepromWriteBits / 8] |=
+                (value & 1) << (7 - savedata->eepromWriteBits % 8);
+            savedata->eepromWriteBits++;
             ++savedata->writeAddress;
         }
         break;
@@ -372,6 +393,7 @@ void cupid_savedata_write_eeprom(struct CupidSavedata* savedata, uint16_t value,
  */
 
 uint16_t cupid_savedata_read_eeprom(struct CupidSavedata* savedata) {
+    if (savedata->programming) return 0;
     if (savedata->command != EEPROM_COMMAND_READ) {
         /** Not in read mode, return 1 (ready bit). */
         return 1;

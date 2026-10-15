@@ -98,6 +98,7 @@ struct CupidGBA {
     bool cpuBlocked;     /**< True while DMA owns the bus */
     bool earlyExit;      /**< Break out of the run loop (for sync) */
     bool stopped;        /**< System clock is frozen until an eligible external IRQ */
+    uint64_t intervalOvershoot; /**< Completed-step clocks charged to the next paced interval */
     bool haltIRQSample;  /**< IRQ line before the HALT acceptance clock */
     bool haltIRQSampleValid;
     uint32_t biosStall;  /**< Extra stall cycles added by BIOS reads */
@@ -131,6 +132,8 @@ void cupid_gba_skip_bios(struct CupidGBA* gba);
 void cupid_gba_halt(struct CupidGBA* gba);
 void cupid_gba_stop(struct CupidGBA* gba);
 void cupid_gba_wake_stop(struct CupidGBA* gba, enum CupidIRQ sources);
+uint64_t cupid_gba_advance_stopped_time(struct CupidGBA* gba, uint64_t clocks);
+void cupid_gba_run_interval(struct CupidGBA* gba, uint32_t clocks);
 
 /** Test and fire keypad IRQ based on KEYCNT (call after key state changes) */
 void cupid_gba_test_keypad_irq(struct CupidGBA* gba);

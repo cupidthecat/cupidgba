@@ -81,6 +81,7 @@ void cupid_gba_create(struct CupidGBA* gba) {
 
     /** Init timing scheduler and wire CPU cycle and next-event counters. */
     cupid_timing_init(&gba->timing, &gba->cpu.cycles, &gba->cpu.nextEvent);
+    cupid_savedata_bind_timing(&gba->memory.savedata, &gba->timing);
     cupid_serial_init(&gba->serial, gba);
 
 }
@@ -96,6 +97,9 @@ void cupid_gba_reset(struct CupidGBA* gba) {
     /** Ensure master pointer is valid. */
     gba->cpu.master = gba;
 
+    /* Accepted cartridge operations retain their remaining duration while
+     * the system scheduler is rebased by console reset. */
+    cupid_savedata_bind_timing(&gba->memory.savedata, NULL);
     /** Clear timing event queue first. */
     cupid_timing_clear(&gba->timing);
 
@@ -115,6 +119,7 @@ void cupid_gba_reset(struct CupidGBA* gba) {
     if (!gba->memory.fullBios) {
         cupid_gba_skip_bios(gba);
     }
+    cupid_savedata_bind_timing(&gba->memory.savedata, &gba->timing);
 }
 
 /**
@@ -152,6 +157,7 @@ static void _cupidGBAReset(struct CupidARM* cpu) {
     gba->idleDetectionFailures = 0;
     cpu->halted = 0;
     gba->stopped = false;
+    gba->intervalOvershoot = 0;
     gba->haltIRQSample = false;
     gba->haltIRQSampleValid = false;
     gba->keysLast = 0x0400;
@@ -235,6 +241,12 @@ void cupid_gba_wake_stop(struct CupidGBA* gba, enum CupidIRQ sources) {
     if (gba->stopped && (stop_sources(gba) & sources)) gba->stopped = false;
 }
 
+uint64_t cupid_gba_advance_stopped_time(struct CupidGBA* gba, uint64_t clocks) {
+    if (!gba->stopped) return 0;
+    cupid_savedata_advance_clock(&gba->memory.savedata, clocks);
+    return clocks;
+}
+
 /**
  * @brief Destroy a GBA instance.
  */
@@ -248,7 +260,8 @@ void cupid_gba_destroy(struct CupidGBA* gba) {
  * @brief Process events for subsystems not wired into timing.
  */
 void cupid_gba_process_events(struct CupidGBA* gba) {
-    (void)gba;
+    gba->cpu.nextEvent = gba->cpu.cycles;
+    gba->cpu.irqh.processEvents(&gba->cpu);
 }
 
 /**
@@ -331,6 +344,31 @@ void cupid_gba_run_frame(struct CupidGBA* gba) {
     }
 }
 
+void cupid_gba_run_interval(struct CupidGBA* gba, uint32_t clocks) {
+    gba->frameReady = false;
+    uint64_t remaining = clocks;
+    if (gba->intervalOvershoot >= remaining) {
+        gba->intervalOvershoot -= remaining;
+        return;
+    }
+    remaining -= gba->intervalOvershoot;
+    gba->intervalOvershoot = 0;
+    while (remaining) {
+        uint64_t elapsed;
+        if (gba->stopped) elapsed = cupid_gba_advance_stopped_time(gba, remaining);
+        else {
+            const uint64_t before = cupid_timing_global_time(&gba->timing);
+            cupid_gba_step(gba);
+            elapsed = cupid_timing_global_time(&gba->timing) - before;
+        }
+        if (elapsed >= remaining) {
+            gba->intervalOvershoot = elapsed - remaining;
+            break;
+        }
+        remaining -= elapsed;
+    }
+}
+
 /**
  * @brief IRQ handler callbacks wired into cpu->irqh.
  */
@@ -360,8 +398,6 @@ static void _cupidProcessEvents(struct CupidARM* cpu) {
     }
     gba->earlyExit = false;
 
-    /** Tick subsystems not yet wired into the timing scheduler. */
-    cupid_gba_process_events(gba);
 }
 
 /**

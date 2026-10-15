@@ -281,7 +281,7 @@ int main(int argc, char* argv[]) {
 
         /* The SDL callback consumes the same queue that emulation produces. */
         if (plat.audioDevice) SDL_LockAudioDevice(plat.audioDevice);
-        cupid_gba_run_frame(&gba);
+        cupid_gba_run_interval(&gba, VIDEO_TOTAL_LENGTH);
         if (plat.audioDevice) SDL_UnlockAudioDevice(plat.audioDevice);
 
         /** Present framebuffer. */

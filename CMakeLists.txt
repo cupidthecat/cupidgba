@@ -42,7 +42,8 @@ add_library(cupid_core STATIC
     src/core/timing.c
     src/gba/gba.c src/gba/memory.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
     src/gba/audio.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c
-    src/gba/hle-bios.c src/gba/bios/file.c src/gba/savedata.c src/gba/save/file.c src/gba/serial/serial.c
+    src/gba/hle-bios.c src/gba/bios/file.c src/gba/savedata.c src/gba/save/file.c
+    src/gba/save/programming.c src/gba/serial/serial.c
     src/gba/render/software.c src/gba/render/composite.c
     src/gba/render/mode0.c src/gba/render/mode2.c
     src/gba/render/mode3.c src/gba/render/mode4.c
@@ -142,6 +143,15 @@ if(BUILD_TESTING)
     endforeach()
     add_test(NAME gba.eeprom-persistence COMMAND test_eeprom persistence ${CMAKE_CURRENT_BINARY_DIR})
     set_tests_properties(gba.eeprom-persistence PROPERTIES TIMEOUT 10)
+
+    add_executable(test_save_programming tests/gba/save/test_programming.c)
+    target_link_libraries(test_save_programming PRIVATE cupid_core)
+    foreach(group eeprom flash chronology power cpu configuration guest)
+        add_test(NAME gba.save-programming-${group} COMMAND test_save_programming ${group})
+        set_tests_properties(gba.save-programming-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+    add_test(NAME gba.save-programming-persistence COMMAND test_save_programming persistence ${CMAKE_CURRENT_BINARY_DIR})
+    set_tests_properties(gba.save-programming-persistence PROPERTIES TIMEOUT 10)
 
     add_executable(test_audio tests/gba/test_audio.c)
     target_link_libraries(test_audio PRIVATE cupid_core)
