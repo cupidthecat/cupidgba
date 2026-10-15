@@ -66,6 +66,20 @@ The cartridges initialize their CPU modes and stacks because explicit guest
 entry skips BIOS boot. Neither that path nor the generated header qualifies
 the BIOS boot sequence.
 
+The local SDL2 completion observation also executes a complete external
+firmware boot. The unchanged owned guest reaches all 32 pairs at 84,747,281
+emulated clocks, or 5.0513 seconds. A five-second wall-clock observation that
+includes startup cannot contain that whole run at normal hardware pacing.
+Its original incomplete 11/32 result and five-second guard remain recorded.
+
+A separate completion observer uses an eight-second watchdog selected before
+execution and quits when the complete result appears. Both firmware selections
+finish all 32 pairs with live audio playback callbacks and safe controller
+shutdown. The external-image run takes 5.49 seconds on the recorded Windows
+host. Changing only the input X value makes all 32 comparisons fail, with
+playback and shutdown still working. These observations qualify the covered
+software path; physical conversion timing and complete gameplay remain open.
+
 The [hardware register description](https://www.akkit.org/info/gbatek.htm)
 describes a busy flag and clock setup, but does not establish a conversion
 duration for this model. Physical busy duration, PHI dependence, analog
