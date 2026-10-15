@@ -41,6 +41,13 @@ jobs:
             '-Wl,-Ttext=0x02018000,--image-base=0x02018000,--oformat=binary,-e,0' \
             tests/bios/music-callbacks.s -o .local-research/music-callbacks.bin
           python3 tests/bios/generate_music_callbacks.py .local-research/music-callbacks.bin
+      - name: Verify owned serial driver source
+        if: matrix.compiler == 'clang'
+        run: |
+          clang --target=arm-none-eabi -march=armv4t -fuse-ld=lld -nostdlib \
+            '-Wl,-Ttext=0x03000000,--image-base=0x03000000,--oformat=binary,-e,0' \
+            tests/gba/serial/joybus-driver.s -o .local-research/joybus-driver.bin
+          python3 tests/gba/serial/generate_joybus_driver.py .local-research/joybus-driver.bin
       - name: Fetch verified test inputs
         run: |
           python3 tests/roms/check_rom.py --fetch --directory .local-research/test-roms

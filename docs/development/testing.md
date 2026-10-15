@@ -8,6 +8,14 @@ Both checkout steps pin a verified Node.js 24 action revision. An OS release
 upgrade needs the same complete test, firmware regeneration, Make and live
 ThreadSanitizer qualification as the current workflow.
 
+The eight `gba.joybus-*` groups check complete command/reply data, 1,024 payload
+patterns, 10,740 rejected frames, decoded register accesses, IRQ/HALT, DMA/timer
+chronology and lifecycle. The owned ARM/Thumb guest completes 256 receive/send
+rounds and two failing-input controls per BIOS path; `CUPID_TEST_BIOS` adds the
+external-image run. All retain ten-second deadlines. Hosted Clang also rebuilds
+the owned assembly fixture. See [JOY commands](../hardware/serial/joybus.md)
+for the peer synchronization contract and unmeasured electrical behavior.
+
 The sixteen `gba.bios-hard-reset-*` native groups require 1,512 observations of
 reset-prefix state, complete built-in startup, timer/DMA/IRQ chronology,
 repeated reboots, temporary startup IRQs and ARM/Thumb POSTFLG byte strobes. `CUPID_TEST_BIOS` adds 352
