@@ -10,6 +10,13 @@ pause/preemption runs remain failing and registered. The independent
 `CUPID_BUS_PAGE_PROBE_ROM` passes all eighteen original CPU/DMA rows on each
 BIOS path. See [DMA timing](../hardware/dma.md) for qualification limits.
 
+The complete locally configured profile reports 463 passes and 11 failures out
+of 474 on Windows GCC and Linux Clang 18 Debug with address/undefined-behavior
+sanitizers. It retains all 454 preceding checks and adds two native groups and
+eighteen original DMA runs. The eleven failures are the seven built-in DMA
+cases above plus the Thumb-to-ARM and binary-only legacy prefetch cartridges
+on both BIOS paths. All remain enabled with their original inputs and guards.
+
 The sixteen `gba.bios-hard-reset-*` native groups require 1,512 observations of
 reset-prefix state, complete built-in startup, timer/DMA/IRQ chronology,
 repeated reboots, temporary startup IRQs and ARM/Thumb POSTFLG byte strobes. `CUPID_TEST_BIOS` adds 352
