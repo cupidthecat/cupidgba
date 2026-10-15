@@ -230,6 +230,9 @@ void cupid_arm_raise_swi(struct CupidARM* cpu) {
 }
 
 void cupid_arm_raise_undefined(struct CupidARM* cpu) {
+	/* The trap's internal interval precedes the vector's N/S fetches. */
+	cpu->cycles += cpu->memory.stall ? cpu->memory.stall(cpu, 1) : 1;
+	if (cpu->memory.timed && cpu->memory.finish) cpu->memory.finish(cpu);
 	union CupidPSR cpsr = cpu->cpsr;
 	int instructionWidth;
 	if (cpu->executionMode == MODE_THUMB) {
