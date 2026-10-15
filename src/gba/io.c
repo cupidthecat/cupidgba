@@ -425,6 +425,13 @@ void cupid_io_write8(struct CupidGBA* gba, uint32_t addr, uint8_t value) {
         return;
     }
 
+    /* POSTFLG owns only its byte. Repeated boot writes cannot strobe HALTCNT. */
+    if (addr == REG_POSTFLG) {
+        if (gba->memory.activeRegion == GBA_REGION_BIOS)
+            gba->memory.io[REG_POSTFLG >> 1] |= value & 1;
+        return;
+    }
+
     /** HALTCNT is at odd byte 0x301; entering halt or stop. */
     if (addr == (REG_HALTCNT & 0x3FF)) {
         if (gba->memory.activeRegion != GBA_REGION_BIOS) return;

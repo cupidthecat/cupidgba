@@ -3,11 +3,11 @@
 .arm
 .balign 4, 0
 SoftReset:
-    mov r5, #0x04000000
-    ldrb r2, [r5, #-6]
+    mov r4, #0x04000000
+    ldrb r2, [r4, #-6]
     bl softResetBanks
     cmp r2, #0
-    ldmdb r5, {r0-r12}
+    ldmdb r4, {r0-r12}
     movne lr, #0x02000000
     moveq lr, #0x08000000
     mov r0, #0x1F
@@ -39,7 +39,7 @@ softResetClear:
     movs r0, #0
     ldr r1, =-0x200
 softResetWord:
-    str r0, [r5, r1]
+    str r0, [r4, r1]
     adds r1, #4
     blt softResetWord
     bx lr

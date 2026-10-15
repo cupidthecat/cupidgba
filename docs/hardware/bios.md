@@ -14,6 +14,12 @@ its work area, resets the visible registers and stacks, and refills the ARM
 pipeline at the selected entry address. See [soft reset](bios-soft-reset.md)
 for caller state, interrupt preconditions, DMA checks and qualification limits.
 
+HardReset executes a non-returning warm reboot through timed bank/work and
+device resets. The built-in firmware retains fast startup; an external BIOS
+runs its own complete startup program. POSTFLG byte writes retain their own
+register without entering the neighboring power control. See
+[HardReset](bios/hard-reset.md) for startup boundaries, clocks and checks.
+
 RegisterRamReset executes timed Thumb firmware for its selected memory and
 device reset groups. Its block fills, register writes and shared transfer
 routine allow timers, IRQs and DMA to run during the call. See
