@@ -84,6 +84,13 @@ if(BUILD_TESTING)
         set_tests_properties(arm.reset-entry-${group} PROPERTIES TIMEOUT 10)
     endforeach()
 
+    add_executable(test_cp14 tests/arm/test_cp14.c)
+    target_link_libraries(test_cp14 PRIVATE cupid_core)
+    foreach(group read write flags conditions undefined pipeline)
+        add_test(NAME arm.cp14-${group} COMMAND test_cp14 ${group})
+        set_tests_properties(arm.cp14-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
     add_executable(test_io tests/gba/test_io.c)
     target_link_libraries(test_io PRIVATE cupid_core)
     add_test(NAME gba.io COMMAND test_io)
