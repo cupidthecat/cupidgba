@@ -87,3 +87,10 @@ starts erase before its preceding byte program becomes ready; its initial
 polling loop does not finish with this profile. These inputs are not
 hardware-calibrated tests. Their original programs and comparisons remain
 unchanged, and their results do not establish measured chip timing.
+
+`CUPID_EEPROM_PROBE_ROM` enables the EEPROM software test when a local original
+input is available. The observer requires its checksum, terminal loop, display
+mode and every pixel in the complete passing result rows. It retains a fixed
+1,200-frame, 150-million-step and 90-second process budget for this separate
+corpus. The input is not downloaded or distributed by CupidGBA. An external
+BIOS adds the same complete check through the firmware boot path.

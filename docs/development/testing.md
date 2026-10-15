@@ -1,5 +1,13 @@
 # Testing
 
+`CUPID_EEPROM_PROBE_ROM` adds a checksum-verified local EEPROM software corpus.
+Its ready-polling and 1,023-block stress loop must reach the original terminal
+and complete passing result pixels. `CUPID_TEST_BIOS` adds the same check after
+firmware boot. The observer uses a fixed 1,200-frame, 150-million-step and
+90-second process budget; CTest retains a 100-second deadline. This separately
+qualified software input is not distributed and does not calibrate chip
+timings. See [save programming](../hardware/cartridge/programming.md).
+
 The eight `gba.save-programming-*` groups cover accepted operations, ready
 deadlines, polling, bus strobes, timer/DMA/IRQ chronology, clock wrap, STOP,
 reset, profile validation and complete save-file images through failures and

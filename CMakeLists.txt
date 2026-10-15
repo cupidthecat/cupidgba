@@ -17,6 +17,7 @@ set(CUPID_SERIAL_SUITE_ROM "" CACHE FILEPATH "Locally built serial timing and re
 set(CUPID_SERIAL_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified serial cartridge probes")
 set(CUPID_HALT_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified firmware HALT probes")
 set(CUPID_AUDIO_TEST_ROM "" CACHE FILEPATH "Locally built audio signal cartridge ROM")
+set(CUPID_EEPROM_PROBE_ROM "" CACHE FILEPATH "Checksum-verified local EEPROM polling software probe")
 set(CUPID_TEST_BIOS "" CACHE FILEPATH "External BIOS for local hardware suite checks")
 
 add_library(cupid_build_options INTERFACE)
@@ -394,6 +395,21 @@ if(BUILD_TESTING)
                 set_tests_properties(rom.ppu-${case}-external PROPERTIES TIMEOUT 130)
             endif()
         endforeach()
+    endif()
+
+    if(CUPID_EEPROM_PROBE_ROM)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        add_test(NAME rom.eeprom-polling COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_eeprom_probe.py
+            --rom ${CUPID_EEPROM_PROBE_ROM} --runner $<TARGET_FILE:cupidgba-headless>)
+        set_tests_properties(rom.eeprom-polling PROPERTIES TIMEOUT 100)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME rom.eeprom-polling-external COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_eeprom_probe.py
+                --rom ${CUPID_EEPROM_PROBE_ROM} --runner $<TARGET_FILE:cupidgba-headless>
+                --bios ${CUPID_TEST_BIOS})
+            set_tests_properties(rom.eeprom-polling-external PROPERTIES TIMEOUT 100)
+        endif()
     endif()
 
     if(CUPID_BUS_SUITE_ROM)
