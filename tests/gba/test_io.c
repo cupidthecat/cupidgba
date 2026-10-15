@@ -120,10 +120,27 @@ static void zero_holes_and_fifo_reset_strobes(void) {
     destroy(gba);
 }
 
+static void post_flag_byte_writes_do_not_enter_power_states(void) {
+    struct CupidGBA* gba = fresh();
+    static const unsigned origins[] = {GBA_REGION_BIOS, GBA_REGION_IWRAM, GBA_REGION_ROM0};
+    for (unsigned origin = 0; origin < sizeof(origins) / sizeof(origins[0]); origin++) {
+        for (unsigned old = 0; old < 2; old++) for (unsigned value = 0; value < 256; value++) {
+            gba->memory.activeRegion = (int)origins[origin];
+            gba->memory.io[REG_POSTFLG >> 1] = (uint16_t)old;
+            cupid_memory_store8(&gba->cpu, GBA_BASE_IO + REG_POSTFLG, (int8_t)value, NULL);
+            unsigned expected = origins[origin] == GBA_REGION_BIOS ? old | (value & 1) : old;
+            CHECK(cupid_memory_load8(&gba->cpu, GBA_BASE_IO + REG_POSTFLG, NULL) == expected);
+            CHECK(!gba->cpu.halted && !gba->stopped);
+        }
+    }
+    destroy(gba);
+}
+
 int main(void) {
     RUN(reserved_bits_do_not_enter_register_state);
     RUN(cpu_loads_write_only_and_unmapped_io);
     RUN(open_bus_lanes_and_dma_latch);
     RUN(zero_holes_and_fifo_reset_strobes);
+    RUN(post_flag_byte_writes_do_not_enter_power_states);
     return 0;
 }

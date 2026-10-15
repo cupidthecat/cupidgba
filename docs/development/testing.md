@@ -16,6 +16,15 @@ interval from IWRAM and ROM. Synthetic operation durations separate scheduler co
 from chip calibration. Each group retains a ten-second deadline; see
 [save programming](../hardware/cartridge/programming.md).
 
+The sixteen `gba.bios-hard-reset-*` native groups require 1,512 observations of
+reset-prefix state, complete built-in startup, timer/DMA/IRQ chronology,
+repeated reboots, temporary startup IRQs and ARM/Thumb POSTFLG byte strobes. `CUPID_TEST_BIOS` adds 352
+paired prefix/chronology observations. Each group retains a ten-second
+deadline. The existing MMIO group adds all byte patterns and both initial
+POSTFLG states for BIOS/RAM/ROM origins. See
+[HardReset](../hardware/bios/hard-reset.md) for complete counts and startup
+qualification limits.
+
 The six `arm.undefined-*` groups cover exception-entry clocks, caller banks
 and ARM/Thumb return, predicates, clock wrap and the internal-cycle timer/DMA
 interval. Each retains a ten-second deadline; see [undefined entry](../hardware/cpu/undefined-entry.md).
