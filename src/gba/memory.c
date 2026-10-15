@@ -697,6 +697,13 @@ uint32_t cupid_memory_load8(struct CupidARM* cpu, uint32_t address, int* cycleCo
     case GBA_REGION_SRAM:
     case GBA_REGION_SRAM_MIRROR:
         wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
+        {
+            uint8_t sample;
+            if (cupid_cartridge_tilt_read(gba, address, &sample)) {
+                value = sample;
+                break;
+            }
+        }
         if (memory->savedata.type == SAVE_AUTODETECT) {
             cupid_savedata_init_sram(&memory->savedata);
         }
@@ -937,6 +944,8 @@ void cupid_memory_store8(struct CupidARM* cpu, uint32_t address, int8_t value, i
         break;
     case GBA_REGION_SRAM:
     case GBA_REGION_SRAM_MIRROR:
+        wait = memory->waitstatesNonseq16[GBA_REGION_SRAM];
+        if (cupid_cartridge_tilt_write(gba, address, (uint8_t)value)) break;
         if (memory->savedata.type == SAVE_AUTODETECT) {
             if ((address & 0xFFFF) == FLASH_BASE_HI && (uint8_t)value == FLASH_COMMAND_START) {
                 memory->savedata.type = SAVE_FLASH512;
@@ -958,7 +967,6 @@ void cupid_memory_store8(struct CupidARM* cpu, uint32_t address, int8_t value, i
                 memory->savedata.dirty = true;
             }
         }
-        wait = memory->waitstatesNonseq16[GBA_REGION_SRAM];
         break;
     default:
         break;

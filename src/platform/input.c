@@ -118,6 +118,20 @@ bool cupid_platform_poll_events(struct CupidPlatform* plat, struct CupidGBA* gba
                 plat->running = false;
                 return false;
             }
+            if (gba->cartridge.tiltPresent) {
+                int x = gba->cartridge.tilt.inputX, y = gba->cartridge.tilt.inputY;
+                switch (event.key.keysym.scancode) {
+                case SDL_SCANCODE_F1: x -= 32; break;
+                case SDL_SCANCODE_F2: x += 32; break;
+                case SDL_SCANCODE_F3: y -= 32; break;
+                case SDL_SCANCODE_F4: y += 32; break;
+                case SDL_SCANCODE_F10: x = y = CUPID_TILT_NEUTRAL; break;
+                default: break;
+                }
+                cupid_cartridge_set_tilt_sample(gba,
+                    (uint16_t)(x < 0 ? 0 : x > 4095 ? 4095 : x),
+                    (uint16_t)(y < 0 ? 0 : y > 4095 ? 4095 : y));
+            }
             if (gba->cartridge.solarPresent &&
                 (event.key.keysym.scancode == SDL_SCANCODE_F5 || event.key.keysym.scancode == SDL_SCANCODE_F6)) {
                 int level = 255 - gba->cartridge.solar.threshold;

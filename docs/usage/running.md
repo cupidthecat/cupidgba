@@ -36,6 +36,11 @@ sets its raw converter input, defaulting to nominal neutral 1728. F7 lowers
 input, F8 raises it and F9 restores that nominal value. This is manual input;
 see [gyroscope behavior and limits](../hardware/cartridge/gyroscope.md).
 
+`--tilt auto|on|off` selects the X/Y sensor. `--tilt-x 0..4095` and
+`--tilt-y 0..4095` set raw converter inputs, each defaulting to 928. F1/F2
+lower/raise X, F3/F4 lower/raise Y and F10 restores both nominal values.
+See [tilt snapshots and timing limits](../hardware/cartridge/tilt.md).
+
 Keyboard controls are Z for A, X for B, Enter for Start, Backspace for Select,
 the arrow keys for the D-pad, A for L, S for R, and Escape to quit. SDL2
 controllers use A/B, Back, Start, the D-pad, and the shoulder buttons. The left

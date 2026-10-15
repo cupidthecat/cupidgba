@@ -22,7 +22,7 @@ bool cupid_platform_solar_level(const char* text, uint8_t* level) {
     return true;
 }
 
-bool cupid_platform_gyro_sample(const char* text, uint16_t* sample) {
+bool cupid_platform_sample12(const char* text, uint16_t* sample) {
     if (!*text) return false;
     unsigned value = 0;
     for (const char* c = text; *c; c++) {
@@ -34,11 +34,17 @@ bool cupid_platform_gyro_sample(const char* text, uint16_t* sample) {
     return true;
 }
 
+bool cupid_platform_gyro_sample(const char* text, uint16_t* sample) {
+    return cupid_platform_sample12(text, sample);
+}
+
 void cupid_platform_peripherals_configure(struct CupidGBA* gba,
     const struct CupidPlatformPeripherals* config) {
     if (config->solarPresence >= 0) cupid_cartridge_enable_solar(gba, config->solarPresence != 0);
     if (config->rumblePresence >= 0) cupid_cartridge_enable_rumble(gba, config->rumblePresence != 0);
     if (config->gyroPresence >= 0) cupid_cartridge_enable_gyro(gba, config->gyroPresence != 0);
+    if (config->tiltPresence >= 0) cupid_cartridge_enable_tilt(gba, config->tiltPresence != 0);
     cupid_cartridge_set_solar_level(gba, config->solarLevel);
     cupid_cartridge_set_gyro_sample(gba, config->gyroSample);
+    cupid_cartridge_set_tilt_sample(gba, config->tiltX, config->tiltY);
 }

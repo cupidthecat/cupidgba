@@ -24,20 +24,26 @@ static void configuration_and_strict_input_parsing(void) {
     CHECK(gba);
     cupid_gba_create(gba);
     cupid_cartridge_enable_rtc(gba, true);
-    const struct CupidPlatformPeripherals config = {1, 1, 73, 1, 0xABC};
+    const struct CupidPlatformPeripherals config = {1, 1, 73, 1, 0xABC, 1, 0x123, 0xDEF};
     cupid_platform_peripherals_configure(gba, &config);
     cupid_gba_reset(gba);
     CHECK(gba->cartridge.solarPresent && gba->cartridge.rumblePresent && gba->cartridge.rtcPresent);
     CHECK(gba->cartridge.solar.threshold == 182);
     CHECK(gba->cartridge.gyroPresent && gba->cartridge.gyro.sample == 0xABC);
-    const struct CupidPlatformPeripherals automatic = {-1, -1, 255, -1, CUPID_GYRO_NEUTRAL};
+    CHECK(gba->cartridge.tiltPresent && gba->cartridge.tilt.inputX == 0x123 &&
+        gba->cartridge.tilt.inputY == 0xDEF);
+    const struct CupidPlatformPeripherals automatic = {-1, -1, 255, -1, CUPID_GYRO_NEUTRAL,
+        -1, CUPID_TILT_NEUTRAL, CUPID_TILT_NEUTRAL};
     cupid_platform_peripherals_configure(gba, &automatic);
     CHECK(gba->cartridge.solarPresent && gba->cartridge.rumblePresent && !gba->cartridge.solar.threshold);
     CHECK(gba->cartridge.gyroPresent && gba->cartridge.gyro.sample == CUPID_GYRO_NEUTRAL);
-    const struct CupidPlatformPeripherals disabled = {0, 0, 0, 0, 0};
+    CHECK(gba->cartridge.tiltPresent && gba->cartridge.tilt.inputX == CUPID_TILT_NEUTRAL &&
+        gba->cartridge.tilt.inputY == CUPID_TILT_NEUTRAL);
+    const struct CupidPlatformPeripherals disabled = {0, 0, 0, 0, 0, 0, 0, 0};
     cupid_platform_peripherals_configure(gba, &disabled);
     CHECK(!gba->cartridge.solarPresent && !gba->cartridge.rumblePresent && gba->cartridge.rtcPresent);
     CHECK(!gba->cartridge.gyroPresent && !gba->cartridge.gyro.sample);
+    CHECK(!gba->cartridge.tiltPresent && !gba->cartridge.tilt.inputX && !gba->cartridge.tilt.inputY);
     cupid_gba_destroy(gba);
     free(gba);
 }
@@ -85,6 +91,45 @@ static void gyro_input_parsing_and_live_controls(void) {
     cupid_cartridge_enable_gyro(gba, false);
     CHECK(SDL_PushEvent(&key) == 1 && cupid_platform_poll_events(&plat, gba));
     CHECK(gba->cartridge.gyro.sample == CUPID_GYRO_NEUTRAL + 128);
+    cupid_gba_destroy(gba);
+    free(gba);
+    SDL_Quit();
+}
+
+static void tilt_live_controls_preserve_the_snapshot_and_other_axis(void) {
+    CHECK(SDL_Init(SDL_INIT_EVENTS) == 0);
+    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+    CHECK(gba);
+    cupid_gba_create(gba);
+    struct CupidPlatform plat = {.controllerIndex = -1, .running = true, .keyboardKeys = 1};
+    SDL_Event key = {0};
+    key.type = SDL_KEYDOWN;
+    key.key.keysym.scancode = SDL_SCANCODE_F1;
+    CHECK(SDL_PushEvent(&key) == 1 && cupid_platform_poll_events(&plat, gba));
+    CHECK(gba->cartridge.tilt.inputX == CUPID_TILT_NEUTRAL);
+    cupid_cartridge_enable_tilt(gba, true);
+    CHECK(cupid_cartridge_set_tilt_sample(gba, 10, 4090));
+    CHECK(SDL_PushEvent(&key) == 1 && cupid_platform_poll_events(&plat, gba));
+    CHECK(!gba->cartridge.tilt.inputX && gba->cartridge.tilt.inputY == 4090);
+    key.key.keysym.scancode = SDL_SCANCODE_F4;
+    CHECK(SDL_PushEvent(&key) == 1 && cupid_platform_poll_events(&plat, gba));
+    CHECK(!gba->cartridge.tilt.inputX && gba->cartridge.tilt.inputY == 4095);
+    key.key.keysym.scancode = SDL_SCANCODE_F2;
+    CHECK(SDL_PushEvent(&key) == 1 && cupid_platform_poll_events(&plat, gba));
+    CHECK(gba->cartridge.tilt.inputX == 32 && gba->cartridge.tilt.inputY == 4095);
+    key.key.keysym.scancode = SDL_SCANCODE_F3;
+    CHECK(SDL_PushEvent(&key) == 1 && cupid_platform_poll_events(&plat, gba));
+    CHECK(gba->cartridge.tilt.inputX == 32 && gba->cartridge.tilt.inputY == 4063);
+    CHECK(gba->cartridge.tilt.x == 4095 && gba->cartridge.tilt.y == 4095 && gba->keysActive == 1);
+    key.key.keysym.scancode = SDL_SCANCODE_F10;
+    CHECK(SDL_PushEvent(&key) == 1 && cupid_platform_poll_events(&plat, gba));
+    CHECK(gba->cartridge.tilt.inputX == CUPID_TILT_NEUTRAL &&
+        gba->cartridge.tilt.inputY == CUPID_TILT_NEUTRAL);
+    CHECK(gba->cartridge.tilt.x == 4095 && gba->cartridge.tilt.y == 4095);
+    cupid_cartridge_enable_tilt(gba, false);
+    key.key.keysym.scancode = SDL_SCANCODE_F1;
+    CHECK(SDL_PushEvent(&key) == 1 && cupid_platform_poll_events(&plat, gba));
+    CHECK(gba->cartridge.tilt.inputX == CUPID_TILT_NEUTRAL);
     cupid_gba_destroy(gba);
     free(gba);
     SDL_Quit();
@@ -250,6 +295,7 @@ static void an_existing_controller_inherits_active_motor_output(void) {
 int main(void) {
     RUN(configuration_and_strict_input_parsing);
     RUN(gyro_input_parsing_and_live_controls);
+    RUN(tilt_live_controls_preserve_the_snapshot_and_other_axis);
     RUN(virtual_controller_output_hotplug_expiry_and_shutdown);
     RUN(an_existing_controller_inherits_active_motor_output);
     return 0;

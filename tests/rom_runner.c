@@ -67,14 +67,18 @@ int main(int argc, char** argv) {
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--bios") && i + 1 < argc) bios = argv[++i];
         else if ((!strcmp(argv[i], "--solar") || !strcmp(argv[i], "--rumble") ||
-                  !strcmp(argv[i], "--gyro")) && i + 1 < argc) {
+                  !strcmp(argv[i], "--gyro") || !strcmp(argv[i], "--tilt")) && i + 1 < argc) {
             int* presence = !strcmp(argv[i], "--solar") ? &peripherals.solarPresence :
-                !strcmp(argv[i], "--rumble") ? &peripherals.rumblePresence : &peripherals.gyroPresence;
+                !strcmp(argv[i], "--rumble") ? &peripherals.rumblePresence :
+                !strcmp(argv[i], "--gyro") ? &peripherals.gyroPresence : &peripherals.tiltPresence;
             if (!cupid_platform_peripheral_mode(argv[++i], presence)) return 2;
         } else if (!strcmp(argv[i], "--sunlight") && i + 1 < argc) {
             if (!cupid_platform_solar_level(argv[++i], &peripherals.solarLevel)) return 2;
         } else if (!strcmp(argv[i], "--gyro-sample") && i + 1 < argc) {
             if (!cupid_platform_gyro_sample(argv[++i], &peripherals.gyroSample)) return 2;
+        } else if ((!strcmp(argv[i], "--tilt-x") || !strcmp(argv[i], "--tilt-y")) && i + 1 < argc) {
+            uint16_t* axis = !strcmp(argv[i], "--tilt-x") ? &peripherals.tiltX : &peripherals.tiltY;
+            if (!cupid_platform_sample12(argv[++i], axis)) return 2;
         }
         else if (!strcmp(argv[i], "--screenshot") && i + 1 < argc) output = argv[++i];
         else if (!strcmp(argv[i], "--dump-vram") && i + 1 < argc) vramOutput = argv[++i];
@@ -106,7 +110,7 @@ int main(int argc, char** argv) {
             expectedRegister = (int)index;
         } else if (argv[i][0] != '-' && !rom) rom = argv[i];
         else {
-            fprintf(stderr, "Usage: %s ROM [--bios FILE] [--frames N] [--steps N] [--key-event FRAME MASK] [--screenshot FILE.ppm] [--dump-vram FILE] [--dump-io FILE] [--dump-ewram FILE] [--dump-audio FILE] [--dump-rumble FILE] [--solar auto|on|off] [--sunlight 0..255] [--rumble auto|on|off] [--gyro auto|on|off] [--gyro-sample 0..4095] [--start-address ADDRESS] [--expect-loop-register N] [--terminal-address ADDRESS]\n", argv[0]);
+            fprintf(stderr, "Usage: %s ROM [--bios FILE] [--frames N] [--steps N] [--key-event FRAME MASK] [--screenshot FILE.ppm] [--dump-vram FILE] [--dump-io FILE] [--dump-ewram FILE] [--dump-audio FILE] [--dump-rumble FILE] [--solar auto|on|off] [--sunlight 0..255] [--rumble auto|on|off] [--gyro auto|on|off] [--gyro-sample 0..4095] [--tilt auto|on|off] [--tilt-x 0..4095] [--tilt-y 0..4095] [--start-address ADDRESS] [--expect-loop-register N] [--terminal-address ADDRESS]\n", argv[0]);
             return 2;
         }
     }

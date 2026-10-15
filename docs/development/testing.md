@@ -487,3 +487,13 @@ Passing these checks establishes the listed cases. They do not cover every CPU
 encoding, every bus or arbitration edge, every timer/IRQ interaction, raster
 effects, audio fidelity, cartridge peripherals, save persistence, or link
 behavior. Those require further regressions and hardware-backed evidence.
+
+`gba.tilt` checks complete X/Y samples, command and input ownership, ARM/Thumb
+access widths, save isolation, EEPROM transfers, board metadata and command
+strobe timing across scheduler wrap. `rom.cartridge-tilt` requires eight
+generated drivers to finish all 32 paired observations each, plus disabled
+device and invalid input controls. `CUPID_TEST_BIOS` adds
+`rom.cartridge-tilt-external`. These use explicit guest entry and initialize
+CPU modes and stacks before invoking firmware; they do not qualify BIOS boot.
+Platform checks exercise manual tilt input. See the
+[sensor model and unqualified timing](../hardware/cartridge/tilt.md).

@@ -85,6 +85,7 @@ void cupid_cartridge_init(struct CupidGBA* gba) {
     cupid_rtc_init(&gba->cartridge.rtc, cupid_timing_global_time(&gba->timing));
     cupid_solar_init(&gba->cartridge.solar);
     cupid_gyro_init(&gba->cartridge.gyro);
+    cupid_tilt_init(&gba->cartridge.tilt);
     gba->cartridge.prefetchEvent = (struct CupidTimingEvent){.context = gba,
         .callback = prefetch_sample, .name = "Cartridge prefetch sample", .priority = 0x70};
     gba->cartridge.rtcInterruptEvent = (struct CupidTimingEvent){.context = gba,
@@ -122,6 +123,29 @@ bool cupid_cartridge_set_gyro_sample(struct CupidGBA* gba, uint16_t sample) {
     return cupid_gyro_set_sample(&gba->cartridge.gyro, sample);
 }
 
+void cupid_cartridge_enable_tilt(struct CupidGBA* gba, bool enabled) {
+    gba->cartridge.tiltPresent = enabled;
+    cupid_tilt_reset(&gba->cartridge.tilt);
+}
+
+bool cupid_cartridge_set_tilt_sample(struct CupidGBA* gba, uint16_t x, uint16_t y) {
+    return cupid_tilt_set_sample(&gba->cartridge.tilt, x, y);
+}
+
+static bool tilt_address(const struct CupidGBA* gba, uint32_t address) {
+    const unsigned region = address >> GBA_BASE_OFFSET;
+    return gba->cartridge.tiltPresent && gba->memory.rom &&
+        (region == GBA_REGION_SRAM || region == GBA_REGION_SRAM_MIRROR);
+}
+
+bool cupid_cartridge_tilt_read(struct CupidGBA* gba, uint32_t address, uint8_t* value) {
+    return tilt_address(gba, address) && cupid_tilt_read(&gba->cartridge.tilt, address, value);
+}
+
+bool cupid_cartridge_tilt_write(struct CupidGBA* gba, uint32_t address, uint8_t value) {
+    return tilt_address(gba, address) && cupid_tilt_write(&gba->cartridge.tilt, address, value);
+}
+
 void cupid_cartridge_enable_rumble(struct CupidGBA* gba, bool enabled) {
     gba->cartridge.rumblePresent = enabled;
     if (!enabled) rumble_output(gba, false);
@@ -150,34 +174,39 @@ void cupid_cartridge_attach(struct CupidGBA* gba, const uint8_t* rom, size_t siz
     void* rumbleContext = gba->cartridge.rumbleContext;
     const uint8_t solarLevel = (uint8_t)(255 - gba->cartridge.solar.threshold);
     const uint16_t gyroSample = gba->cartridge.gyro.sample;
+    const uint16_t tiltX = gba->cartridge.tilt.inputX, tiltY = gba->cartridge.tilt.inputY;
     cupid_cartridge_init(gba);
     gba->cartridge.rumbleChanged = rumbleChanged;
     gba->cartridge.rumbleContext = rumbleContext;
     cupid_solar_set_level(&gba->cartridge.solar, solarLevel);
     cupid_gyro_set_sample(&gba->cartridge.gyro, gyroSample);
+    cupid_tilt_set_sample(&gba->cartridge.tilt, tiltX, tiltY);
     gba->cartridge.identity = UINT64_C(14695981039346656037);
     for (size_t i = 0; i < size; i++) {
         gba->cartridge.identity ^= rom[i];
         gba->cartridge.identity *= UINT64_C(1099511628211);
     }
     if (size >= 0xB0) {
-        static const char solarBoards[][5] = {
-            "U3IJ", "U3IE", "U3IP", "U32J", "U32E", "U32P", "U33J"
+        enum { RTC = 1, SOLAR = 2, RUMBLE = 4, GYRO = 8, TILT = 16 };
+        static const struct { char code[5]; uint8_t devices; } boards[] = {
+            {"U3IJ", RTC | SOLAR}, {"U3IE", RTC | SOLAR}, {"U3IP", RTC | SOLAR},
+            {"U32J", RTC | SOLAR}, {"U32E", RTC | SOLAR}, {"U32P", RTC | SOLAR},
+            {"U33J", RTC | SOLAR},
+            {"V49J", RUMBLE}, {"V49E", RUMBLE}, {"V49P", RUMBLE}, {"2GBP", RUMBLE},
+            {"RZWJ", RUMBLE | GYRO}, {"RZWE", RUMBLE | GYRO}, {"RZWP", RUMBLE | GYRO},
+            {"KHPJ", TILT}, {"KYGJ", TILT}, {"KYGE", TILT}, {"KYGP", TILT}
         };
-        static const char rumbleBoards[][5] = {
-            "V49J", "V49E", "V49P", "2GBP", "RZWJ", "RZWE", "RZWP"
-        };
-        for (size_t i = 0; i < sizeof(solarBoards) / sizeof(solarBoards[0]); i++) {
-            if (!memcmp(rom + 0xAC, solarBoards[i], 4)) {
-                gba->cartridge.solarPresent = true;
-                detected = true;
-            }
+        for (size_t i = 0; i < sizeof(boards) / sizeof(boards[0]); i++) {
+            if (memcmp(rom + 0xAC, boards[i].code, 4)) continue;
+            /* Physical board selection overrides an unused RTC library marker.
+             * Explicit caller configuration can still select other devices. */
+            detected = (boards[i].devices & RTC) != 0;
+            gba->cartridge.solarPresent = (boards[i].devices & SOLAR) != 0;
+            gba->cartridge.rumblePresent = (boards[i].devices & RUMBLE) != 0;
+            gba->cartridge.gyroPresent = (boards[i].devices & GYRO) != 0;
+            gba->cartridge.tiltPresent = (boards[i].devices & TILT) != 0;
+            break;
         }
-        for (size_t i = 0; i < sizeof(rumbleBoards) / sizeof(rumbleBoards[0]); i++) {
-            if (!memcmp(rom + 0xAC, rumbleBoards[i], 4)) gba->cartridge.rumblePresent = true;
-        }
-        gba->cartridge.gyroPresent = !memcmp(rom + 0xAC, "RZWJ", 4) ||
-            !memcmp(rom + 0xAC, "RZWE", 4) || !memcmp(rom + 0xAC, "RZWP", 4);
     }
     cupid_cartridge_enable_rtc(gba, detected);
 }
@@ -192,6 +221,7 @@ void cupid_cartridge_reset_bus(struct CupidGBA* gba) {
     cupid_rtc_reset_bus(&gba->cartridge.rtc);
     cupid_solar_reset_bus(&gba->cartridge.solar);
     cupid_gyro_reset_bus(&gba->cartridge.gyro);
+    cupid_tilt_reset(&gba->cartridge.tilt);
     cupid_cartridge_rtc_reschedule(gba);
 }
 

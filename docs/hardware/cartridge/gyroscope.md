@@ -56,6 +56,7 @@ BIOS boot.
 
 Analog calibration, conversion latency, propagation, held-start electrical
 behavior and clocks faster than the documented driver remain unqualified.
-The model adds no speculative wire delay. It does not model the separate
-memory-mapped X/Y tilt sensor. Delivery is tracked in #74; full cartridge
+The model adds no speculative wire delay. The separate memory-mapped
+[X/Y tilt sensor](tilt.md) has its own input and snapshot interface.
+Gyroscope delivery is tracked in #74; full cartridge
 acceptance remains open in #1.

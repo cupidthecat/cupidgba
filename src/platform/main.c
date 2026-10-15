@@ -162,11 +162,13 @@ static void printUsage(const char* progname) {
     fprintf(stderr, "\nPeripherals: --solar auto|on|off  --sunlight 0..255 (default: 128)\n");
     fprintf(stderr, "             --rumble auto|on|off\n");
     fprintf(stderr, "             --gyro auto|on|off  --gyro-sample 0..4095 (default: 1728)\n");
+    fprintf(stderr, "             --tilt auto|on|off  --tilt-x 0..4095  --tilt-y 0..4095 (defaults: 928)\n");
     fprintf(stderr, "\nControls:\n");
     fprintf(stderr, "  Z=A  X=B  Enter=Start  Backspace=Select\n");
     fprintf(stderr, "  Arrow keys=D-Pad  A=L  S=R  Esc=Quit\n");
     fprintf(stderr, "  F5=Less sunlight  F6=More sunlight\n");
     fprintf(stderr, "  F7=Lower gyro input  F8=Higher gyro input  F9=Nominal neutral\n");
+    fprintf(stderr, "  F1/F2=Lower/higher tilt X  F3/F4=Lower/higher tilt Y  F10=Nominal neutral\n");
 }
 
 /**
@@ -194,9 +196,10 @@ int main(int argc, char* argv[]) {
         } else if (strcmp(argv[i], "-S") == 0 && i + 1 < argc) {
             saveTypeStr = argv[++i];
         } else if ((!strcmp(argv[i], "--solar") || !strcmp(argv[i], "--rumble") ||
-                    !strcmp(argv[i], "--gyro")) && i + 1 < argc) {
+                    !strcmp(argv[i], "--gyro") || !strcmp(argv[i], "--tilt")) && i + 1 < argc) {
             int* presence = !strcmp(argv[i], "--solar") ? &peripherals.solarPresence :
-                !strcmp(argv[i], "--rumble") ? &peripherals.rumblePresence : &peripherals.gyroPresence;
+                !strcmp(argv[i], "--rumble") ? &peripherals.rumblePresence :
+                !strcmp(argv[i], "--gyro") ? &peripherals.gyroPresence : &peripherals.tiltPresence;
             if (!cupid_platform_peripheral_mode(argv[++i], presence)) {
                 fprintf(stderr, "Error: Peripheral mode must be auto, on or off\n"); return 1;
             }
@@ -207,6 +210,11 @@ int main(int argc, char* argv[]) {
         } else if (!strcmp(argv[i], "--gyro-sample") && i + 1 < argc) {
             if (!cupid_platform_gyro_sample(argv[++i], &peripherals.gyroSample)) {
                 fprintf(stderr, "Error: Gyro input must be an integer from 0 through 4095\n"); return 1;
+            }
+        } else if ((!strcmp(argv[i], "--tilt-x") || !strcmp(argv[i], "--tilt-y")) && i + 1 < argc) {
+            uint16_t* axis = !strcmp(argv[i], "--tilt-x") ? &peripherals.tiltX : &peripherals.tiltY;
+            if (!cupid_platform_sample12(argv[++i], axis)) {
+                fprintf(stderr, "Error: Tilt input must be an integer from 0 through 4095\n"); return 1;
             }
         } else if (strcmp(argv[i], "--rtc") == 0 && i + 1 < argc) {
             const char* mode = argv[++i];

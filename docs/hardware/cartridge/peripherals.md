@@ -74,6 +74,9 @@ motor measurements.
 
 ## Regression coverage
 
+The memory-mapped [X/Y tilt sensor](tilt.md) uses the save bus instead of GPIO.
+It has independent device selection, raw input, snapshots and validation.
+
 Native component checks cover all 256 levels and two complete counter wraps,
 including 2,097,152 pulse observations. Driver checks execute ARM/Thumb byte,
 halfword and word instructions, all three GPIO ROM windows, prefetch on/off,
