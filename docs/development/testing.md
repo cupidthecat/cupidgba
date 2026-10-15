@@ -8,10 +8,12 @@ firmware boot. The observer uses a fixed 1,200-frame, 150-million-step and
 qualified software input is not distributed and does not calibrate chip
 timings. See [save programming](../hardware/cartridge/programming.md).
 
-The eight `gba.save-programming-*` groups cover accepted operations, ready
+The nine `gba.save-programming-*` groups cover accepted operations, ready
 deadlines, polling, bus strobes, timer/DMA/IRQ chronology, clock wrap, STOP,
 reset, profile validation and complete save-file images through failures and
-replacement. An owned ARM driver also polls through the default byte-program
+replacement. A 32-case reboot group retains every captured operation and its
+original deadline through ARM/Thumb HardReset at four clock epochs, including
+signed/unsigned wrap. An owned ARM driver also polls through the default byte-program
 interval from IWRAM and ROM. Synthetic operation durations separate scheduler correctness
 from chip calibration. Each group retains a ten-second deadline; see
 [save programming](../hardware/cartridge/programming.md).

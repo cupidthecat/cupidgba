@@ -94,3 +94,11 @@ mode and every pixel in the complete passing result rows. It retains a fixed
 1,200-frame, 150-million-step and 90-second process budget for this separate
 corpus. The input is not downloaded or distributed by CupidGBA. An external
 BIOS adds the same complete check through the firmware boot path.
+
+The `gba.save-programming-reboot` group adds 32 complete warm-reboot cases:
+EEPROM and Flash byte/sector/chip operations, both caller instruction states,
+and four clock epochs including signed/unsigned wrap. Selected long synthetic
+profiles keep programming in flight after the firmware reaches cartridge
+entry. Storage, bank/range, dirty state and the original deadline survive; the
+operation commits exactly at that deadline. The group retains its ten-second
+deadline and does not calibrate physical chip timing.

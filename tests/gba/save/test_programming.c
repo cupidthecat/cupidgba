@@ -366,6 +366,79 @@ static void guest_polling_uses_the_default_byte_program_profile(void) {
     puts("PASS owned IWRAM/ROM ARM driver polling with default programming duration");
 }
 
+static void firmware_reboot_preserves_accepted_operations(void) {
+    unsigned observations = 0;
+    for (unsigned c = 0; c < 4; c++) for (unsigned operation = 0; operation < 4; operation++)
+        for (unsigned thumb = 0; thumb < 2; thumb++) {
+            struct CupidGBA* gba = machine(anchors[c], operation ? SAVE_FLASH1M : SAVE_EEPROM512);
+            struct CupidSavedata* save = &gba->memory.savedata;
+            gba->cpu.cpsr.f = 1;
+            cupid_video_reset(&gba->video);
+            cupid_audio_reset(&gba->audio);
+            /* Keep the fresh mixer at the same synthetic wrap-test epoch. */
+            gba->audio.lastSample = anchors[c];
+            gba->audio.nextSample = anchors[c] + 512;
+            gba->audio.sampleOrigin = anchors[c];
+            /* Long selected profiles keep all operations pending past entry.
+             * These durations exercise ownership rather than chip calibration. */
+            CHECK(cupid_savedata_set_programming_clocks(save, 2000000, 2000000, 3000000, 4000000));
+            memset(save->data, operation > 1 ? 0 : 0xFF, save->size);
+            save->dirty = false;
+            uint8_t* storage = save->data;
+            if (!operation) eeprom(save, 0, true);
+            else {
+                flash(save, 0xB0); cupid_savedata_write_flash(save, 0, 1);
+                flash(save, operation == 1 ? 0xA0 : 0x80);
+                if (operation == 1) cupid_savedata_write_flash(save, 0x1234, 0x25);
+                else {
+                    cupid_savedata_write_flash(save, 0x5555, 0xAA);
+                    cupid_savedata_write_flash(save, 0x2AAA, 0x55);
+                    cupid_savedata_write_flash(save, operation == 2 ? 0x6000 : 0x5555,
+                                                operation == 2 ? 0x30 : 0x10);
+                }
+            }
+            CHECK(save->programming && !save->dirty);
+            const uint64_t deadline = save->readyClock;
+            const uint32_t offset = save->programOffset, length = save->programLength;
+            gba->memory.rom = calloc(1, 4096); CHECK(gba->memory.rom);
+            gba->memory.romSize = 4096; gba->memory.romMask = 4095;
+            const uint32_t entry = 0xEAFFFFFE;
+            memcpy(gba->memory.rom, &entry, 4);
+            const uint32_t arm[] = {0xEF260000, 0xE3A080CC, 0xEAFFFFFE};
+            const uint16_t narrow[] = {0xDF26, 0x20CC, 0xE7FE};
+            memcpy(gba->memory.iwram + 0x100, thumb ? (const void*)narrow : (const void*)arm,
+                   thumb ? sizeof(narrow) : sizeof(arm));
+            _CupidSetMode(&gba->cpu, thumb ? MODE_THUMB : MODE_ARM);
+            gba->cpu.gprs[ARM_PC] = GBA_BASE_IWRAM + 0x100;
+            if (thumb) CupidThumbWritePC(&gba->cpu); else CupidARMWritePC(&gba->cpu);
+            unsigned steps;
+            for (steps = 0; steps < 500000; steps++) {
+                cupid_gba_step(gba);
+                if (gba->cpu.executionMode == MODE_ARM && gba->cpu.gprs[ARM_PC] == GBA_BASE_ROM0 + 4) break;
+            }
+            CHECK(steps < 500000 && save->programming && !save->dirty);
+            CHECK(save->data == storage && save->readyClock == deadline);
+            CHECK(save->programOffset == offset && save->programLength == length);
+            CHECK(!operation || save->flashBank == 1);
+            for (unsigned i = 0; i < save->size; i++) CHECK(save->data[i] == (operation > 1 ? 0 : 0xFF));
+            cupid_gba_process_events(gba);
+            const uint64_t now = cupid_timing_global_time(&gba->timing);
+            CHECK(now < deadline);
+            cupid_timing_tick(&gba->timing, (int32_t)(deadline - now - 1));
+            CHECK(save->programming && !save->dirty);
+            cupid_timing_tick(&gba->timing, 1);
+            CHECK(!save->programming && save->dirty && save->data == storage);
+            if (!operation) CHECK(!memcmp(save->data + offset, payload, 8));
+            else if (operation == 1) CHECK(save->data[0x11234] == 0x25);
+            else for (unsigned i = 0; i < save->size; i++)
+                CHECK(save->data[i] == (i >= offset && i - offset < length ? 0xFF : 0));
+            observations++;
+            destroy(gba);
+        }
+    CHECK(observations == 32);
+    puts("PASS 32 pending EEPROM/Flash operations through ARM/Thumb HardReset and clock wrap");
+}
+
 int main(int argc, char** argv) {
     CHECK(argc == 2 || argc == 3);
     if (!strcmp(argv[1], "eeprom")) eeprom_acceptance_and_ready_have_owned_deadlines();
@@ -375,6 +448,7 @@ int main(int argc, char** argv) {
     else if (!strcmp(argv[1], "cpu")) cpu_store_acceptance_and_polling_use_bus_clocks();
     else if (!strcmp(argv[1], "configuration")) configuration_and_replacement_preserve_clock_ownership();
     else if (!strcmp(argv[1], "guest")) guest_polling_uses_the_default_byte_program_profile();
+    else if (!strcmp(argv[1], "reboot")) firmware_reboot_preserves_accepted_operations();
     else if (!strcmp(argv[1], "persistence") && argc == 3)
         pending_programming_and_file_failures_retain_complete_images(argv[2]);
     else return 2;

@@ -147,7 +147,7 @@ if(BUILD_TESTING)
 
     add_executable(test_save_programming tests/gba/save/test_programming.c)
     target_link_libraries(test_save_programming PRIVATE cupid_core)
-    foreach(group eeprom flash chronology power cpu configuration guest)
+    foreach(group eeprom flash chronology power cpu configuration guest reboot)
         add_test(NAME gba.save-programming-${group} COMMAND test_save_programming ${group})
         set_tests_properties(gba.save-programming-${group} PROPERTIES TIMEOUT 10)
     endforeach()
