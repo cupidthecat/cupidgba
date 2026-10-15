@@ -12,15 +12,15 @@ static uint64_t current_time(struct CupidGBA* gba, uint32_t late) {
 static void line_callback(struct CupidTiming* timing, void* context, uint32_t late) {
     (void)timing;
     (void)late;
-    struct CupidIRQLineChange* change = context;
+    struct CupidIRQSignalChange* change = context;
     change->gba->irq.line = change->value;
 }
 
 static void available_callback(struct CupidTiming* timing, void* context, uint32_t late) {
     (void)timing;
     (void)late;
-    struct CupidGBA* gba = context;
-    gba->irq.available = gba->irq.pendingAvailable;
+    struct CupidIRQSignalChange* change = context;
+    change->gba->irq.available = change->value;
 }
 
 static void update_lines(struct CupidGBA* gba, uint64_t when) {
@@ -28,13 +28,17 @@ static void update_lines(struct CupidGBA* gba, uint64_t when) {
     bool available = (gba->ie & gba->irqf) != 0;
     if (available != irq->logicalAvailable) {
         irq->logicalAvailable = available;
-        irq->pendingAvailable = available;
-        schedule_at(gba, &irq->availableEvent, when + 1);
+        /* Keep this accepted value even if another register update runs at
+         * its publication deadline and queues the opposite value. */
+        struct CupidIRQSignalChange* change = &irq->availableChanges[irq->nextAvailableChange];
+        irq->nextAvailableChange = (irq->nextAvailableChange + 1) % 4;
+        change->value = available;
+        schedule_at(gba, &change->event, when + 1);
     }
     bool line = gba->ime && available;
     if (line != irq->logicalLine) {
         irq->logicalLine = line;
-        struct CupidIRQLineChange* change = &irq->lineChanges[irq->nextLineChange];
+        struct CupidIRQSignalChange* change = &irq->lineChanges[irq->nextLineChange];
         irq->nextLineChange = (irq->nextLineChange + 1) % 4;
         change->value = line;
         schedule_at(gba, &change->event, when + 2);
@@ -86,14 +90,16 @@ static void queue_write(struct CupidGBA* gba, uint64_t when, unsigned priority,
 void cupid_irq_init(struct CupidGBA* gba) {
     memset(&gba->irq, 0, sizeof(gba->irq));
     gba->cpu.irqDisableLatch = gba->cpu.cpsr.i;
-    gba->irq.availableEvent = (struct CupidTimingEvent){.context = gba,
-        .callback = available_callback, .name = "Interrupt available", .priority = 0};
     for (unsigned i = 0; i < 4; i++) {
         struct CupidIRQRegisterWrite* write = &gba->irq.writes[i];
         write->gba = gba;
         write->event = (struct CupidTimingEvent){.context = write,
             .callback = write_callback, .name = "Interrupt register write", .priority = 1};
-        struct CupidIRQLineChange* change = &gba->irq.lineChanges[i];
+        struct CupidIRQSignalChange* available = &gba->irq.availableChanges[i];
+        available->gba = gba;
+        available->event = (struct CupidTimingEvent){.context = available,
+            .callback = available_callback, .name = "Interrupt available", .priority = 0};
+        struct CupidIRQSignalChange* change = &gba->irq.lineChanges[i];
         change->gba = gba;
         change->event = (struct CupidTimingEvent){.context = change,
             .callback = line_callback, .name = "Interrupt line change", .priority = 0};

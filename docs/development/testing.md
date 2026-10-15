@@ -445,6 +445,14 @@ It retains the 360-frame, 150-million-step and 90-second observation budgets.
 Native IRQ tests cover the acceptance and wake samples in ARM/Thumb mode,
 their saved return addresses and clock wrap.
 
+`gba.irq-pulses` requires queued enabled-request values to survive a later
+register update on the same publication clock. It checks complete signal
+histories through queue reuse and scheduler wrap, bulk versus single-clock
+dispatch, HALT resume in both CPU modes with either mask state, DMA
+acknowledgements, STOP and console reset. It keeps the existing IRQ stage
+delays and does not replace the original CPU/bus cartridge checks. See
+[interrupt ownership and remaining sampling limits](../hardware/interrupts.md).
+
 Passing these checks establishes the listed cases. They do not cover every CPU
 encoding, every bus or arbitration edge, every timer/IRQ interaction, raster
 effects, audio fidelity, cartridge peripherals, save persistence, or link

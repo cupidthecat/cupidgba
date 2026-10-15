@@ -6,9 +6,15 @@ IF bit acknowledges that request. Byte writes merge with the pending IE value
 or acknowledge only the selected IF byte. The reserved IME byte has no effect.
 
 After register acceptance, the enabled-request signal reaches HALT one cycle
-later. The CPU IRQ line follows two cycles after acceptance. Successive line
-changes keep their own deadlines, including short assertions followed by
-deassertions. IME and the CPSR IRQ mask control exception entry; HALT can wake
+later. The CPU IRQ line follows two cycles after acceptance. Both signals
+retain each accepted value and its publication deadline, including short
+assertions followed by deassertions. A register update cannot replace an older
+enabled-request publication due on that same clock. This matters when a DMA
+acknowledgement coincides with a separately phased peripheral request: HALT
+must still observe the one-clock enabled-request pulse. The register, HALT
+and CPU-line delays remain unchanged.
+
+IME and the CPSR IRQ mask control exception entry; HALT can wake
 from an enabled request while both masks prevent entry.
 
 The CPU samples the IRQ line and its latched CPSR mask at instruction
@@ -37,6 +43,15 @@ external-BIOS timer suite checks 90 IRQ observations and 936 count-up results;
 see [testing](../development/testing.md). The CPU's pipeline and exception
 registers are described in the
 [ARM7TDMI technical reference manual](https://support.arm.com/documentation/ddi0210/c/).
+
+`gba.irq-pulses` checks every publication in a sequence that previously lost
+the enabled-request pulse. It covers repeated queue reuse, single-clock and
+bulk dispatch, 32-bit clock wrap, both CPU instruction modes, IME/CPSR masks,
+actual DMA acknowledgement strobes, STOP clock freezing and console reset.
+The old core fails the pulse, HALT-resume and DMA controls. These regressions
+preserve the documented pipeline; they do not settle physical IRQ sampling at
+every instruction/refill boundary. Remaining original CPU/bus cartridge
+failures stay tracked in #10.
 
 The relative priority of an IRQ assertion and an IF acknowledge on exactly
 the same hardware cycle remains unverified. Queued IF changes retain their

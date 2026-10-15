@@ -4,7 +4,7 @@
 #include "cupid/timing.h"
 struct CupidGBA;
 
-struct CupidIRQLineChange {
+struct CupidIRQSignalChange {
     struct CupidGBA* gba;
     bool value;
     struct CupidTimingEvent event;
@@ -21,12 +21,12 @@ struct CupidIRQRegisterWrite {
 struct CupidIRQState {
     uint16_t pendingIE, pendingIF;
     bool pendingIME;
-    bool available, logicalAvailable, pendingAvailable;
+    bool available, logicalAvailable;
     bool line, logicalLine;
-    unsigned nextLineChange;
-    struct CupidTimingEvent availableEvent;
+    unsigned nextLineChange, nextAvailableChange;
     struct CupidIRQRegisterWrite writes[4];
-    struct CupidIRQLineChange lineChanges[4];
+    struct CupidIRQSignalChange lineChanges[4];
+    struct CupidIRQSignalChange availableChanges[4];
 };
 
 void cupid_irq_init(struct CupidGBA* gba);
