@@ -122,6 +122,16 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_runner_checkpoint.py
         --runner $<TARGET_FILE:cupidgba-headless>)
     set_tests_properties(runner.checkpoint PROPERTIES TIMEOUT 10)
+    add_test(NAME runner.observations COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_runner_observations.py
+        --runner $<TARGET_FILE:cupidgba-headless>)
+    set_tests_properties(runner.observations PROPERTIES TIMEOUT 10)
+    add_executable(test_observer tests/arm/test_observer.c)
+    target_link_libraries(test_observer PRIVATE cupid_core)
+    foreach(group stream boundaries)
+        add_test(NAME arm.observer-${group} COMMAND test_observer ${group})
+        set_tests_properties(arm.observer-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
 
     add_executable(test_cartridge_image tests/gba/cartridge/test_image.c)
     target_link_libraries(test_cartridge_image PRIVATE cupid_core)

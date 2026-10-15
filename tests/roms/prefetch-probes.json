@@ -83,14 +83,39 @@
       "path": "prefetcher/prefetcher_branch_thumb_arm_3.gba",
       "sha256": "c378b2e326133552cb2d78619d8218a1019e10bac26072bf6fca4c2f375ded2b",
       "checkpoint": "0x80001c4",
-      "terminal": "0x800033c"
+      "terminal": "0x800033c",
+      "observations": [
+        {
+          "address": "0x0800018c",
+          "mode": "arm",
+          "instruction": "0xe350004c",
+          "register": 0,
+          "value": "0x4c"
+        },
+        {
+          "address": "0x080001aa",
+          "mode": "thumb",
+          "instruction": "0x0000286a",
+          "register": 0,
+          "value": "0x6a"
+        }
+      ]
     },
     {
       "name": "branch-thumb-arm-4",
       "path": "prefetcher/prefetcher_branch_thumb_arm_4.gba",
       "sha256": "e7fb5455564506566d3e11b96f8eff3ebdf65acafef3dfab6713f1d77c984049",
       "checkpoint": "0x800017c",
-      "terminal": "0x80002f4"
+      "terminal": "0x80002f4",
+      "observations": [
+        {
+          "address": "0x0800016e",
+          "mode": "thumb",
+          "instruction": "0x00002828",
+          "register": 0,
+          "value": "0x28"
+        }
+      ]
     },
     {
       "name": "dma",
@@ -139,7 +164,16 @@
       "path": "prefetcher/bounday_test_1.gba",
       "sha256": "dbe894739715261bd3c482c3577ebd99007b9d3ad140957716814bf67a349f14",
       "checkpoint": "0x802001c",
-      "terminal": "0x8020194"
+      "terminal": "0x8020194",
+      "observations": [
+        {
+          "address": "0x0802000a",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x29"
+        }
+      ]
     }
   ]
 }

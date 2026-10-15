@@ -116,6 +116,8 @@ void cupid_arm_init(struct CupidARM* cpu) {
 	cpu->shifterCarryOut = 0;
 	cpu->prefetch[0] = 0;
 	cpu->prefetch[1] = 0;
+	cpu->instructionObserver = NULL;
+	cpu->instructionObserverContext = NULL;
 }
 
 void cupid_arm_reset(struct CupidARM* cpu) {
@@ -310,6 +312,7 @@ static inline void cupid_thumb_step_inline(struct CupidARM* cpu) {
 /** @name Public Step Functions */
 
 void cupid_arm_step(struct CupidARM* cpu) {
+	if (cpu->instructionObserver) cpu->instructionObserver(cpu, cpu->instructionObserverContext);
 	bool previous = cpu->memory.timed;
 	cpu->memory.timed = cpu->memory.fetch != NULL;
 	cupid_arm_step_inline(cpu);
@@ -318,6 +321,7 @@ void cupid_arm_step(struct CupidARM* cpu) {
 }
 
 void cupid_thumb_step(struct CupidARM* cpu) {
+	if (cpu->instructionObserver) cpu->instructionObserver(cpu, cpu->instructionObserverContext);
 	bool previous = cpu->memory.timed;
 	cpu->memory.timed = cpu->memory.fetch != NULL;
 	cupid_thumb_step_inline(cpu);

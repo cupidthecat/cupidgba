@@ -223,6 +223,13 @@ struct CupidARM {
 
     /** Back-pointer to owning GBA */
     struct CupidGBA* master;
+
+    /* Read-only host observation immediately before an ARM/Thumb instruction
+     * is issued, after the owner's IRQ/HALT arbitration. Failed ARM predicates
+     * are still issued instructions. The observer must not modify the core or
+     * advance emulated time. Host ownership survives reset. */
+    void (*instructionObserver)(const struct CupidARM* cpu, void* context);
+    void* instructionObserverContext;
 };
 #undef CUPID_ARM_REGISTER_FILE
 

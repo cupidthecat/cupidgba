@@ -76,6 +76,27 @@ records the first ARM visit using the selected `--expect-loop-register`.
 Owned positive and negative cartridges check overwritten failures, missing
 checkpoints and terminal failures without changing ordinary runner behavior.
 
+The mixed-width pair and legacy boundary case additionally require their
+original comparison values at pinned instruction addresses. The failing
+mixed-width case must observe both 0x4C and 0x6A; its passing neighbor requires
+0x28, and the legacy boundary requires 0x29. The checker verifies the original
+instruction bytes, CPU mode, opcode, register value and complete observation
+order. An incorrectly calculated branch target can bypass a failure-recording
+instruction and still reach a zero result at both display and terminal; that
+path cannot satisfy these comparison observations.
+
+The runner's repeatable `--expect-register-at ADDRESS REGISTER VALUE` option
+samples through a read-only CPU instruction-issue hook. It does not sample
+HALT polls, STOP, discarded exception fetches or preempted application
+instructions. Missing, extra or reordered visits fail, and every requested
+value must match. Repeated addresses require one expectation per issued
+visit. Owned ARM/Thumb controls deliberately bypass failure recording while
+keeping both result boundaries zero; the explicit observations must reject
+them. Other controls check repeated visits, unissued terminal instructions,
+the exact 128-observation capacity and invalid arguments. CPU tests retain
+guest state and clocks with observation enabled, including failed ARM
+predicates, branch refills, IRQ arbitration, HALT/STOP, reset and clock wrap.
+
 The current candidate passes sixteen of the seventeen original prefetch
 cartridges on each BIOS path, including all Thumb-only branch groups. The
 remaining Thumb-to-ARM case reads 0x66 where its second comparison requires

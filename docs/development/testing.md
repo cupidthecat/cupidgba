@@ -1,5 +1,14 @@
 # Testing
 
+The `runner.observations` and two `arm.observer-*` groups require actual
+instruction-issue observations rather than a zero terminal alone. They use
+owned ARM/Thumb streams with deliberately skipped failure writes, ordered
+and repeated observations, malformed inputs, IRQ/HALT/STOP boundaries and
+clock wrap. Each retains a ten-second deadline. The mixed-width and legacy
+prefetch observers pin the original comparison instruction bytes and values;
+source inputs, comparisons and run limits remain unchanged. See
+[prefetch qualification](../hardware/prefetch.md).
+
 Hosted Linux qualification uses the explicit Ubuntu 24.04 release for GCC
 Release and Clang Debug with address/undefined-behavior sanitizers. This keeps
 an automatic `ubuntu-latest` release migration from changing the compiler,
