@@ -1,4 +1,4 @@
-# Cartridge solar and rumble devices
+# Cartridge solar, gyroscope and rumble devices
 
 CupidGBA connects these devices to the cartridge GPIO data, direction and
 read-control registers. GPIO remains visible in the three lower ROM windows;
@@ -47,13 +47,14 @@ The reported clocks describe bus transitions; motor response and force have
 not been calibrated against a physical cartridge.
 
 Automatic detection recognizes `V49J`, `V49E`, `V49P`, `2GBP`, `RZWJ`, `RZWE`
-and `RZWP`. The last three boards also have a gyroscope; gyroscope input is
-not implemented by this change. `--rumble auto|on|off` controls presence.
+and `RZWP`. The last three boards also provide the
+[serial gyroscope](gyroscope.md). `--rumble auto|on|off` controls motor presence
+independently of that converter.
 
 Console reset, device disable, cartridge replacement and core destruction
 stop the motor. Replacing or removing an output subscriber stops its previous
 host output; the logical cartridge state is retained for a new subscriber.
-Cartridge replacement preserves the subscriber and illumination setting,
+Cartridge replacement preserves the subscriber and external sensor inputs,
 then detects the new board with a cleared port.
 
 Loading a replacement ROM reads and validates its candidate image before

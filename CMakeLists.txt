@@ -45,6 +45,7 @@ add_library(cupid_core STATIC
     src/gba/audio.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c
     src/gba/hle-bios.c src/gba/bios/file.c src/gba/savedata.c src/gba/save/file.c src/gba/serial/serial.c
     src/gba/cartridge/rtc.c src/gba/cartridge/gpio.c src/gba/cartridge/battery.c src/gba/cartridge/solar.c
+    src/gba/cartridge/gyro.c
     src/gba/render/software.c src/gba/render/composite.c
     src/gba/render/mode0.c src/gba/render/mode2.c
     src/gba/render/mode3.c src/gba/render/mode4.c
@@ -73,7 +74,14 @@ if(BUILD_TESTING)
     add_test(NAME rom.cartridge-peripherals COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_peripherals.py --runner $<TARGET_FILE:cupidgba-headless>)
     set_tests_properties(rom.cartridge-peripherals PROPERTIES TIMEOUT 30)
+    add_test(NAME rom.cartridge-gyro COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_gyro.py --runner $<TARGET_FILE:cupidgba-headless>)
+    set_tests_properties(rom.cartridge-gyro PROPERTIES TIMEOUT 30)
     if(CUPID_TEST_BIOS)
+        add_test(NAME rom.cartridge-gyro-external COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_gyro.py --runner $<TARGET_FILE:cupidgba-headless>
+            --bios ${CUPID_TEST_BIOS})
+        set_tests_properties(rom.cartridge-gyro-external PROPERTIES TIMEOUT 30)
         add_test(NAME rom.cartridge-peripherals-external COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_peripherals.py --runner $<TARGET_FILE:cupidgba-headless>
             --bios ${CUPID_TEST_BIOS})
@@ -100,6 +108,10 @@ if(BUILD_TESTING)
             set_tests_properties(gba.solar-${group}-external PROPERTIES TIMEOUT 10)
         endif()
     endforeach()
+    add_executable(test_gyro tests/gba/cartridge/test_gyro.c)
+    target_link_libraries(test_gyro PRIVATE cupid_core)
+    add_test(NAME gba.gyro COMMAND test_gyro)
+    set_tests_properties(gba.gyro PROPERTIES TIMEOUT 10)
     add_executable(test_rtc tests/gba/cartridge/test_rtc.c)
     target_link_libraries(test_rtc PRIVATE cupid_core)
     add_test(NAME gba.rtc-calendar COMMAND test_rtc)

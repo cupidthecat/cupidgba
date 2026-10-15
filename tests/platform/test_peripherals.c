@@ -24,19 +24,70 @@ static void configuration_and_strict_input_parsing(void) {
     CHECK(gba);
     cupid_gba_create(gba);
     cupid_cartridge_enable_rtc(gba, true);
-    const struct CupidPlatformPeripherals config = {1, 1, 73};
+    const struct CupidPlatformPeripherals config = {1, 1, 73, 1, 0xABC};
     cupid_platform_peripherals_configure(gba, &config);
     cupid_gba_reset(gba);
     CHECK(gba->cartridge.solarPresent && gba->cartridge.rumblePresent && gba->cartridge.rtcPresent);
     CHECK(gba->cartridge.solar.threshold == 182);
-    const struct CupidPlatformPeripherals automatic = {-1, -1, 255};
+    CHECK(gba->cartridge.gyroPresent && gba->cartridge.gyro.sample == 0xABC);
+    const struct CupidPlatformPeripherals automatic = {-1, -1, 255, -1, CUPID_GYRO_NEUTRAL};
     cupid_platform_peripherals_configure(gba, &automatic);
     CHECK(gba->cartridge.solarPresent && gba->cartridge.rumblePresent && !gba->cartridge.solar.threshold);
-    const struct CupidPlatformPeripherals disabled = {0, 0, 0};
+    CHECK(gba->cartridge.gyroPresent && gba->cartridge.gyro.sample == CUPID_GYRO_NEUTRAL);
+    const struct CupidPlatformPeripherals disabled = {0, 0, 0, 0, 0};
     cupid_platform_peripherals_configure(gba, &disabled);
     CHECK(!gba->cartridge.solarPresent && !gba->cartridge.rumblePresent && gba->cartridge.rtcPresent);
+    CHECK(!gba->cartridge.gyroPresent && !gba->cartridge.gyro.sample);
     cupid_gba_destroy(gba);
     free(gba);
+}
+
+static void gyro_input_parsing_and_live_controls(void) {
+    uint16_t sample = 19;
+    const char* invalid[] = {"", "-1", "+1", "4096", "1.5", " 1", "1 ", "0x6c0", "999999999999999999999"};
+    for (unsigned i = 0; i < sizeof(invalid) / sizeof(*invalid); i++)
+        CHECK(!cupid_platform_gyro_sample(invalid[i], &sample) && sample == 19);
+    for (unsigned value = 0; value < 4096; value++) {
+        char text[5];
+        snprintf(text, sizeof(text), "%u", value);
+        CHECK(cupid_platform_gyro_sample(text, &sample) && sample == value);
+    }
+    CHECK(SDL_Init(SDL_INIT_EVENTS) == 0);
+    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+    CHECK(gba);
+    cupid_gba_create(gba);
+    struct CupidPlatform plat = {.controllerIndex = -1, .running = true};
+    SDL_Event key = {0};
+    key.type = SDL_KEYDOWN;
+    key.key.keysym.scancode = SDL_SCANCODE_F7;
+    CHECK(SDL_PushEvent(&key) == 1 && cupid_platform_poll_events(&plat, gba));
+    CHECK(gba->cartridge.gyro.sample == CUPID_GYRO_NEUTRAL);
+    cupid_cartridge_enable_gyro(gba, true);
+    CHECK(cupid_cartridge_set_gyro_sample(gba, 10));
+    CHECK(SDL_PushEvent(&key) == 1 && cupid_platform_poll_events(&plat, gba));
+    CHECK(gba->cartridge.gyro.sample == 0);
+    key.key.keysym.scancode = SDL_SCANCODE_F8;
+    CHECK(SDL_PushEvent(&key) == 1 && cupid_platform_poll_events(&plat, gba));
+    CHECK(gba->cartridge.gyro.sample == 128);
+    CHECK(cupid_cartridge_set_gyro_sample(gba, 4090));
+    CHECK(SDL_PushEvent(&key) == 1 && cupid_platform_poll_events(&plat, gba));
+    CHECK(gba->cartridge.gyro.sample == 4095);
+    key.key.keysym.scancode = SDL_SCANCODE_F9;
+    CHECK(SDL_PushEvent(&key) == 1 && cupid_platform_poll_events(&plat, gba));
+    CHECK(gba->cartridge.gyro.sample == CUPID_GYRO_NEUTRAL);
+    cupid_gyro_write_pins(&gba->cartridge.gyro, 3);
+    cupid_gyro_write_pins(&gba->cartridge.gyro, 2);
+    const uint16_t shift = gba->cartridge.gyro.shift;
+    key.key.keysym.scancode = SDL_SCANCODE_F8;
+    CHECK(SDL_PushEvent(&key) == 1 && cupid_platform_poll_events(&plat, gba));
+    CHECK(gba->cartridge.gyro.sample == CUPID_GYRO_NEUTRAL + 128);
+    CHECK(gba->cartridge.gyro.shift == shift);
+    cupid_cartridge_enable_gyro(gba, false);
+    CHECK(SDL_PushEvent(&key) == 1 && cupid_platform_poll_events(&plat, gba));
+    CHECK(gba->cartridge.gyro.sample == CUPID_GYRO_NEUTRAL + 128);
+    cupid_gba_destroy(gba);
+    free(gba);
+    SDL_Quit();
 }
 
 struct HostMotor { unsigned on, off; uint16_t low, high; };
@@ -198,6 +249,7 @@ static void an_existing_controller_inherits_active_motor_output(void) {
 
 int main(void) {
     RUN(configuration_and_strict_input_parsing);
+    RUN(gyro_input_parsing_and_live_controls);
     RUN(virtual_controller_output_hotplug_expiry_and_shutdown);
     RUN(an_existing_controller_inherits_active_motor_output);
     return 0;

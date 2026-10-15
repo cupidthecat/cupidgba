@@ -45,8 +45,9 @@ has a ten-second deadline. See [input handling](../hardware/input.md) for the
 complete observations and scope.
 
 Cartridge peripheral checks include `gba.solar-*`, `gba.cartridge-rumble`,
-`platform.cartridge-peripherals` and `rom.cartridge-peripherals`. An external
-BIOS adds paired bus/interaction and generated-cartridge groups. Native groups
+`gba.gyro`, `platform.cartridge-peripherals`, `rom.cartridge-gyro` and
+`rom.cartridge-peripherals`. An external BIOS adds paired bus/interaction and
+generated-cartridge groups. Native groups
 have ten-second deadlines; generated cartridge groups have thirty seconds.
 The headless runner can start a probe at `--start-address` (an aligned ARM
 cartridge address) and record motor edges with `--dump-rumble`. The output

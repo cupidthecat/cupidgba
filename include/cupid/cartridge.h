@@ -4,6 +4,7 @@
 
 #include "cupid/rtc.h"
 #include "cupid/solar.h"
+#include "cupid/gyro.h"
 #include "cupid/timing.h"
 
 struct CupidGBA;
@@ -12,6 +13,7 @@ struct CupidARM;
 struct CupidCartridge {
     struct CupidRTC rtc;
     struct CupidSolar solar;
+    struct CupidGyro gyro;
     uint64_t identity;
     uint32_t opcodeAddress, opcodeValue;
     struct CupidTimingEvent prefetchEvent;
@@ -22,6 +24,7 @@ struct CupidCartridge {
     uint8_t output, direction;
     bool rtcPresent, readable, opcodeValid;
     bool solarPresent, rumblePresent, rumbleActive;
+    bool gyroPresent;
     bool prefetchScheduled;
     uint8_t (*inputPins)(void* context);
     void* inputContext;
@@ -35,6 +38,8 @@ void cupid_cartridge_attach(struct CupidGBA* gba, const uint8_t* rom, size_t siz
 void cupid_cartridge_enable_rtc(struct CupidGBA* gba, bool enabled);
 void cupid_cartridge_enable_solar(struct CupidGBA* gba, bool enabled);
 void cupid_cartridge_set_solar_level(struct CupidGBA* gba, uint8_t level);
+void cupid_cartridge_enable_gyro(struct CupidGBA* gba, bool enabled);
+bool cupid_cartridge_set_gyro_sample(struct CupidGBA* gba, uint16_t sample);
 void cupid_cartridge_enable_rumble(struct CupidGBA* gba, bool enabled);
 void cupid_cartridge_set_rumble_output(struct CupidGBA* gba,
     void (*output)(void*, bool, uint64_t), void* context);

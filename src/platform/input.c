@@ -124,6 +124,16 @@ bool cupid_platform_poll_events(struct CupidPlatform* plat, struct CupidGBA* gba
                 level += event.key.keysym.scancode == SDL_SCANCODE_F5 ? -16 : 16;
                 cupid_cartridge_set_solar_level(gba, (uint8_t)(level < 0 ? 0 : level > 255 ? 255 : level));
             }
+            if (gba->cartridge.gyroPresent &&
+                (event.key.keysym.scancode == SDL_SCANCODE_F7 ||
+                 event.key.keysym.scancode == SDL_SCANCODE_F8 ||
+                 event.key.keysym.scancode == SDL_SCANCODE_F9)) {
+                int sample = gba->cartridge.gyro.sample;
+                if (event.key.keysym.scancode == SDL_SCANCODE_F9) sample = CUPID_GYRO_NEUTRAL;
+                else sample += event.key.keysym.scancode == SDL_SCANCODE_F7 ? -128 : 128;
+                cupid_cartridge_set_gyro_sample(gba,
+                    (uint16_t)(sample < 0 ? 0 : sample > 4095 ? 4095 : sample));
+            }
             for (size_t i = 0; i < KEY_MAP_SIZE; i++) {
                 if (event.key.keysym.scancode == keyMap[i].scancode) {
                     plat->keyboardKeys |= (uint16_t)(1u << keyMap[i].bit);

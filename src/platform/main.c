@@ -161,10 +161,12 @@ static void printUsage(const char* progname) {
     fprintf(stderr, "     --rtc-offline pause|wall (default: pause; wall includes powered-off time)\n");
     fprintf(stderr, "\nPeripherals: --solar auto|on|off  --sunlight 0..255 (default: 128)\n");
     fprintf(stderr, "             --rumble auto|on|off\n");
+    fprintf(stderr, "             --gyro auto|on|off  --gyro-sample 0..4095 (default: 1728)\n");
     fprintf(stderr, "\nControls:\n");
     fprintf(stderr, "  Z=A  X=B  Enter=Start  Backspace=Select\n");
     fprintf(stderr, "  Arrow keys=D-Pad  A=L  S=R  Esc=Quit\n");
     fprintf(stderr, "  F5=Less sunlight  F6=More sunlight\n");
+    fprintf(stderr, "  F7=Lower gyro input  F8=Higher gyro input  F9=Nominal neutral\n");
 }
 
 /**
@@ -179,7 +181,7 @@ int main(int argc, char* argv[]) {
     int rtcPresence = -1;
     struct CupidRTCDateTime rtcSeed;
     struct CupidPlatformRTC rtcConfig = {0};
-    struct CupidPlatformPeripherals peripherals = {-1, -1, 128};
+    struct CupidPlatformPeripherals peripherals = CUPID_PLATFORM_PERIPHERALS_DEFAULT;
 
     /** Parse CLI arguments. */
     for (int i = 1; i < argc; i++) {
@@ -191,14 +193,20 @@ int main(int argc, char* argv[]) {
             if (scale > 10) scale = 10;
         } else if (strcmp(argv[i], "-S") == 0 && i + 1 < argc) {
             saveTypeStr = argv[++i];
-        } else if ((!strcmp(argv[i], "--solar") || !strcmp(argv[i], "--rumble")) && i + 1 < argc) {
-            int* presence = !strcmp(argv[i], "--solar") ? &peripherals.solarPresence : &peripherals.rumblePresence;
+        } else if ((!strcmp(argv[i], "--solar") || !strcmp(argv[i], "--rumble") ||
+                    !strcmp(argv[i], "--gyro")) && i + 1 < argc) {
+            int* presence = !strcmp(argv[i], "--solar") ? &peripherals.solarPresence :
+                !strcmp(argv[i], "--rumble") ? &peripherals.rumblePresence : &peripherals.gyroPresence;
             if (!cupid_platform_peripheral_mode(argv[++i], presence)) {
                 fprintf(stderr, "Error: Peripheral mode must be auto, on or off\n"); return 1;
             }
         } else if (!strcmp(argv[i], "--sunlight") && i + 1 < argc) {
             if (!cupid_platform_solar_level(argv[++i], &peripherals.solarLevel)) {
                 fprintf(stderr, "Error: Sunlight must be an integer from 0 through 255\n"); return 1;
+            }
+        } else if (!strcmp(argv[i], "--gyro-sample") && i + 1 < argc) {
+            if (!cupid_platform_gyro_sample(argv[++i], &peripherals.gyroSample)) {
+                fprintf(stderr, "Error: Gyro input must be an integer from 0 through 4095\n"); return 1;
             }
         } else if (strcmp(argv[i], "--rtc") == 0 && i + 1 < argc) {
             const char* mode = argv[++i];
