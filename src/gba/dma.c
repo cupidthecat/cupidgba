@@ -35,10 +35,13 @@ static unsigned access_cycles(struct CupidMemory* memory, struct CupidDMA* dma,
         dma->externalSeen = true;
     }
     if (region >= GBA_REGION_ROM0 && region <= GBA_REGION_ROM2_EX) {
-        /* Sequential strobes advance the cartridge counter even on writes.
-         * A source/destination crossover continues that same bus burst. */
+        /* The programmed address predicts the next access's page restart.
+         * Fixed and decrementing pointers retain that delayed boundary edge.
+         * Nonsequential strobes latch an address; sequential reads and writes
+         * advance the shared counter, including source/destination crossovers. */
+        if (memory->dmaROMBoundary) sequential = false;
+        memory->dmaROMBoundary = !((address + (dma->transferWord ? 4 : 2)) & 0x1FFFF);
         if (!sequential) memory->dmaROMAddress = address & 0x01FFFFFF;
-        if (!(memory->dmaROMAddress & 0x1FFFF)) sequential = false;
         bool eeprom = cupid_memory_is_eeprom_address(memory, address) &&
             (memory->savedata.type == SAVE_EEPROM || memory->savedata.type == SAVE_EEPROM512);
         if (!eeprom) dma->accessAddress = (address & 0xFE000000) | memory->dmaROMAddress;
@@ -218,6 +221,7 @@ void cupid_dma_reset(struct CupidGBA* gba) {
     gba->memory.dmaRunning = false;
     gba->memory.dmaBus = 0;
     gba->memory.dmaROMAddress = 0;
+    gba->memory.dmaROMBoundary = false;
     gba->memory.lastWasDMA = false;
     gba->cpuBlocked = false;
 }

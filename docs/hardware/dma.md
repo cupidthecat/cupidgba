@@ -36,13 +36,28 @@ The first external access in a burst is nonsequential; later accesses are
 sequential. The cartridge address counter is shared by DMA reads and writes.
 Sequential strobes advance it even when a ROM write stores no data. This also
 applies when the source crosses into ROM after the destination has already
-started a cartridge burst. Crossing a 128 KiB cartridge-counter boundary
-requires nonsequential timing in the current model. The DMA source pointer
+started a cartridge burst. A programmed ROM access ending at a 128 KiB page
+boundary makes the following ROM access nonsequential. This delayed edge
+follows the programmed address even for fixed and decrementing transfers.
+Nonsequential strobes latch the programmed cartridge address. The DMA source pointer
 retains its programmed increment, decrement or fixed mode. Sequential ROM
 reads obtain their data from the separate cartridge counter. A decrementing
 source can therefore leave ROM and read OAM even though earlier ROM data
 advanced through that counter. A fixed source retains its DMA address while
-successive ROM strobes return successive cartridge data.
+successive sequential ROM strobes return successive cartridge data. A fixed
+source at the final transfer unit of a page therefore requests a new address
+latch on every subsequent access. A fixed source one unit earlier can stream
+across a data-counter boundary without that programmed-address page edge.
+
+The two `gba.dma-pages-*` groups require 480 complete transactions and 1,920
+destination publications. Explicit address/strobe tables cover incrementing,
+decrementing and fixed sources, both widths, all three cartridge wait banks,
+two wait-control profiles, four clock anchors and bulk/single-clock dispatch.
+Every write is checked before and at its required deadline, with complete
+payloads, retained source modes, completion clocks and IRQ visibility. Both
+groups fail against the preceding DMA implementation. Data-address assertions
+follow the address-latch/counter model; the source cartridges below directly
+qualify the covered timing comparisons rather than every electrical data edge.
 
 ## Registers, latches and requests
 
@@ -71,6 +86,16 @@ HBlank requests run on visible lines and VBlank requests run on entry to line
 2–161 and disables it at line 162.
 
 ## Evidence and remaining limits
+
+`CUPID_DMA_PROBE_DIR` registers nine unchanged local DMA cartridges and repeats
+them with `CUPID_TEST_BIOS`. Each run requires its original pre-display and
+terminal results. All nine pass with the external BIOS. The built-in path
+passes the enabled-mode-change and fixed-ROM page cases; seven pause/preemption
+observations still fail. Their inputs, comparisons and guards remain intact.
+The fixed-ROM case retains its original low-byte timer comparison of `0x30`.
+The independent CPU/DMA page cartridge now passes all eighteen original rows
+with either BIOS, including both decrement rows requiring 70 clocks. These
+source results do not qualify the remaining built-in firmware/CPU/DMA phases.
 
 Four checksum-pinned hardware ROMs pass ten assertions with both BIOS paths:
 immediate timer sampling at 20 clocks, the two 88-clock burst-restart cases,

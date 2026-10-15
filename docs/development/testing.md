@@ -1,5 +1,15 @@
 # Testing
 
+The `gba.dma-pages-halfword` and `gba.dma-pages-word` groups require 480 complete
+DMA page transactions across source modes, wait banks/profiles, clock wrap
+and dispatch granularity. Each keeps a ten-second deadline. The optional
+`CUPID_DMA_PROBE_DIR` points to the nine pinned original DMA cartridges.
+`CUPID_TEST_BIOS` repeats them with the external image. Both original result
+boundaries must pass. All nine external-image runs pass; seven built-in
+pause/preemption runs remain failing and registered. The independent
+`CUPID_BUS_PAGE_PROBE_ROM` passes all eighteen original CPU/DMA rows on each
+BIOS path. See [DMA timing](../hardware/dma.md) for qualification limits.
+
 The sixteen `gba.bios-hard-reset-*` native groups require 1,512 observations of
 reset-prefix state, complete built-in startup, timer/DMA/IRQ chronology,
 repeated reboots, temporary startup IRQs and ARM/Thumb POSTFLG byte strobes. `CUPID_TEST_BIOS` adds 352

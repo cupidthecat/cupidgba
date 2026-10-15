@@ -283,6 +283,7 @@ struct CupidMemory {
     bool lastWasDMA;
     uint32_t dmaBus;
     uint32_t dmaROMAddress;  /**< Game Pak counter shared by DMA reads/writes */
+    bool dmaROMBoundary;    /**< The preceding ROM strobe ended a programmed page */
 
     /**
      * Wait-state tables (indexed by region = address >> 24).

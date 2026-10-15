@@ -92,14 +92,14 @@ do not establish all page phases.
 
 `CUPID_BUS_PAGE_PROBE_ROM` enables a separate fixed CPU/DMA page-boundary
 cartridge. The observer requires all eighteen original console results. The
-ROM-to-OAM decrement row now passes its 63-clock comparison on both BIOS
-paths. Two DMA decrement page rows still read 68 instead of 70 at
-0x0801FFF0 and 0x0803FFF0. Failure text scrolls one earlier row off the console;
-that missing row cannot be counted as a pass. The programmed DMA source
-pointer now retains its mode independently of sequential cartridge data.
-Remaining physical cartridge counting and page strobes need investigation.
-The failing test remains enabled
-whenever its input is configured.
+ROM-to-OAM decrement row passes its 63-clock comparison on both BIOS paths.
+Both decrement page rows require and receive 70 clocks at 0x0801FFF0 and
+0x0803FFF0. All eighteen results remain visible and pass with both BIOS paths.
+The programmed DMA source retains its mode; an access ending at a programmed
+page boundary requests nonsequential timing for the following ROM strobe.
+The independent fixed-source cartridge also passes its original low-byte
+timer comparison on both BIOS paths. See [DMA page timing](dma.md) for the
+native transactions and the remaining built-in pause/preemption failures.
 
 The firmware timing cases execute the built-in math and copy routines through
 the timed CPU. See [BIOS execution](bios.md) for their coverage. Both complete

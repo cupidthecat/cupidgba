@@ -10,6 +10,7 @@ option(CUPID_THREAD_SANITIZER "Enable the thread sanitizer" OFF)
 set(CUPID_TEST_ROM_DIR "" CACHE PATH "Directory containing checksum-verified external test ROMs")
 set(CUPID_TIMER_SUITE_ROM "" CACHE FILEPATH "Locally built timer and IRQ suite ROM")
 set(CUPID_DMA_SUITE_ROM "" CACHE FILEPATH "Locally built DMA transfer suite ROM")
+set(CUPID_DMA_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified DMA arbitration cartridges")
 set(CUPID_BUS_SUITE_ROM "" CACHE FILEPATH "Locally built CPU and bus timing suite ROM")
 set(CUPID_BIOS_MATH_SUITE_ROM "" CACHE FILEPATH "Locally built BIOS math register suite ROM")
 set(CUPID_IO_SUITE_ROM "" CACHE FILEPATH "Locally built I/O register-read suite ROM")
@@ -203,6 +204,29 @@ if(BUILD_TESTING)
     target_link_libraries(test_dma PRIVATE cupid_core)
     add_test(NAME gba.dma COMMAND test_dma)
     set_tests_properties(gba.dma PROPERTIES TIMEOUT 10)
+
+    add_executable(test_dma_pages tests/gba/dma/test_pages.c)
+    target_link_libraries(test_dma_pages PRIVATE cupid_core)
+    foreach(width halfword word)
+        add_test(NAME gba.dma-pages-${width} COMMAND test_dma_pages ${width})
+        set_tests_properties(gba.dma-pages-${width} PROPERTIES TIMEOUT 10)
+    endforeach()
+
+    if(CUPID_DMA_PROBE_DIR)
+        foreach(case mode-change pause-end-1 pause-end-2 pause-end-3 pause-end-4 pause-mid-1 pause-mid-2 rom-preemption rom-fixed)
+            add_test(NAME rom.dma-probe-${case} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_dma_probe.py
+                --directory ${CUPID_DMA_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless> --test ${case})
+            set_tests_properties(rom.dma-probe-${case} PROPERTIES TIMEOUT 100)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.dma-probe-${case}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_dma_probe.py
+                    --directory ${CUPID_DMA_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless>
+                    --test ${case} --bios ${CUPID_TEST_BIOS})
+                set_tests_properties(rom.dma-probe-${case}-external PROPERTIES TIMEOUT 100)
+            endif()
+        endforeach()
+    endif()
 
     add_executable(test_prefetch tests/gba/test_prefetch.c)
     target_link_libraries(test_prefetch PRIVATE cupid_core)
