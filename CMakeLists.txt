@@ -14,6 +14,7 @@ set(CUPID_BUS_SUITE_ROM "" CACHE FILEPATH "Locally built CPU and bus timing suit
 set(CUPID_BIOS_MATH_SUITE_ROM "" CACHE FILEPATH "Locally built BIOS math register suite ROM")
 set(CUPID_IO_SUITE_ROM "" CACHE FILEPATH "Locally built I/O register-read suite ROM")
 set(CUPID_SERIAL_SUITE_ROM "" CACHE FILEPATH "Locally built serial timing and register suite ROM")
+set(CUPID_RTC_STATE_ROM "" CACHE FILEPATH "Checksum-verified local RTC state corpus with RAM result transport")
 set(CUPID_SERIAL_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified serial cartridge probes")
 set(CUPID_HALT_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified firmware HALT probes")
 set(CUPID_AUDIO_TEST_ROM "" CACHE FILEPATH "Locally built audio signal cartridge ROM")
@@ -592,6 +593,20 @@ if(BUILD_TESTING)
                 --rom ${CUPID_AUDIO_TEST_ROM} --runner $<TARGET_FILE:cupidgba-headless> --test ${case})
             set_tests_properties(rom.audio-${case} PROPERTIES TIMEOUT 130)
         endforeach()
+    endif()
+
+    if(CUPID_RTC_STATE_ROM)
+        add_test(NAME rom.rtc-state COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_state.py
+            --rom ${CUPID_RTC_STATE_ROM} --runner $<TARGET_FILE:cupidgba-headless>)
+        set_tests_properties(rom.rtc-state PROPERTIES TIMEOUT 100)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME rom.rtc-state-external COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_state.py
+                --rom ${CUPID_RTC_STATE_ROM} --bios ${CUPID_TEST_BIOS}
+                --runner $<TARGET_FILE:cupidgba-headless>)
+            set_tests_properties(rom.rtc-state-external PROPERTIES TIMEOUT 100)
+        endif()
     endif()
 
     if(CUPID_TIMER_SUITE_ROM)

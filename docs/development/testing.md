@@ -405,6 +405,16 @@ can stop a valid long run when prefetch permits more instructions per frame.
 This changes the observation budget; it does not change emulation timing or
 any hardware test expectation.
 
+Set `CUPID_RTC_STATE_ROM` to add `rom.rtc-state`, an optional original RTC
+state/status corpus observed through a private RAM text transport. Adding
+`CUPID_TEST_BIOS` also registers `rom.rtc-state-external`. The observer requires
+the exact prepared input checksum, a complete EWRAM snapshot, the original
+360-frame interval and the complete passing result digest for all 17 comparisons
+after the presence/write guard. It retains the 150-million-step and 90-second
+process limits. The original wire code, delays and comparisons are unchanged;
+the cartridge and transport inputs are not fetched or distributed. These cases
+cover basic state/status protocol behavior, not calendar or interrupt timing.
+
 `gba.rtc-outputs` checks the documented alarm and selected-frequency model:
 all 16 divider clocks, mixed masks across the complete divider phase, output
 priority, both hour formats, held alarm output, daily carries and long waits.
