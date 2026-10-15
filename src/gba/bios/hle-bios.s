@@ -117,9 +117,7 @@ subs   pc, lr, #4
 .word 0
 .word 0x03A0E004
 
-@ Unimplemented
-MultiBoot:
-
+@ Unused software-service entries return without work.
 NopCall:
 bx lr
 

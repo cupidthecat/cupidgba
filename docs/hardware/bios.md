@@ -108,8 +108,10 @@ The unchanged local math suite passes 615/615 register observations on both
 paths. Both also pass the complete 2020/2020 CPU/bus timing matrix, including
 its division, square-root, angle and copy cases. The observers reject partial
 counts and logged failures. These results cover the listed calls and inputs;
-multiboot and remaining undocumented/internal services still need separate
-execution and timing work. Timed initialization, software mixing and controls
+remaining undocumented/internal services still need separate execution and
+timing work. [Multiboot sending](bios/multiboot.md) executes its guarded body,
+encryption and checksum exchanges with explicit connected-serial timing limits.
+Timed initialization, software mixing and controls
 are described in [the sound driver](bios/sound-driver.md). SWIs 20h through
 24h and 2Ah execute [music-player lifecycle, sequencing and discovery](bios/music-player.md),
 with separate qualification of the callable helper table and library hooks.

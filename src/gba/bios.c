@@ -61,6 +61,10 @@ void cupid_bios_swi(struct CupidGBA* gba, uint8_t comment) {
         /* Warm reboot runs firmware reset writes and refills the entry pipeline. */
         cupid_arm_raise_swi(&gba->cpu);
         break;
+    case 0x25:
+        /* Download words and checksums use timed serial register accesses. */
+        cupid_arm_raise_swi(&gba->cpu);
+        break;
     default: break;    /** Unknown SWI */
     }
 }
