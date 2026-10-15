@@ -433,7 +433,7 @@ static void driven_low_data_corrupts_only_the_previous_response_bit(void) {
     }
 }
 
-static void interrupt_parameters_use_a_complete_two_byte_write_only_frame(void) {
+static void interrupt_parameters_shift_during_writes_and_nominal_reads(void) {
     for (unsigned msb = 0; msb < 2; msb++) {
         struct CupidRTC rtc;
         cupid_rtc_init(&rtc, 0);
@@ -445,8 +445,15 @@ static void interrupt_parameters_use_a_complete_two_byte_write_only_frame(void) 
         CHECK(rtc.interruptParameters == 0x3492);
         select_chip(&rtc, &clock);
         CHECK(!send_byte(&rtc, msb ? 0x69 : 0x96, msb, &clock));
-        CHECK(read_byte(&rtc, &clock) == 0xFF && read_byte(&rtc, &clock) == 0xFF);
-        CHECK(rtc.interruptParameters == 0x3492);
+        for (unsigned bit = 0; bit < 16; bit++) {
+            clock += 128;
+            CHECK(!cupid_rtc_write_pins_direction(&rtc, 6, 5, clock));
+            CHECK(cupid_rtc_output_pins(&rtc) == 2);
+            clock += 128;
+            CHECK(!cupid_rtc_write_pins_direction(&rtc, 7, 5, clock));
+            CHECK(cupid_rtc_output_pins(&rtc) == 2);
+        }
+        CHECK(rtc.interruptParameters == 0xFFFF);
         select_chip(&rtc, &clock);
         CHECK(!send_byte(&rtc, 0x06, false, &clock));
         CHECK(!rtc.interruptParameters && !rtc.interruptLow);
@@ -454,7 +461,7 @@ static void interrupt_parameters_use_a_complete_two_byte_write_only_frame(void) 
 }
 
 int main(void) {
-    RUN(interrupt_parameters_use_a_complete_two_byte_write_only_frame);
+    RUN(interrupt_parameters_shift_during_writes_and_nominal_reads);
     RUN(payload_commit_waits_for_the_eighth_rising_edge);
     RUN(response_frames_repeat_until_chip_select_release);
     RUN(status_writes_repeat_and_retain_the_shifted_partial_byte);

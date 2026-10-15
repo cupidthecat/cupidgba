@@ -344,7 +344,8 @@ static bool receive_command(struct CupidRTC* rtc) {
     default: rtc->length = 1; break;
     }
     memset(rtc->transfer, 0xFF, sizeof(rtc->transfer));
-    if (command & 0x80) {
+    /* The parameter register receives data even for its nominal read command. */
+    if ((command & 0x80) && rtc->command != 1) {
         uint8_t date[7];
         switch (rtc->command) {
         case 2: cupid_rtc_read_datetime(rtc, rtc->transfer); break;
@@ -364,6 +365,13 @@ static bool receive_command(struct CupidRTC* rtc) {
 }
 
 static void receive_payload(struct CupidRTC* rtc, bool data) {
+    if (rtc->command == 1) {
+        /* This live shift register affects output before the word is complete. */
+        cupid_rtc_write_interrupt_parameters(rtc,
+            (uint16_t)((rtc->interruptParameters >> 1) | (data ? 0x8000 : 0)));
+        if (++rtc->bit == 16) rtc->state = RTC_IDLE;
+        return;
+    }
     if (rtc->command == 4) {
         /* The status shift register retains its contents between bytes. */
         rtc->inputByte = (uint8_t)((rtc->inputByte >> 1) | (data ? 0x80 : 0));
@@ -379,9 +387,6 @@ static void receive_payload(struct CupidRTC* rtc, bool data) {
     rtc->inputByte = rtc->bit = 0;
     if (rtc->byte != rtc->length) return;
     switch (rtc->command) {
-    case 1:
-        cupid_rtc_write_interrupt_parameters(rtc, (uint16_t)(rtc->transfer[0] | rtc->transfer[1] << 8));
-        break;
     case 2: cupid_rtc_write_datetime(rtc, rtc->transfer); break;
     case 4: cupid_rtc_write_control(rtc, rtc->transfer[0]); break;
     case 6: cupid_rtc_write_time(rtc, rtc->transfer); break;

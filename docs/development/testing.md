@@ -497,3 +497,15 @@ device and invalid input controls. `CUPID_TEST_BIOS` adds
 CPU modes and stacks before invoking firmware; they do not qualify BIOS boot.
 Platform checks exercise manual tilt input. See the
 [sensor model and unqualified timing](../hardware/cartridge/tilt.md).
+
+`gba.rtc-parameters-component` observes every sixteen-bit parameter payload
+through both command directions, including each partial word, repeated levels,
+released input and chip-select abort. `gba.rtc-parameters-bus` checks ARM/Thumb
+halfword/word stores in all three GPIO windows, frequency-release IRQ deadlines,
+late dispatch, wrap and DMA strobes alongside a timer. Bulk and single-clock
+dispatch must agree. `rom.rtc-parameters` runs six owned guest drivers and
+requires all 32 IRQ observations per driver, plus all 512 serial-bit comparisons
+for each nominal-read driver. `CUPID_TEST_BIOS` adds the external-firmware path.
+Missing-device controls fail the positive observations. These inputs use
+explicit guest entry and do not qualify BIOS boot. See the
+[parameter model and physical limits](../hardware/cartridge/rtc.md).

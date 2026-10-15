@@ -81,7 +81,14 @@ if(BUILD_TESTING)
     add_test(NAME rom.cartridge-tilt COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_tilt.py --runner $<TARGET_FILE:cupidgba-headless>)
     set_tests_properties(rom.cartridge-tilt PROPERTIES TIMEOUT 30)
+    add_test(NAME rom.rtc-parameters COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_parameters.py --runner $<TARGET_FILE:cupidgba-headless>)
+    set_tests_properties(rom.rtc-parameters PROPERTIES TIMEOUT 30)
     if(CUPID_TEST_BIOS)
+        add_test(NAME rom.rtc-parameters-external COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_parameters.py --runner $<TARGET_FILE:cupidgba-headless>
+            --bios ${CUPID_TEST_BIOS})
+        set_tests_properties(rom.rtc-parameters-external PROPERTIES TIMEOUT 30)
         add_test(NAME rom.cartridge-tilt-external COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_tilt.py --runner $<TARGET_FILE:cupidgba-headless>
             --bios ${CUPID_TEST_BIOS})
@@ -132,6 +139,12 @@ if(BUILD_TESTING)
     target_link_libraries(test_rtc_outputs PRIVATE cupid_core)
     add_test(NAME gba.rtc-outputs COMMAND test_rtc_outputs)
     set_tests_properties(gba.rtc-outputs PROPERTIES TIMEOUT 10)
+    add_executable(test_rtc_parameters tests/gba/cartridge/test_rtc_parameters.c)
+    target_link_libraries(test_rtc_parameters PRIVATE cupid_core)
+    add_test(NAME gba.rtc-parameters-component COMMAND test_rtc_parameters component)
+    set_tests_properties(gba.rtc-parameters-component PROPERTIES TIMEOUT 30)
+    add_test(NAME gba.rtc-parameters-bus COMMAND test_rtc_parameters bus)
+    set_tests_properties(gba.rtc-parameters-bus PROPERTIES TIMEOUT 10)
     add_executable(test_rtc_minute tests/gba/cartridge/test_rtc_minute.c)
     target_link_libraries(test_rtc_minute PRIVATE cupid_core)
     add_test(NAME gba.rtc-minute COMMAND test_rtc_minute)

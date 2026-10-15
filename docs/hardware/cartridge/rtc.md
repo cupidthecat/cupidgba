@@ -2,8 +2,10 @@
 
 CupidGBA detects an RTC driver signature in the cartridge image. `--rtc on`
 enables the device explicitly, `--rtc off` disables it, and `--rtc auto` uses
-signature detection. The default is automatic. Detection does not patch CPU
-execution or change cartridge bytes. Other GPIO devices are not implemented.
+signature detection and known board wiring. The default is automatic. Detection
+does not patch CPU execution or change cartridge bytes. The separate
+[solar and rumble devices](peripherals.md), [gyroscope](gyroscope.md) and
+save-bus [X/Y sensor](tilt.md) have their own configuration and input.
 
 The data, direction and read-control registers occupy physical cartridge
 offsets `0xC4`, `0xC6` and `0xC8`. Data and direction use four bits; a direction
@@ -34,10 +36,22 @@ their byte and allow another aligned command without chip-select release.
 Status writes commit at the eighth rising edge and can accept more bytes in
 the same transaction. The first bit after each completed status byte also
 publishes the shifted byte; an incomplete continuation retains that value.
-Date, time and interrupt-parameter writes commit after a complete frame; their
-partial and overrun behavior still needs qualification. Interrupt parameters
-use two bytes, least significant byte first. Their write-only command reads
-as released serial data in the model.
+Date and time writes commit after a complete frame; their partial, overrun and
+active-output behavior still needs qualification.
+
+Interrupt parameters use a live sixteen-bit shift register. Each accepted
+payload bit shifts the word right and enters at bit 15, so frequency output
+can change before all sixteen bits arrive. The nominal parameter-read command
+also receives input and leaves serial output released. A host that releases
+the data line therefore reads `0xffff` and writes that value into the register.
+The model retains shifted bits when chip select is released and accepts the
+first sixteen payload bits of either command.
+
+These behaviors follow [chip-level serial observations](https://forums.nesdev.org/viewtopic.php?t=21513).
+They do not qualify GBA board propagation, the exact physical parameter sample
+edge, abort/restoration behavior or clocks beyond the complete word. The
+logical wire model uses the existing rising-edge payload sample; it adds no
+speculative delay. Raw save bytes and the calendar remain independent.
 
 Date and time use BCD with a two-digit year, leap-year rollover and a separately
 stored weekday. In 12-hour mode, midnight and noon use hour zero; bit seven
