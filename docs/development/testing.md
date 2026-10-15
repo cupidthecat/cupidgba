@@ -72,11 +72,17 @@ words, both instruction-width changes and BIOS/RAM exception returns,
 uncached page boundaries and DMA/timer/IRQ interactions across clock wrap.
 They also write wait controls before the first fetch, after a firmware reset
 and after an invalid jump, then require the configured costs on a valid fetch.
-`CUPID_PREFETCH_PROBE_DIR` enables all seventeen unchanged cartridge groups;
+`CUPID_PREFETCH_PROBE_DIR` points to the root containing the `prefetcher` and
+`timing` input subdirectories and enables all twenty unchanged cartridge groups;
 `CUPID_TEST_BIOS` adds their external-firmware comparisons. Each requires the
 original result before its display routine and at its terminal, a verified
-input digest and unchanged frame/instruction bounds. Known nearby-branch
-failures remain failing cases. See [prefetch](../hardware/prefetch.md).
+input digest and unchanged frame/instruction bounds. Nineteen groups have
+matching source; the additional legacy boundary cartridge has binary evidence
+only. The Thumb-to-ARM and legacy boundary failures remain registered.
+`CUPID_BUS_PAGE_PROBE_ROM` adds the eighteen-result CPU/DMA page-boundary
+cartridge and repeats it when `CUPID_TEST_BIOS` is set. Missing or failing
+console rows fail the check; current DMA decrement mismatches remain visible.
+See [prefetch](../hardware/prefetch.md).
 Music-frequency fixtures cover caller banks,
 fractional interpolation, upper-key clamps, source alignment/waits and live
 timer/DMA/IRQ progress, including late callbacks and clock wrap. A local

@@ -27,6 +27,9 @@ void cupid_bus_release(struct CupidARM* cpu) {
 void cupid_bus_fetch(struct CupidARM* cpu, uint32_t address, unsigned width, bool sequential) {
     struct CupidGBA* gba = cpu->master;
     cupid_bus_wait(cpu);
+    /* A pipeline refill differs from a sequential CPU request whose bus
+     * access was made nonsequential by an internal cycle or a page edge. */
+    bool refill = !sequential;
     sequential = sequential && !gba->memory.fetchNonseq;
     unsigned region = address >> GBA_BASE_OFFSET;
     if (region >= GBA_REGION_ROM0 && region <= GBA_REGION_ROM2_EX &&
@@ -44,7 +47,7 @@ void cupid_bus_fetch(struct CupidARM* cpu, uint32_t address, unsigned width, boo
             : (sequential ? cpu->memory.activeSeqCycles16 : cpu->memory.activeNonseqCycles16);
     }
     gba->memory.fetchNonseq = false;
-    unsigned cycles = cupid_prefetch_fetch(gba, address, width, wait + 1);
+    unsigned cycles = cupid_prefetch_fetch(gba, address, width, wait + 1, refill);
     cupid_bus_advance(cpu, cycles, true);
     cupid_prefetch_finish_fetch(gba);
     /* The caller reads the opcode before releasing ownership of the bus. */

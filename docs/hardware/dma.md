@@ -91,4 +91,8 @@ mode 3 currently uses a fixed source. The
 [Game Pak prefetch queue](prefetch.md) now shares CPU/DMA bus clocks; PPU
 contention timing remains incomplete. EEPROM serial paths remain available, but
 their full width/size/peripheral behavior needs separate cartridge tests.
+The optional CPU/DMA page-boundary cartridge currently fails three decrement
+timing rows on each BIOS path. Source-address stepping and the cartridge
+counter's page strobes are not fully qualified; see
+[the recorded results](prefetch.md#validation).
 See [testing](../development/testing.md) for the reproducible checks.

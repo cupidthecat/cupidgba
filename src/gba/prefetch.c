@@ -10,6 +10,7 @@ void cupid_prefetch_update(struct CupidGBA* gba, uint64_t timestamp) {
     memory->prefetchUnit.epoch = timestamp;
     if (!memory->prefetchUnit.active || memory->prefetchUnit.busy ||
         !memory->prefetchUnit.remaining) return;
+    if (elapsed) memory->prefetchUnit.engaged = true;
     unsigned capacity = 8;
     while (elapsed >= memory->prefetchUnit.remaining) {
         elapsed -= memory->prefetchUnit.remaining;
@@ -37,11 +38,12 @@ static unsigned stop(struct CupidGBA* gba) {
     memory->prefetchUnit.count = 0;
     memory->prefetchUnit.remaining = 0;
     memory->prefetchUnit.paused = false;
+    memory->prefetchUnit.engaged = false;
     return penalty;
 }
 
 unsigned cupid_prefetch_fetch(struct CupidGBA* gba, uint32_t address, unsigned width,
-                              unsigned cycles) {
+                              unsigned cycles, bool refill) {
     struct CupidMemory* memory = &gba->memory;
     cupid_prefetch_update(gba, cupid_timing_global_time(&gba->timing));
     memory->prefetchUnit.fetchKind = FETCH_NONE;
@@ -60,7 +62,10 @@ unsigned cupid_prefetch_fetch(struct CupidGBA* gba, uint32_t address, unsigned w
             memory->prefetchUnit.fetchKind = FETCH_CACHED;
             return 1;
         }
+        /* A branch can join a started background read only at the FIFO
+         * head. Sequential CPU demand can keep an unstarted burst alive. */
         if (memory->prefetchUnit.remaining &&
+            (!refill || (memory->prefetchUnit.engaged && address == memory->prefetchUnit.head)) &&
             (address == memory->prefetchUnit.tail ||
              (address == memory->prefetchUnit.head && memory->prefetchUnit.count < halfwords))) {
             /* A word may already have its first halfword buffered. Only the
@@ -94,6 +99,8 @@ void cupid_prefetch_finish_fetch(struct CupidGBA* gba) {
         unsigned region = memory->prefetchUnit.address >> GBA_BASE_OFFSET;
         unsigned width = memory->prefetchUnit.width;
         memory->prefetchUnit.active = memory->prefetch;
+        if (memory->prefetchUnit.fetchKind == FETCH_START || !memory->prefetch)
+            memory->prefetchUnit.engaged = false;
         memory->prefetchUnit.count = 0;
         memory->prefetchUnit.head = memory->prefetchUnit.address + width;
         memory->prefetchUnit.tail = memory->prefetchUnit.head;

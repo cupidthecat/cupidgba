@@ -251,8 +251,9 @@ struct CupidPrefetch {
     unsigned count, width;   /**< Buffered halfwords and current CPU fetch width */
     unsigned duty, remaining; /**< Full and remaining cartridge halfword clocks */
     unsigned fetchKind;
-    bool active, busy;        /**< Engaged stream and occupied Game Pak bus */
+    bool active, busy;        /**< Prefetch stream and occupied Game Pak bus */
     bool paused;              /**< Full queue must drain before burst restart */
+    bool engaged;             /**< Background burst has received idle bus clocks */
     bool disabled;            /**< Pending burst restart after WAITCNT disable */
 };
 
@@ -351,7 +352,7 @@ void cupid_bus_release(struct CupidARM* cpu);
 void cupid_bus_lock(struct CupidARM* cpu, bool locked);
 void cupid_prefetch_update(struct CupidGBA* gba, uint64_t timestamp);
 unsigned cupid_prefetch_fetch(struct CupidGBA* gba, uint32_t address, unsigned width,
-                              unsigned cycles);
+                              unsigned cycles, bool refill);
 void cupid_prefetch_finish_fetch(struct CupidGBA* gba);
 unsigned cupid_prefetch_before_data(struct CupidGBA* gba, uint32_t address);
 void cupid_prefetch_after_data(struct CupidGBA* gba);

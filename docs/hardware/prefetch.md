@@ -29,6 +29,13 @@ target starts a new stream. An uncached fetch at a 128 KiB ROM
 boundary uses nonsequential timing. WAITCNT changes update access costs and
 track a pending burst restart when prefetch is disabled.
 
+A sequential CPU request can continue a cartridge burst before background
+filling has received an idle bus clock. A branch refill can join an in-flight
+read only after background filling has started, and only at the oldest FIFO
+address. A target beyond older queued entries starts a new access. This
+distinction uses the CPU's refill request before internal cycles and page
+boundaries modify its bus access type.
+
 ## Validation
 
 The complete locally built timing suite passes 2020/2020 observations with
@@ -43,7 +50,8 @@ fetch bandwidth, complete full-queue draining and nonsequential restart,
 reset, RAM fill clocks, external-data cancellation,
 halfword arbitration, partially buffered words, both instruction-width changes,
 BIOS/RAM exception returns, disable/restart behavior, configured
-wait states, uncached page boundaries and DMA/timer/IRQ equivalence between
+wait states, idle-bus engagement, oldest-entry branch joining, uncached page
+boundaries and DMA/timer/IRQ equivalence between
 late dispatch and advancing one clock at a time.
 
 An owned ARM kernel fills the queue with nine RAM loads, performs a ROM data
@@ -55,8 +63,11 @@ are consumed. The earlier assumption that filling resumed immediately after
 one opcode was consumed was incorrect; the cartridge observations determine
 the replacement assertion.
 
-`CUPID_PREFETCH_PROBE_DIR` registers seventeen checksum-verified, source-backed local
-cartridge groups. `CUPID_TEST_BIOS` repeats every group with the local external
+`CUPID_PREFETCH_PROBE_DIR` points to the input root containing the `prefetcher`
+and `timing` subdirectories. It registers twenty checksum-verified local
+cartridge groups: seventeen original prefetch groups, two live WAITCNT groups
+and one binary-only legacy boundary group. Nineteen groups have matching
+source. `CUPID_TEST_BIOS` repeats every group with the local external
 image. Inputs remain private. The observer requires both R12=0 before the
 original result display and R12=0 at the original terminal. Some display paths
 reuse IWRAM locations that overlap their stack, so the terminal value alone
@@ -65,12 +76,28 @@ records the first ARM visit using the selected `--expect-loop-register`.
 Owned positive and negative cartridges check overwritten failures, missing
 checkpoints and terminal failures without changing ordinary runner behavior.
 
-The current candidate passes twelve of the seventeen cartridges on each BIOS
-path, including the three full-buffer groups, four boundary groups and the
-DMA group. Five nearby-branch groups still fail their original comparisons.
-Every group remains registered; an enabled source profile reports those
-failures. These covered boundary examples do not establish all page phases.
-An additional binary-only legacy boundary input remains unqualified.
+The current candidate passes sixteen of the seventeen original prefetch
+cartridges on each BIOS path, including all Thumb-only branch groups. The
+remaining Thumb-to-ARM case reads 0x66 where its second comparison requires
+0x6A. It contains a `BX PC` at 0x0800016E; the state-transition alignment and
+timing need further qualification. Its failure remains registered.
+
+Both live WAITCNT groups pass on each BIOS path with their original 0xBD
+timer comparison. These are specific enable/disabled sequences, not a complete
+mid-stream write matrix. The binary-only boundary group reads 0x21 instead
+of its encoded 0x29 comparison. Its digest, comparison, pre-display result
+and terminal are retained; missing assembly limits source qualification.
+The expanded prefetch profile passes 36 of 40 runs. Covered boundary examples
+do not establish all page phases.
+
+`CUPID_BUS_PAGE_PROBE_ROM` enables a separate fixed CPU/DMA page-boundary
+cartridge. The observer requires all eighteen original console results. Three
+DMA decrement rows currently fail on both BIOS paths: 68 instead of 63 at
+0x07FFFFF8, and 68 instead of 70 at 0x0801FFF0 and 0x0803FFF0. Failure text
+scrolls two earlier rows off the console; those missing rows cannot be counted
+as passes. Logical DMA address stepping, physical cartridge counting and
+page strobes need further investigation. The failing test remains enabled
+whenever its input is configured.
 
 The firmware timing cases execute the built-in math and copy routines through
 the timed CPU. See [BIOS execution](bios.md) for their coverage. Both complete
@@ -82,8 +109,8 @@ The FIFO correction preserves matching Thumb entries at the later exception
 return; it does not establish the earlier IRQ sampling point. This failure
 remains unresolved, with the original ROM, comparisons and run budget retained.
 
-The full-queue pause/drain/restart cases above now have source-cartridge and
-owned-kernel coverage. Other refill phases, mid-stream WAITCNT changes and
+The full-queue pause/drain/restart and nearby Thumb branch cases above now
+have source-cartridge and native coverage. Other refill phases, broader WAITCNT changes and
 prefetched page-boundary edges need further qualification. The current
 disable/drain behavior has native regression coverage but is not fully
 qualified on hardware. PPU bus
