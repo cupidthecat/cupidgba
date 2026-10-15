@@ -140,14 +140,19 @@ stores and timestamped FIFO output. `CUPID_TEST_BIOS` repeats every group with
 a local authorized image. See [music-player services](../hardware/bios/music-player.md)
 for corpus counts, pointer normalization and the remaining accuracy limits.
 
-Twelve `gba.bios-multiboot-*` groups validate owned normal and multiplayer
-downloads, complete decrypted bodies, CRC/offset rejection, readiness waits,
-disconnection, retained parameters and timestamped wire transcripts. A local
+Twenty-seven `gba.bios-multiboot-*` groups validate owned normal and multiplayer
+downloads, complete decrypted bodies through the maximum length, source/page
+boundaries, selected-client errors, CRC/offset rejection, readiness waits,
+disconnection, retained parameters and timestamped wire transcripts. The guard
+matrix covers mode/source/length edges, mirrored and read-only parameters and
+enabled DMA. Active-download cases observe DMA mutation, pending timer/IRQ
+requests and partial cleanup stores. A local
 `CUPID_TEST_BIOS` repeats them with the external image. `gba.multiplayer` checks
 the word-level device lifecycle, ordered receive slots, clock ownership,
 IRQ/cancellation/reset/STOP and synchronized boards. See
-[the sender model](../hardware/bios/multiboot.md) for timing limits and pending
-qualification. Existing serial source tests and expected values remain intact.
+[the sender model](../hardware/bios/multiboot.md) for corpus scope, the separate
+full-size profile and unmeasured timing limits. Existing serial source tests
+and expected values remain intact.
 
 Register/memory reset checks cover 650 observations across all 256 masks,
 both caller modes, ignored upper bits, cartridge waits and safe RAM callers.

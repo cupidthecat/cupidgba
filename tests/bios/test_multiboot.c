@@ -9,6 +9,7 @@
 
 static const char* externalBios;
 static uint32_t parameterAddress;
+static bool unmaskedCaller;
 
 static uint32_t word(const uint8_t* data, unsigned offset) {
     uint32_t result; memcpy(&result, data + offset, 4); return result;
@@ -41,6 +42,10 @@ struct DownloadPeer {
     uint32_t key, crc, polynomial, xorKey, reply, response, transmitted, previous;
     unsigned bits, words, length, transfers, state, fault, waitReplies;
     uint8_t handshake, random, received[1024];
+    const uint8_t* source;
+    uint8_t* output;
+    void (*finished)(void* context, uint64_t timestamp);
+    void* finishedContext;
     bool clock;
     uint64_t start, signature;
 };
@@ -64,8 +69,9 @@ static void download_word(struct DownloadPeer* peer, uint32_t transmitted, uint6
         peer->key = peer->key * 0x6F646573 + 1;
         const uint32_t clear = transmitted ^ peer->key ^
             (uint32_t)-(int32_t)(0x020000C0 + peer->words * 4) ^ peer->xorKey;
-        put(peer->received, peer->words * 4, clear);
-        CHECK(clear == word(peer->gba->memory.ewram, 0x10000 + peer->words * 4));
+        put(peer->output ? peer->output : peer->received, peer->words * 4, clear);
+        const uint8_t* source = peer->source ? peer->source : peer->gba->memory.ewram + 0x10000;
+        CHECK(clear == word(source, peer->words * 4));
         peer->crc = download_crc(peer->crc, clear, peer->polynomial);
         ++peer->words;
         peer->reply = 0x00C0 + peer->words * 4;
@@ -89,6 +95,7 @@ static void download_word(struct DownloadPeer* peer, uint32_t transmitted, uint6
     } else {
         CHECK(peer->state == 3 && transmitted == peer->crc);
         peer->state = 4;
+        if (peer->finished) peer->finished(peer->finishedContext, timestamp);
     }
     peer->previous = transmitted;
     ++peer->transfers;
@@ -112,8 +119,8 @@ static void download_pins(void* context, uint8_t mask, uint8_t levels, uint64_t 
     }
     peer->clock = clock;
 }
-static uint64_t call(struct CupidGBA* gba, unsigned mode, bool thumb,
-                     enum CupidPrivMode bank, uint64_t* traceStart) {
+static uint64_t execute_call(struct CupidGBA* gba, unsigned mode, bool thumb,
+                             enum CupidPrivMode bank, uint64_t* traceStart, unsigned instructionLimit) {
     const uint32_t wide[] = {0xEF250000, 0xEAFFFFFE};
     const uint16_t narrow[] = {0xDF25, 0xE7FE};
     memcpy(gba->memory.iwram + 0x100, thumb ? (const void*)narrow : (const void*)wide,
@@ -122,7 +129,7 @@ static uint64_t call(struct CupidGBA* gba, unsigned mode, bool thumb,
     for (unsigned reg = 0; reg < 15; reg++) gba->cpu.gprs[reg] = (int32_t)(0x11220000u + reg);
     gba->cpu.gprs[0] = (int32_t)parameterAddress; gba->cpu.gprs[1] = (int32_t)mode;
     gba->cpu.gprs[ARM_SP] = 0x03007000;
-    const uint32_t status = 0xA0000080u | bank | (thumb ? 32u : 0u);
+    const uint32_t status = 0xA0000000u | (unmaskedCaller ? 0 : 0x80u) | bank | (thumb ? 32u : 0u);
     gba->cpu.cpsr.packed = (int32_t)status; gba->cpu.spsr.packed = 0x6500003F;
     _CupidSetMode(&gba->cpu, thumb ? MODE_THUMB : MODE_ARM);
     gba->cpu.gprs[ARM_PC] = 0x03000100;
@@ -130,15 +137,13 @@ static uint64_t call(struct CupidGBA* gba, unsigned mode, bool thumb,
     const uint64_t start = cupid_timing_global_time(&gba->timing);
     if (traceStart) *traceStart = start;
     unsigned steps;
-    /* The firmware's initial delay alone executes over 524,000 instructions.
-     * This separate guard covers the complete owned downloads up to 1 KiB. */
-    for (steps = 0; steps < 2000000; steps++) {
+    for (steps = 0; steps < instructionLimit; steps++) {
         cupid_gba_step(gba);
         if (gba->cpu.executionMode == (thumb ? MODE_THUMB : MODE_ARM) &&
             (uint32_t)gba->cpu.gprs[ARM_PC] == 0x03000100u + (thumb ? 4u : 8u)) break;
     }
-    if (steps == 2000000) fprintf(stderr, "Download did not return: pc=%08" PRIx32 "\n", (uint32_t)gba->cpu.gprs[ARM_PC]);
-    CHECK(steps < 2000000);
+    if (steps == instructionLimit) fprintf(stderr, "Download did not return: pc=%08" PRIx32 "\n", (uint32_t)gba->cpu.gprs[ARM_PC]);
+    CHECK(steps < instructionLimit);
     CHECK(gba->cpu.privilegeMode == bank && (uint32_t)gba->cpu.cpsr.packed == status);
     CHECK((uint32_t)gba->cpu.gprs[1] == mode && (uint32_t)gba->cpu.gprs[2] == 0x11220002);
     for (unsigned reg = 3; reg < 15; reg++)
@@ -146,10 +151,19 @@ static uint64_t call(struct CupidGBA* gba, unsigned mode, bool thumb,
     if (bank == MODE_IRQ) CHECK((uint32_t)gba->cpu.spsr.packed == 0x6500003F);
     return cupid_timing_global_time(&gba->timing) - start;
 }
-static void normal_download(unsigned fixture, unsigned fault) {
+static uint64_t call(struct CupidGBA* gba, unsigned mode, bool thumb,
+                     enum CupidPrivMode bank, uint64_t* traceStart) {
+    /* The initial delay alone exceeds 524,000 instructions. Retain the
+     * original two-million-instruction guard for every small-download case. */
+    return execute_call(gba, mode, thumb, bank, traceStart, 2000000);
+}
+#include "multiboot-bus-inputs.inc"
+
+static void normal_download(unsigned fixture, unsigned fault, bool interactions) {
     const unsigned modes[] = {0, 2, 0, 2}, lengths[] = {256, 512, 256, 1024};
     const uint64_t origins[] = {0, UINT32_MAX - 16u, UINT64_C(0x300000000), 0};
     struct CupidGBA* gba = machine(origins[fixture], fixture >= 2);
+    struct DownloadBusWatch watch = {.gba = gba};
     struct DownloadPeer peer = {.gba = gba, .key = 0xFFFF4293, .crc = 0xC387, .polynomial = 0xC37B,
         .xorKey = 0x43202F2F, .reply = 0x7313, .length = lengths[fixture], .handshake = 0x51,
         .random = 0x13, .clock = true, .previous = 0x6451, .signature = UINT64_C(14695981039346656037),
@@ -168,7 +182,14 @@ static void normal_download(unsigned fixture, unsigned fault) {
     cupid_io_write(gba, REG_SIODATA32_LO, 0x6451);
     cupid_io_write(gba, REG_SIODATA32_HI, fault == 4 ? 0x7213 : 0x7313);
     cupid_serial_set_output_callback(&gba->serial, fault == 5 ? NULL : download_pins, &peer);
-    const uint64_t clocks = call(gba, modes[fixture], (fixture & 1) != 0, fixture & 1 ? MODE_IRQ : MODE_SYS, &peer.start);
+    if (interactions) {
+        start_download_bus_watch(&watch);
+        peer.finished = watch_download_completion; peer.finishedContext = &watch;
+    }
+    unmaskedCaller = interactions;
+    const uint64_t clocks = call(gba, modes[fixture], (fixture & 1) != 0,
+        interactions ? MODE_SYS : (fixture & 1 ? MODE_IRQ : MODE_SYS), &peer.start);
+    unmaskedCaller = false;
     CHECK((unsigned)gba->cpu.gprs[0] == result && !gba->serial.active);
     if (fault == 2) CHECK(peer.words == 1 && peer.transfers == 2 && !peer.state);
     else if (fault == 4 || fault == 5) CHECK(!peer.words && !peer.transfers && !peer.state);
@@ -177,7 +198,15 @@ static void normal_download(unsigned fixture, unsigned fault) {
     CHECK(!memcmp(peer.received, gba->memory.ewram + 0x10000, peer.words * 4));
     for (unsigned byte = peer.words * 4; byte < sizeof(peer.received); byte++) CHECK(peer.received[byte] == 0xA5);
     CHECK(!memcmp(expected, params, sizeof(expected)));
-    if (!fault) {
+    if (interactions) {
+        static const struct DownloadExpected observations[] = {
+            {UINT64_C(1238452), UINT64_C(0xFA1B64F03D0E3DC0), 0xC67B},
+            {UINT64_C(1206323), UINT64_C(0x73B6E24B50AB51D5), 0x7942},
+        };
+        CHECK(clocks == observations[fixture].clocks && peer.signature == observations[fixture].signature);
+        CHECK(peer.crc == observations[fixture].crc);
+        finish_download_bus_watch(&watch, (fixture & 1) != 0, modes[fixture]);
+    } else if (!fault) {
         CHECK(clocks == downloadExpected[fixture].clocks && peer.signature == downloadExpected[fixture].signature);
         CHECK(peer.crc == downloadExpected[fixture].crc);
     } else {
@@ -185,10 +214,10 @@ static void normal_download(unsigned fixture, unsigned fault) {
         CHECK(clocks == observation->clocks && peer.signature == observation->signature && peer.crc == observation->crc);
     }
     printf("%s download %u clocks=%" PRIu64 " transcript=%016" PRIx64 " crc=%04" PRIx32 "\n",
-           fault ? "Peer" : "Normal", fault ? fault : fixture, clocks, peer.signature, peer.crc);
+           interactions ? "Bus" : (fault ? "Peer" : "Normal"), fault ? fault : fixture, clocks, peer.signature, peer.crc);
     destroy(gba);
 }
-static void successful_normal_download(unsigned fixture) { normal_download(fixture, 0); }
+static void successful_normal_download(unsigned fixture) { normal_download(fixture, 0, false); }
 static void empty_source_guards(void) {
     const uint64_t clocks[] = {256, 252, 256, 196};
     for (unsigned mode = 0; mode < 4; mode++) {
@@ -204,6 +233,8 @@ static void empty_source_guards(void) {
     }
 }
 #include "multiboot-multiplayer.inc"
+#include "multiboot-source-inputs.inc"
+#include "multiboot-guard-inputs.inc"
 
 int main(int argc, char** argv) {
     CHECK(argc == 2 || (argc == 4 && !strcmp(argv[2], "--external-bios")));
@@ -215,11 +246,26 @@ int main(int argc, char** argv) {
     else if (!strcmp(argv[1], "normal-3")) successful_normal_download(3);
     else if (!strcmp(argv[1], "multi-0")) successful_multiplayer_download(0);
     else if (!strcmp(argv[1], "multi-1")) successful_multiplayer_download(1);
-    else if (!strcmp(argv[1], "crc-reject")) normal_download(0, 1);
-    else if (!strcmp(argv[1], "offset-reject")) normal_download(0, 2);
-    else if (!strcmp(argv[1], "client-wait")) normal_download(0, 3);
-    else if (!strcmp(argv[1], "client-reject")) normal_download(0, 4);
-    else if (!strcmp(argv[1], "disconnect")) normal_download(0, 5);
+    else if (!strcmp(argv[1], "multi-2")) successful_multiplayer_download(2);
+    else if (!strcmp(argv[1], "multi-sparse")) successful_multiplayer_download(3);
+    else if (!strcmp(argv[1], "multi-unselected")) multiplayer_download(3, 3);
+    else if (!strcmp(argv[1], "multi-offset-reject")) multiplayer_download(2, 1);
+    else if (!strcmp(argv[1], "multi-crc-reject")) multiplayer_download(2, 2);
+    else if (!strcmp(argv[1], "crc-reject")) normal_download(0, 1, false);
+    else if (!strcmp(argv[1], "offset-reject")) normal_download(0, 2, false);
+    else if (!strcmp(argv[1], "client-wait")) normal_download(0, 3, false);
+    else if (!strcmp(argv[1], "client-reject")) normal_download(0, 4, false);
+    else if (!strcmp(argv[1], "disconnect")) normal_download(0, 5, false);
+    else if (!strcmp(argv[1], "bus-0")) normal_download(0, 0, true);
+    else if (!strcmp(argv[1], "bus-1")) normal_download(1, 0, true);
+    else if (!strcmp(argv[1], "source-iwram")) source_download(0);
+    else if (!strcmp(argv[1], "source-rom-page")) source_download(1);
+    else if (!strcmp(argv[1], "maximum")) source_download(2);
+    else if (!strcmp(argv[1], "guard-matrix-0")) guarded_source_matrix(0);
+    else if (!strcmp(argv[1], "guard-matrix-1")) guarded_source_matrix(1);
+    else if (!strcmp(argv[1], "guard-matrix-2")) guarded_source_matrix(2);
+    else if (!strcmp(argv[1], "guard-readonly")) readonly_parameter_guard();
+    else if (!strcmp(argv[1], "guard-dma")) enabled_dma_guard();
     else CHECK(false);
     return 0;
 }

@@ -28,8 +28,9 @@ The caller-provided fields used by the fixtures are:
 The ordinary protocol uses body lengths from `100h` through `3FF40h`, in
 16-byte units, excluding the previously transferred header. The sender's
 observed size masking and guarded source reads are retained; the routine does
-not add inferred host-side validation. Tests use owned bodies in the prepared
-RAM regions and validate retained parameter bytes and surrounding guards.
+not add inferred host-side validation. Tests use owned EWRAM, IWRAM and ROM
+bodies, including a ROM page crossing and the complete maximum body. They
+validate retained parameter bytes, unchanged sources and surrounding guards.
 
 The sender masks CPU interrupt requests while it executes. Peripheral clocks
 continue, including serial completion, timers and DMA. It rejects the observed
@@ -77,13 +78,30 @@ establish those physical properties or complete link emulation.
 
 ## Qualification fixtures
 
-Twelve native BIOS groups cover four valid normal downloads, one- and
-three-client multiplayer downloads, source guards, incorrect offsets and CRC,
-readiness waits, rejected client markers and disconnection. A local
+Twenty-seven native BIOS groups cover normal downloads, one-, two- and
+three-client multiplayer downloads, sparse client selection, incorrect offsets
+and CRC, readiness waits, rejected client markers and disconnection. A local
 `CUPID_TEST_BIOS` repeats every group with an authorized external image.
 Fixtures check ARM/Thumb callers, System/IRQ banks, EWRAM/IWRAM parameters,
 clock wrap, complete retained parameter images, guarded receive buffers,
 decrypted body bytes and independent timestamped wire-transcript signatures.
+
+The guard matrix records 960 bounded observations per firmware image across
+six mode values, RAM parameter regions and their mirrors, both caller ISAs,
+source addresses and masked length boundaries. Its deliberately unready peer
+rejects before malformed payloads are read; these cases do not qualify complete
+transfers at malformed lengths. Eight read-only parameter cases verify that
+ROM remains unchanged. Twenty-four cases reject enabled DMA across all four
+channels, three transfer modes and both caller ISAs.
+
+Two active-download cases inject a real DMA source mutation after entry. The
+receiver validates the changed payload and CRC. Timer and DMA interrupt flags
+become pending while the sender masks CPU requests; the timer handler runs
+after return and preserves the caller. One-cycle observers capture the
+separate work-area and scratch stores before return. Both firmware images
+match the asserted bus chronology and timestamped wire signatures. Selected
+multiplayer clients with incorrect offset or CRC cause failure; an incorrect
+offset from an unselected client is ignored.
 
 The separate multiplayer group covers all four baud selectors, ordered
 receive slots, participant counts, slave IDs, latched local words, IRQ
@@ -93,9 +111,16 @@ serial suite retains all 90 register observations, four counted normal timing
 cases and its four original multiplayer skips. Those skips do not qualify
 connected multiplayer timing.
 
-The BIOS fixtures have a separate two-million-instruction guard because the
-sender's initial delay alone exceeds 524,000 instructions. Existing guards,
-source programs, expected values and test deadlines remain unchanged.
+Small BIOS fixtures retain their two-million-instruction guard because the
+sender's initial delay alone exceeds 524,000 instructions. The new full-size
+`maximum` profile sends all `3FF40h` bytes and checks every plaintext word,
+16-bit offset wrap, final CRC, parameter bytes and buffer guards. It has a
+separate 150-million-instruction guard and 180-second deadline; ordinary
+fixtures retain their ten-second deadlines. Existing source programs, expected
+values, instruction guards and deadlines remain unchanged.
+
 External firmware, cartridge inputs, captures and private research are not
-distributed. Broader source/length and bus-interaction qualification, final
-platform/runtime checks and hosted delivery gates remain tracked in #71.
+distributed. This corpus qualifies the stated software exchanges and bus
+observations. It does not establish calibrated cable phases, general link,
+UART or JOY support, or complete BIOS accuracy. Platform/runtime and hosted
+delivery results are tracked in #71.

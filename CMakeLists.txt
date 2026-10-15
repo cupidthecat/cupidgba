@@ -286,7 +286,10 @@ if(BUILD_TESTING)
     add_executable(test_bios_multiboot tests/bios/test_multiboot.c)
     target_link_libraries(test_bios_multiboot PRIVATE cupid_core)
     foreach(group guards normal-0 normal-1 normal-2 normal-3 multi-0 multi-1
-                  crc-reject offset-reject client-wait client-reject disconnect)
+                  crc-reject offset-reject client-wait client-reject disconnect
+                  source-iwram source-rom-page bus-0 bus-1
+                  guard-matrix-0 guard-matrix-1 guard-matrix-2 guard-readonly guard-dma
+                  multi-2 multi-sparse multi-unselected multi-offset-reject multi-crc-reject)
         add_test(NAME gba.bios-multiboot-${group} COMMAND test_bios_multiboot ${group})
         set_tests_properties(gba.bios-multiboot-${group} PROPERTIES TIMEOUT 10)
         if(CUPID_TEST_BIOS)
@@ -294,6 +297,15 @@ if(BUILD_TESTING)
             set_tests_properties(gba.bios-multiboot-${group}-external PROPERTIES TIMEOUT 10)
         endif()
     endforeach()
+
+    # Full-size protocol execution is a separate end-to-end profile. Existing
+    # small-download guards and ten-second deadlines remain unchanged.
+    add_test(NAME gba.bios-multiboot-maximum COMMAND test_bios_multiboot maximum)
+    set_tests_properties(gba.bios-multiboot-maximum PROPERTIES TIMEOUT 180 LABELS extended)
+    if(CUPID_TEST_BIOS)
+        add_test(NAME gba.bios-multiboot-maximum-external COMMAND test_bios_multiboot maximum --external-bios ${CUPID_TEST_BIOS})
+        set_tests_properties(gba.bios-multiboot-maximum-external PROPERTIES TIMEOUT 180 LABELS extended)
+    endif()
 
     add_executable(test_bios_power tests/bios/test_power.c)
     target_link_libraries(test_bios_power PRIVATE cupid_core)
