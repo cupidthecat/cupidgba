@@ -130,8 +130,15 @@ words, and twelve-frame playback checks include every output sample and its
 timestamp. `CUPID_TEST_BIOS` adds matching external-firmware groups. All groups
 retain ten-second deadlines and fixed instruction guards; the mixer rate
 corpus runs in three four-selector batches with identical inputs and assertions.
-Rate fixtures align both video engines explicitly. Undocumented music helpers and physical audio
-remain unqualified. See [the sound driver](../hardware/bios/sound-driver.md).
+Rate fixtures align both video engines explicitly. Physical audio remains
+unqualified. See [the sound driver](../hardware/bios/sound-driver.md).
+
+Thirty-nine `gba.bios-music-player-*` groups cover player lifecycle, all 36
+exported entries, owned songs and ARM/Thumb library hooks. Complete state and
+execution clocks are checked alongside timer/DMA/IRQ interaction, partial
+stores and timestamped FIFO output. `CUPID_TEST_BIOS` repeats every group with
+a local authorized image. See [music-player services](../hardware/bios/music-player.md)
+for corpus counts, pointer normalization and the remaining accuracy limits.
 
 Register/memory reset checks cover 650 observations across all 256 masks,
 both caller modes, ignored upper bits, cartridge waits and safe RAM callers.

@@ -264,6 +264,21 @@ if(BUILD_TESTING)
         endif()
     endforeach()
 
+    add_executable(test_bios_music_player tests/bios/test_music_player.c)
+    target_link_libraries(test_bios_music_player PRIVATE cupid_core)
+    foreach(group open open-guards discovery start stop continue fade guards sequence irq
+                  clear-entry unlink-entry controllers-0 controllers-1 controllers-2 controllers-3
+                  controllers-4 fine-entry flow-entry port-entry rate-entry-0 rate-entry-1 rate-entry-2
+                  stop-entry fade-entry tie-entry source-guard track-entry songs-0 songs-1 songs-2 songs-3
+                  songs-4 hooks-arm hooks-thumb playback-0 playback-1 playback-2 progress)
+        add_test(NAME gba.bios-music-player-${group} COMMAND test_bios_music_player ${group})
+        set_tests_properties(gba.bios-music-player-${group} PROPERTIES TIMEOUT 10)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME gba.bios-music-player-${group}-external COMMAND test_bios_music_player ${group} --external-bios ${CUPID_TEST_BIOS})
+            set_tests_properties(gba.bios-music-player-${group}-external PROPERTIES TIMEOUT 10)
+        endif()
+    endforeach()
+
     add_executable(test_bios_power tests/bios/test_power.c)
     target_link_libraries(test_bios_power PRIVATE cupid_core)
     foreach(batch RANGE 0 3)

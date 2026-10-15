@@ -45,7 +45,7 @@ SoundDriverInit:
     strb r0, [r7, #6]
     movs r0, #15
     strb r0, [r7, #7]
-    ldr r0, =soundDefaultReturn
+    ldr r0, =musicStartNote
     str r0, [r7, #56]
     ldr r0, =soundDefaultReturn
     str r0, [r7, #40]
@@ -65,15 +65,9 @@ SoundDriverInit:
 .balign 4, 0
 .ltorg
 
-@ The documented driver has no default extension. Music helper dispatch is
-@ reserved separately from PCM mixing and remains an unsupported interface.
+@ Library extensions start detached; the music table and note helper are live.
 .thumb_func
 soundDefaultReturn:
     bx lr
-.balign 4, 0
-soundInternalJumpTable:
-    .rept 36
-    .word soundDefaultReturn
-    .endr
 .arm
 .balign 4, 0

@@ -20,8 +20,9 @@ uses the same scanline synchronization as a rate change and publishes the
 ready identifier only after setup finishes.
 
 The default extension hooks return without changing state. The reserved
-music jump table and helper pointer are initialized to callable placeholders;
-their undocumented music-player operations remain unsupported. Address words
+music jump table and note helper are initialized to live functions; see
+[music-player services](music-player.md). Detached library hooks retain their
+return functions until the caller installs extensions. Address words
 are implementation details, so they are checked for bounds and supported
 callability separately from complete PCM and channel-state comparisons.
 
@@ -137,6 +138,7 @@ for a DMA-restarting VSync, 83 without restart, 245 for channel clear without
 an extension, 9,685 for VSyncOff and 60 for VSyncOn. These are the tested
 software paths and initial states, not physical cartridge measurements.
 
-Undocumented music-player helpers, jump-table completeness, invalid pointers,
-malformed wave/work-area state, extended library variants and physical audio
-output remain unqualified. Full BIOS and audio acceptance remain open.
+Music-player lifecycle and exported helpers have separate
+[qualification coverage](music-player.md). Invalid pointers, malformed
+wave/work-area state, extended library variants and physical audio output
+remain unqualified. Full BIOS and audio acceptance remain open.
