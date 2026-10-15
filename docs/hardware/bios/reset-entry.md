@@ -28,4 +28,5 @@ Native BIOS service fixtures inject application code without executing a full
 boot. They prepare the caller mode and stack banks explicitly, while keeping
 firmware ownership, clocks, peripheral queues and existing assertions intact.
 Reset-entry fixtures and source ROMs that execute firmware boot retain the
-raw reset state. The separate warm-reset service still needs qualification.
+raw reset state. The separate [HardReset service](hard-reset.md) executes warm
+reboot instructions without resetting the system scheduler.
