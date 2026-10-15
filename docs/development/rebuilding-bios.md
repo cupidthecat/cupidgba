@@ -38,6 +38,10 @@ bridge. `music-pitch.inc` provides 180 octave/semitone indices and 12 Q31
 semitone factors reproduced with decimal arithmetic. Its generator supports
 `--write` and `--check`. The reset pointer subtraction has an explicit Thumb
 encoding so GNU and LLVM emit identical bytes for the same operation.
+`sound-driver.s` occupies the reserved space before the pitch data and contains
+timed work-area controls, PCM clearing, FIFO DMA cadence and playback-rate
+configuration. Its integer ratio helper enters ARM with a direct instruction
+state change. Initialization and the software mixer remain incomplete.
 `checksum.s` reads all 4,096 image words through timed ARM loads and adds them.
 The reserved final word at `0x3FFC` comes from `checksum-identity.inc`. Its
 generator subtracts the sum of the preceding words from the replacement

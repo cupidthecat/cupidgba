@@ -119,18 +119,13 @@ subs   pc, lr, #4
 
 @ Unimplemented
 SoundDriverInit:
-SoundDriverMode:
 SoundDriverMain:
-SoundDriverVsync:
-SoundChannelClear:
 MusicPlayerOpen:
 MusicPlayerStart:
 MusicPlayerStop:
 MusicPlayerContinue:
 MusicPlayerFadeOut:
 MultiBoot:
-SoundDriverVsyncOff:
-SoundDriverVsyncOn:
 
 NopCall:
 bx lr

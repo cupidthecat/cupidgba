@@ -121,6 +121,14 @@ the local external BIOS. Background and object groups retain separate
 ten-second deadlines, and a mathematical generator checks all sine values.
 See [affine services](../hardware/bios-affine-services.md).
 
+Eight `gba.bios-sound-*` groups cover work-area identifiers, mode fields, frame
+cadence, PCM disable/enable, channel clearing, ARM/Thumb extension callbacks,
+caller banks, all twelve playback rates and per-clock bus progress during
+timer/DMA IRQs and clock wrap. `CUPID_TEST_BIOS` adds matching external-firmware
+groups. The three rate batches retain all selectors and ten-second deadlines;
+their video engines start at the same explicit phase. Initialization and
+software mixing remain incomplete. See [sound-driver controls](../hardware/bios/sound-driver.md).
+
 Register/memory reset checks cover 650 observations across all 256 masks,
 both caller modes, ignored upper bits, cartridge waits and safe RAM callers.
 They compare complete memory, retained regions, readable I/O, wave banks,
