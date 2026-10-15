@@ -1104,9 +1104,10 @@ uint32_t cupid_memory_store_multiple(struct CupidARM* cpu, uint32_t address,
 }
 
 /**
- * @brief Apply memory stall adjustment for wait cycles.
+ * @brief Retain internal clocks and mark the following opcode request.
  *
- * Currently pass-through; prefetch-buffer effects are not yet modeled here.
+ * Timed internal cycles request a nonsequential fetch. The prefetch unit
+ * separately supplies matching buffered or in-flight cartridge halfwords.
  */
 int32_t cupid_memory_stall(struct CupidARM* cpu, int32_t wait) {
     if (cpu->memory.timed && wait > 0) {

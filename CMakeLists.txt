@@ -16,6 +16,7 @@ set(CUPID_IO_SUITE_ROM "" CACHE FILEPATH "Locally built I/O register-read suite 
 set(CUPID_SERIAL_SUITE_ROM "" CACHE FILEPATH "Locally built serial timing and register suite ROM")
 set(CUPID_SERIAL_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified serial cartridge probes")
 set(CUPID_HALT_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified firmware HALT probes")
+set(CUPID_PREFETCH_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified prefetch cartridge probes")
 set(CUPID_AUDIO_TEST_ROM "" CACHE FILEPATH "Locally built audio signal cartridge ROM")
 set(CUPID_TEST_BIOS "" CACHE FILEPATH "External BIOS for local hardware suite checks")
 
@@ -114,6 +115,10 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_bios_startup.py
         --runner $<TARGET_FILE:cupidgba-headless>)
     set_tests_properties(runner.bios-startup PROPERTIES TIMEOUT 10)
+    add_test(NAME runner.checkpoint COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_runner_checkpoint.py
+        --runner $<TARGET_FILE:cupidgba-headless>)
+    set_tests_properties(runner.checkpoint PROPERTIES TIMEOUT 10)
 
     add_executable(test_cartridge_image tests/gba/cartridge/test_image.c)
     target_link_libraries(test_cartridge_image PRIVATE cupid_core)
@@ -524,6 +529,24 @@ if(BUILD_TESTING)
                 --runner $<TARGET_FILE:cupidgba-headless>)
             set_tests_properties(rom.io-suite-external PROPERTIES TIMEOUT 100)
         endif()
+    endif()
+
+    if(CUPID_PREFETCH_PROBE_DIR)
+        foreach(case boundary-1 boundary-2 boundary-3 boundary-4 branch-thumb
+                     branch-thumb-2 branch-thumb-3 branch-thumb-4 branch-thumb-5 branch-thumb-6
+                     branch-thumb-arm branch-thumb-arm-3 branch-thumb-arm-4 dma full-arm full-arm-2 full-thumb)
+            add_test(NAME rom.prefetch-${case} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_prefetch_probe.py
+                --directory ${CUPID_PREFETCH_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless> --test ${case})
+            set_tests_properties(rom.prefetch-${case} PROPERTIES TIMEOUT 95)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.prefetch-${case}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_prefetch_probe.py
+                    --directory ${CUPID_PREFETCH_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless>
+                    --bios ${CUPID_TEST_BIOS} --test ${case})
+                set_tests_properties(rom.prefetch-${case}-external PROPERTIES TIMEOUT 95)
+            endif()
+        endforeach()
     endif()
 
     if(CUPID_HALT_PROBE_DIR AND CUPID_TEST_BIOS)

@@ -16,6 +16,7 @@ void cupid_prefetch_update(struct CupidGBA* gba, uint64_t timestamp) {
         memory->prefetchUnit.count++;
         memory->prefetchUnit.tail += 2;
         if (!memory->prefetch || memory->prefetchUnit.count >= capacity) {
+            memory->prefetchUnit.paused = memory->prefetch;
             memory->prefetchUnit.remaining = 0;
             return;
         }
@@ -35,6 +36,7 @@ static unsigned stop(struct CupidGBA* gba) {
     memory->prefetchUnit.active = false;
     memory->prefetchUnit.count = 0;
     memory->prefetchUnit.remaining = 0;
+    memory->prefetchUnit.paused = false;
     return penalty;
 }
 
@@ -52,7 +54,7 @@ unsigned cupid_prefetch_fetch(struct CupidGBA* gba, uint32_t address, unsigned w
         if (memory->prefetchUnit.count >= halfwords && address == memory->prefetchUnit.head) {
             memory->prefetchUnit.count -= halfwords;
             memory->prefetchUnit.head += width;
-            if (!memory->prefetchUnit.remaining && memory->prefetch) {
+            if (!memory->prefetchUnit.remaining && memory->prefetch && !memory->prefetchUnit.paused) {
                 memory->prefetchUnit.remaining = memory->prefetchUnit.duty;
             }
             memory->prefetchUnit.fetchKind = FETCH_CACHED;
@@ -71,8 +73,9 @@ unsigned cupid_prefetch_fetch(struct CupidGBA* gba, uint32_t address, unsigned w
             return memory->prefetchUnit.remaining + (needed - 1) * memory->prefetchUnit.duty;
         }
     }
+    bool restart = memory->prefetchUnit.paused;
     cycles += stop(gba);
-    if (memory->prefetchUnit.disabled) {
+    if (memory->prefetchUnit.disabled || restart) {
         cycles = 1 + (width == 4 ? memory->waitstatesNonseq32[region]
                                   : memory->waitstatesNonseq16[region]);
         memory->prefetchUnit.disabled = false;
@@ -96,6 +99,7 @@ void cupid_prefetch_finish_fetch(struct CupidGBA* gba) {
         memory->prefetchUnit.tail = memory->prefetchUnit.head;
         memory->prefetchUnit.duty = 1 + memory->waitstatesSeq16[region];
         memory->prefetchUnit.remaining = memory->prefetchUnit.duty;
+        memory->prefetchUnit.paused = false;
     }
     memory->prefetchUnit.busy = false;
     memory->prefetchUnit.fetchKind = FETCH_NONE;

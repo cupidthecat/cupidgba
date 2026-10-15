@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "cupid/gba.h"
+#include "cupid/isa-inlines.h"
 #include "../test.h"
 
 static struct CupidGBA* machine(uint64_t clock) {
@@ -108,23 +109,29 @@ static void queue_capacity_is_bounded_and_reset_clears_pending_state(void) {
         struct CupidPrefetch* unit = &gba->memory.prefetchUnit;
         fetch(gba, GBA_BASE_ROM0 + 0x100, width, false);
         idle(gba, 1000000);
-        CHECK(unit->count == 8 && unit->remaining == 0);
+        CHECK(unit->count == 8 && unit->remaining == 0 && unit->paused);
         CHECK(unit->tail - unit->head == 16);
         uint32_t first = unit->head;
         idle(gba, 1000000);
         CHECK(unit->count == 8 && unit->head == first);
         CHECK(fetch(gba, first, width, true) == 1);
         CHECK(unit->count == 8 - width / 2);
-        CHECK(unit->remaining == unit->duty - 1);
-        /* A full buffer cannot supply an unlimited stream at one clock per
-         * opcode: newly fetched opcodes still use the cartridge bandwidth. */
-        for (unsigned i = 1; i < 32; i++) {
-            uint64_t clocks = fetch(gba, first + i * width, width, true);
-            CHECK(unit->count <= 8);
-            if (i >= 16) CHECK(clocks == unit->duty * width / 2);
+        CHECK(unit->remaining == 0 && unit->paused);
+        /* Capacity stops the burst until every cached halfword drains. An
+         * idle interval after consuming one opcode must not refill that slot. */
+        idle(gba, 1000000);
+        CHECK(unit->count == 8 - width / 2 && unit->remaining == 0 && unit->paused);
+        for (unsigned offset = width; offset < 16; offset += width) {
+            CHECK(fetch(gba, first + offset, width, true) == 1);
+            CHECK(unit->remaining == 0 && unit->paused);
         }
+        CHECK(!unit->count);
+        CHECK(fetch(gba, first + 16, width, true) == (width == 4 ? 8 : 5));
+        CHECK(!unit->paused && !unit->count && unit->remaining == 3);
+        for (unsigned i = 1; i < 32; i++)
+            CHECK(fetch(gba, first + 16 + i * width, width, true) == unit->duty * width / 2);
         cupid_gba_reset(gba);
-        CHECK(!unit->active && !unit->busy && !unit->disabled && unit->count == 0);
+        CHECK(!unit->active && !unit->busy && !unit->disabled && !unit->paused && unit->count == 0);
         CHECK(!gba->memory.prefetch);
         destroy(gba);
     }
@@ -302,7 +309,7 @@ static void dma_clock_accounting_matches_late_and_punctual_dispatch(void) {
             const struct CupidPrefetch* a = &late->memory.prefetchUnit;
             const struct CupidPrefetch* b = &punctual->memory.prefetchUnit;
             CHECK(a->count == b->count && a->head == b->head && a->tail == b->tail);
-            CHECK(a->remaining == b->remaining && a->active == b->active && a->busy == b->busy);
+            CHECK(a->remaining == b->remaining && a->active == b->active && a->busy == b->busy && a->paused == b->paused);
             CHECK(a->epoch == b->epoch);
             CHECK(late->memory.dma[3].busyUntil == punctual->memory.dma[3].busyUntil);
             CHECK(late->irqf == punctual->irqf && late->irq.line == punctual->irq.line);
@@ -336,10 +343,13 @@ static void dma_external_write_waits_for_completing_prefetch_halfword(void) {
     destroy(gba);
 }
 
+#include "prefetch-full-kernel.inc"
+
 int main(void) {
     RUN(wait_controls_before_fetch_and_after_invalid_jump);
     RUN(initial_fetch_pending_completion_and_cache_consumption);
     RUN(queue_capacity_is_bounded_and_reset_clears_pending_state);
+    RUN(full_queue_rom_data_flush_kernel);
     RUN(cpu_ram_data_fills_and_gamepak_data_cancels);
     RUN(completing_halfword_arbitration_and_branch_width_changes);
     RUN(partial_words_and_mixed_instruction_widths);

@@ -252,6 +252,7 @@ struct CupidPrefetch {
     unsigned duty, remaining; /**< Full and remaining cartridge halfword clocks */
     unsigned fetchKind;
     bool active, busy;        /**< Engaged stream and occupied Game Pak bus */
+    bool paused;              /**< Full queue must drain before burst restart */
     bool disabled;            /**< Pending burst restart after WAITCNT disable */
 };
 

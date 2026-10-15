@@ -66,11 +66,17 @@ CPU bus stalls, internal-cycle overlap, swap locking, masks, maximum counts,
 address stepping, repeat reloads, cancellation, FIFO requests, timed I/O and
 clock wrap. They compare late dispatch with advancing one clock at a time.
 Prefetch regressions check pending/cached fetches, queue capacity and sustained
-bandwidth, fill/cancellation clocks, disable/restart behavior, partially buffered
+bandwidth, full-queue drain/nonsequential restart, an owned timed ROM-data
+flush kernel, fill/cancellation clocks, disable/restart behavior, partially buffered
 words, both instruction-width changes and BIOS/RAM exception returns,
 uncached page boundaries and DMA/timer/IRQ interactions across clock wrap.
 They also write wait controls before the first fetch, after a firmware reset
 and after an invalid jump, then require the configured costs on a valid fetch.
+`CUPID_PREFETCH_PROBE_DIR` enables all seventeen unchanged cartridge groups;
+`CUPID_TEST_BIOS` adds their external-firmware comparisons. Each requires the
+original result before its display routine and at its terminal, a verified
+input digest and unchanged frame/instruction bounds. Known nearby-branch
+failures remain failing cases. See [prefetch](../hardware/prefetch.md).
 Music-frequency fixtures cover caller banks,
 fractional interpolation, upper-key clamps, source alignment/waits and live
 timer/DMA/IRQ progress, including late callbacks and clock wrap. A local
@@ -403,6 +409,10 @@ native 240x160 framebuffer, written as a binary PPM file. Step and emulated-cycl
 budgets bound execution; `--expect-loop-register` reports the result register
 at an ARM branch to itself. `--terminal-address` restricts that observation to
 a specific instruction address.
+`--checkpoint-address ADDRESS` additionally records the selected register at
+the first ARM visit to that address. Success requires both the checkpoint and
+terminal values to be zero. An unvisited checkpoint fails, even if later guest
+code reports zero. `runner.checkpoint` exercises this with owned instructions.
 `--key-event FRAME MASK` changes the pressed-button mask at a completed frame
 boundary. Repeat it in frame order to provide a deterministic input sequence;
 a zero mask releases all buttons. This uses the same key state and keypad IRQ
