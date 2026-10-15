@@ -23,10 +23,10 @@ if len(actual) > 0x4000 or struct.unpack_from("<I", actual, stall)[0] != 0xE25BB
     raise SystemExit("HLE image size or internal stall entry is invalid")
 if len(actual) != 0x4000 or sum(struct.unpack("<4096I", actual)) & 0xFFFFFFFF != 0xBAAE187F:
     raise SystemExit("HLE additive image identity is invalid")
-for call in (0, 1, 2, 3, *range(6, 0x1A), 0x1F, 0x26, 0x27):
+for call in (0, 1, 2, 3, *range(6, 0x27), 0x27, 0x28, 0x29, 0x2A):
     target = struct.unpack_from("<I", actual, table + call * 4)[0]
     aligned = target & ~1
-    valid_mode = target & 1 if call in (1, 0x0A, 0x0B, *range(0x14, 0x1A), 0x1F) else target % 4 == 0
+    valid_mode = target & 1 if call in (1, 0x0A, 0x0B, *range(0x14, 0x26), 0x28, 0x29, 0x2A) else target % 4 == 0
     if target == stall or not valid_mode or not table + 0x2B * 4 <= aligned < len(actual):
         raise SystemExit("HLE timed-service dispatch target is invalid")
 print(f"Verified {len(actual)} HLE bytes")

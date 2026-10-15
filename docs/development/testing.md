@@ -142,6 +142,39 @@ the local external BIOS. Background and object groups retain separate
 ten-second deadlines, and a mathematical generator checks all sine values.
 See [affine services](../hardware/bios-affine-services.md).
 
+Nineteen `gba.bios-sound-*` groups cover initialization, software mixing,
+envelopes, looping, reverb, work-area identifiers, mode fields, frame cadence,
+PCM disable/enable, channel clearing, ARM/Thumb callbacks, caller banks, all
+twelve playback rates and bus progress during timer/DMA IRQs and clock wrap.
+Owned wave fixtures compare complete state apart from six internal address
+words, and twelve-frame playback checks include every output sample and its
+timestamp. `CUPID_TEST_BIOS` adds matching external-firmware groups. All groups
+retain ten-second deadlines and fixed instruction guards; the mixer rate
+corpus runs in three four-selector batches with identical inputs and assertions.
+Rate fixtures align both video engines explicitly. Physical audio remains
+unqualified. See [the sound driver](../hardware/bios/sound-driver.md).
+
+Thirty-nine `gba.bios-music-player-*` groups cover player lifecycle, all 36
+exported entries, owned songs and ARM/Thumb library hooks. Complete state and
+execution clocks are checked alongside timer/DMA/IRQ interaction, partial
+stores and timestamped FIFO output. `CUPID_TEST_BIOS` repeats every group with
+a local authorized image. See [music-player services](../hardware/bios/music-player.md)
+for corpus counts, pointer normalization and the remaining accuracy limits.
+
+Twenty-seven `gba.bios-multiboot-*` groups validate owned normal and multiplayer
+downloads, complete decrypted bodies through the maximum length, source/page
+boundaries, selected-client errors, CRC/offset rejection, readiness waits,
+disconnection, retained parameters and timestamped wire transcripts. The guard
+matrix covers mode/source/length edges, mirrored and read-only parameters and
+enabled DMA. Active-download cases observe DMA mutation, pending timer/IRQ
+requests and partial cleanup stores. A local
+`CUPID_TEST_BIOS` repeats them with the external image. `gba.multiplayer` checks
+the word-level device lifecycle, ordered receive slots, clock ownership,
+IRQ/cancellation/reset/STOP and synchronized boards. See
+[the sender model](../hardware/bios/multiboot.md) for corpus scope, the separate
+full-size profile and unmeasured timing limits. Existing serial source tests
+and expected values remain intact.
+
 Register/memory reset checks cover 650 observations across all 256 masks,
 both caller modes, ignored upper bits, cartridge waits and safe RAM callers.
 They compare complete memory, retained regions, readable I/O, wave banks,
