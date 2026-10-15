@@ -795,6 +795,28 @@ DEFINE_INSTRUCTION_ARM(MSRRI,
 	mask &= PSR_USER_MASK | PSR_PRIV_MASK | PSR_STATE_MASK;
 	cpu->spsr.packed = (cpu->spsr.packed & ~mask) | (operand & mask) | 0x00000010;)
 
+/** @name Coprocessor Register Transfers */
+
+DEFINE_INSTRUCTION_ARM(MRC,
+	if (((opcode >> 8) & 15) != 14) {
+		ARM_ILL;
+	} else {
+		/* The disabled GBA debug channel samples the completed opcode fetch. */
+		unsigned rd = (opcode >> 12) & 15;
+		uint32_t value = cpu->prefetch[1];
+		if (rd == ARM_PC) {
+			cpu->cpsr.packed = (int32_t)(((uint32_t)cpu->cpsr.packed & 0x0FFFFFFFu) | (value & 0xF0000000u));
+		} else {
+			cpu->gprs[rd] = (int32_t)value;
+		}
+	})
+
+DEFINE_INSTRUCTION_ARM(MCR,
+	/* Writes to the disabled GBA debug channel have no effect. */
+	if (((opcode >> 8) & 15) != 14) {
+		ARM_ILL;
+	})
+
 /** @name Miscellaneous */
 
 DEFINE_INSTRUCTION_ARM(BKPT,
