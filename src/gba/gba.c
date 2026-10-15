@@ -257,7 +257,7 @@ void cupid_gba_destroy(struct CupidGBA* gba) {
 }
 
 /**
- * @brief Process events for subsystems not wired into timing.
+ * @brief Flush accumulated CPU clocks and dispatch due scheduler events.
  */
 void cupid_gba_process_events(struct CupidGBA* gba) {
     gba->cpu.nextEvent = gba->cpu.cycles;

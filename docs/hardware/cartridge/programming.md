@@ -79,3 +79,11 @@ and fail at that comparison with the pending-operation profile. Their original
 inputs, comparisons and budgets are retained. This difference is unresolved
 source-test qualification, not a passing hardware result. See
 [issue 62](https://github.com/cupidthecat/cupidgba/issues/62).
+
+A separate original EEPROM software test polls for readiness after each write.
+Its initial storage, neighboring-block, address-mirror and 1,023-block stress
+comparisons pass with both BIOS paths. Another original Flash software test
+starts erase before its preceding byte program becomes ready; its initial
+polling loop does not finish with this profile. These inputs are not
+hardware-calibrated tests. Their original programs and comparisons remain
+unchanged, and their results do not establish measured chip timing.
