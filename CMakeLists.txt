@@ -91,6 +91,13 @@ if(BUILD_TESTING)
         set_tests_properties(arm.cp14-${group} PROPERTIES TIMEOUT 10)
     endforeach()
 
+    add_executable(test_undefined tests/arm/test_undefined.c)
+    target_link_libraries(test_undefined PRIVATE cupid_core)
+    foreach(group timed untimed state conditions phase dma)
+        add_test(NAME arm.undefined-${group} COMMAND test_undefined ${group})
+        set_tests_properties(arm.undefined-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
     add_executable(test_io tests/gba/test_io.c)
     target_link_libraries(test_io PRIVATE cupid_core)
     add_test(NAME gba.io COMMAND test_io)
