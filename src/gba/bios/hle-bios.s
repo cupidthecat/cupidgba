@@ -129,7 +129,6 @@ MusicPlayerStop:
 MusicPlayerContinue:
 MusicPlayerFadeOut:
 MultiBoot:
-HardReset:
 SoundDriverVsyncOff:
 SoundDriverVsyncOn:
 
@@ -534,6 +533,7 @@ subs pc, lr, #4
 .include "src/gba/bios/power-control.s"
 .include "src/gba/bios/checksum.s"
 .include "src/gba/bios/music-frequency.s"
+.include "src/gba/bios/hard-reset.s"
 
 @ The final word records the embedded image's additive identity.
 .org 0x3FFC

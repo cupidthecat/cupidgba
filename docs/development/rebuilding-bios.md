@@ -26,6 +26,10 @@ include and `--check` verifies it. No external firmware data is needed.
 contains its direct Thumb-to-ARM bridge and the shared block-transfer code.
 `soft-reset.s` contains restart selection, bank setup and the timed work-area
 clear, followed by an ARM pipeline refill at the selected entry address.
+`hard-reset.s` shares that bank/work initialization and performs warm startup,
+register/memory resets and the bias ramp through the CPU. Its Thumb startup
+pointer carries the function's instruction-state bit. GNU and LLVM builds
+produce identical bytes.
 `power-control.s` contains the shared ARM HALTCNT byte strobe and return for
 HALT, STOP and CustomHalt. Unused space after HALT's branch preserves the
 fixed internal entry offsets without adding executed delay instructions.

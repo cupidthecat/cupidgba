@@ -49,6 +49,10 @@ void cupid_bios_swi(struct CupidGBA* gba, uint8_t comment) {
         /* Fixed-point interpolation and the wave read run through firmware. */
         cupid_arm_raise_swi(&gba->cpu);
         break;
+    case 0x26:
+        /* Warm reboot runs firmware reset writes and refills the entry pipeline. */
+        cupid_arm_raise_swi(&gba->cpu);
+        break;
     default: break;    /** Unknown SWI */
     }
 }
