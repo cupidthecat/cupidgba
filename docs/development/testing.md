@@ -1,5 +1,14 @@
 # Testing
 
+The five `gba.fifo-power-*` groups cover 160 owned observations of ignored
+sound-off writes, ARM/Thumb stores, complete DMA transfers, power edges during
+DMA and queued-word disposal. Each keeps a ten-second deadline. The optional
+`CUPID_FIFO_PROBE_DIR` points to a local directory containing the nine pinned
+FIFO/DMA cartridges. `CUPID_TEST_BIOS` repeats all nine with that image. Both the
+original pre-display result and terminal must pass. The current main-based
+profile passes six of eighteen runs; its twelve failures remain enabled and
+unresolved. See [FIFO power](../hardware/audio/fifo-power.md).
+
 The sixteen `gba.bios-hard-reset-*` native groups require 1,512 observations of
 reset-prefix state, complete built-in startup, timer/DMA/IRQ chronology,
 repeated reboots, temporary startup IRQs and ARM/Thumb POSTFLG byte strobes. `CUPID_TEST_BIOS` adds 352

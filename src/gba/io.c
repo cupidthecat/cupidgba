@@ -197,18 +197,23 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
      * FIFO writes: store32 splits into two 16-bit writes (LO then HI).
      * Buffer the LO half, push the full 32-bit word on the HI write.
      * This avoids double-pushing each DMA word.
+     * Master sound power gates both strobes, including byte-write merges.
      */
     case REG_FIFO_A_LO:
+        if (!gba->audio.enable) return;
         gba->memory.io[addr >> 1] = value;
         return;
     case REG_FIFO_A_HI:
+        if (!gba->audio.enable) return;
         cupid_audio_fifo_write(&gba->audio.chA,
             (uint32_t)gba->memory.io[REG_FIFO_A_LO >> 1] | ((uint32_t)value << 16));
         return;
     case REG_FIFO_B_LO:
+        if (!gba->audio.enable) return;
         gba->memory.io[addr >> 1] = value;
         return;
     case REG_FIFO_B_HI:
+        if (!gba->audio.enable) return;
         cupid_audio_fifo_write(&gba->audio.chB,
             (uint32_t)gba->memory.io[REG_FIFO_B_LO >> 1] | ((uint32_t)value << 16));
         return;

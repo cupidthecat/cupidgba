@@ -1549,6 +1549,10 @@ void cupid_audio_write_register(struct CupidAudio* audio, uint32_t addr,
         _writeNR52(psg, (uint8_t)val);
 
         if (!audio->enable && oldEnable) {
+            /* Master power discards queued words. The staged word and held
+             * output have separate state and retain their current phase. */
+            audio->chA.fifoWrite = audio->chA.fifoRead = 0;
+            audio->chB.fifoWrite = audio->chB.fifoRead = 0;
             audio->soundcntL = 0;
             /** Disable: clear SOUNDCNT_H fields too. */
             audio->volume    = 0;

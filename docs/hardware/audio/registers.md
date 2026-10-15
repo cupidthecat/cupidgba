@@ -25,6 +25,10 @@ off; the CPU wave window remains accessible in bank 1. These bank and power
 rules follow the [AGB Programming Manual](https://www.manuallib.com/download/2023-10-17/AGB%20Programming%20Manual.pdf),
 pages 93, 96 and 101.
 
+FIFO stores while master sound is off are ignored. Disabling sound discards
+queued words without canceling an accepted DMA transfer. See
+[FIFO power](fifo-power.md) for access-width, transfer and qualification details.
+
 Native regressions cover both banks and every access width, ARM/Thumb byte
 stores, running counters and envelopes, explicit triggers, ignored bytes,
 accesses during playback, complete wave cycles and power transitions. The

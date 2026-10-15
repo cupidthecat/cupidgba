@@ -48,6 +48,7 @@ int main(int argc, char** argv) {
     struct AudioTrace audioTrace = {0};
     uint64_t frames = 120, cycleLimit = UINT64_C(280896) * 120, stepLimit = 50000000;
     uint64_t terminalAddress = 0;
+    uint64_t checkpointAddress = 0;
     int expectedRegister = -1;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--bios") && i + 1 < argc) bios = argv[++i];
@@ -58,6 +59,9 @@ int main(int argc, char** argv) {
         else if (!strcmp(argv[i], "--dump-audio") && i + 1 < argc) audioOutput = argv[++i];
         else if (!strcmp(argv[i], "--terminal-address") && i + 1 < argc) {
             if (!number(argv[++i], &terminalAddress) || terminalAddress > UINT32_MAX) return 2;
+        }
+        else if (!strcmp(argv[i], "--checkpoint-address") && i + 1 < argc) {
+            if (!number(argv[++i], &checkpointAddress) || !checkpointAddress || checkpointAddress > UINT32_MAX) return 2;
         }
         else if (!strcmp(argv[i], "--key-event") && i + 2 < argc) {
             uint64_t frame, keys;
@@ -76,11 +80,12 @@ int main(int argc, char** argv) {
             expectedRegister = (int)index;
         } else if (argv[i][0] != '-' && !rom) rom = argv[i];
         else {
-            fprintf(stderr, "Usage: %s ROM [--bios FILE] [--frames N] [--steps N] [--key-event FRAME MASK] [--screenshot FILE.ppm] [--dump-vram FILE] [--dump-io FILE] [--dump-ewram FILE] [--dump-audio FILE] [--expect-loop-register N] [--terminal-address ADDRESS]\n", argv[0]);
+            fprintf(stderr, "Usage: %s ROM [--bios FILE] [--frames N] [--steps N] [--key-event FRAME MASK] [--screenshot FILE.ppm] [--dump-vram FILE] [--dump-io FILE] [--dump-ewram FILE] [--dump-audio FILE] [--expect-loop-register N] [--terminal-address ADDRESS] [--checkpoint-address ADDRESS]\n", argv[0]);
             return 2;
         }
     }
     if (!rom) return 2;
+    if (checkpointAddress && expectedRegister < 0) return 2;
     struct CupidGBA* gba = calloc(1, sizeof(*gba));
     if (!gba) return 2;
     cupid_gba_create(gba);
@@ -96,8 +101,15 @@ int main(int argc, char** argv) {
     }
     uint64_t completed = 0, steps = 0;
     bool terminal = false;
+    bool checkpoint = false;
+    uint32_t checkpointValue = 0;
     while (completed < frames && steps < stepLimit &&
            cupid_timing_global_time(&gba->timing) < cycleLimit) {
+        if (checkpointAddress && !checkpoint && gba->cpu.executionMode == MODE_ARM &&
+            (uint32_t)gba->cpu.gprs[ARM_PC] - 4 == checkpointAddress) {
+            checkpoint = true;
+            checkpointValue = (uint32_t)gba->cpu.gprs[expectedRegister];
+        }
         if (expectedRegister >= 0 && gba->cpu.executionMode == MODE_ARM &&
             (uint32_t)gba->cpu.gprs[ARM_PC] >= GBA_BASE_ROM0 &&
             (!terminalAddress || (uint32_t)gba->cpu.gprs[ARM_PC] - 4 == terminalAddress) &&
@@ -119,7 +131,10 @@ int main(int argc, char** argv) {
         uint32_t value = (uint32_t)gba->cpu.gprs[expectedRegister];
         printf("terminal=%s r%d=%" PRIu32 " result=%s\n", terminal ? "yes" : "no", expectedRegister,
                value, terminal ? (value ? "FAIL" : "PASS") : "TIMEOUT");
-        result = terminal && !value ? 0 : 1;
+        if (checkpointAddress) printf("checkpoint=%s r%d=%" PRIu32 " result=%s\n",
+            checkpoint ? "yes" : "no", expectedRegister, checkpointValue,
+            checkpoint ? (checkpointValue ? "FAIL" : "PASS") : "MISSING");
+        result = terminal && !value && (!checkpointAddress || (checkpoint && !checkpointValue)) ? 0 : 1;
     } else result = completed == frames ? 0 : 1;
     if (output && !screenshot(gba, output)) { perror(output); result = 2; }
     const char* dumpPaths[] = {vramOutput, ioOutput, ewramOutput};
