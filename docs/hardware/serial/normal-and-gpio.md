@@ -42,8 +42,9 @@ Mode-specific register masks and access are checked by all 90 unchanged local
 source observations. Multiplayer receive registers are read-only; normal
 32-bit data registers accept writes in their mode. Byte writes preserve
 untouched fields and do not restart a busy transfer. JOY control status bits
-use write-one acknowledgement. Register access alone does not implement
-multiplayer, UART or JOY bus transactions.
+use write-one acknowledgement. Connected multiplayer word transfers are
+described in [multiboot](../bios/multiboot.md); complete JOY command peers are
+described in [JOY commands](joybus.md). UART transactions remain incomplete.
 
 The CPU samples the IRQ line before HALT's wake clock. If the line becomes
 asserted during that clock, the resumed instruction completes before IRQ entry.

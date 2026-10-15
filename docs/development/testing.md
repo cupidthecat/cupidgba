@@ -1,5 +1,21 @@
 # Testing
 
+Hosted Linux qualification uses the explicit Ubuntu 24.04 release for GCC
+Release and Clang Debug with address/undefined-behavior sanitizers. This keeps
+an automatic `ubuntu-latest` release migration from changing the compiler,
+sanitizer and firmware-assembler baseline. Windows checks use GCC and SDL2.
+Both checkout steps pin a verified Node.js 24 action revision. An OS release
+upgrade needs the same complete test, firmware regeneration, Make and live
+ThreadSanitizer qualification as the current workflow.
+
+The eight `gba.joybus-*` groups check complete command/reply data, 1,024 payload
+patterns, 10,740 rejected frames, decoded register accesses, IRQ/HALT, DMA/timer
+chronology and lifecycle. The owned ARM/Thumb guest completes 256 receive/send
+rounds and two failing-input controls per BIOS path; `CUPID_TEST_BIOS` adds the
+external-image run. All retain ten-second deadlines. Hosted Clang also rebuilds
+the owned assembly fixture. See [JOY commands](../hardware/serial/joybus.md)
+for the peer synchronization contract and unmeasured electrical behavior.
+
 The `gba.dma-pages-halfword` and `gba.dma-pages-word` groups require 480 complete
 DMA page transactions across source modes, wait banks/profiles, clock wrap
 and dispatch granularity. Each keeps a ten-second deadline. The optional
@@ -10,7 +26,8 @@ pause/preemption runs remain failing and registered. The independent
 `CUPID_BUS_PAGE_PROBE_ROM` passes all eighteen original CPU/DMA rows on each
 BIOS path. See [DMA timing](../hardware/dma.md) for qualification limits.
 
-The complete locally configured profile reports 463 passes and 11 failures out
+At preceding head `55058c0d1f2a73bf0210a8377de23c49276d11e8`, the complete
+locally configured profile reports 463 passes and 11 failures out
 of 474 on Windows GCC and Linux Clang 18 Debug with address/undefined-behavior
 sanitizers. It retains all 454 preceding checks and adds two native groups and
 eighteen original DMA runs. The eleven failures are the seven built-in DMA
@@ -448,7 +465,7 @@ result inspection.
 `--dump-ewram FILE` provides the result counters and failure log for the local
 timer suite observer.
 The example explicitly allows at most one instruction per emulated clock for
-600 frames (600 × 280896 clocks). The runner's default 50-million-step guard
+600 frames (600 Ã— 280896 clocks). The runner's default 50-million-step guard
 can stop a valid long run when prefetch permits more instructions per frame.
 This changes the observation budget; it does not change emulation timing or
 any hardware test expectation.
