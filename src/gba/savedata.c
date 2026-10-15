@@ -283,19 +283,21 @@ void cupid_savedata_write_flash(struct CupidSavedata* savedata, uint16_t address
  */
 
 /**
- * @brief Upgrade EEPROM512 to EEPROM when address exceeds 512B range.
+ * @brief Infer an unforced EEPROM capacity from a complete DMA command.
  */
-static void _ensureEeprom(struct CupidSavedata* savedata, uint32_t size) {
-    if (size < GBA_SIZE_EEPROM512) return;
-    if (savedata->type == SAVE_EEPROM) return;
-
-    printf("CUPID: Upgrading EEPROM from 512B to 8K\n");
-    savedata->type = SAVE_EEPROM;
+static void _selectEepromCapacity(struct CupidSavedata* savedata, uint32_t remaining,
+                                  bool write) {
+    /* At the second prefix bit, 14-bit commands retain 80 write bits or
+     * 16 read-request bits. Capacity does not depend on the requested block. */
+    if (savedata->type != SAVE_EEPROM512 || savedata->typeForced ||
+        remaining != (write ? 80u : 16u)) return;
     uint8_t* newdata = malloc(GBA_SIZE_EEPROM);
+    if (!newdata) return;
     memcpy(newdata, savedata->data, GBA_SIZE_EEPROM512);
     memset(newdata + GBA_SIZE_EEPROM512, 0xFF, GBA_SIZE_EEPROM - GBA_SIZE_EEPROM512);
     free(savedata->data);
     savedata->data = newdata;
+    savedata->type = SAVE_EEPROM;
     savedata->size = GBA_SIZE_EEPROM;
 }
 
@@ -314,6 +316,7 @@ void cupid_savedata_write_eeprom(struct CupidSavedata* savedata, uint16_t value,
         break;
     case EEPROM_COMMAND_PENDING:
         savedata->command = (enum CupidSavedataCommand)(((int)savedata->command << 1) | (value & 0x1));
+        _selectEepromCapacity(savedata, writeSize, savedata->command == EEPROM_COMMAND_WRITE);
         if (savedata->command == EEPROM_COMMAND_WRITE) {
             savedata->writeAddress = 0;
         } else {
@@ -327,11 +330,13 @@ void cupid_savedata_write_eeprom(struct CupidSavedata* savedata, uint16_t value,
             /** Still receiving address bits. */
             savedata->writeAddress <<= 1;
             savedata->writeAddress |= (value & 0x1) << 6;
+            /* The physical block decoder retains six or ten address bits;
+             * the 8-KiB protocol still consumes all fourteen wire bits. */
+            savedata->writeAddress &= (uint32_t)(savedata->size - 1) << 3;
         } else if (writeSize == 1) {
             /** Stop bit, end of write. */
             savedata->command = EEPROM_COMMAND_NULL;
-        } else if ((savedata->writeAddress >> 3) < GBA_SIZE_EEPROM) {
-            _ensureEeprom(savedata, savedata->writeAddress >> 3);
+        } else if ((savedata->writeAddress >> 3) < savedata->size) {
             uint8_t current = savedata->data[savedata->writeAddress >> 3];
             current &= ~(1 << (0x7 - (savedata->writeAddress & 0x7)));
             current |= (value & 0x1) << (0x7 - (savedata->writeAddress & 0x7));
@@ -348,6 +353,7 @@ void cupid_savedata_write_eeprom(struct CupidSavedata* savedata, uint16_t value,
             if (value & 0x1) {
                 savedata->readAddress |= 0x40;
             }
+            savedata->readAddress &= (uint32_t)(savedata->size - 1) << 3;
         } else {
             /** Stop bit, switch to read mode. */
             savedata->readBitsRemaining = 68;
@@ -374,10 +380,6 @@ uint16_t cupid_savedata_read_eeprom(struct CupidSavedata* savedata) {
     if (savedata->readBitsRemaining < 64) {
         int step = 63 - savedata->readBitsRemaining;
         uint32_t address = (savedata->readAddress + step) >> 3;
-        _ensureEeprom(savedata, address);
-        if (address >= savedata->size) {
-            return 0xFF;
-        }
         uint8_t data = savedata->data[address] >> (0x7 - (step & 0x7));
         if (!savedata->readBitsRemaining) {
             savedata->command = EEPROM_COMMAND_NULL;

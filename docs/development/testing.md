@@ -1,5 +1,9 @@
 # Testing
 
+The six `arm.undefined-*` groups cover exception-entry clocks, caller banks
+and ARM/Thumb return, predicates, clock wrap and the internal-cycle timer/DMA
+interval. Each retains a ten-second deadline; see [undefined entry](../hardware/cpu/undefined-entry.md).
+
 The six `arm.cp14-*` groups check decoded register transfers, complete selector
 coverage, r15 flags, predicates, retained undefined exceptions and timer/DMA
 progress with owned instruction streams. Each has a ten-second deadline;

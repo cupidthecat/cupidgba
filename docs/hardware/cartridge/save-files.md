@@ -47,3 +47,6 @@ qualify file persistence. EEPROM/Flash programming delays, disputed bus accesses
 peripheral metadata and complete cartridge accuracy remain in
 [issue 1](https://github.com/cupidthecat/cupidgba/issues/1). Power-loss behavior
 beyond the host's file and replacement guarantees remains unqualified.
+
+[EEPROM address decoding](eeprom.md) describes command-width capacity inference
+and block selection before data reaches the saved image.
