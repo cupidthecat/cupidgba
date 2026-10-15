@@ -1,5 +1,10 @@
 # Testing
 
+The six `arm.cp14-*` groups check decoded register transfers, complete selector
+coverage, r15 flags, predicates, retained undefined exceptions and timer/DMA
+progress with owned instruction streams. Each has a ten-second deadline;
+see [CP14 register transfers](../hardware/cpu/cp14.md).
+
 The four `arm.reset-entry-*` groups check guest-visible reset control, prior
 ARM/Thumb and privilege state, pending IRQs, repeated reset and the built-in
 fast entry with owned instructions. Each retains a ten-second deadline. Native
