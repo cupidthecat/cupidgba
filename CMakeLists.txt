@@ -253,7 +253,9 @@ if(BUILD_TESTING)
 
     add_executable(test_bios_sound_driver tests/bios/test_sound_driver.c)
     target_link_libraries(test_bios_sound_driver PRIVATE cupid_core)
-    foreach(group mode vsync clear pcm rates-0 rates-1 rates-2 chronology init frames-0 frames-1 frames-2 frames-3 hooks mix-irq playback mix-rates)
+    foreach(group mode vsync clear pcm rates-0 rates-1 rates-2 chronology init
+                  frames-0 frames-1 frames-2 frames-3 hooks mix-irq playback
+                  mix-rates-0 mix-rates-1 mix-rates-2)
         add_test(NAME gba.bios-sound-${group} COMMAND test_bios_sound_driver ${group})
         set_tests_properties(gba.bios-sound-${group} PROPERTIES TIMEOUT 10)
         if(CUPID_TEST_BIOS)

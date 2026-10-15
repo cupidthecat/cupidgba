@@ -418,8 +418,8 @@ static void mixing_in_internal_ram(void) {
     }
 }
 
-static void mixing_at_all_playback_rates(void) {
-    for (unsigned rate = 1; rate <= 12; rate++) {
+static void mixing_at_playback_rates(unsigned batch) {
+    for (unsigned rate = batch * 4 + 1; rate <= (batch + 1) * 4; rate++) {
         struct CupidGBA* gba = machine(0, false);
         prepare_sound_scene(gba, 15);
         call(gba, 0x1B, rate << 16, false, MODE_SYS);
@@ -552,7 +552,9 @@ int main(int argc, char** argv) {
     else if (!strcmp(argv[1], "hooks")) RUN(frame_hooks_and_access_guards);
     else if (!strcmp(argv[1], "mix-irq")) RUN(mixing_survives_nested_irq);
     else if (!strcmp(argv[1], "playback")) RUN(playback_reaches_fifo_and_output);
-    else if (!strcmp(argv[1], "mix-rates")) RUN(mixing_at_all_playback_rates);
+    else if (!strcmp(argv[1], "mix-rates-0")) mixing_at_playback_rates(0);
+    else if (!strcmp(argv[1], "mix-rates-1")) mixing_at_playback_rates(1);
+    else if (!strcmp(argv[1], "mix-rates-2")) mixing_at_playback_rates(2);
     else if (!strcmp(argv[1], "chronology")) {
         RUN(bus_progress_timer_dma_and_wrap);
         RUN(nested_irq_preserves_busy_state);

@@ -102,11 +102,11 @@ through normal instructions.
 
 ## Qualification
 
-Seventeen native groups cover initialization, mode fields, all frame-counter
+Nineteen native groups cover initialization, mode fields, all frame-counter
 values, identifier guards, RAM regions, ARM/Thumb callers and callbacks,
 System/IRQ banks, all twelve rates, timer/DMA IRQs, visible partial PCM clearing
 and clock wrap. Supplying `CUPID_TEST_BIOS` repeats these checks with a local
-external firmware input. All nine initialization/mixer groups fail against
+external firmware input. All eleven initialization/mixer groups fail against
 the preceding control-only core, whose eight control groups still pass.
 No firmware or cartridge input is distributed.
 
@@ -114,6 +114,8 @@ Owned synthetic waves cover empty, fixed and fractional channels, short waves,
 high cursor advancement, loop endpoints, zero attack, the envelope stages,
 release/echo, start/stop, reverb and twelve simultaneous voices. The fixtures
 check 84 frame captures and another 36 across all twelve playback rates.
+The mixer rate corpus uses three four-selector batches, retaining every case,
+assertion and ten-second deadline.
 Each signature includes every byte in the 4 KiB prepared work-area image
 except the six reserved internal-address words at `28h` through `3Fh`.
 Separate IWRAM fixtures verify complete state and elapsed clocks across clock
