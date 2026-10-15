@@ -118,19 +118,12 @@ subs   pc, lr, #4
 .word 0x03A0E004
 
 @ Unimplemented
-SoundDriverInit:
-SoundDriverMode:
-SoundDriverMain:
-SoundDriverVsync:
-SoundChannelClear:
 MusicPlayerOpen:
 MusicPlayerStart:
 MusicPlayerStop:
 MusicPlayerContinue:
 MusicPlayerFadeOut:
 MultiBoot:
-SoundDriverVsyncOff:
-SoundDriverVsyncOn:
 
 NopCall:
 bx lr

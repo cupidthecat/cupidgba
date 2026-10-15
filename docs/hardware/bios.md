@@ -108,8 +108,9 @@ The unchanged local math suite passes 615/615 register observations on both
 paths. Both also pass the complete 2020/2020 CPU/bus timing matrix, including
 its division, square-root, angle and copy cases. The observers reject partial
 counts and logged failures. These results cover the listed calls and inputs;
-sound-driver, multiboot and other services still need separate
-execution and timing work.
+multiboot and remaining undocumented/internal services still need separate
+execution and timing work. Timed initialization, software mixing and controls
+are described in [the sound driver](bios/sound-driver.md).
 
 ## Affine conversion
 
