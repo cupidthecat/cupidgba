@@ -65,10 +65,9 @@ static void read_next(struct CupidGBA* gba, uint64_t when) {
     dma->transferWord = dma->wordTransfer || dma->fifo;
     int width = dma->transferWord ? 4 : 2;
     static const int offsets[] = {1, -1, 0, 0};
+    /* The DMA pointer keeps its programmed step. Sequential ROM strobes
+     * use the separate cartridge counter in access_cycles(). */
     dma->sourceOffset = offsets[dma->srcControl] * width;
-    if (dma->nextSource >= GBA_BASE_ROM0 && dma->nextSource < GBA_BASE_SRAM) {
-        dma->sourceOffset = width;
-    }
     dma->destOffset = dma->fifo ? 0 : (dma->destControl == 3 ? width
         : offsets[dma->destControl] * width);
     dma->nextSource &= ~(uint32_t)(width - 1);
@@ -261,9 +260,6 @@ void cupid_dma_write_cnt(struct CupidGBA* gba, int ch, uint16_t value) {
         dma->nextCount = dma->fifo ? 4 : (int32_t)transfer_count(dma);
         static const int offsets[] = {1, -1, 0, 0};
         dma->sourceOffset = offsets[dma->srcControl] * (int)width;
-        if (dma->source >= GBA_BASE_ROM0 && dma->source < GBA_BASE_SRAM) {
-            dma->sourceOffset = (int)width;
-        }
         dma->destOffset = dma->fifo ? 0 : (dma->destControl == 3 ? (int)width
             : offsets[dma->destControl] * (int)width);
         if (dma->timing == DMA_TIMING_NOW) cupid_dma_transfer(gba, ch);

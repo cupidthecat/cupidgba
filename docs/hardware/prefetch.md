@@ -91,12 +91,14 @@ The expanded prefetch profile passes 36 of 40 runs. Covered boundary examples
 do not establish all page phases.
 
 `CUPID_BUS_PAGE_PROBE_ROM` enables a separate fixed CPU/DMA page-boundary
-cartridge. The observer requires all eighteen original console results. Three
-DMA decrement rows currently fail on both BIOS paths: 68 instead of 63 at
-0x07FFFFF8, and 68 instead of 70 at 0x0801FFF0 and 0x0803FFF0. Failure text
-scrolls two earlier rows off the console; those missing rows cannot be counted
-as passes. Logical DMA address stepping, physical cartridge counting and
-page strobes need further investigation. The failing test remains enabled
+cartridge. The observer requires all eighteen original console results. The
+ROM-to-OAM decrement row now passes its 63-clock comparison on both BIOS
+paths. Two DMA decrement page rows still read 68 instead of 70 at
+0x0801FFF0 and 0x0803FFF0. Failure text scrolls one earlier row off the console;
+that missing row cannot be counted as a pass. The programmed DMA source
+pointer now retains its mode independently of sequential cartridge data.
+Remaining physical cartridge counting and page strobes need investigation.
+The failing test remains enabled
 whenever its input is configured.
 
 The firmware timing cases execute the built-in math and copy routines through

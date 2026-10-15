@@ -64,7 +64,10 @@ CPU regressions check block-transfer bus costs and the final load internal cycle
 DMA regressions check read/write phase boundaries, priority and preemption,
 CPU bus stalls, internal-cycle overlap, swap locking, masks, maximum counts,
 address stepping, repeat reloads, cancellation, FIFO requests, timed I/O and
-clock wrap. They compare late dispatch with advancing one clock at a time.
+clock wrap. Thirty-two additional cases check fixed ROM source pointers with
+sequential cartridge data, decrementing ROM-to-OAM transfers, exact completion
+clocks, both transfer widths, all three ROM banks and four clock anchors.
+They compare late dispatch with advancing one clock at a time.
 Prefetch regressions check pending/cached fetches, queue capacity and sustained
 bandwidth, full-queue drain/nonsequential restart, an owned timed ROM-data
 flush kernel, fill/cancellation clocks, disable/restart behavior, partially buffered

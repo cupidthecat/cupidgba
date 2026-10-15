@@ -37,8 +37,12 @@ sequential. The cartridge address counter is shared by DMA reads and writes.
 Sequential strobes advance it even when a ROM write stores no data. This also
 applies when the source crosses into ROM after the destination has already
 started a cartridge burst. Crossing a 128 KiB cartridge-counter boundary
-requires nonsequential timing. ROM sources advance regardless of their
-programmed increment/decrement/fixed mode.
+requires nonsequential timing in the current model. The DMA source pointer
+retains its programmed increment, decrement or fixed mode. Sequential ROM
+reads obtain their data from the separate cartridge counter. A decrementing
+source can therefore leave ROM and read OAM even though earlier ROM data
+advanced through that counter. A fixed source retains its DMA address while
+successive ROM strobes return successive cartridge data.
 
 ## Registers, latches and requests
 
@@ -91,8 +95,14 @@ mode 3 currently uses a fixed source. The
 [Game Pak prefetch queue](prefetch.md) now shares CPU/DMA bus clocks; PPU
 contention timing remains incomplete. EEPROM serial paths remain available, but
 their full width/size/peripheral behavior needs separate cartridge tests.
-The optional CPU/DMA page-boundary cartridge currently fails three decrement
-timing rows on each BIOS path. Source-address stepping and the cartridge
-counter's page strobes are not fully qualified; see
+The optional CPU/DMA page-boundary cartridge now passes the ROM-to-OAM
+decrement case at its original 63-clock timer comparison on both BIOS paths.
+Two other decrement page rows still fail on each path. Thirty-two native
+cases check fixed sources in all three ROM wait-state windows and decrementing
+ROM-to-OAM transfers, both widths and four clock anchors. They require the
+programmed pointer, complete destination data and exact completion clock.
+The word ROM-to-OAM transaction takes 29 clocks; the preceding source-pointer
+model takes 34. Its unchanged source file fails the owned negative control.
+The cartridge counter's page strobes remain incompletely qualified; see
 [the recorded results](prefetch.md#validation).
 See [testing](../development/testing.md) for the reproducible checks.
