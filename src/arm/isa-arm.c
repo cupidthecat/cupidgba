@@ -10,6 +10,7 @@
 
 #include "cupid/isa-inlines.h"
 #include "cupid/emitter-arm.h"
+#include "cupid/registers.h"
 
 #define ARM_PREFETCH_CYCLES (cpu->memory.timed ? 0 : 1 + (int)cpu->memory.activeSeqCycles32)
 
@@ -22,10 +23,11 @@ static inline void _shiftLSL(struct CupidARM* cpu, uint32_t opcode) {
 	int rm = opcode & 0xF;
 	if (opcode & 0x00000010) {
 		int rs = (opcode >> 8) & 0xF;
+		int shift = CupidReadRegister(cpu, rs) & 0xFF;
+		CupidRegisterDataPhase(cpu);
 		cpu->cycles += cpu->memory.stall ? cpu->memory.stall(cpu, 1) : 1;
-		int32_t shiftVal = cpu->gprs[rm];
+		int32_t shiftVal = CupidReadRegister(cpu, rm);
 		if (rm == ARM_PC) shiftVal += 4;
-		int shift = cpu->gprs[rs] & 0xFF;
 		if (!shift) {
 			cpu->shifterOperand = shiftVal;
 			cpu->shifterCarryOut = cpu->cpsr.c;
@@ -42,11 +44,11 @@ static inline void _shiftLSL(struct CupidARM* cpu, uint32_t opcode) {
 	} else {
 		int immediate = (opcode & 0x00000F80) >> 7;
 		if (!immediate) {
-			cpu->shifterOperand = cpu->gprs[rm];
+			cpu->shifterOperand = CupidReadRegister(cpu, rm);
 			cpu->shifterCarryOut = cpu->cpsr.c;
 		} else {
-			cpu->shifterOperand = (uint32_t)cpu->gprs[rm] << immediate;
-			cpu->shifterCarryOut = (cpu->gprs[rm] >> (32 - immediate)) & 1;
+			cpu->shifterOperand = (uint32_t)CupidReadRegister(cpu, rm) << immediate;
+			cpu->shifterCarryOut = (CupidReadRegister(cpu, rm) >> (32 - immediate)) & 1;
 		}
 	}
 }
@@ -55,10 +57,11 @@ static inline void _shiftLSR(struct CupidARM* cpu, uint32_t opcode) {
 	int rm = opcode & 0xF;
 	if (opcode & 0x00000010) {
 		int rs = (opcode >> 8) & 0xF;
+		int shift = CupidReadRegister(cpu, rs) & 0xFF;
+		CupidRegisterDataPhase(cpu);
 		cpu->cycles += cpu->memory.stall ? cpu->memory.stall(cpu, 1) : 1;
-		uint32_t shiftVal = cpu->gprs[rm];
+		uint32_t shiftVal = CupidReadRegister(cpu, rm);
 		if (rm == ARM_PC) shiftVal += 4;
-		int shift = cpu->gprs[rs] & 0xFF;
 		if (!shift) {
 			cpu->shifterOperand = shiftVal;
 			cpu->shifterCarryOut = cpu->cpsr.c;
@@ -75,11 +78,11 @@ static inline void _shiftLSR(struct CupidARM* cpu, uint32_t opcode) {
 	} else {
 		int immediate = (opcode & 0x00000F80) >> 7;
 		if (immediate) {
-			cpu->shifterOperand = ((uint32_t) cpu->gprs[rm]) >> immediate;
-			cpu->shifterCarryOut = (cpu->gprs[rm] >> (immediate - 1)) & 1;
+			cpu->shifterOperand = ((uint32_t) CupidReadRegister(cpu, rm)) >> immediate;
+			cpu->shifterCarryOut = (CupidReadRegister(cpu, rm) >> (immediate - 1)) & 1;
 		} else {
 			cpu->shifterOperand = 0;
-			cpu->shifterCarryOut = ARM_SIGN(cpu->gprs[rm]);
+			cpu->shifterCarryOut = ARM_SIGN(CupidReadRegister(cpu, rm));
 		}
 	}
 }
@@ -88,17 +91,18 @@ static inline void _shiftASR(struct CupidARM* cpu, uint32_t opcode) {
 	int rm = opcode & 0xF;
 	if (opcode & 0x00000010) {
 		int rs = (opcode >> 8) & 0xF;
+		int shift = CupidReadRegister(cpu, rs) & 0xFF;
+		CupidRegisterDataPhase(cpu);
 		cpu->cycles += cpu->memory.stall ? cpu->memory.stall(cpu, 1) : 1;
-		int shiftVal = cpu->gprs[rm];
+		int shiftVal = CupidReadRegister(cpu, rm);
 		if (rm == ARM_PC) shiftVal += 4;
-		int shift = cpu->gprs[rs] & 0xFF;
 		if (!shift) {
 			cpu->shifterOperand = shiftVal;
 			cpu->shifterCarryOut = cpu->cpsr.c;
 		} else if (shift < 32) {
 			cpu->shifterOperand = shiftVal >> shift;
 			cpu->shifterCarryOut = (shiftVal >> (shift - 1)) & 1;
-		} else if (cpu->gprs[rm] >> 31) {
+		} else if (CupidReadRegister(cpu, rm) >> 31) {
 			cpu->shifterOperand = 0xFFFFFFFF;
 			cpu->shifterCarryOut = 1;
 		} else {
@@ -108,10 +112,10 @@ static inline void _shiftASR(struct CupidARM* cpu, uint32_t opcode) {
 	} else {
 		int immediate = (opcode & 0x00000F80) >> 7;
 		if (immediate) {
-			cpu->shifterOperand = cpu->gprs[rm] >> immediate;
-			cpu->shifterCarryOut = (cpu->gprs[rm] >> (immediate - 1)) & 1;
+			cpu->shifterOperand = CupidReadRegister(cpu, rm) >> immediate;
+			cpu->shifterCarryOut = (CupidReadRegister(cpu, rm) >> (immediate - 1)) & 1;
 		} else {
-			cpu->shifterCarryOut = ARM_SIGN(cpu->gprs[rm]);
+			cpu->shifterCarryOut = ARM_SIGN(CupidReadRegister(cpu, rm));
 			cpu->shifterOperand = cpu->shifterCarryOut ? (int32_t)UINT32_MAX : 0;
 		}
 	}
@@ -121,10 +125,11 @@ static inline void _shiftROR(struct CupidARM* cpu, uint32_t opcode) {
 	int rm = opcode & 0xF;
 	if (opcode & 0x00000010) {
 		int rs = (opcode >> 8) & 0xF;
+		int shift = CupidReadRegister(cpu, rs) & 0xFF;
+		CupidRegisterDataPhase(cpu);
 		cpu->cycles += cpu->memory.stall ? cpu->memory.stall(cpu, 1) : 1;
-		int shiftVal = cpu->gprs[rm];
+		int shiftVal = CupidReadRegister(cpu, rm);
 		if (rm == ARM_PC) shiftVal += 4;
-		int shift = cpu->gprs[rs] & 0xFF;
 		int rotate = shift & 0x1F;
 		if (!shift) {
 			cpu->shifterOperand = shiftVal;
@@ -139,12 +144,12 @@ static inline void _shiftROR(struct CupidARM* cpu, uint32_t opcode) {
 	} else {
 		int immediate = (opcode & 0x00000F80) >> 7;
 		if (immediate) {
-			cpu->shifterOperand = ROR(cpu->gprs[rm], immediate);
-			cpu->shifterCarryOut = (cpu->gprs[rm] >> (immediate - 1)) & 1;
+			cpu->shifterOperand = ROR(CupidReadRegister(cpu, rm), immediate);
+			cpu->shifterCarryOut = (CupidReadRegister(cpu, rm) >> (immediate - 1)) & 1;
 		} else {
 			/** RRX */
-			cpu->shifterOperand = ((uint32_t)cpu->cpsr.c << 31) | (((uint32_t) cpu->gprs[rm]) >> 1);
-			cpu->shifterCarryOut = cpu->gprs[rm] & 0x00000001;
+			cpu->shifterOperand = ((uint32_t)cpu->cpsr.c << 31) | (((uint32_t) CupidReadRegister(cpu, rm)) >> 1);
+			cpu->shifterCarryOut = CupidReadRegister(cpu, rm) & 0x00000001;
 		}
 	}
 }
@@ -229,25 +234,25 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM* cpu, int32_t d) {
 #define ADDR_MODE_2_I_TEST (opcode & 0x00000F80)
 #define ADDR_MODE_2_I      ((opcode & 0x00000F80) >> 7)
 #define ADDR_MODE_2_ADDRESS (address)
-#define ADDR_MODE_2_RN     ((uint32_t)cpu->gprs[rn])
-#define ADDR_MODE_2_RM     ((uint32_t)cpu->gprs[rm])
+#define ADDR_MODE_2_RN     (baseAddress)
+#define ADDR_MODE_2_RM     (addressRm)
 #define ADDR_MODE_2_IMMEDIATE (opcode & 0x00000FFF)
-#define ADDR_MODE_2_INDEX(U_OP, M) ((uint32_t)cpu->gprs[rn] U_OP (uint32_t)(M))
+#define ADDR_MODE_2_INDEX(U_OP, M) (baseAddress U_OP (uint32_t)(M))
 #define ADDR_MODE_2_WRITEBACK(ADDR) \
-	cpu->gprs[rn] = ADDR; \
+	CupidWriteRegister(cpu, rn, ADDR); \
 	if (UNLIKELY(rn == ARM_PC)) { \
 		CupidFlushCycles(cpu, &currentCycles); currentCycles += CupidARMWritePC(cpu); \
 	}
 
 #define ADDR_MODE_2_WRITEBACK_PRE_STORE(WB)
 #define ADDR_MODE_2_WRITEBACK_POST_STORE(WB) WB
-#define ADDR_MODE_2_WRITEBACK_PRE_LOAD(WB) WB
+#define ADDR_MODE_2_WRITEBACK_PRE_LOAD(WB) CupidRegisterDataPhase(cpu); WB
 #define ADDR_MODE_2_WRITEBACK_POST_LOAD(WB)
 
-#define ADDR_MODE_2_LSL ((uint32_t)cpu->gprs[rm] << ADDR_MODE_2_I)
-#define ADDR_MODE_2_LSR (ADDR_MODE_2_I_TEST ? ((uint32_t) cpu->gprs[rm]) >> ADDR_MODE_2_I : 0)
-#define ADDR_MODE_2_ASR (ADDR_MODE_2_I_TEST ? ((int32_t) cpu->gprs[rm]) >> ADDR_MODE_2_I : ((int32_t) cpu->gprs[rm]) >> 31)
-#define ADDR_MODE_2_ROR (ADDR_MODE_2_I_TEST ? ROR(cpu->gprs[rm], ADDR_MODE_2_I) : ((uint32_t)cpu->cpsr.c << 31) | (((uint32_t) cpu->gprs[rm]) >> 1))
+#define ADDR_MODE_2_LSL ((uint32_t)addressRm << ADDR_MODE_2_I)
+#define ADDR_MODE_2_LSR (ADDR_MODE_2_I_TEST ? ((uint32_t) addressRm) >> ADDR_MODE_2_I : 0)
+#define ADDR_MODE_2_ASR (ADDR_MODE_2_I_TEST ? ((int32_t) addressRm) >> ADDR_MODE_2_I : ((int32_t) addressRm) >> 31)
+#define ADDR_MODE_2_ROR (ADDR_MODE_2_I_TEST ? ROR(addressRm, ADDR_MODE_2_I) : ((uint32_t)cpu->cpsr.c << 31) | (((uint32_t) addressRm) >> 1))
 
 /** Addressing mode 3 — Halfword/signed load/store */
 #define ADDR_MODE_3_ADDRESS ADDR_MODE_2_ADDRESS
@@ -260,9 +265,9 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM* cpu, int32_t d) {
 /** Block transfer writeback */
 #define ADDR_MODE_4_WRITEBACK_LDM \
 	if (!((1 << rn) & rs)) { \
-		cpu->gprs[rn] = address; \
+		CupidWriteRegister(cpu, rn, address); \
 	}
-#define ADDR_MODE_4_WRITEBACK_STM cpu->gprs[rn] = address;
+#define ADDR_MODE_4_WRITEBACK_STM CupidWriteRegister(cpu, rn, address);
 
 /** Post-body for loads/stores */
 #define ARM_LOAD_POST_BODY \
@@ -272,6 +277,7 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM* cpu, int32_t d) {
 	}
 
 #define ARM_STORE_POST_BODY \
+	CupidRegisterDataPhase(cpu); \
 	currentCycles += cpu->memory.timed ? 0 : (int)cpu->memory.activeNonseqCycles32 - (int)cpu->memory.activeSeqCycles32;
 
 /** @name DEFINE_INSTRUCTION_ARM
@@ -294,7 +300,7 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM* cpu, int32_t d) {
 		SHIFTER(cpu, opcode); \
 		int rd = (opcode >> 12) & 0xF; \
 		int rn = (opcode >> 16) & 0xF; \
-		int32_t n ATTRIBUTE_UNUSED = cpu->gprs[rn]; \
+		int32_t n ATTRIBUTE_UNUSED = CupidReadRegister(cpu, rn); \
 		if (UNLIKELY(rn == ARM_PC && (opcode & 0x02000010) == 0x00000010)) { \
 			n += WORD_SIZE_ARM; \
 		} \
@@ -337,7 +343,10 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM* cpu, int32_t d) {
 		int rs = (opcode >> 8) & 0xF; \
 		int rm = opcode & 0xF; \
 		if (rd != ARM_PC) { \
-			ARM_WAIT_ ## SIGNED ## MUL(cpu->gprs[rs], 0); \
+			int32_t rmValue = CupidReadRegister(cpu, rm); \
+			int32_t rsValue = CupidReadRegister(cpu, rs); \
+			ARM_WAIT_ ## SIGNED ## MUL(rsValue, 0); \
+			CupidRegisterDataPhase(cpu); \
 			BODY; \
 			S_BODY; \
 		} \
@@ -350,7 +359,14 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM* cpu, int32_t d) {
 		int rs = (opcode >> 8) & 0xF; \
 		int rm = opcode & 0xF; \
 		if (rdHi != ARM_PC && rd != ARM_PC) { \
-			ARM_WAIT_ ## SIGNED ## MUL(cpu->gprs[rs], WAIT); \
+			int32_t rdValue ATTRIBUTE_UNUSED = CupidReadRegister(cpu, rd); \
+			int32_t rdHiValue ATTRIBUTE_UNUSED = CupidReadRegister(cpu, rdHi); \
+			/* Accumulator ports precede the multiplicand phase. */ \
+			CupidRegisterDataPhase(cpu); \
+			int32_t rmValue = CupidReadRegister(cpu, rm); \
+			int32_t rsValue = CupidReadRegister(cpu, rs); \
+			ARM_WAIT_ ## SIGNED ## MUL(rsValue, WAIT); \
+			CupidRegisterDataPhase(cpu); \
 			BODY; \
 			S_BODY; \
 		} \
@@ -371,10 +387,13 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM* cpu, int32_t d) {
 		uint32_t address; \
 		int rn = (opcode >> 16) & 0xF; \
 		int rd = (opcode >> 12) & 0xF; \
-		int32_t d ATTRIBUTE_UNUSED = cpu->gprs[rd]; \
+		int32_t d ATTRIBUTE_UNUSED = CupidReadRegister(cpu, rd); \
 		if (UNLIKELY(rd == ARM_PC)) { d += WORD_SIZE_ARM; } \
 		int rm = opcode & 0xF; \
 		UNUSED(rm); \
+		/* Address writeback reuses the original operand-port samples. */ \
+		uint32_t baseAddress = CupidReadRegister(cpu, rn); \
+		uint32_t addressRm ATTRIBUTE_UNUSED = CupidReadRegister(cpu, rm); \
 		address = ADDRESS; \
 		ADDR_MODE_2_WRITEBACK_PRE_ ## LS (WRITEBACK); \
 		BODY; \
@@ -449,12 +468,13 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM* cpu, int32_t d) {
 #define ARM_BLOCK_PRE_store(DIRECTION) \
 	if ((opcode & 0x00200000) && (rs & (1 << rn)) && (rs & ((1 << rn) - 1))) { \
 		unsigned bytes = (unsigned)__builtin_popcount((unsigned)rs) * 4; \
-		cpu->gprs[rn] = (LSM_ ## DIRECTION & LSM_D) ? address - bytes : address + bytes; \
+		CupidWriteRegister(cpu, rn, (LSM_ ## DIRECTION & LSM_D) ? address - bytes : address + bytes); \
 	}
 
 #define ARM_MS_POST_load \
 	if (!(rs & 0x8000) && rs) { \
 		cupid_arm_set_priv_mode(cpu, privilegeMode); \
+		cpu->userBankPending = privilegeMode != MODE_SYS && privilegeMode != MODE_USR; \
 	} else if (_CupidModeHasSPSR(cpu->cpsr.priv)) { \
 		cpu->cpsr = cpu->spsr; \
 		_CupidReadCPSR(cpu); \
@@ -464,10 +484,11 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM* cpu, int32_t d) {
 	DEFINE_INSTRUCTION_ARM(NAME, \
 		int rn = (opcode >> 16) & 0xF; \
 		int rs = opcode & 0x0000FFFF; \
-		uint32_t address = cpu->gprs[rn]; \
+		uint32_t address = CupidReadRegister(cpu, rn); \
 		S_PRE; \
 		ARM_BLOCK_PRE_ ## LS(DIRECTION); \
 		address = cpu->memory. LS ## Multiple(cpu, address, rs, LSM_ ## DIRECTION, &currentCycles); \
+		CupidRegisterDataPhase(cpu); \
 		WRITEBACK; \
 		S_POST; \
 		POST_BODY;)
@@ -498,16 +519,16 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM* cpu, int32_t d) {
 /** @name ALU */
 
 DEFINE_ALU_INSTRUCTION_ARM(ADD, ARM_ADDITION_S(n, cpu->shifterOperand, cpu->gprs[rd]),
-	cpu->gprs[rd] = (uint32_t)n + (uint32_t)cpu->shifterOperand;)
+	CupidWriteRegister(cpu, rd, (uint32_t)n + (uint32_t)cpu->shifterOperand);)
 
 DEFINE_ALU_INSTRUCTION_ARM(ADC, ARM_ADDITION_S(n, cpu->shifterOperand, cpu->gprs[rd]),
-	cpu->gprs[rd] = (uint32_t)n + (uint32_t)cpu->shifterOperand + cpu->cpsr.c;)
+	CupidWriteRegister(cpu, rd, (uint32_t)n + (uint32_t)cpu->shifterOperand + cpu->cpsr.c);)
 
 DEFINE_ALU_INSTRUCTION_ARM(AND, ARM_NEUTRAL_S(n, cpu->shifterOperand, cpu->gprs[rd]),
-	cpu->gprs[rd] = n & cpu->shifterOperand;)
+	CupidWriteRegister(cpu, rd, n & cpu->shifterOperand);)
 
 DEFINE_ALU_INSTRUCTION_ARM(BIC, ARM_NEUTRAL_S(n, cpu->shifterOperand, cpu->gprs[rd]),
-	cpu->gprs[rd] = n & ~cpu->shifterOperand;)
+	CupidWriteRegister(cpu, rd, n & ~cpu->shifterOperand);)
 
 DEFINE_ALU_INSTRUCTION_S_ONLY_ARM(CMN, ARM_ADDITION_S(n, cpu->shifterOperand, aluOut),
 	int32_t aluOut = (uint32_t)n + (uint32_t)cpu->shifterOperand;)
@@ -516,28 +537,28 @@ DEFINE_ALU_INSTRUCTION_S_ONLY_ARM(CMP, ARM_SUBTRACTION_S(n, cpu->shifterOperand,
 	int32_t aluOut = (uint32_t)n - (uint32_t)cpu->shifterOperand;)
 
 DEFINE_ALU_INSTRUCTION_ARM(EOR, ARM_NEUTRAL_S(n, cpu->shifterOperand, cpu->gprs[rd]),
-	cpu->gprs[rd] = n ^ cpu->shifterOperand;)
+	CupidWriteRegister(cpu, rd, n ^ cpu->shifterOperand);)
 
 DEFINE_ALU_INSTRUCTION_ARM(MOV, ARM_NEUTRAL_S(n, cpu->shifterOperand, cpu->gprs[rd]),
-	cpu->gprs[rd] = cpu->shifterOperand;)
+	CupidWriteRegister(cpu, rd, cpu->shifterOperand);)
 
 DEFINE_ALU_INSTRUCTION_ARM(MVN, ARM_NEUTRAL_S(n, cpu->shifterOperand, cpu->gprs[rd]),
-	cpu->gprs[rd] = ~cpu->shifterOperand;)
+	CupidWriteRegister(cpu, rd, ~cpu->shifterOperand);)
 
 DEFINE_ALU_INSTRUCTION_ARM(ORR, ARM_NEUTRAL_S(n, cpu->shifterOperand, cpu->gprs[rd]),
-	cpu->gprs[rd] = n | cpu->shifterOperand;)
+	CupidWriteRegister(cpu, rd, n | cpu->shifterOperand);)
 
 DEFINE_ALU_INSTRUCTION_ARM(RSB, ARM_SUBTRACTION_S(cpu->shifterOperand, n, cpu->gprs[rd]),
-	cpu->gprs[rd] = (uint32_t)cpu->shifterOperand - (uint32_t)n;)
+	CupidWriteRegister(cpu, rd, (uint32_t)cpu->shifterOperand - (uint32_t)n);)
 
 DEFINE_ALU_INSTRUCTION_ARM(RSC, ARM_SUBTRACTION_CARRY_S(cpu->shifterOperand, n, cpu->gprs[rd], !cpu->cpsr.c),
-	cpu->gprs[rd] = (uint32_t)cpu->shifterOperand - (uint32_t)n - !cpu->cpsr.c;)
+	CupidWriteRegister(cpu, rd, (uint32_t)cpu->shifterOperand - (uint32_t)n - !cpu->cpsr.c);)
 
 DEFINE_ALU_INSTRUCTION_ARM(SBC, ARM_SUBTRACTION_CARRY_S(n, cpu->shifterOperand, cpu->gprs[rd], !cpu->cpsr.c),
-	cpu->gprs[rd] = (uint32_t)n - (uint32_t)cpu->shifterOperand - !cpu->cpsr.c;)
+	CupidWriteRegister(cpu, rd, (uint32_t)n - (uint32_t)cpu->shifterOperand - !cpu->cpsr.c);)
 
 DEFINE_ALU_INSTRUCTION_ARM(SUB, ARM_SUBTRACTION_S(n, cpu->shifterOperand, cpu->gprs[rd]),
-	cpu->gprs[rd] = (uint32_t)n - (uint32_t)cpu->shifterOperand;)
+	CupidWriteRegister(cpu, rd, (uint32_t)n - (uint32_t)cpu->shifterOperand);)
 
 DEFINE_ALU_INSTRUCTION_S_ONLY_ARM(TEQ, ARM_NEUTRAL_S(n, cpu->shifterOperand, aluOut),
 	int32_t aluOut = n ^ cpu->shifterOperand;)
@@ -548,47 +569,47 @@ DEFINE_ALU_INSTRUCTION_S_ONLY_ARM(TST, ARM_NEUTRAL_S(n, cpu->shifterOperand, alu
 /** @name Multiply */
 
 DEFINE_MULTIPLY_INSTRUCTION_ARM(MUL,
-	cpu->gprs[rd] = (uint32_t)cpu->gprs[rm] * (uint32_t)cpu->gprs[rs],
-	ARM_NEUTRAL_S(cpu->gprs[rm], cpu->gprs[rs], cpu->gprs[rd]), S)
+	CupidWriteRegister(cpu, rd, (uint32_t)rmValue * (uint32_t)rsValue);,
+	ARM_NEUTRAL_S(rmValue, rsValue, cpu->gprs[rd]), S)
 
 DEFINE_MULTIPLY_INSTRUCTION_2_ARM(MLA,
-	cpu->gprs[rdHi] = (uint32_t)cpu->gprs[rm] * (uint32_t)cpu->gprs[rs] + cpu->gprs[rd],
+	CupidWriteRegister(cpu, rdHi, (uint32_t)rmValue * (uint32_t)rsValue + rdValue);,
 	ARM_NEUTRAL_S(, , cpu->gprs[rdHi]), S, 1)
 
 DEFINE_MULTIPLY_INSTRUCTION_2_ARM(UMULL,
-	uint64_t d = ARM_UXT_64(cpu->gprs[rm]) * ARM_UXT_64(cpu->gprs[rs]);
-	cpu->gprs[rd] = d;
-	cpu->gprs[rdHi] = d >> 32;,
+	uint64_t d = ARM_UXT_64(rmValue) * ARM_UXT_64(rsValue);
+	CupidWriteRegister(cpu, rd, d);
+	CupidWriteRegister(cpu, rdHi, d >> 32);,
 	ARM_NEUTRAL_HI_S(cpu->gprs[rd], cpu->gprs[rdHi]), U, 1)
 
 DEFINE_MULTIPLY_INSTRUCTION_2_ARM(UMLAL,
-	uint64_t d = ARM_UXT_64(cpu->gprs[rm]) * ARM_UXT_64(cpu->gprs[rs]) + ((uint32_t) cpu->gprs[rd]);
-	uint32_t dHi = ((uint32_t) cpu->gprs[rdHi]) + (d >> 32);
-	cpu->gprs[rd] = d;
-	cpu->gprs[rdHi] = dHi;,
+	uint64_t d = ARM_UXT_64(rmValue) * ARM_UXT_64(rsValue) + ((uint32_t) rdValue);
+	uint32_t dHi = ((uint32_t) rdHiValue) + (d >> 32);
+	CupidWriteRegister(cpu, rd, d);
+	CupidWriteRegister(cpu, rdHi, dHi);,
 	ARM_NEUTRAL_HI_S(cpu->gprs[rd], dHi), U, 2)
 
 DEFINE_MULTIPLY_INSTRUCTION_2_ARM(SMULL,
-	int64_t d = ((int64_t) cpu->gprs[rm]) * ((int64_t) cpu->gprs[rs]);
-	cpu->gprs[rd] = d;
-	cpu->gprs[rdHi] = d >> 32;,
+	int64_t d = ((int64_t) rmValue) * ((int64_t) rsValue);
+	CupidWriteRegister(cpu, rd, d);
+	CupidWriteRegister(cpu, rdHi, d >> 32);,
 	ARM_NEUTRAL_HI_S(cpu->gprs[rd], cpu->gprs[rdHi]), S, 1)
 
 DEFINE_MULTIPLY_INSTRUCTION_2_ARM(SMLAL,
-	int64_t d = ((int64_t) cpu->gprs[rm]) * ((int64_t) cpu->gprs[rs]) + ((uint32_t) cpu->gprs[rd]);
-	uint32_t dHi = (uint32_t)cpu->gprs[rdHi] + (uint32_t)(d >> 32);
-	cpu->gprs[rd] = d;
-	cpu->gprs[rdHi] = dHi;,
+	int64_t d = ((int64_t) rmValue) * ((int64_t) rsValue) + ((uint32_t) rdValue);
+	uint32_t dHi = (uint32_t)rdHiValue + (uint32_t)(d >> 32);
+	CupidWriteRegister(cpu, rd, d);
+	CupidWriteRegister(cpu, rdHi, dHi);,
 	ARM_NEUTRAL_HI_S(cpu->gprs[rd], dHi), S, 2)
 
 /** @name Load/Store Word/Byte */
 
 DEFINE_LOAD_STORE_INSTRUCTION_ARM(LDR, LOAD,
-	cpu->gprs[rd] = cpu->memory.load32(cpu, address, &currentCycles);
+	CupidWriteRegister(cpu, rd, cpu->memory.load32(cpu, address, &currentCycles));
 	ARM_LOAD_POST_BODY;)
 
 DEFINE_LOAD_STORE_INSTRUCTION_ARM(LDRB, LOAD,
-	cpu->gprs[rd] = cpu->memory.load8(cpu, address, &currentCycles);
+	CupidWriteRegister(cpu, rd, cpu->memory.load8(cpu, address, &currentCycles));
 	ARM_LOAD_POST_BODY;)
 
 DEFINE_LOAD_STORE_INSTRUCTION_ARM(STR, STORE,
@@ -605,7 +626,7 @@ DEFINE_LOAD_STORE_T_INSTRUCTION_ARM(LDRT, LOAD,
 	cupid_arm_set_priv_mode(cpu, MODE_USR);
 	int32_t r = cpu->memory.load32(cpu, address, &currentCycles);
 	cupid_arm_set_priv_mode(cpu, priv);
-	cpu->gprs[rd] = r;
+	CupidWriteRegister(cpu, rd, r);
 	ARM_LOAD_POST_BODY;)
 
 DEFINE_LOAD_STORE_T_INSTRUCTION_ARM(LDRBT, LOAD,
@@ -613,12 +634,12 @@ DEFINE_LOAD_STORE_T_INSTRUCTION_ARM(LDRBT, LOAD,
 	cupid_arm_set_priv_mode(cpu, MODE_USR);
 	int32_t r = cpu->memory.load8(cpu, address, &currentCycles);
 	cupid_arm_set_priv_mode(cpu, priv);
-	cpu->gprs[rd] = r;
+	CupidWriteRegister(cpu, rd, r);
 	ARM_LOAD_POST_BODY;)
 
 DEFINE_LOAD_STORE_T_INSTRUCTION_ARM(STRT, STORE,
 	enum CupidPrivMode priv = cpu->privilegeMode;
-	int32_t r = cpu->gprs[rd];
+	int32_t r = CupidReadRegister(cpu, rd);
 	cupid_arm_set_priv_mode(cpu, MODE_USR);
 	cpu->memory.store32(cpu, address, r, &currentCycles);
 	cupid_arm_set_priv_mode(cpu, priv);
@@ -626,7 +647,7 @@ DEFINE_LOAD_STORE_T_INSTRUCTION_ARM(STRT, STORE,
 
 DEFINE_LOAD_STORE_T_INSTRUCTION_ARM(STRBT, STORE,
 	enum CupidPrivMode priv = cpu->privilegeMode;
-	int32_t r = cpu->gprs[rd];
+	int32_t r = CupidReadRegister(cpu, rd);
 	cupid_arm_set_priv_mode(cpu, MODE_USR);
 	cpu->memory.store8(cpu, address, r, &currentCycles);
 	cupid_arm_set_priv_mode(cpu, priv);
@@ -635,17 +656,17 @@ DEFINE_LOAD_STORE_T_INSTRUCTION_ARM(STRBT, STORE,
 /** @name Halfword / Signed Load/Store */
 
 DEFINE_LOAD_STORE_MODE_3_INSTRUCTION_ARM(LDRH, LOAD,
-	cpu->gprs[rd] = cpu->memory.load16(cpu, address, &currentCycles);
+	CupidWriteRegister(cpu, rd, cpu->memory.load16(cpu, address, &currentCycles));
 	ARM_LOAD_POST_BODY;)
 
 DEFINE_LOAD_STORE_MODE_3_INSTRUCTION_ARM(LDRSB, LOAD,
-	cpu->gprs[rd] = ARM_SXT_8(cpu->memory.load8(cpu, address, &currentCycles));
+	CupidWriteRegister(cpu, rd, ARM_SXT_8(cpu->memory.load8(cpu, address, &currentCycles)));
 	ARM_LOAD_POST_BODY;)
 
 DEFINE_LOAD_STORE_MODE_3_INSTRUCTION_ARM(LDRSH, LOAD,
-	cpu->gprs[rd] = (address & 1)
+	CupidWriteRegister(cpu, rd, (address & 1)
 		? ARM_SXT_8(cpu->memory.load16(cpu, address, &currentCycles))
-		: ARM_SXT_16(cpu->memory.load16(cpu, address, &currentCycles));
+		: ARM_SXT_16(cpu->memory.load16(cpu, address, &currentCycles)));
 	ARM_LOAD_POST_BODY;)
 
 DEFINE_LOAD_STORE_MODE_3_INSTRUCTION_ARM(STRH, STORE,
@@ -673,43 +694,47 @@ DEFINE_INSTRUCTION_ARM(SWP,
 	int rm = opcode & 0xF;
 	int rd = (opcode >> 12) & 0xF;
 	int rn = (opcode >> 16) & 0xF;
+	uint32_t address = CupidReadRegister(cpu, rn);
 	if (cpu->memory.timed) cpu->memory.lock(cpu, true);
-	int32_t d = cpu->memory.load32(cpu, cpu->gprs[rn], &currentCycles);
+	int32_t d = cpu->memory.load32(cpu, address, &currentCycles);
+	CupidRegisterDataPhase(cpu);
 	/* SWP's internal cycle follows both locked data accesses. */
 	if (cpu->memory.timed) currentCycles = 0;
-	cpu->memory.store32(cpu, cpu->gprs[rn], cpu->gprs[rm], &currentCycles);
+	cpu->memory.store32(cpu, address, CupidReadRegister(cpu, rm), &currentCycles);
 	if (cpu->memory.timed) { cpu->memory.lock(cpu, false); currentCycles = 1; }
-	cpu->gprs[rd] = d;)
+	CupidWriteRegister(cpu, rd, d);)
 
 DEFINE_INSTRUCTION_ARM(SWPB,
 	int rm = opcode & 0xF;
 	int rd = (opcode >> 12) & 0xF;
 	int rn = (opcode >> 16) & 0xF;
+	uint32_t address = CupidReadRegister(cpu, rn);
 	if (cpu->memory.timed) cpu->memory.lock(cpu, true);
-	int32_t d = cpu->memory.load8(cpu, cpu->gprs[rn], &currentCycles);
+	int32_t d = cpu->memory.load8(cpu, address, &currentCycles);
+	CupidRegisterDataPhase(cpu);
 	if (cpu->memory.timed) currentCycles = 0;
-	cpu->memory.store8(cpu, cpu->gprs[rn], cpu->gprs[rm], &currentCycles);
+	cpu->memory.store8(cpu, address, CupidReadRegister(cpu, rm), &currentCycles);
 	if (cpu->memory.timed) { cpu->memory.lock(cpu, false); currentCycles = 1; }
-	cpu->gprs[rd] = d;)
+	CupidWriteRegister(cpu, rd, d);)
 
 /** @name Branches */
 
 DEFINE_INSTRUCTION_ARM(B,
 	int32_t offset = opcode << 8;
 	offset >>= 6;
-	cpu->gprs[ARM_PC] += offset;
+	CupidWriteRegister(cpu, ARM_PC, CupidReadRegister(cpu, ARM_PC) + (offset));
 	CupidFlushCycles(cpu, &currentCycles); currentCycles += CupidARMWritePC(cpu);)
 
 DEFINE_INSTRUCTION_ARM(BL,
 	int32_t immediate = (opcode & 0x00FFFFFF) << 8;
-	cpu->gprs[ARM_LR] = cpu->gprs[ARM_PC] - WORD_SIZE_ARM;
-	cpu->gprs[ARM_PC] += immediate >> 6;
+	CupidWriteRegister(cpu, ARM_LR, CupidReadRegister(cpu, ARM_PC) - WORD_SIZE_ARM);
+	CupidWriteRegister(cpu, ARM_PC, CupidReadRegister(cpu, ARM_PC) + (immediate >> 6));
 	CupidFlushCycles(cpu, &currentCycles); currentCycles += CupidARMWritePC(cpu);)
 
 DEFINE_INSTRUCTION_ARM(BX,
 	int rm = opcode & 0xF;
-	_CupidSetMode(cpu, cpu->gprs[rm] & 1);
-	cpu->gprs[ARM_PC] = cpu->gprs[rm] & 0xFFFFFFFE;
+	_CupidSetMode(cpu, CupidReadRegister(cpu, rm) & 1);
+	CupidWriteRegister(cpu, ARM_PC, CupidReadRegister(cpu, rm) & 0xFFFFFFFE);
 	if (cpu->executionMode == MODE_THUMB) {
 		CupidFlushCycles(cpu, &currentCycles); currentCycles += CupidThumbWritePC(cpu);
 	} else {
@@ -718,18 +743,24 @@ DEFINE_INSTRUCTION_ARM(BX,
 
 /** @name PSR Transfer */
 
+/* User and System modes have no saved-status bank. Their SPSR read alias is
+ * the live CPSR; writing that alias must not change CPSR or an exception bank. */
+static inline bool _hasSavedStatusBank(const struct CupidARM* cpu) {
+	return cpu->privilegeMode != MODE_USR && cpu->privilegeMode != MODE_SYS;
+}
+
 DEFINE_INSTRUCTION_ARM(MRS,
 	int rd = (opcode >> 12) & 0xF;
-	cpu->gprs[rd] = cpu->cpsr.packed;)
+	CupidWriteRegister(cpu, rd, cpu->cpsr.packed);)
 
 DEFINE_INSTRUCTION_ARM(MRSR,
 	int rd = (opcode >> 12) & 0xF;
-	cpu->gprs[rd] = cpu->spsr.packed;)
+	CupidWriteRegister(cpu, rd, _hasSavedStatusBank(cpu) ? cpu->spsr.packed : cpu->cpsr.packed);)
 
 DEFINE_INSTRUCTION_ARM(MSR,
 	int c = opcode & 0x00010000;
 	int f = opcode & 0x00080000;
-	int32_t operand = cpu->gprs[opcode & 0xF];
+	int32_t operand = CupidReadRegister(cpu, opcode & 0xF);
 	int32_t mask = (c ? 0x000000FF : 0) | (f ? 0xFF000000 : 0);
 	if (mask & PSR_USER_MASK) {
 		cpu->cpsr.packed = (cpu->cpsr.packed & ~PSR_USER_MASK) | (operand & PSR_USER_MASK);
@@ -745,19 +776,21 @@ DEFINE_INSTRUCTION_ARM(MSR,
 	if (cpu->executionMode == MODE_THUMB) {
 		cpu->prefetch[0] = 0x46C0;
 		cpu->prefetch[1] &= 0xFFFF;
-		cpu->gprs[ARM_PC] += WORD_SIZE_THUMB;
+		CupidWriteRegister(cpu, ARM_PC, CupidReadRegister(cpu, ARM_PC) + (WORD_SIZE_THUMB));
 	} else {
-		LOAD_32(cpu->prefetch[0], (cpu->gprs[ARM_PC] - WORD_SIZE_ARM) & cpu->memory.activeMask, cpu->memory.activeRegion);
-		LOAD_32(cpu->prefetch[1], cpu->gprs[ARM_PC] & cpu->memory.activeMask, cpu->memory.activeRegion);
+		LOAD_32(cpu->prefetch[0], (CupidReadRegister(cpu, ARM_PC) - WORD_SIZE_ARM) & cpu->memory.activeMask, cpu->memory.activeRegion);
+		LOAD_32(cpu->prefetch[1], CupidReadRegister(cpu, ARM_PC) & cpu->memory.activeMask, cpu->memory.activeRegion);
 	})
 
 DEFINE_INSTRUCTION_ARM(MSRR,
 	int c = opcode & 0x00010000;
 	int f = opcode & 0x00080000;
-	int32_t operand = cpu->gprs[opcode & 0xF];
+	int32_t operand = CupidReadRegister(cpu, opcode & 0xF);
 	int32_t mask = (c ? 0x000000FF : 0) | (f ? 0xFF000000 : 0);
 	mask &= PSR_USER_MASK | PSR_PRIV_MASK | PSR_STATE_MASK;
-	cpu->spsr.packed = (cpu->spsr.packed & ~mask) | (operand & mask) | 0x00000010;)
+	if (_hasSavedStatusBank(cpu)) {
+		cpu->spsr.packed = (cpu->spsr.packed & ~mask) | (operand & mask) | 0x00000010;
+	})
 
 /** MSR immediate variants (used in immediate ALU block rows 0x32, 0x36) */
 DEFINE_INSTRUCTION_ARM(MSRI,
@@ -780,10 +813,10 @@ DEFINE_INSTRUCTION_ARM(MSRI,
 	if (cpu->executionMode == MODE_THUMB) {
 		cpu->prefetch[0] = 0x46C0;
 		cpu->prefetch[1] &= 0xFFFF;
-		cpu->gprs[ARM_PC] += WORD_SIZE_THUMB;
+		CupidWriteRegister(cpu, ARM_PC, CupidReadRegister(cpu, ARM_PC) + (WORD_SIZE_THUMB));
 	} else {
-		LOAD_32(cpu->prefetch[0], (cpu->gprs[ARM_PC] - WORD_SIZE_ARM) & cpu->memory.activeMask, cpu->memory.activeRegion);
-		LOAD_32(cpu->prefetch[1], cpu->gprs[ARM_PC] & cpu->memory.activeMask, cpu->memory.activeRegion);
+		LOAD_32(cpu->prefetch[0], (CupidReadRegister(cpu, ARM_PC) - WORD_SIZE_ARM) & cpu->memory.activeMask, cpu->memory.activeRegion);
+		LOAD_32(cpu->prefetch[1], CupidReadRegister(cpu, ARM_PC) & cpu->memory.activeMask, cpu->memory.activeRegion);
 	})
 
 DEFINE_INSTRUCTION_ARM(MSRRI,
@@ -793,7 +826,9 @@ DEFINE_INSTRUCTION_ARM(MSRRI,
 	int32_t operand = cpu->shifterOperand;
 	int32_t mask = (c ? 0x000000FF : 0) | (f ? 0xFF000000 : 0);
 	mask &= PSR_USER_MASK | PSR_PRIV_MASK | PSR_STATE_MASK;
-	cpu->spsr.packed = (cpu->spsr.packed & ~mask) | (operand & mask) | 0x00000010;)
+	if (_hasSavedStatusBank(cpu)) {
+		cpu->spsr.packed = (cpu->spsr.packed & ~mask) | (operand & mask) | 0x00000010;
+	})
 
 /** @name Coprocessor Register Transfers */
 
@@ -807,7 +842,7 @@ DEFINE_INSTRUCTION_ARM(MRC,
 		if (rd == ARM_PC) {
 			cpu->cpsr.packed = (int32_t)(((uint32_t)cpu->cpsr.packed & 0x0FFFFFFFu) | (value & 0xF0000000u));
 		} else {
-			cpu->gprs[rd] = (int32_t)value;
+			CupidWriteRegister(cpu, rd, (int32_t)value);
 		}
 	})
 
@@ -820,8 +855,8 @@ DEFINE_INSTRUCTION_ARM(MCR,
 /** @name Miscellaneous */
 
 DEFINE_INSTRUCTION_ARM(BKPT,
-	cpu->irqh.bkpt32(cpu, ((opcode >> 4) & 0xFFF0) | (opcode & 0xF));
-	currentCycles = 0;)
+	/* Retain the instruction fetch cost even when a host handles the hook. */
+	cpu->irqh.bkpt32(cpu, ((opcode >> 4) & 0xFFF0) | (opcode & 0xF));)
 
 DEFINE_INSTRUCTION_ARM(ILL, ARM_ILL)
 
