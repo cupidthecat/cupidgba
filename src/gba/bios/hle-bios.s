@@ -2,6 +2,8 @@
 .syntax unified
 
 @ Fixed ARM offsets are covered by tests/bios/verify_hle.py.
+.equ IRQ_ENTRY_OFFSET, 0x128
+.equ IRQ_RETURN_OFFSET, 0x138
 .equ SWI_TABLE_OFFSET, 0x198
 .equ STALL_CALL_OFFSET, 0x3FC
 .equ UTILITY_SOURCE_OFFSET, 0xBA4
@@ -26,6 +28,17 @@ b fiqBase
 .word 0
 .word 0
 .word 0
+
+@ The callback returns to the register restore at the fixed firmware slot.
+.org IRQ_ENTRY_OFFSET
+irqBase:
+stmfd  sp!, {r0-r3, r12, lr}
+mov    r0, #0x04000000
+add    lr, pc, #0
+ldr    pc, [r0, #-4]
+irqReturn:
+ldmfd  sp!, {r0-r3, r12, lr}
+subs   pc, lr, #4
 
 @ The shared SWI return address is also CpuSet's visible R3 clobber.
 .org 0x140
@@ -102,13 +115,8 @@ swiTable:
 .ltorg
 .word 0 @ Padding for back-compat
 
-irqBase:
-stmfd  sp!, {r0-r3, r12, lr}
-mov    r0, #0x04000000
-add    lr, pc, #0
-ldr    pc, [r0, #-4]
-ldmfd  sp!, {r0-r3, r12, lr}
-subs   pc, lr, #4
+@ Fixed service-layout padding; the IRQ wrapper precedes SWI dispatch.
+.space 24, 0
 .word 0
 .word 0xE55EC002
 
