@@ -8,6 +8,16 @@ Both checkout steps pin a verified Node.js 24 action revision. An OS release
 upgrade needs the same complete test, firmware regeneration, Make and live
 ThreadSanitizer qualification as the current workflow.
 
+The six `arm.user-bank-*` groups check 840 complete user-bank transfers, operand
+phases, bank ownership, ALU flags, memory and branch behavior, predicates,
+reset/IRQ entry and real DMA/timer progress across clock wrap. All retain
+ten-second deadlines. `CUPID_USER_BANK_PROBE_DIR` adds eight original local
+cartridges, and `CUPID_TEST_BIOS` repeats them with the external image. The
+observer requires all 35 original failure guards, the FIQ pre-display result
+and the issued R0 terminal. Owned negative controls reject bypassed failure
+recording while retaining guest state and clocks. See
+[user-bank LDM](../hardware/cpu/user-bank-ldm.md) for the scope and input guards.
+
 The eight `gba.joybus-*` groups check complete command/reply data, 1,024 payload
 patterns, 10,740 rejected frames, decoded register accesses, IRQ/HALT, DMA/timer
 chronology and lifecycle. The owned ARM/Thumb guest completes 256 receive/send

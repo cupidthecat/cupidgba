@@ -16,6 +16,7 @@ set(CUPID_IO_SUITE_ROM "" CACHE FILEPATH "Locally built I/O register-read suite 
 set(CUPID_SERIAL_SUITE_ROM "" CACHE FILEPATH "Locally built serial timing and register suite ROM")
 set(CUPID_SERIAL_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified serial cartridge probes")
 set(CUPID_HALT_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified firmware HALT probes")
+set(CUPID_USER_BANK_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified user-bank cartridge probes")
 set(CUPID_AUDIO_TEST_ROM "" CACHE FILEPATH "Locally built audio signal cartridge ROM")
 set(CUPID_TEST_BIOS "" CACHE FILEPATH "External BIOS for local hardware suite checks")
 
@@ -218,6 +219,30 @@ if(BUILD_TESTING)
     add_executable(test_cpu tests/arm/test_cpu.c)
     target_link_libraries(test_cpu PRIVATE cupid_core)
     add_test(NAME arm.cpu COMMAND test_cpu)
+
+    add_executable(test_user_bank tests/arm/test_user_bank.c tests/arm/user_bank_probe.c)
+    target_link_libraries(test_user_bank PRIVATE cupid_core)
+    foreach(group registers arithmetic memory control chronology observer)
+        add_test(NAME arm.user-bank-${group} COMMAND test_user_bank ${group})
+        set_tests_properties(arm.user-bank-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
+    if(CUPID_USER_BANK_PROBE_DIR)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        foreach(group alu immediate writeback branch load multiply-long accumulate-long swap)
+            add_test(NAME rom.user-bank-${group} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_user_bank_probe.py
+                --directory ${CUPID_USER_BANK_PROBE_DIR} --runner $<TARGET_FILE:test_user_bank> --test ${group})
+            set_tests_properties(rom.user-bank-${group} PROPERTIES TIMEOUT 100)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.user-bank-${group}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_user_bank_probe.py
+                    --directory ${CUPID_USER_BANK_PROBE_DIR} --runner $<TARGET_FILE:test_user_bank>
+                    --test ${group} --bios ${CUPID_TEST_BIOS})
+                set_tests_properties(rom.user-bank-${group}-external PROPERTIES TIMEOUT 100)
+            endif()
+        endforeach()
+    endif()
     set_tests_properties(arm.cpu PROPERTIES TIMEOUT 10)
 
     add_executable(test_bios tests/bios/test_bios.c)
