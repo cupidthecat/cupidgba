@@ -33,7 +33,10 @@ Each group has a ten-second deadline. The existing music-progress image and
 chronology expectations remain unchanged.
 The observer group independently rejects bypassed comparisons, wrong opcodes
 and modes, and missing visits in ARM/Thumb streams with zero result registers.
-Observed and unobserved runs retain complete guest state and clocks.
+Guarded runs match boundary-only observation runs for general and banked
+registers, CPSR, the instruction pipeline, EWRAM, IWRAM, I/O and elapsed clocks.
+Both paths use the issue hook; this checks those fields rather than full-state
+equivalence with execution without a hook.
 
 With `CUPID_HALT_PROBE_DIR` and `CUPID_TEST_BIOS`, twelve additional
 `rom.irq-probe-*-external` cases require their 46 original comparison outcomes,
