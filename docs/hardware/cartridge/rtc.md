@@ -243,17 +243,19 @@ active-output transactions or physical serial propagation.
 
 The selected serial model keeps date/time reception active after a complete
 payload while chip select remains high. Each subsequent complete payload
-replaces the calendar or time; an incomplete following payload leaves the last
-committed value intact. Deselecting discards that incomplete payload. These
+replaces the calendar or time. An incomplete following payload does not update
+the calendar, whose clock continues to run. Deselecting discards that payload. These
 updates retain the existing final-rising-edge commit and divider reset, with
 no added delay. CupidGBA combines repeating serial framing with a complete-frame
 write buffer. This is the selected logical model; behavior beyond the ordinary
 frame boundary has no independent hardware confirmation.
 
-The native `gba.rtc-calendar-framing` group checks 516 pin-driven scenarios:
+The native `gba.rtc-calendar-framing` group checks 528 pin-driven scenarios:
 both payload lengths and hour formats, every incomplete length, multiple full
 frames, the final sample edge, repeated levels, deselection/restart and clock
-wrap. The preceding core stops reception after its first payload and fails
+epochs across the 32-bit boundary. A one-second pause during reception must
+advance the battery clock before the next complete frame replaces its time.
+The preceding core stops reception after its first payload and fails
 the complete second-frame control. The checks qualify the selected framing
 model; partial physical-register effects and electrical timing remain unmeasured.
 

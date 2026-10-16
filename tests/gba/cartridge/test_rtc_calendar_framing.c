@@ -93,13 +93,29 @@ static void final_edge_and_repeated_frames(bool wholeDate, bool hour24, uint64_t
     bits(&rtc, data[2], length); expect(&rtc, 2, wholeDate);
     bits(&rtc, data[0], length); expect(&rtc, 0, wholeDate); ++scenarios;
 }
+static void clock_runs_during_reception(bool wholeDate, bool hour24, uint64_t epoch) {
+    const unsigned length = wholeDate ? 56 : 24;
+    uint8_t first[7], second[7];
+    payload(0, wholeDate, hour24, first); payload(1, wholeDate, hour24, second);
+    struct CupidRTC rtc; begin(&rtc, wholeDate, hour24, epoch);
+    bits(&rtc, first, length); bits(&rtc, second, length / 2);
+    clock += CUPID_RTC_CLOCK_HZ;
+    cupid_rtc_sync(&rtc, clock);
+    struct CupidRTCDateTime advanced = dates[0];
+    ++advanced.second;
+    CHECK(!memcmp(&rtc.date, &advanced, sizeof(advanced)));
+    /* A long pause clocks the battery without accepting the buffered payload. */
+    for (unsigned i = length / 2; i < length; ++i) bit(&rtc, (second[i / 8] >> (i % 8)) & 1);
+    expect(&rtc, 1, wholeDate); CHECK(rtc.fraction == 128); ++scenarios;
+}
 int main(void) {
     for (unsigned date = 0; date < 2; ++date) for (unsigned mode = 0; mode < 2; ++mode)
       for (unsigned epoch = 0; epoch < 3; ++epoch) {
         partial_and_abort(date != 0, mode != 0, epochs[epoch]);
         final_edge_and_repeated_frames(date != 0, mode != 0, epochs[epoch]);
+        clock_runs_during_reception(date != 0, mode != 0, epochs[epoch]);
       }
-    CHECK(scenarios == 516);
+    CHECK(scenarios == 528);
     printf("RTC calendar framing scenarios: %u\n", scenarios);
     return 0;
 }
