@@ -15,6 +15,11 @@ python3 tests/bios/generate_checksum_identity.py .local-research/hle-rebuilt.bin
 ```
 
 The verifier compares all 16,384 explicit bytes with `src/gba/hle-bios.c`.
+It checks that vector `0x18` selects the IRQ entry at `0x128`, the callback
+returns through `0x138`, and the six-register save/restore and exception return
+occupy those slots. The IRQ body precedes the SWI dispatcher; reserved space
+after the service table retains every later entry address. See
+[firmware IRQ entry](../hardware/bios/interrupt-entry.md).
 The included `src/gba/bios/data-services.s` contains the timed data utilities and
 bias ramp. The verifier checks the internal stall entry, the ARM/Thumb service
 targets, and the utility source guard's observable address at `0x0BA4`.

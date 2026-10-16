@@ -481,3 +481,18 @@ Passing these checks establishes the listed cases. They do not cover every CPU
 encoding, every bus or arbitration edge, every timer/IRQ interaction, raster
 effects, audio fidelity, cartridge peripherals, save persistence, or link
 behavior. Those require further regressions and hardware-backed evidence.
+
+The `gba.bios-irq-arm`, `gba.bios-irq-thumb` and `gba.bios-irq-events` groups
+exercise the installed firmware's fixed IRQ entry/return, complete stack and
+caller context, protected readback, DMA/HALT/timer interactions and clock wrap.
+`CUPID_TEST_BIOS` adds matching external-firmware groups. The independent
+`gba.bios-irq-observer` group checks twenty owned guarded executions.
+
+Set `CUPID_FIRMWARE_IRQ_PROBE_DIR` to the private directory containing the four
+original `IRQ_sub*.gba` cartridges. Both firmware paths retain the original
+digests, opcode/mode/flag observations, checkpoint, terminal and all limits.
+The 360-frame, 150-million-step, 660-frame clock ceiling and 90-second process
+guards remain. Every original comparison must issue in order with its expected
+flags, and both original result boundaries must issue with R12=0. Current local
+results and remaining failures are documented under
+[firmware IRQ entry](../hardware/bios/interrupt-entry.md).
