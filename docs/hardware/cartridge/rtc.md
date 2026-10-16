@@ -36,8 +36,9 @@ their byte and allow another aligned command without chip-select release.
 Status writes commit at the eighth rising edge and can accept more bytes in
 the same transaction. The first bit after each completed status byte also
 publishes the shifted byte; an incomplete continuation retains that value.
-Date and time writes commit after a complete frame; their partial, overrun and
-active-output behavior still needs qualification.
+Date and time writes commit after each complete frame and accept subsequent
+frames while selected. An incomplete following frame is discarded on release.
+Physical partial-register effects and active-output behavior remain unmeasured.
 
 Interrupt parameters use a live sixteen-bit shift register. Each accepted
 payload bit shifts the word right and enters at bit 15, so frequency output
@@ -258,6 +259,14 @@ advance the battery clock before the next complete frame replaces its time.
 The preceding core stops reception after its first payload and fails
 the complete second-frame control. The checks qualify the selected framing
 model; partial physical-register effects and electrical timing remain unmeasured.
+
+Four additional `rom.rtc-calendar-continued-*` groups repeat the guest matrix
+with two complete payloads per date/time command, without releasing chip
+select between them. The second payload is the original matrix value; the
+original table, expected records and execution guards are unchanged. Both
+firmware paths run these groups, including missing-device, deliberately wrong
+expectation and year-carry controls. The original 32 cartridge variants and
+their expected records remain byte-identical.
 
 Native tests cover calendar correction and rollover, wire commands, complete
 responses, directions, ARM/Thumb instruction accesses, ROM preservation,

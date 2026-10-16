@@ -12,6 +12,19 @@ import tempfile
 from check_rtc_parameters import Driver
 
 
+class ContinuedThumbDriver(Driver):
+    def load(self, register, value):
+        # Extra frames exceed Thumb's literal-pool reach. Build constants in
+        # registers only for these extended drivers, preserving every original
+        # cartridge byte. No caller carries condition flags across a load.
+        self.emit(0x2000 | register << 8 | (value >> 24 & 255))
+        for shift in (16, 8, 0):
+            self.emit(0x0200 | register << 3 | register)
+            byte = value >> shift & 255
+            if byte:
+                self.emit(0x3000 | register << 8 | byte)
+
+
 def bcd(value):
     return value // 10 * 16 + value % 10
 
@@ -62,8 +75,8 @@ def cases(rollover=False):
     return table, expected
 
 
-def cartridge(thumb, width, bank, present=True, wrong_expected=False, rollover=False):
-    code = Driver(thumb)
+def cartridge(thumb, width, bank, present=True, wrong_expected=False, rollover=False, continued=False):
+    code = ContinuedThumbDriver(thumb) if continued and thumb else Driver(thumb)
     table, expected = cases(rollover)
     rows = 1 if rollover else 256
     if wrong_expected:
@@ -145,11 +158,19 @@ def cartridge(thumb, width, bank, present=True, wrong_expected=False, rollover=F
     command(0x46)
     send()  # Control: 12/24-hour mode, with interrupt outputs disabled.
     command(0x26)
+    if continued:
+        # A first complete payload must not terminate the selected stream.
+        # Keep the original table, expected records and following payload intact.
+        for value in (0, 1, 1, 0, 0, 0, 0):
+            send(value)
     for _ in range(7):
         send()
     command(0xA6)
     read_bytes(7)
     command(0x66)
+    if continued:
+        for value in (0, 0, 0):
+            send(value)
     for _ in range(3):
         send()
     command(0xE6)
@@ -240,6 +261,7 @@ def main():
     parser.add_argument('--bios')
     parser.add_argument('--mode', choices=('arm', 'thumb'), required=True)
     parser.add_argument('--width', type=int, choices=(2, 4), required=True)
+    parser.add_argument('--continued', action='store_true', help='Write two complete payloads without releasing chip select')
     args = parser.parse_args()
     thumb = args.mode == 'thumb'
     with tempfile.TemporaryDirectory(prefix='cupidgba-rtc-calendar-') as directory:
@@ -248,7 +270,7 @@ def main():
         configurations += [(0, False, False, False), (0, True, True, False)]
         configurations += [(b, True, False, True) for b in range(3)]
         for bank, present, wrong, rollover in configurations:
-            image, expected = cartridge(thumb, args.width, bank, present, wrong, rollover)
+            image, expected = cartridge(thumb, args.width, bank, present, wrong, rollover, args.continued)
             rows = 1 if rollover else 256
             rom, ram = root / 'owned.gba', root / 'record.bin'
             rom.write_bytes(image)
@@ -275,7 +297,8 @@ def main():
                     raise SystemExit('Year rollover did not advance a complete RTC second')
             print(f'PASS {args.mode} width={args.width} bank={bank} present={present} wrong_expected={wrong}: '
                   f'{rows} complete date/time records, {len(expected)} serial bytes, {failures} expected failures'
-                  + ('; complete one-second year rollover' if rollover else ''))
+                  + ('; complete one-second year rollover' if rollover else '')
+                  + ('; continued calendar frames' if args.continued else ''))
 
 
 if __name__ == '__main__':
