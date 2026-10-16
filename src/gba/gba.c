@@ -317,7 +317,8 @@ void cupid_gba_step(struct CupidGBA* gba) {
         cpu->cycles = cpu->nextEvent;
     } else {
         if (irqLine && !cpu->irqDisableLatch) {
-            cpu->memory.timed = true;
+            /* Static CPU clients use the exception's existing cycle path. */
+            cpu->memory.timed = cpu->memory.fetch != NULL;
             cupid_arm_take_irq(cpu);
             cpu->memory.timed = false;
         }
@@ -438,12 +439,13 @@ static void _cupidHitStub(struct CupidARM* cpu, uint32_t opcode) {
 }
 
 /**
- * @brief BKPT instruction handler (software breakpoint).
+ * @brief Handle an unsupported breakpoint encoding on the GBA CPU.
  */
 static void _cupidBreakpoint(struct CupidARM* cpu, int immediate) {
-    (void)cpu;
     (void)immediate;
-    /** Debugger hook would go here. */
+    /* ARM7TDMI has no BKPT instruction. An embedding debugger can replace
+     * this callback; ordinary execution takes the Undefined vector. */
+    cupid_arm_raise_undefined(cpu);
 }
 
 /**

@@ -8,6 +8,16 @@ Both checkout steps pin a verified Node.js 24 action revision. An OS release
 upgrade needs the same complete test, firmware regeneration, Make and live
 ThreadSanitizer qualification as the current workflow.
 
+The six `arm.user-bank-*` groups check 840 complete user-bank transfers, operand
+phases, bank ownership, ALU flags, memory and branch behavior, predicates,
+reset/IRQ entry and real DMA/timer progress across clock wrap. All retain
+ten-second deadlines. `CUPID_USER_BANK_PROBE_DIR` adds eight original local
+cartridges, and `CUPID_TEST_BIOS` repeats them with the external image. The
+observer requires all 35 original failure guards, the FIQ pre-display result
+and the issued R0 terminal. Owned negative controls reject bypassed failure
+recording while retaining guest state and clocks. See
+[user-bank LDM](../hardware/cpu/user-bank-ldm.md) for the scope and input guards.
+
 The eight `gba.joybus-*` groups check complete command/reply data, 1,024 payload
 patterns, 10,740 rejected frames, decoded register accesses, IRQ/HALT, DMA/timer
 chronology and lifecycle. The owned ARM/Thumb guest completes 256 receive/send
@@ -25,9 +35,13 @@ POSTFLG states for BIOS/RAM/ROM origins. See
 [HardReset](../hardware/bios/hard-reset.md) for complete counts and startup
 qualification limits.
 
-The six `arm.undefined-*` groups cover exception-entry clocks, caller banks
+The six general `arm.undefined-*` groups cover exception-entry clocks, caller banks
 and ARM/Thumb return, predicates, clock wrap and the internal-cycle timer/DMA
-interval. Each retains a ten-second deadline; see [undefined entry](../hardware/cpu/undefined-entry.md).
+interval. Five additional `arm.undefined-bkpt-*` groups require 391,436
+observations of unsupported breakpoint encodings, exception return, complete
+immediates, predicates, explicit host hooks and peripheral progress. Both
+timed and static paths retain their opcode fetch costs. All eleven groups
+retain ten-second deadlines; see [undefined entry](../hardware/cpu/undefined-entry.md).
 
 The six `arm.cp14-*` groups check decoded register transfers, complete selector
 coverage, r15 flags, predicates, retained undefined exceptions and timer/DMA
@@ -499,6 +513,27 @@ It retains the 360-frame, 150-million-step and 90-second observation budgets.
 Native IRQ tests cover the acceptance and wake samples in ARM/Thumb mode,
 their saved return addresses and clock wrap.
 
+Set `CUPID_SAVED_STATUS_PROBE_DIR` to the private source directory containing
+`psr/psr.gba` to register the saved-status cartridge. `CUPID_TEST_BIOS` adds its
+external BIOS path. The checker verifies the pinned 2052-byte input, all five
+original ARM comparisons, their operands and privilege modes, the original
+display checkpoint and terminal instruction. Both result boundaries must issue
+with R12=0. The dedicated probe retains the 360-frame, 150-million-step,
+660-frame clock ceiling and 90-second process limits. It does not change the
+generic headless runner's observation protocol or distribute the cartridge.
+
+The ten `arm.saved-status-*` groups require 1,139,864 observations across
+reads, register/immediate writes, masks, predicates, banks, waits, clock wrap,
+static/timed clients and timer/DMA/IRQ interactions. Five
+`arm.instruction-observer-*` groups cover initialization/reset ownership,
+ARM/Thumb issue, all ARM predicates, HALT/STOP and real timer IRQ preemption.
+Their owned programs reach zero-result boundaries even when changed input or
+an IRQ return bypasses a required comparison. The observer rejects those runs,
+wrong opcodes/modes/privileges/operands, missing or reordered comparisons and
+duplicates. Sampled register/bank/status, pipeline, RAM, I/O and clock equality
+checks verify passive observation; these samples do not describe every piece
+of emulator state. See [saved-status transfers](../hardware/cpu/saved-status-transfers.md).
+
 Passing these checks establishes the listed cases. They do not cover every CPU
 encoding, every bus or arbitration edge, every timer/IRQ interaction, raster
 effects, audio fidelity, cartridge peripherals, save persistence, or link
@@ -538,3 +573,18 @@ for each nominal-read driver. `CUPID_TEST_BIOS` adds the external-firmware path.
 Missing-device controls fail the positive observations. These inputs use
 explicit guest entry and do not qualify BIOS boot. See the
 [parameter model and physical limits](../hardware/cartridge/rtc.md).
+
+The `gba.bios-irq-arm`, `gba.bios-irq-thumb` and `gba.bios-irq-events` groups
+exercise the installed firmware's fixed IRQ entry/return, complete stack and
+caller context, protected readback, DMA/HALT/timer interactions and clock wrap.
+`CUPID_TEST_BIOS` adds matching external-firmware groups. The independent
+`gba.bios-irq-observer` group checks twenty owned guarded executions.
+
+Set `CUPID_FIRMWARE_IRQ_PROBE_DIR` to the private directory containing the four
+original `IRQ_sub*.gba` cartridges. Both firmware paths retain the original
+digests, opcode/mode/flag observations, checkpoint, terminal and all limits.
+The 360-frame, 150-million-step, 660-frame clock ceiling and 90-second process
+guards remain. Every original comparison must issue in order with its expected
+flags, and both original result boundaries must issue with R12=0. Current local
+results and remaining failures are documented under
+[firmware IRQ entry](../hardware/bios/interrupt-entry.md).

@@ -1,1 +1,1 @@
-.word 0x343BCABC
+.word 0x343BCB04

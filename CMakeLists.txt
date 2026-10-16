@@ -17,6 +17,9 @@ set(CUPID_SERIAL_SUITE_ROM "" CACHE FILEPATH "Locally built serial timing and re
 set(CUPID_RTC_STATE_ROM "" CACHE FILEPATH "Checksum-verified local RTC state corpus with RAM result transport")
 set(CUPID_SERIAL_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified serial cartridge probes")
 set(CUPID_HALT_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified firmware HALT probes")
+set(CUPID_USER_BANK_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified user-bank cartridge probes")
+set(CUPID_SAVED_STATUS_PROBE_DIR "" CACHE PATH "Directory containing the checksum-verified saved-status cartridge")
+set(CUPID_FIRMWARE_IRQ_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified firmware IRQ return cartridges")
 set(CUPID_AUDIO_TEST_ROM "" CACHE FILEPATH "Locally built audio signal cartridge ROM")
 set(CUPID_TEST_BIOS "" CACHE FILEPATH "External BIOS for local hardware suite checks")
 
@@ -215,7 +218,8 @@ if(BUILD_TESTING)
 
     add_executable(test_undefined tests/arm/test_undefined.c)
     target_link_libraries(test_undefined PRIVATE cupid_core)
-    foreach(group timed untimed state conditions phase dma)
+    foreach(group timed untimed state conditions phase dma
+                  bkpt-encodings bkpt-timed bkpt-untimed bkpt-hooks bkpt-events)
         add_test(NAME arm.undefined-${group} COMMAND test_undefined ${group})
         set_tests_properties(arm.undefined-${group} PROPERTIES TIMEOUT 10)
     endforeach()
@@ -339,12 +343,96 @@ if(BUILD_TESTING)
     add_executable(test_cpu tests/arm/test_cpu.c)
     target_link_libraries(test_cpu PRIVATE cupid_core)
     add_test(NAME arm.cpu COMMAND test_cpu)
+
+    add_executable(test_saved_status tests/arm/test_saved_status.c)
+    target_link_libraries(test_saved_status PRIVATE cupid_core)
+    foreach(group reads registers immediate-0 immediate-4 immediate-8 immediate-12 timing predicates banks events)
+        add_test(NAME arm.saved-status-${group} COMMAND test_saved_status ${group})
+        set_tests_properties(arm.saved-status-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
+    add_executable(test_instruction_observer tests/arm/test_instruction_observer.c tests/arm/instruction_probe.c)
+    target_link_libraries(test_instruction_observer PRIVATE cupid_core)
+    foreach(group lifecycle execution arbitration guards passivity)
+        add_test(NAME arm.instruction-observer-${group} COMMAND test_instruction_observer ${group})
+        set_tests_properties(arm.instruction-observer-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
+    add_executable(saved_status_probe tests/arm/saved_status_probe.c tests/arm/instruction_probe.c)
+    target_link_libraries(saved_status_probe PRIVATE cupid_core)
+    if(CUPID_SAVED_STATUS_PROBE_DIR)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        add_test(NAME rom.saved-status COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_saved_status_probe.py
+            --directory ${CUPID_SAVED_STATUS_PROBE_DIR} --runner $<TARGET_FILE:saved_status_probe>)
+        set_tests_properties(rom.saved-status PROPERTIES TIMEOUT 100)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME rom.saved-status-external COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_saved_status_probe.py
+                --directory ${CUPID_SAVED_STATUS_PROBE_DIR} --runner $<TARGET_FILE:saved_status_probe>
+                --bios ${CUPID_TEST_BIOS})
+            set_tests_properties(rom.saved-status-external PROPERTIES TIMEOUT 100)
+        endif()
+    endif()
+
+    add_executable(test_user_bank tests/arm/test_user_bank.c tests/arm/user_bank_probe.c)
+    target_link_libraries(test_user_bank PRIVATE cupid_core)
+    foreach(group registers arithmetic memory control chronology observer)
+        add_test(NAME arm.user-bank-${group} COMMAND test_user_bank ${group})
+        set_tests_properties(arm.user-bank-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
+    if(CUPID_USER_BANK_PROBE_DIR)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        foreach(group alu immediate writeback branch load multiply-long accumulate-long swap)
+            add_test(NAME rom.user-bank-${group} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_user_bank_probe.py
+                --directory ${CUPID_USER_BANK_PROBE_DIR} --runner $<TARGET_FILE:test_user_bank> --test ${group})
+            set_tests_properties(rom.user-bank-${group} PROPERTIES TIMEOUT 100)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.user-bank-${group}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_user_bank_probe.py
+                    --directory ${CUPID_USER_BANK_PROBE_DIR} --runner $<TARGET_FILE:test_user_bank>
+                    --test ${group} --bios ${CUPID_TEST_BIOS})
+                set_tests_properties(rom.user-bank-${group}-external PROPERTIES TIMEOUT 100)
+            endif()
+        endforeach()
+    endif()
     set_tests_properties(arm.cpu PROPERTIES TIMEOUT 10)
 
     add_executable(test_bios tests/bios/test_bios.c)
     target_link_libraries(test_bios PRIVATE cupid_core)
     add_test(NAME gba.bios COMMAND test_bios)
     set_tests_properties(gba.bios PROPERTIES TIMEOUT 10)
+
+    add_executable(test_bios_irq tests/bios/test_irq.c tests/arm/irq_probe.c)
+    target_link_libraries(test_bios_irq PRIVATE cupid_core)
+    foreach(group arm thumb events)
+        add_test(NAME gba.bios-irq-${group} COMMAND test_bios_irq ${group})
+        set_tests_properties(gba.bios-irq-${group} PROPERTIES TIMEOUT 10)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME gba.bios-irq-${group}-external COMMAND test_bios_irq ${group} --bios ${CUPID_TEST_BIOS})
+            set_tests_properties(gba.bios-irq-${group}-external PROPERTIES TIMEOUT 10)
+        endif()
+    endforeach()
+    add_test(NAME gba.bios-irq-observer COMMAND test_bios_irq observer)
+    set_tests_properties(gba.bios-irq-observer PROPERTIES TIMEOUT 10)
+    if(CUPID_FIRMWARE_IRQ_PROBE_DIR)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        foreach(group irq-sub irq-sub-2 irq-sub-slow irq-sub-2-slow)
+            add_test(NAME rom.firmware-${group} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_firmware_irq_probe.py
+                --directory ${CUPID_FIRMWARE_IRQ_PROBE_DIR} --runner $<TARGET_FILE:test_bios_irq> --test ${group})
+            set_tests_properties(rom.firmware-${group} PROPERTIES TIMEOUT 100)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.firmware-${group}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_firmware_irq_probe.py
+                    --directory ${CUPID_FIRMWARE_IRQ_PROBE_DIR} --runner $<TARGET_FILE:test_bios_irq>
+                    --test ${group} --bios ${CUPID_TEST_BIOS})
+                set_tests_properties(rom.firmware-${group}-external PROPERTIES TIMEOUT 100)
+            endif()
+        endforeach()
+    endif()
 
     add_executable(test_bios_math_copy tests/bios/test_math_copy.c)
     target_link_libraries(test_bios_math_copy PRIVATE cupid_core)
