@@ -172,13 +172,23 @@ void cupid_irq_pause_cpu(struct CupidGBA* gba) {
     if (gba->irq.cpuClockPaused) abort();
     gba->irq.cpuClockPaused = true;
     uint32_t now = (uint32_t)cupid_timing_global_time(&gba->timing);
-    for (unsigned i = 0; i < 4; ++i) {
-        struct CupidIRQSignalChange* change = &gba->irq.lineChanges[i];
-        if (!cupid_timing_is_scheduled(&gba->timing, &change->event)) continue;
-        change->remaining = change->event.when - now;
-        if (!change->remaining || change->remaining > 2) abort();
-        change->pausedPending = true;
-        cupid_timing_deschedule(&gba->timing, &change->event);
+    /* Walk each scheduler list once instead of searching it separately for
+     * all four possible line events on every stretched memory transfer.
+     * Read next before descheduling, which clears the removed event's link. */
+    struct CupidTimingEvent* lists[] = {gba->timing.root, gba->timing.reroot};
+    for (unsigned i = 0; i < 2; ++i) {
+        struct CupidTimingEvent* event = lists[i];
+        while (event) {
+            struct CupidTimingEvent* next = event->next;
+            if (event->callback == line_callback) {
+                struct CupidIRQSignalChange* change = event->context;
+                change->remaining = event->when - now;
+                if (!change->remaining || change->remaining > 2) abort();
+                change->pausedPending = true;
+                cupid_timing_deschedule(&gba->timing, event);
+            }
+            event = next;
+        }
     }
 }
 
