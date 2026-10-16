@@ -1,0 +1,89 @@
+{
+  "source_revision": "66f5f1d60cd7030b600606886c76f5c821ecaf9d",
+  "cases": [
+    {
+      "name": "irq-sub",
+      "path": "IRQ_sub.gba",
+      "sha256": "2bc63329f8dd10edd9b231c605de9b3ff9d096598de3ceacd2ec7d6819f8a8f4",
+      "checkpoint": "0x8000250",
+      "terminal": "0x80003c8",
+      "guards": [
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x800023e",
+          "instruction": "0xd102"
+        }
+      ]
+    },
+    {
+      "name": "irq-sub-2",
+      "path": "IRQ_sub_2.gba",
+      "sha256": "808155b942d068a72e2e20e990a6d790fba077eda8567cb8262f1f5de3d80589",
+      "checkpoint": "0x8000220",
+      "terminal": "0x8000398",
+      "guards": [
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x80001f4",
+          "instruction": "0xd108"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x80001fc",
+          "instruction": "0xd107"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x8000200",
+          "instruction": "0xd108"
+        }
+      ]
+    },
+    {
+      "name": "irq-sub-2-slow",
+      "path": "IRQ_sub_2_slow.gba",
+      "sha256": "9c6cf257e39cc1729536a1b7ad346440f2b56c70c80210f061a578b3a985eaa0",
+      "checkpoint": "0x8000220",
+      "terminal": "0x8000398",
+      "guards": [
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x80001f4",
+          "instruction": "0xd108"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x80001fc",
+          "instruction": "0xd107"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x8000200",
+          "instruction": "0xd108"
+        }
+      ]
+    },
+    {
+      "name": "irq-sub-slow",
+      "path": "IRQ_sub_slow.gba",
+      "sha256": "e1d0be6780f4e8254a73b2292987d5021cbfeb46ff3209150beba56235f28a14",
+      "checkpoint": "0x8000250",
+      "terminal": "0x80003c8",
+      "guards": [
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x800023e",
+          "instruction": "0xd102"
+        }
+      ]
+    }
+  ]
+}

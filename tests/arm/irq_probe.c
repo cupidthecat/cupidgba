@@ -15,6 +15,7 @@ struct IRQObservation {
     unsigned next;
     bool valid, checkpoint, terminal;
     uint64_t fingerprint;
+    FILE* output;
 };
 static void observe_irq_instruction(const struct CupidARM* cpu, void* context) {
     struct IRQObservation* observation = context;
@@ -30,6 +31,10 @@ static void observe_irq_instruction(const struct CupidARM* cpu, void* context) {
             i, address, cpu->prefetch[0], guard->opcode, thumb, cpu->cpsr.z, guard->zero,
             (unsigned)cpu->gprs[0], (unsigned)cpu->gprs[8]);
         observation->valid &= valid;
+        if (observation->output) fprintf(observation->output,
+            "guard=%u pc=%08" PRIx32 " mode=%s opcode=%08" PRIx32 " z=%u expected=%u result=%s\n",
+            i, address, thumb ? "thumb" : "arm", cpu->prefetch[0], (unsigned)cpu->cpsr.z,
+            (unsigned)guard->zero, valid ? "PASS" : "FAIL");
         ++observation->next;
         break;
     }
@@ -48,8 +53,8 @@ static uint64_t hash_bytes(uint64_t value, const void* data, size_t size) {
     for (size_t i = 0; i < size; ++i) value = (value ^ bytes[i]) * UINT64_C(1099511628211);
     return value;
 }
-static struct IRQObservation execute(struct CupidGBA* gba, const struct IRQExpectation* expected, unsigned budget) {
-    struct IRQObservation observation = {.expected = expected, .valid = true};
+static struct IRQObservation execute(struct CupidGBA* gba, const struct IRQExpectation* expected, unsigned budget, FILE* output) {
+    struct IRQObservation observation = {.expected = expected, .valid = true, .output = output};
     gba->cpu.instructionObserver = observe_irq_instruction;
     gba->cpu.instructionObserverContext = &observation;
     unsigned frames = 0;
@@ -99,9 +104,9 @@ int cupid_test_irq_source_probe(int argc, char** argv) {
     }
     struct CupidGBA* gba = calloc(1, sizeof(*gba)); CHECK(gba);
     cupid_gba_create(gba);
-    if (!cupid_load_rom(gba, argv[2]) || !cupid_load_bios(gba, argv[3])) { cupid_gba_destroy(gba); free(gba); return 2; }
+    if (!cupid_load_rom(gba, argv[2]) || (strcmp(argv[3], "-") && !cupid_load_bios(gba, argv[3]))) { cupid_gba_destroy(gba); free(gba); return 2; }
     cupid_gba_reset(gba);
-    struct IRQObservation observation = execute(gba, &expected, 150000000);
+    struct IRQObservation observation = execute(gba, &expected, 150000000, stdout);
     printf("checkpoint=%s comparisons=%u/%u terminal=%s r12=%u result=%s\n",
         observation.checkpoint ? "yes" : "no", observation.next, expected.count,
         observation.terminal ? "yes" : "no", (unsigned)gba->cpu.gprs[12], observation.valid ? "PASS" : "FAIL");
@@ -132,18 +137,21 @@ static struct IRQObservation owned(bool thumb, bool changed, unsigned check) {
         expected.guards[1] = (struct IRQGuard){GBA_BASE_IWRAM + 0x1200,0x1A000000,false,true};
     }
     if (check == 4) expected.guards[0].thumb = !expected.guards[0].thumb;
-    struct IRQObservation result = execute(gba, &expected, 10000);
+    struct IRQObservation result = execute(gba, &expected, 10000, NULL);
     CHECK(result.checkpoint && result.terminal && !gba->cpu.gprs[12]);
     cupid_gba_destroy(gba); free(gba); return result;
 }
 void cupid_test_irq_source_observer(void) {
+    unsigned executions = 0;
     for (unsigned thumb = 0; thumb < 2; ++thumb) for (unsigned changed = 0; changed < 2; ++changed) {
-        struct IRQObservation baseline = owned(thumb != 0, changed != 0, 0); CHECK(baseline.valid);
+        struct IRQObservation baseline = owned(thumb != 0, changed != 0, 0); CHECK(baseline.valid); ++executions;
         for (unsigned check = 1; check <= 4; ++check) {
             struct IRQObservation result = owned(thumb != 0, changed != 0, check);
             CHECK(result.fingerprint == baseline.fingerprint);
             CHECK(result.valid == (!changed && check == 1));
+            ++executions;
         }
     }
-    puts("PASS issued IRQ comparison observations: bypassed failure/opcode/missing controls rejected; state and clocks retained");
+    CHECK(executions == 20);
+    puts("PASS issued IRQ comparison observations: bypassed failure/opcode/missing/mode controls rejected; sampled state and clocks retained;20 executions");
 }

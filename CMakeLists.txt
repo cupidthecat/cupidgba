@@ -22,6 +22,7 @@ set(CUPID_BUS_PAGE_PROBE_ROM "" CACHE FILEPATH "Local checksum-verified CPU/DMA 
 set(CUPID_CPU_INTERACTION_PROBE_DIR "" CACHE PATH "Root containing checksum-verified CPU/DMA/IRQ cartridges")
 set(CUPID_USER_BANK_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified user-bank cartridge probes")
 set(CUPID_SAVED_STATUS_PROBE_DIR "" CACHE PATH "Directory containing the checksum-verified saved-status cartridge")
+set(CUPID_FIRMWARE_IRQ_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified firmware IRQ return cartridges")
 set(CUPID_AUDIO_TEST_ROM "" CACHE FILEPATH "Locally built audio signal cartridge ROM")
 set(CUPID_TEST_BIOS "" CACHE FILEPATH "External BIOS for local hardware suite checks")
 
@@ -363,6 +364,35 @@ if(BUILD_TESTING)
     target_link_libraries(test_bios PRIVATE cupid_core)
     add_test(NAME gba.bios COMMAND test_bios)
     set_tests_properties(gba.bios PROPERTIES TIMEOUT 10)
+
+    add_executable(test_bios_irq tests/bios/test_irq.c tests/arm/irq_probe.c)
+    target_link_libraries(test_bios_irq PRIVATE cupid_core)
+    foreach(group arm thumb events)
+        add_test(NAME gba.bios-irq-${group} COMMAND test_bios_irq ${group})
+        set_tests_properties(gba.bios-irq-${group} PROPERTIES TIMEOUT 10)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME gba.bios-irq-${group}-external COMMAND test_bios_irq ${group} --bios ${CUPID_TEST_BIOS})
+            set_tests_properties(gba.bios-irq-${group}-external PROPERTIES TIMEOUT 10)
+        endif()
+    endforeach()
+    add_test(NAME gba.bios-irq-observer COMMAND test_bios_irq observer)
+    set_tests_properties(gba.bios-irq-observer PROPERTIES TIMEOUT 10)
+    if(CUPID_FIRMWARE_IRQ_PROBE_DIR)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        foreach(group irq-sub irq-sub-2 irq-sub-slow irq-sub-2-slow)
+            add_test(NAME rom.firmware-${group} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_firmware_irq_probe.py
+                --directory ${CUPID_FIRMWARE_IRQ_PROBE_DIR} --runner $<TARGET_FILE:test_bios_irq> --test ${group})
+            set_tests_properties(rom.firmware-${group} PROPERTIES TIMEOUT 100)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.firmware-${group}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_firmware_irq_probe.py
+                    --directory ${CUPID_FIRMWARE_IRQ_PROBE_DIR} --runner $<TARGET_FILE:test_bios_irq>
+                    --test ${group} --bios ${CUPID_TEST_BIOS})
+                set_tests_properties(rom.firmware-${group}-external PROPERTIES TIMEOUT 100)
+            endif()
+        endforeach()
+    endif()
 
     add_executable(test_bios_math_copy tests/bios/test_math_copy.c)
     target_link_libraries(test_bios_math_copy PRIVATE cupid_core)
