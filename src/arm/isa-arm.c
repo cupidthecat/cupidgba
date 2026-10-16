@@ -845,8 +845,8 @@ DEFINE_INSTRUCTION_ARM(MCR,
 /** @name Miscellaneous */
 
 DEFINE_INSTRUCTION_ARM(BKPT,
-	cpu->irqh.bkpt32(cpu, ((opcode >> 4) & 0xFFF0) | (opcode & 0xF));
-	currentCycles = 0;)
+	/* Retain the instruction fetch cost even when a host handles the hook. */
+	cpu->irqh.bkpt32(cpu, ((opcode >> 4) & 0xFFF0) | (opcode & 0xF));)
 
 DEFINE_INSTRUCTION_ARM(ILL, ARM_ILL)
 
