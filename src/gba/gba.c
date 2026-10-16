@@ -306,7 +306,8 @@ void cupid_gba_step(struct CupidGBA* gba) {
         cpu->cycles = cpu->nextEvent;
     } else {
         if (irqLine && !cpu->irqDisableLatch) {
-            cpu->memory.timed = true;
+            /* Static CPU clients use the exception's existing cycle path. */
+            cpu->memory.timed = cpu->memory.fetch != NULL;
             cupid_arm_take_irq(cpu);
             cpu->memory.timed = false;
         }
