@@ -246,10 +246,9 @@ payload while chip select remains high. Each subsequent complete payload
 replaces the calendar or time; an incomplete following payload leaves the last
 committed value intact. Deselecting discards that incomplete payload. These
 updates retain the existing final-rising-edge commit and divider reset, with
-no added delay. This combines repeating source-supported serial framing with
-the complete-frame write buffer. The source implementations leave calendar
-updates unfinished, so this extension is a model choice rather than independent
-hardware confirmation.
+no added delay. CupidGBA combines repeating serial framing with a complete-frame
+write buffer. This is the selected logical model; behavior beyond the ordinary
+frame boundary has no independent hardware confirmation.
 
 The native `gba.rtc-calendar-framing` group checks 516 pin-driven scenarios:
 both payload lengths and hour formats, every incomplete length, multiple full
