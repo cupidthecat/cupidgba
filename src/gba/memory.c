@@ -4,6 +4,7 @@
  */
 
 #include "cupid/gba.h"
+#include "cupid/registers.h"
 #include <errno.h>
 
 static bool reserved_vram(const struct CupidGBA* gba, uint32_t address) {
@@ -26,11 +27,6 @@ void cupid_memory_refresh_vram_fetch(struct CupidARM* cpu, uint32_t address) {
     cpu->memory.activeMask &= cpu->cpsr.t ? ~1u : ~3u;
 }
 
-static void display_beat(struct CupidARM* cpu, uint32_t address, unsigned penalty) {
-    struct CupidVideo* video = &((struct CupidGBA*)cpu->master)->video;
-    cupid_bus_advance(cpu, 1 + penalty, true);
-    while (cupid_video_memory_busy(video, address)) cupid_bus_advance(cpu, 1, true);
-}
 
 /* Small-image boards select the upper ROM half; large boards also decode
  * the upper seventeen halfword-address lines, reserving the last 256 bytes. */
@@ -56,9 +52,13 @@ static void begin_data_access(struct CupidARM* cpu, uint32_t address,
         : (sequential ? memory->waitstatesSeq16[region] : memory->waitstatesNonseq16[region]));
     memory->fetchNonseq = true;
     unsigned penalty = cupid_prefetch_before_data(cpu->master, address);
-    if (region >= GBA_REGION_PALETTE && region <= GBA_REGION_OAM) display_beat(cpu, address, penalty);
+    if (region >= GBA_REGION_PALETTE && region <= GBA_REGION_OAM) {
+        if (penalty) abort(); /* Display accesses do not cancel Game Pak prefetch. */
+        cupid_bus_display_beat(cpu, address, width != 4 || region == GBA_REGION_OAM);
+    }
     else cupid_bus_advance(cpu, wait + 1 + penalty, true);
     cupid_prefetch_after_data(cpu->master);
+    CupidRegisterDataPhase(cpu);
 }
 
 static void end_data_access(struct CupidARM* cpu, int* cycles, bool load) {
@@ -179,6 +179,8 @@ void cupid_memory_reset(struct CupidGBA* gba) {
     mem->biosPrefetch = 0;
     mem->prefetch = false;
     memset(&mem->prefetchUnit, 0, sizeof(mem->prefetchUnit));
+    mem->displayAddress = 0;
+    mem->displayBeatReady = mem->displayFinal = false;
     mem->lastPrefetchedPc = 0;
     mem->openBus = 0;
     mem->busBusy = false;
@@ -416,9 +418,9 @@ uint32_t cupid_memory_load32(struct CupidARM* cpu, uint32_t address, int* cycleC
     unsigned region = address >> 24;
     if (cycleCounter && cpu->memory.timed && (region == GBA_REGION_PALETTE || region == GBA_REGION_VRAM)) {
         uint32_t aligned = address & ~3u;
-        begin_data_access(cpu, aligned, 2, cycleCounter);
+        begin_data_access(cpu, aligned, 4, cycleCounter);
         uint32_t value = cupid_memory_load16(cpu, aligned, NULL);
-        display_beat(cpu, aligned + 2, 0);
+        cupid_bus_display_beat(cpu, aligned + 2, true);
         value |= cupid_memory_load16(cpu, aligned + 2, NULL) << 16;
         end_data_access(cpu, cycleCounter, true);
         return ROR(value, (address & 3) * 8);
@@ -729,9 +731,9 @@ void cupid_memory_store32(struct CupidARM* cpu, uint32_t address, int32_t value,
     unsigned region = address >> 24;
     if (cycleCounter && cpu->memory.timed && (region == GBA_REGION_PALETTE || region == GBA_REGION_VRAM)) {
         uint32_t aligned = address & ~3u;
-        begin_data_access(cpu, aligned, 2, cycleCounter);
+        begin_data_access(cpu, aligned, 4, cycleCounter);
         cupid_memory_store16(cpu, aligned, (int16_t)value, NULL);
-        display_beat(cpu, aligned + 2, 0);
+        cupid_bus_display_beat(cpu, aligned + 2, true);
         cupid_memory_store16(cpu, aligned + 2, (int16_t)((uint32_t)value >> 16), NULL);
         end_data_access(cpu, cycleCounter, false);
         return;
@@ -1137,7 +1139,7 @@ uint32_t cupid_memory_store_multiple(struct CupidARM* cpu, uint32_t address,
     if (!mask) mask = 1 << ARM_PC;
     for (int i = 0; i < 16; i++) {
         if (!(mask & (1 << i))) continue;
-        int32_t val = cpu->gprs[i];
+        int32_t val = CupidReadRegister(cpu, (unsigned)i);
         if (i == ARM_PC) {
             val = (uint32_t)val + (cpu->executionMode == MODE_ARM ? WORD_SIZE_ARM : WORD_SIZE_THUMB);
         }
@@ -1156,9 +1158,10 @@ uint32_t cupid_memory_store_multiple(struct CupidARM* cpu, uint32_t address,
 }
 
 /**
- * @brief Apply memory stall adjustment for wait cycles.
+ * @brief Retain internal clocks and mark the following opcode request.
  *
- * Currently pass-through; prefetch-buffer effects are not yet modeled here.
+ * Timed internal cycles request a nonsequential fetch. The prefetch unit
+ * separately supplies matching buffered or in-flight cartridge halfwords.
  */
 int32_t cupid_memory_stall(struct CupidARM* cpu, int32_t wait) {
     if (cpu->memory.timed && wait > 0) {

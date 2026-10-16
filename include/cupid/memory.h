@@ -140,7 +140,7 @@ struct CupidDMA {
     int32_t  nextCount;      /**< Transfer units remaining in the latched burst */
     uint32_t latch;          /**< Open-bus: last value transferred */
 
-    int32_t  sourceOffset;   /**< Bytes per step (±width, forced +width for ROM) */
+    int32_t  sourceOffset;   /**< Bytes per step (Â±width, forced +width for ROM) */
     int32_t  destOffset;     /**< Bytes per step */
 
     /** Decoded control fields (written by cupid_dma_write_cnt) */
@@ -253,7 +253,9 @@ struct CupidPrefetch {
     unsigned count, width;   /**< Buffered halfwords and current CPU fetch width */
     unsigned duty, remaining; /**< Full and remaining cartridge halfword clocks */
     unsigned fetchKind;
-    bool active, busy;        /**< Engaged stream and occupied Game Pak bus */
+    bool active, busy;        /**< Prefetch stream and occupied Game Pak bus */
+    bool paused;              /**< Full queue must drain before burst restart */
+    bool engaged;             /**< Background burst has received idle bus clocks */
     bool disabled;            /**< Pending burst restart after WAITCNT disable */
 };
 
@@ -283,6 +285,7 @@ struct CupidMemory {
     bool lastWasDMA;
     uint32_t dmaBus;
     uint32_t dmaROMAddress;  /**< Game Pak counter shared by DMA reads/writes */
+    bool dmaROMBoundary;    /**< The preceding ROM strobe ended a programmed page */
 
     /**
      * Wait-state tables (indexed by region = address >> 24).
@@ -297,6 +300,9 @@ struct CupidMemory {
     bool     biosLoaded;
 
     /** Prefetch buffer state */
+    /* The display bridge may finish two beats before a CPU word is ready. */
+    uint32_t displayAddress;
+    bool displayBeatReady, displayFinal;
     bool     prefetch;           /**< WAITCNT bit 14: prefetch enable */
     uint32_t lastPrefetchedPc;   /**< Last PC that triggered a prefetch */
 
@@ -349,11 +355,12 @@ void cupid_bus_fetch(struct CupidARM* cpu, uint32_t address, unsigned width, boo
 void cupid_bus_finish(struct CupidARM* cpu);
 void cupid_bus_wait(struct CupidARM* cpu);
 void cupid_bus_advance(struct CupidARM* cpu, unsigned cycles, bool occupied);
+void cupid_bus_display_beat(struct CupidARM* cpu, uint32_t address, bool final);
 void cupid_bus_release(struct CupidARM* cpu);
 void cupid_bus_lock(struct CupidARM* cpu, bool locked);
 void cupid_prefetch_update(struct CupidGBA* gba, uint64_t timestamp);
 unsigned cupid_prefetch_fetch(struct CupidGBA* gba, uint32_t address, unsigned width,
-                              unsigned cycles);
+                              unsigned cycles, bool refill);
 void cupid_prefetch_finish_fetch(struct CupidGBA* gba);
 unsigned cupid_prefetch_before_data(struct CupidGBA* gba, uint32_t address);
 void cupid_prefetch_after_data(struct CupidGBA* gba);

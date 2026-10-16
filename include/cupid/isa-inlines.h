@@ -78,7 +78,10 @@
 /** @name PC Write Helpers */
 
 static inline int32_t CupidARMWritePC(struct CupidARM* cpu) {
-	uint32_t pc = cpu->gprs[ARM_PC] & ~(uint32_t)(WORD_SIZE_ARM - 1);
+	cpu->userBankPending = cpu->userBankActive = false;
+	/* Interworking can retain A1 in the logical PC. Opcode reads use the
+	 * word-aligned active mask, without the rotation of an unaligned LDR. */
+	uint32_t pc = cpu->gprs[ARM_PC] & ~(uint32_t)(WORD_SIZE_THUMB - 1);
 	cpu->memory.setActiveRegion(cpu, pc);
 	if (cpu->memory.timed) cpu->memory.fetch(cpu, pc, WORD_SIZE_ARM, false);
 	LOAD_32(cpu->prefetch[0], pc & cpu->memory.activeMask, cpu->memory.activeRegion);
@@ -93,6 +96,7 @@ static inline int32_t CupidARMWritePC(struct CupidARM* cpu) {
 }
 
 static inline int32_t CupidThumbWritePC(struct CupidARM* cpu) {
+	cpu->userBankPending = cpu->userBankActive = false;
 	uint32_t pc = cpu->gprs[ARM_PC] & ~(uint32_t)(WORD_SIZE_THUMB - 1);
 	cpu->memory.setActiveRegion(cpu, pc);
 	if (cpu->memory.timed) cpu->memory.fetch(cpu, pc, WORD_SIZE_THUMB, false);

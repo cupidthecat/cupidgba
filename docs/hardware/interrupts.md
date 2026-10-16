@@ -6,9 +6,29 @@ IF bit acknowledges that request. Byte writes merge with the pending IE value
 or acknowledge only the selected IF byte. The reserved IME byte has no effect.
 
 After register acceptance, the enabled-request signal reaches HALT one cycle
-later. The CPU IRQ line follows two cycles after acceptance. Successive line
-changes keep their own deadlines, including short assertions followed by
-deassertions. IME and the CPSR IRQ mask control exception entry; HALT can wake
+later. The CPU IRQ line follows two CPU clocks after acceptance. With no held
+bus cycle this keeps the existing system-clock deadlines. Both signals retain
+values already sampled into their pipelines, including short assertions
+followed by deassertions. A register update cannot replace an older
+enabled-request publication due on that same clock. This matters when a DMA
+acknowledgement coincides with a separately phased peripheral request: HALT
+must still observe the one-clock enabled-request pulse. The register, HALT
+and CPU-line stage counts remain unchanged.
+
+CPU bus waits hold the IRQ synchronizer. A stretched memory transfer completes
+one CPU clock at its ready edge; its intermediate wait clocks advance the
+peripherals. Waiting for DMA to release the bus completes no CPU clock by
+itself. CPU internal cycles and HALT continue to clock the synchronizer during
+DMA. IF register acceptance and the HALT enabled-request signal keep their
+system-clock deadlines throughout these waits.
+
+An input pulse that begins and ends while the CPU clock is held is not captured
+by its first stage. A value captured before the hold still reaches the final
+stage on the next CPU-ready edge. A scheduled ready-edge event preserves this
+ownership without splitting peripheral dispatch batches. Timer, DMA, audio and
+existing bus-progress observations retain their previous dispatch partitions.
+
+IME and the CPSR IRQ mask control exception entry; HALT can wake
 from an enabled request while both masks prevent entry.
 
 The CPU samples the IRQ line and its latched CPSR mask at instruction
@@ -37,6 +57,34 @@ external-BIOS timer suite checks 90 IRQ observations and 936 count-up results;
 see [testing](../development/testing.md). The CPU's pipeline and exception
 registers are described in the
 [ARM7TDMI technical reference manual](https://support.arm.com/documentation/ddi0210/c/).
+
+`gba.irq-pulses` checks every publication in a sequence that previously lost
+the enabled-request pulse. It covers repeated queue reuse, single-clock and
+bulk dispatch, 32-bit clock wrap, both CPU instruction modes, IME/CPSR masks,
+actual DMA acknowledgement strobes, STOP clock freezing and console reset.
+The old core fails the pulse, HALT-resume and DMA controls. These regressions
+preserve the documented pipeline; they do not settle physical IRQ sampling at
+every instruction/refill boundary. Remaining original CPU/bus cartridge
+failures stay tracked in #10.
+
+Four `gba.irq-clock-*` timing groups add 2,056 observed waveform clocks, complete
+CPU load/store data, repeated unclocked input pulses, already captured stages,
+real DMA transfers, multiply internal-cycle overlap and reset. Memory regions,
+both fetch widths, wait controls and four clock anchors retain their existing
+transfer durations. The preceding core fails all four groups. Four original
+external-firmware load, branch and store cartridges now reach their encoded
+IRQ return addresses; two HALT/timer cases and the built-in startup cases
+remain unresolved. See [CPU/DMA/IRQ interactions](cpu/dma-irq-interactions.md).
+
+The additional observer group rejects skipped comparisons, wrong opcodes or
+modes and missing visits in owned ARM/Thumb streams that still report zero.
+The optional external-firmware IRQ profile requires all 46 original comparison
+outcomes across twelve cartridges and an actually issued terminal. The former
+slow return timeout now reaches its three comparisons and passing terminal.
+Eleven cartridges pass. One retained failure reads `0xF4` instead of `0xF5`;
+its original wide guard encoding does not record that failure on ARM7TDMI,
+so its zero guest result alone is insufficient. The strengthened observer
+rejects it. No input bytes or decoder behavior were changed for that encoding.
 
 The relative priority of an IRQ assertion and an IF acknowledge on exactly
 the same hardware cycle remains unverified. Queued IF changes retain their

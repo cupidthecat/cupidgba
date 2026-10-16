@@ -197,6 +197,8 @@ struct CupidARM {
     /** Halt state */
     int halted;
     bool irqDisableLatch; /**< IRQ mask sampled by the instruction pipeline */
+    /* User/current register ports overlap in the operand phase after LDM^. */
+    bool userBankPending, userBankActive;
 
     /**
      * Banked registers (one set per mode: USR/SYS, FIQ, IRQ, SVC, ABT, UND).
@@ -223,6 +225,13 @@ struct CupidARM {
 
     /** Back-pointer to owning GBA */
     struct CupidGBA* master;
+
+    /* Read-only host observation immediately before an ARM/Thumb instruction
+     * is issued, after the owner's IRQ/HALT arbitration. Failed ARM predicates
+     * are still issued instructions. The observer must not modify the core or
+     * advance emulated time. Host ownership survives reset. */
+    void (*instructionObserver)(const struct CupidARM* cpu, void* context);
+    void* instructionObserverContext;
 };
 #undef CUPID_ARM_REGISTER_FILE
 
@@ -230,6 +239,15 @@ struct CupidARM {
 void cupid_arm_set_priv_mode(struct CupidARM* cpu, enum CupidPrivMode mode);
 
 /** @name Inline Helpers */
+/* Address of the pending instruction at the issue/observer boundary. R15
+ * retains the logical ARM address, including A1 after interworking; opcode
+ * bytes are fetched from a word-aligned address. During instruction execution
+ * R15 has advanced again and this helper must not be used for operands. */
+static inline uint32_t cupid_arm_instruction_address(const struct CupidARM* cpu) {
+    const bool thumb = cpu->executionMode == MODE_THUMB;
+    return ((uint32_t)cpu->gprs[ARM_PC] - (thumb ? 2u : 4u)) & ~(thumb ? 1u : 3u);
+}
+
 static inline void _cupidSetMode(struct CupidARM* cpu, int thumb) {
     cpu->executionMode = thumb ? MODE_THUMB : MODE_ARM;
 }

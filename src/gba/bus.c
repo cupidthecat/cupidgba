@@ -5,17 +5,45 @@ void cupid_bus_wait(struct CupidARM* cpu) {
     struct CupidGBA* gba = cpu->master;
     cpu->irqh.processEvents(cpu);
     cupid_dma_kick(gba, cupid_timing_global_time(&gba->timing));
+    bool waiting = gba->memory.dmaRunning && !gba->memory.busLocked;
+    /* The CPU waits for bus ownership; DMA's peripheral clocks still run. */
+    if (waiting) cupid_irq_pause_cpu(gba);
     while (gba->memory.dmaRunning && !gba->memory.busLocked) {
         cpu->cycles = cpu->nextEvent;
         cpu->irqh.processEvents(cpu);
     }
+    if (waiting) cupid_irq_resume_cpu(gba);
 }
 
 void cupid_bus_advance(struct CupidARM* cpu, unsigned cycles, bool occupied) {
     struct CupidGBA* gba = cpu->master;
     gba->memory.busBusy = occupied;
+    /* Wait states stretch one CPU bus cycle. Only its final ready edge
+     * advances the IRQ synchronizer. Keep peripheral dispatch in one batch. */
+    if (occupied && cycles > 1) cupid_irq_hold_cpu(gba, cycles);
     cpu->cycles += (int32_t)cycles;
     cpu->irqh.processEvents(cpu);
+}
+
+/* A PPU bridge beat can finish while the CPU word request remains held.
+ * Only the final free beat clocks the CPU IRQ stages. The ready event runs
+ * before same-edge MMIO acceptance, matching ordinary stretched transfers. */
+static bool display_ready(struct CupidGBA* gba) {
+    if (cupid_video_memory_busy(&gba->video, gba->memory.displayAddress)) return false;
+    gba->memory.displayBeatReady = true;
+    return gba->memory.displayFinal;
+}
+
+void cupid_bus_display_beat(struct CupidARM* cpu, uint32_t address, bool final) {
+    struct CupidGBA* gba = cpu->master;
+    gba->memory.displayAddress = address;
+    gba->memory.displayBeatReady = false;
+    gba->memory.displayFinal = final;
+    if (!gba->irq.cpuClockPaused) cupid_irq_hold_cpu_until(gba, display_ready);
+    else if (gba->irq.cpuReady != display_ready) abort();
+    do {
+        cupid_bus_advance(cpu, 1, true);
+    } while (!gba->memory.displayBeatReady);
 }
 
 void cupid_bus_release(struct CupidARM* cpu) {
@@ -27,6 +55,9 @@ void cupid_bus_release(struct CupidARM* cpu) {
 void cupid_bus_fetch(struct CupidARM* cpu, uint32_t address, unsigned width, bool sequential) {
     struct CupidGBA* gba = cpu->master;
     cupid_bus_wait(cpu);
+    /* A pipeline refill differs from a sequential CPU request whose bus
+     * access was made nonsequential by an internal cycle or a page edge. */
+    bool refill = !sequential;
     sequential = sequential && !gba->memory.fetchNonseq;
     unsigned region = address >> GBA_BASE_OFFSET;
     if (region >= GBA_REGION_ROM0 && region <= GBA_REGION_ROM2_EX &&
@@ -44,12 +75,11 @@ void cupid_bus_fetch(struct CupidARM* cpu, uint32_t address, unsigned width, boo
             : (sequential ? cpu->memory.activeSeqCycles16 : cpu->memory.activeNonseqCycles16);
     }
     gba->memory.fetchNonseq = false;
-    unsigned cycles = cupid_prefetch_fetch(gba, address, width, wait + 1);
+    unsigned cycles = cupid_prefetch_fetch(gba, address, width, wait + 1, refill);
     if (region >= GBA_REGION_PALETTE && region <= GBA_REGION_OAM) {
         unsigned beats = width == 4 && region != GBA_REGION_OAM ? 2 : 1;
         for (unsigned i = 0; i < beats; i++) {
-            cupid_bus_advance(cpu, 1, true);
-            while (cupid_video_memory_busy(&gba->video, address)) cupid_bus_advance(cpu, 1, true);
+            cupid_bus_display_beat(cpu, address + i * 2, i + 1 == beats);
         }
     } else cupid_bus_advance(cpu, cycles, true);
     cupid_prefetch_finish_fetch(gba);
