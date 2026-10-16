@@ -451,6 +451,24 @@ native 240x160 framebuffer, written as a binary PPM file. Step and emulated-cycl
 budgets bound execution; `--expect-loop-register` reports the result register
 at an ARM branch to itself. `--terminal-address` restricts that observation to
 a specific instruction address.
+
+`--expect-register-at ADDRESS REGISTER VALUE` requires an ordered issued
+instruction and its live register value. `--expect-register-pair-at ADDRESS
+REGISTER VALUE REGISTER VALUE` checks both operands at the same instruction.
+The runner allows up to 128 ordered observations. Missing, extra, reordered
+or wrong values fail even when both result boundaries contain zero. Records
+include actual ARM/Thumb mode and opcode for pinned-input verification.
+Observation runs after IRQ arbitration and includes failed ARM predicates;
+HALT/STOP polls and discarded exception fetches do not issue instructions.
+
+The `arm.observer-*`, `runner.observations` and `runner.fifo-comparisons`
+groups check passive state/clock preservation, IRQ replacement, reset ownership,
+branches, failed predicates, complete comparison operands and bypassed failure
+writes. Their ten-second deadlines and owned process guards remain fixed.
+The FIFO manifest preserves all 26 original comparisons, including the source
+base's second `8Bh` comparison that is absent from the bundled image. See
+[FIFO power](../hardware/audio/fifo-power.md) for the retained timing failures.
+
 `--key-event FRAME MASK` changes the pressed-button mask at a completed frame
 boundary. Repeat it in frame order to provide a deterministic input sequence;
 a zero mask releases all buttons. This uses the same key state and keypad IRQ

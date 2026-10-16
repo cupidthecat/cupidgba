@@ -14,70 +14,291 @@
       "path": "fifo.gba",
       "sha256": "c848d1373bb8bb6a418f1b13a34ffeefaea5fc64c6e18fd5a3dcd70442826716",
       "checkpoint": "0x80004ac",
-      "terminal": "0x8000624"
+      "terminal": "0x8000624",
+      "observations": [
+        {
+          "address": "0x08000174",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x770f0000",
+          "literal": "0x08000184"
+        },
+        {
+          "address": "0x0800021c",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x00800068",
+          "literal": "0x08000244"
+        },
+        {
+          "address": "0x0800030c",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x00800068",
+          "literal": "0x08000324"
+        },
+        {
+          "address": "0x08000428",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x00800068",
+          "literal": "0x0800045c"
+        },
+        {
+          "address": "0x0800043c",
+          "mode": "arm",
+          "instruction": "0xe1570001",
+          "register": 7,
+          "value": "0x008000a5",
+          "literal": "0x08000460"
+        }
+      ]
     },
     {
       "name": "prefetch",
       "path": "fifo_2.gba",
       "sha256": "3177942aa07f3b7204f00e2f155fcb28fdfa43d86b4662adcbbf27cc1350e922",
       "checkpoint": "0x8000708",
-      "terminal": "0x8000880"
+      "terminal": "0x8000880",
+      "observations": [
+        {
+          "address": "0x080001dc",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x00800051",
+          "literal": "0x080001f4"
+        },
+        {
+          "address": "0x08000290",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x00800051",
+          "literal": "0x080002a8"
+        },
+        {
+          "address": "0x08000344",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x00800051",
+          "literal": "0x0800035c"
+        },
+        {
+          "address": "0x080003f8",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x00800051",
+          "literal": "0x08000410"
+        },
+        {
+          "address": "0x080004ac",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x00800051",
+          "literal": "0x080004c4"
+        },
+        {
+          "address": "0x08000560",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x00800051",
+          "literal": "0x08000578"
+        },
+        {
+          "address": "0x08000614",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x00800051",
+          "literal": "0x0800062c"
+        },
+        {
+          "address": "0x080006c8",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x00800033",
+          "literal": "0x080006e0"
+        }
+      ]
     },
     {
       "name": "irq",
       "path": "fifo_3.gba",
       "sha256": "b75527a216fe47468aac72633e9b6937fdb542cd308337dcf0089b8a8e82e63a",
       "checkpoint": "0x8000254",
-      "terminal": "0x80003cc"
+      "terminal": "0x80003cc",
+      "observations": [
+        {
+          "address": "0x08000214",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x008000af",
+          "literal": "0x0800022c"
+        }
+      ]
     },
     {
       "name": "threshold",
       "path": "fifo_4.gba",
       "sha256": "57544d2ea602f852b65c8842d69d3ea3d7598f39844a6cf61497b1d69edfd688",
       "checkpoint": "0x8000270",
-      "terminal": "0x80003e8"
+      "terminal": "0x80003e8",
+      "observations": [
+        {
+          "address": "0x08000214",
+          "mode": "arm",
+          "instruction": "0xe350005b",
+          "register": 0,
+          "value": "0x0000005b"
+        },
+        {
+          "address": "0x08000220",
+          "mode": "arm",
+          "instruction": "0xe351007d",
+          "register": 1,
+          "value": "0x0000007d"
+        }
+      ]
     },
     {
       "name": "overflow",
       "path": "fifo_5.gba",
       "sha256": "0c9f20e5865c4104a47d5db7cf53ade1f24d0cc532e119c8a1f0d69a449b3c20",
       "checkpoint": "0x8000260",
-      "terminal": "0x80003d8"
+      "terminal": "0x80003d8",
+      "observations": [
+        {
+          "address": "0x08000204",
+          "mode": "arm",
+          "instruction": "0xe3500058",
+          "register": 0,
+          "value": "0x00000058"
+        },
+        {
+          "address": "0x08000210",
+          "mode": "arm",
+          "instruction": "0xe351005c",
+          "register": 1,
+          "value": "0x0000005c"
+        }
+      ]
     },
     {
       "name": "irq-latch",
       "path": "fifo_6.gba",
       "sha256": "67b04bb9d3781c213b22676248b3355d8a8871ef13c78202fffecdfa332dc60c",
       "checkpoint": "0x800027c",
-      "terminal": "0x80003f4"
+      "terminal": "0x80003f4",
+      "observations": [
+        {
+          "address": "0x0800023c",
+          "mode": "arm",
+          "instruction": "0xe1570001",
+          "register": 7,
+          "value": "0x0080007b",
+          "literal": "0x08000254"
+        }
+      ]
     },
     {
       "name": "disable-3",
       "path": "fifo_dma_disable_3.gba",
       "sha256": "55cfbc18625a9b117ec8919977438433d4621a78bb6a38af111b4d0ac6a03999",
       "checkpoint": "0x80001e8",
-      "terminal": "0x8000360"
+      "terminal": "0x8000360",
+      "observations": []
     },
     {
       "name": "disable-4",
       "path": "fifo_dma_disable_4.gba",
       "sha256": "106aa10f25ef1a618726760bf7e51fad227c19bd0f8f782a824f8a84fc14cded",
       "checkpoint": "0x8000204",
-      "terminal": "0x800037c"
+      "terminal": "0x800037c",
+      "observations": [
+        {
+          "address": "0x080001dc",
+          "mode": "arm",
+          "instruction": "0xe350004a",
+          "register": 0,
+          "value": "0x0000004a"
+        }
+      ]
     },
     {
       "name": "disable-5",
       "path": "fifo_dma_disable_5.gba",
       "sha256": "5c521ac9695365c7c0f3228cd0578b2ceb9efa5a89f205990ad3ae78a58452b8",
       "checkpoint": "0x80001e8",
-      "terminal": "0x8000360"
+      "terminal": "0x8000360",
+      "observations": []
     },
     {
       "name": "base-source",
       "path": "fifo.gba",
       "sha256": "a347d97325b5548f5bb596826bcabdaa271963f79e879906f7ea4ce399b683f8",
       "checkpoint": "0x80004b0",
-      "terminal": "0x8000628"
+      "terminal": "0x8000628",
+      "observations": [
+        {
+          "address": "0x08000174",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x770f0000",
+          "literal": "0x08000184"
+        },
+        {
+          "address": "0x0800021c",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x00800068",
+          "literal": "0x08000248"
+        },
+        {
+          "address": "0x08000230",
+          "mode": "arm",
+          "instruction": "0xe1570001",
+          "register": 7,
+          "value": "0x0080008b",
+          "literal": "0x0800024c"
+        },
+        {
+          "address": "0x08000310",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x00800068",
+          "literal": "0x08000328"
+        },
+        {
+          "address": "0x0800042c",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x00800068",
+          "literal": "0x08000460"
+        },
+        {
+          "address": "0x08000440",
+          "mode": "arm",
+          "instruction": "0xe1570001",
+          "register": 7,
+          "value": "0x008000a5",
+          "literal": "0x08000464"
+        }
+      ]
     }
   ]
 }

@@ -62,6 +62,20 @@ requires a passing result at both boundaries; display code cannot conceal an
 earlier failure by overwriting the result register. No cartridge or BIOS image
 is distributed.
 
+The manifest also retains all 26 encoded comparisons across the nine bundled
+images and separate source image. Qualification observes actual instruction
+issue after IRQ arbitration, checks the pinned opcode and requires the measured
+register to equal the original immediate or literal. Register-to-register
+comparisons also require the live expected-value register. Missing, reordered
+or failed comparisons reject a zero-result terminal. The two disable inputs
+without encoded comparisons retain their original result boundaries.
+
+Owned negative controls deliberately bypass failure writes while leaving zero
+at both boundaries. They must fail when the measured value is wrong, the live
+expected operand differs or a required comparison never issues. Separate
+controls reject changed opcodes, register selection, immediates and literals.
+The observation callback leaves emulated state and clocks unchanged.
+
 The bundled base image differs from its accompanying assembly source. Its
 second timer-read path loads the expectation into the measured register and
 branches on the preceding comparison flags. Its data contains `0x00800098`,

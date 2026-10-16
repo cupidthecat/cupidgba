@@ -24,6 +24,50 @@ static bool screenshot(const struct CupidGBA* gba, const char* path) {
 
 struct AudioTrace { FILE* file; bool failed; };
 
+enum { MAX_REGISTER_OBSERVATIONS = 128 };
+struct RegisterObservation {
+    uint32_t address, expected, secondExpected;
+    unsigned reg, secondReg;
+    bool pair;
+};
+struct RegisterObservations {
+    struct RegisterObservation entries[MAX_REGISTER_OBSERVATIONS];
+    unsigned count, next;
+    bool failed, orderFailed;
+};
+
+static void observe_instruction(const struct CupidARM* cpu, void* context) {
+    struct RegisterObservations* observations = context;
+    const bool thumb = cpu->executionMode == MODE_THUMB;
+    const uint32_t pc = (uint32_t)cpu->gprs[ARM_PC] - (thumb ? 2u : 4u);
+    bool watched = false;
+    for (unsigned i = 0; i < observations->count; i++) {
+        if (observations->entries[i].address == pc) { watched = true; break; }
+    }
+    if (!watched) return;
+    /* Only actual instruction issue reaches this hook. A HALT poll, IRQ
+     * arbitration or discarded exception fetch cannot consume an expectation. */
+    if (observations->next == observations->count || observations->entries[observations->next].address != pc) {
+        if (!observations->orderFailed)
+            printf("observation-order=FAIL pc=%08" PRIx32 " next=%u\n", pc, observations->next);
+        observations->orderFailed = true;
+        return;
+    }
+    const struct RegisterObservation* observation = &observations->entries[observations->next];
+    const uint32_t value = (uint32_t)cpu->gprs[observation->reg];
+    const uint32_t second = (uint32_t)cpu->gprs[observation->secondReg];
+    const bool passed = value == observation->expected && (!observation->pair || second == observation->secondExpected);
+    printf("observation=%u pc=%08" PRIx32 " mode=%s opcode=%08" PRIx32
+           " r%u=%08" PRIx32 " expected=%08" PRIx32,
+           observations->next, pc, thumb ? "thumb" : "arm", cpu->prefetch[0],
+           observation->reg, value, observation->expected);
+    if (observation->pair) printf(" r%u=%08" PRIx32 " expected=%08" PRIx32,
+                                  observation->secondReg, second, observation->secondExpected);
+    printf(" result=%s\n", passed ? "PASS" : "FAIL");
+    if (!passed) observations->failed = true;
+    observations->next++;
+}
+
 static void audio_sample(void* context, uint64_t clock, int16_t left, int16_t right) {
     struct AudioTrace* trace = context;
     uint8_t record[12];
@@ -38,6 +82,7 @@ static void audio_sample(void* context, uint64_t clock, int16_t left, int16_t ri
 int main(int argc, char** argv) {
     struct KeyEvent { uint64_t frame; uint16_t keys; } keyEvents[64];
     unsigned keyEventCount = 0, nextKeyEvent = 0;
+    struct RegisterObservations observations = {0};
     const char* rom = NULL;
     const char* bios = NULL;
     const char* output = NULL;
@@ -63,6 +108,27 @@ int main(int argc, char** argv) {
         else if (!strcmp(argv[i], "--checkpoint-address") && i + 1 < argc) {
             if (!number(argv[++i], &checkpointAddress) || !checkpointAddress || checkpointAddress > UINT32_MAX) return 2;
         }
+        else if (!strcmp(argv[i], "--expect-register-at") && i + 3 < argc) {
+            uint64_t address, reg, expected;
+            if (observations.count == MAX_REGISTER_OBSERVATIONS ||
+                !number(argv[++i], &address) || address > UINT32_MAX ||
+                !number(argv[++i], &reg) || reg > 15 ||
+                !number(argv[++i], &expected) || expected > UINT32_MAX) return 2;
+            observations.entries[observations.count++] = (struct RegisterObservation){
+                .address = (uint32_t)address, .expected = (uint32_t)expected, .reg = (unsigned)reg};
+        }
+        else if (!strcmp(argv[i], "--expect-register-pair-at") && i + 5 < argc) {
+            uint64_t address, reg, expected, secondReg, secondExpected;
+            if (observations.count == MAX_REGISTER_OBSERVATIONS ||
+                !number(argv[++i], &address) || address > UINT32_MAX ||
+                !number(argv[++i], &reg) || reg > 15 ||
+                !number(argv[++i], &expected) || expected > UINT32_MAX ||
+                !number(argv[++i], &secondReg) || secondReg > 15 ||
+                !number(argv[++i], &secondExpected) || secondExpected > UINT32_MAX) return 2;
+            observations.entries[observations.count++] = (struct RegisterObservation){
+                .address = (uint32_t)address, .expected = (uint32_t)expected, .reg = (unsigned)reg,
+                .secondExpected = (uint32_t)secondExpected, .secondReg = (unsigned)secondReg, .pair = true};
+        }
         else if (!strcmp(argv[i], "--key-event") && i + 2 < argc) {
             uint64_t frame, keys;
             if (keyEventCount == 64 || !number(argv[++i], &frame) ||
@@ -80,7 +146,7 @@ int main(int argc, char** argv) {
             expectedRegister = (int)index;
         } else if (argv[i][0] != '-' && !rom) rom = argv[i];
         else {
-            fprintf(stderr, "Usage: %s ROM [--bios FILE] [--frames N] [--steps N] [--key-event FRAME MASK] [--screenshot FILE.ppm] [--dump-vram FILE] [--dump-io FILE] [--dump-ewram FILE] [--dump-audio FILE] [--expect-loop-register N] [--terminal-address ADDRESS] [--checkpoint-address ADDRESS]\n", argv[0]);
+            fprintf(stderr, "Usage: %s ROM [--bios FILE] [--frames N] [--steps N] [--key-event FRAME MASK] [--screenshot FILE.ppm] [--dump-vram FILE] [--dump-io FILE] [--dump-ewram FILE] [--dump-audio FILE] [--expect-loop-register N] [--terminal-address ADDRESS] [--checkpoint-address ADDRESS] [--expect-register-at ADDRESS REGISTER VALUE] [--expect-register-pair-at ADDRESS REGISTER VALUE REGISTER VALUE]\n", argv[0]);
             return 2;
         }
     }
@@ -92,6 +158,10 @@ int main(int argc, char** argv) {
     int result = 2;
     if (!cupid_load_rom(gba, rom) || (bios && !cupid_load_bios(gba, bios))) goto cleanup;
     cupid_gba_reset(gba);
+    if (observations.count) {
+        gba->cpu.instructionObserver = observe_instruction;
+        gba->cpu.instructionObserverContext = &observations;
+    }
     if (audioOutput) {
         audioTrace.file = fopen(audioOutput, "wb");
         if (!audioTrace.file) { perror(audioOutput); goto cleanup; }
@@ -136,6 +206,12 @@ int main(int argc, char** argv) {
             checkpoint ? (checkpointValue ? "FAIL" : "PASS") : "MISSING");
         result = terminal && !value && (!checkpointAddress || (checkpoint && !checkpointValue)) ? 0 : 1;
     } else result = completed == frames ? 0 : 1;
+    if (observations.count) {
+        const bool failed = observations.failed || observations.orderFailed;
+        printf("observations=%u/%u result=%s\n", observations.next, observations.count,
+               failed ? "FAIL" : observations.next != observations.count ? "MISSING" : "PASS");
+        if (failed || observations.next != observations.count) result = 1;
+    }
     if (output && !screenshot(gba, output)) { perror(output); result = 2; }
     const char* dumpPaths[] = {vramOutput, ioOutput, ewramOutput};
     const void* dumpData[] = {gba->video.vram, gba->memory.io, gba->memory.ewram};
