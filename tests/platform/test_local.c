@@ -6,12 +6,18 @@
 #include "../test.h"
 #include <string.h>
 
-static void key(SDL_Scancode code, bool pressed) {
-    SDL_Event event = {0};
+static void key_event(SDL_Scancode code, bool pressed, bool repeat) {
+    SDL_Event event;
+    /* SDL_Event is a union. C11 {0} initializes its first member only; the
+     * keyboard repeat flag needs a defined value on every compiler. */
+    SDL_zero(event);
     event.type = pressed ? SDL_KEYDOWN : SDL_KEYUP;
+    event.key.repeat = repeat;
     event.key.keysym.scancode = code;
     CHECK(SDL_PushEvent(&event) == 1);
 }
+
+static void key(SDL_Scancode code, bool pressed) { key_event(code, pressed, false); }
 
 static void input(void) {
     CHECK(SDL_Init(SDL_INIT_GAMECONTROLLER) == 0);
@@ -50,6 +56,14 @@ static void input(void) {
         CHECK(cupid_platform_poll_local(platforms, cores, 4, &focus, &connected));
         CHECK(focus == (owner + 1) % 4);
         for (unsigned i = 0; i < 4; ++i) CHECK(!cores[i]->keysActive);
+        key_event(SDL_SCANCODE_TAB, true, true);
+        key_event(SDL_SCANCODE_Z, true, true);
+        CHECK(cupid_platform_poll_local(platforms, cores, 4, &focus, &connected));
+        CHECK(focus == (owner + 1) % 4);
+        for (unsigned i = 0; i < 4; ++i) CHECK(!cores[i]->keysActive);
+        key(SDL_SCANCODE_TAB, false);
+        key(SDL_SCANCODE_Z, false);
+        CHECK(cupid_platform_poll_local(platforms, cores, 4, &focus, &connected));
     }
     for (unsigned i = 0; i < 4; ++i)
         CHECK(SDL_JoystickSetVirtualButton(joysticks[i], SDL_CONTROLLER_BUTTON_B, i == 2) == 0);
@@ -57,6 +71,10 @@ static void input(void) {
     CHECK(cupid_platform_poll_local(platforms, cores, 4, &focus, &connected));
     for (unsigned i = 0; i < 4; ++i) CHECK(cores[i]->keysActive == (i == 2 ? 2 : 0));
     key(SDL_SCANCODE_F9, true);
+    CHECK(cupid_platform_poll_local(platforms, cores, 4, &focus, &connected)); CHECK(!connected);
+    key_event(SDL_SCANCODE_F9, true, true);
+    CHECK(cupid_platform_poll_local(platforms, cores, 4, &focus, &connected)); CHECK(!connected);
+    key(SDL_SCANCODE_F9, false);
     CHECK(cupid_platform_poll_local(platforms, cores, 4, &focus, &connected)); CHECK(!connected);
     key(SDL_SCANCODE_F9, true);
     CHECK(cupid_platform_poll_local(platforms, cores, 4, &focus, &connected)); CHECK(connected);

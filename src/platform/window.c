@@ -94,5 +94,5 @@ void cupid_platform_render_frame(struct CupidPlatform* plat, const uint32_t* fra
     }
     SDL_RenderClear(plat->renderer);
     SDL_RenderCopy(plat->renderer, plat->texture, NULL, NULL);
-    SDL_RenderPresent(plat->renderer);  /** VSync wait. */
+    SDL_RenderPresent(plat->renderer);  /* The chosen renderer may wait for VSync. */
 }
