@@ -11,6 +11,12 @@ compares its aligned query with the FIFO's original halfword cursor. Aligning
 the cursor as well would join a different cartridge stream. This distinction
 changes no wait-state constants and adds no instruction-specific delay.
 
+The 128 KiB cartridge page decoder uses the physical opcode address, before
+choosing the nonsequential access at a page's first word. For example, logical
+ARM address `0x08020002` fetches the word at `0x08020000`; retained A1 must not
+hide that page restart. The logical address and original halfword FIFO cursor
+remain intact. This separates page decoding from stream matching.
+
 The instruction observer runs at issue, after IRQ/HALT arbitration. At that
 boundary R15 is ahead of the pending instruction by four bytes in ARM state or
 two bytes in Thumb state. `cupid_arm_instruction_address` returns its physical
@@ -42,3 +48,14 @@ comparisons, its pre-display result and terminal with either BIOS path. The
 full prefetch profile passes 38/40; the two legacy boundary failures remain
 enabled. These results qualify the covered address sequences, not complete
 CPU or cartridge timing accuracy.
+
+The additional `arm.pc-address-page` group checks 96 executed two-instruction
+programs, 96 crossing refills and 96 direct request pairs with prefetch disabled.
+Three wait-state banks, four WAITCNT settings, both logical A1 values and four clock epochs
+require 384 exact clock comparisons. Boundary words use nonsequential timing;
+the following words retain sequential timing. Executed PC operands, logical
+R15, physical issue addresses and both complete pipeline words remain checked.
+The preceding core fails this group with its own headers and library. A separate
+diagnostic records 80 failing clock comparisons before the fix and zero after
+it. Existing mixed-width inputs and all four preceding address groups remain
+unchanged. Buffered page-edge combinations still require separate coverage.

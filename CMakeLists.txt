@@ -134,7 +134,7 @@ if(BUILD_TESTING)
 
     add_executable(test_pc_address tests/arm/test_pc_address.c)
     target_link_libraries(test_pc_address PRIVATE cupid_core)
-    foreach(group refill operands interworking observer)
+    foreach(group refill operands interworking observer page)
         add_test(NAME arm.pc-address-${group} COMMAND test_pc_address ${group})
         set_tests_properties(arm.pc-address-${group} PROPERTIES TIMEOUT 10)
     endforeach()

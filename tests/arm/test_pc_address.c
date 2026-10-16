@@ -145,12 +145,86 @@ static void physical_issue_observation_is_passive(void) {
         check_interworking_result(traced, region); destroy(plain); destroy(traced);
     }
 }
+static struct CupidGBA* page_machine(uint64_t clock, uint16_t control) {
+    struct CupidGBA* gba = machine(clock, false);
+    free(gba->memory.rom);
+    gba->memory.rom = calloc(1, 0x40000); CHECK(gba->memory.rom);
+    gba->memory.romSize = gba->memory.romImageSize = 0x40000;
+    gba->memory.romMask = 0x3FFFF;
+    cupid_memory_update_waitstates(gba, control);
+    return gba;
+}
+static unsigned page_fetch(struct CupidGBA* gba, uint32_t address, bool sequential) {
+    uint64_t before = cupid_timing_global_time(&gba->timing);
+    cupid_bus_fetch(&gba->cpu, address, 4, sequential);
+    cupid_bus_finish(&gba->cpu);
+    return (unsigned)(cupid_timing_global_time(&gba->timing) - before);
+}
+static void page_restart_uses_physical_opcode_address(void) {
+    static const uint16_t controls[] = {0, 0x14, 0x198, 0x7FF};
+    static const unsigned n_table[] = {5, 4, 3, 9}, s_table[] = {3, 5, 9};
+    /* The first ADD observes logical A1. The next two MOV words establish
+     * that a timing restart neither rotates nor drops pipeline data. */
+    static const uint32_t words[] = {0xE28F0000, 0xE3A01031, 0xE3A02042, 0xEAFFFFFE};
+    unsigned checks = 0;
+    for (unsigned bank = 0; bank < 3; ++bank) for (unsigned setting = 0; setting < 4; ++setting)
+    for (unsigned epoch = 0; epoch < 4; ++epoch) for (unsigned low = 0; low <= 2; low += 2) {
+        uint16_t control = controls[setting];
+        unsigned n = n_table[(control >> (2 + 3 * bank)) & 3];
+        unsigned s = control & (1u << (4 + 3 * bank)) ? 2 : s_table[bank];
+        uint32_t base = GBA_BASE_ROM0 + bank * 0x02000000u;
+        struct CupidGBA* gba = page_machine(clocks[epoch], control);
+        memcpy(gba->memory.rom + 0x1FFF8, words, sizeof(words));
+        start(gba, base + 0x1FFF8 + low, false);
+        uint64_t before = cupid_timing_global_time(&gba->timing);
+        cupid_gba_step(gba);
+        CHECK(cupid_timing_global_time(&gba->timing) - before == n + s); ++checks;
+        CHECK((uint32_t)gba->cpu.gprs[0] == base + 0x20000 + low);
+        CHECK(gba->cpu.prefetch[0] == words[1] && gba->cpu.prefetch[1] == words[2]);
+        CHECK(cupid_arm_instruction_address(&gba->cpu) == base + 0x1FFFC);
+        before = cupid_timing_global_time(&gba->timing);
+        cupid_gba_step(gba);
+        CHECK(cupid_timing_global_time(&gba->timing) - before == 2 * s); ++checks;
+        CHECK((uint32_t)gba->cpu.gprs[1] == 0x31);
+        CHECK((uint32_t)gba->cpu.gprs[ARM_PC] == base + 0x20004 + low);
+        destroy(gba);
+
+        /* Execute MOV pc,r3 from IWRAM. Its one-clock fetch precedes the
+         * refill, whose second word is the first word of the new page. */
+        gba = page_machine(clocks[epoch], control);
+        memcpy(gba->memory.rom + 0x1FFF8, words, sizeof(words));
+        const uint32_t branch = 0xE1A0F003;
+        memcpy(gba->memory.iwram + 0x3000, &branch, sizeof(branch));
+        gba->cpu.gprs[3] = base + 0x1FFFC + low;
+        start(gba, GBA_BASE_IWRAM + 0x3000, false);
+        before = cupid_timing_global_time(&gba->timing);
+        cupid_gba_step(gba);
+        CHECK(cupid_timing_global_time(&gba->timing) - before == 1 + 2 * (n + s)); ++checks;
+        CHECK(gba->cpu.prefetch[0] == words[1] && gba->cpu.prefetch[1] == words[2]);
+        CHECK((uint32_t)gba->cpu.gprs[ARM_PC] == base + 0x20000 + low);
+        CHECK(cupid_arm_instruction_address(&gba->cpu) == base + 0x1FFFC);
+        destroy(gba);
+
+        /* A direct request pair independently checks the bus decoder, with
+         * prefetch disabled and the preceding word in the old 128 KiB page. */
+        gba = page_machine(clocks[epoch], control);
+        gba->cpu.gprs[ARM_PC] = base + 0x1FFFC + low;
+        cupid_memory_set_active_region(&gba->cpu, base + 0x1FFFC + low);
+        CHECK(page_fetch(gba, base + 0x1FFFC + low, false) == n + s);
+        CHECK(page_fetch(gba, base + 0x20000 + low, true) == n + s); ++checks;
+        destroy(gba);
+    }
+    CHECK(checks == 384);
+    printf("page clocks=%u programs=96 refills=96 request-pairs=96\n", checks);
+}
+
 int main(int argc, char** argv) {
     CHECK(argc == 2);
     if (!strcmp(argv[1], "refill")) RUN(refill_keeps_logical_a1_and_unrotated_words);
     else if (!strcmp(argv[1], "operands")) RUN(pc_operands_and_data_rotation_use_distinct_addresses);
     else if (!strcmp(argv[1], "interworking")) RUN(thumb_bx_and_bx_pc_retain_a1_until_return);
     else if (!strcmp(argv[1], "observer")) RUN(physical_issue_observation_is_passive);
+    else if (!strcmp(argv[1], "page")) RUN(page_restart_uses_physical_opcode_address);
     else return 2;
     return 0;
 }
