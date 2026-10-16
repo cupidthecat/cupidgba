@@ -238,8 +238,25 @@ Missing-device controls must finish every record and fail each nonzero expected
 byte. Separate controls change one expected byte per record and require exactly
 256 failures while retaining the complete actual serial output. These checks
 use explicit guest entry, fixed execution guards and owned inputs. They qualify
-complete normal frames with interrupt outputs disabled; partial/overrun writes,
-active-output transactions and physical serial propagation remain unqualified.
+complete normal frames with interrupt outputs disabled. They do not qualify
+active-output transactions or physical serial propagation.
+
+The selected serial model keeps date/time reception active after a complete
+payload while chip select remains high. Each subsequent complete payload
+replaces the calendar or time; an incomplete following payload leaves the last
+committed value intact. Deselecting discards that incomplete payload. These
+updates retain the existing final-rising-edge commit and divider reset, with
+no added delay. This combines repeating source-supported serial framing with
+the complete-frame write buffer. The source implementations leave calendar
+updates unfinished, so this extension is a model choice rather than independent
+hardware confirmation.
+
+The native `gba.rtc-calendar-framing` group checks 516 pin-driven scenarios:
+both payload lengths and hour formats, every incomplete length, multiple full
+frames, the final sample edge, repeated levels, deselection/restart and clock
+wrap. The preceding core stops reception after its first payload and fails
+the complete second-frame control. The checks qualify the selected framing
+model; partial physical-register effects and electrical timing remain unmeasured.
 
 Native tests cover calendar correction and rollover, wire commands, complete
 responses, directions, ARM/Thumb instruction accesses, ROM preservation,

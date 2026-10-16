@@ -387,9 +387,16 @@ static void receive_payload(struct CupidRTC* rtc, bool data) {
     rtc->inputByte = rtc->bit = 0;
     if (rtc->byte != rtc->length) return;
     switch (rtc->command) {
-    case 2: cupid_rtc_write_datetime(rtc, rtc->transfer); break;
+    case 2:
+        cupid_rtc_write_datetime(rtc, rtc->transfer);
+        /* Keep the selected stream open for another complete calendar frame. */
+        rtc->byte = 0;
+        return;
     case 4: cupid_rtc_write_control(rtc, rtc->transfer[0]); break;
-    case 6: cupid_rtc_write_time(rtc, rtc->transfer); break;
+    case 6:
+        cupid_rtc_write_time(rtc, rtc->transfer);
+        rtc->byte = 0;
+        return;
     default: break;
     }
     rtc->state = RTC_IDLE;
