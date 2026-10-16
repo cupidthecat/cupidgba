@@ -46,7 +46,7 @@ add_library(cupid_core STATIC
     src/gba/gba.c src/gba/memory.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
     src/gba/audio.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c
     src/gba/hle-bios.c src/gba/bios/file.c src/gba/savedata.c src/gba/save/file.c
-    src/gba/serial/serial.c src/gba/serial/joybus.c
+    src/gba/serial/serial.c src/gba/serial/joybus.c src/gba/serial/uart.c
     src/gba/render/software.c src/gba/render/composite.c
     src/gba/render/mode0.c src/gba/render/mode2.c
     src/gba/render/mode3.c src/gba/render/mode4.c
@@ -155,6 +155,21 @@ if(BUILD_TESTING)
 
     add_executable(test_serial tests/gba/serial/test_serial.c)
     target_link_libraries(test_serial PRIVATE cupid_core)
+
+    add_executable(test_uart tests/gba/serial/test_uart.c tests/gba/serial/test_uart_guest.c)
+    target_link_libraries(test_uart PRIVATE cupid_core)
+    foreach(group formats fifo errors interrupts peers chronology lifecycle)
+        add_test(NAME gba.uart-${group} COMMAND test_uart ${group})
+        set_tests_properties(gba.uart-${group} PROPERTIES TIMEOUT 30)
+    endforeach()
+    foreach(group guest-arm guest-thumb guest-controls)
+        add_test(NAME gba.uart-${group} COMMAND test_uart ${group})
+        set_tests_properties(gba.uart-${group} PROPERTIES TIMEOUT 30)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME gba.uart-${group}-external COMMAND test_uart ${group} --external-bios ${CUPID_TEST_BIOS})
+            set_tests_properties(gba.uart-${group}-external PROPERTIES TIMEOUT 30)
+        endif()
+    endforeach()
     add_test(NAME gba.serial COMMAND test_serial)
     set_tests_properties(gba.serial PROPERTIES TIMEOUT 10)
     add_executable(test_multiplayer tests/gba/serial/test_multiplayer.c)

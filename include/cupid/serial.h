@@ -28,6 +28,18 @@ enum CupidJoyCommand {
     SERIAL_JOY_RESET = 0xFF
 };
 
+struct CupidUART {
+    struct CupidTimingEvent transmitEvent, receiveEvent;
+    uint64_t transmitStart, receiveStart;
+    uint16_t transmitControl, receiveControl, transmitFrame;
+    unsigned transmitStep, transmitBits, receiveStep, receiveBits;
+    uint8_t transmitFIFO[4], receiveFIFO[4];
+    unsigned transmitHead, transmitCount, receiveHead, receiveCount;
+    uint8_t transmitData, receiveData, receiveShift;
+    bool transmitReady, receiveReady, transmitting, receiving;
+    bool outputHigh, error, receiveError;
+};
+
 struct CupidSerial {
     struct CupidGBA* gba;
     struct CupidTimingEvent edgeEvent;
@@ -68,6 +80,7 @@ struct CupidSerial {
     bool (*multiplayerExchange)(void* context, uint16_t transmitted, unsigned baud,
                                 uint16_t received[4], uint64_t timestamp);
     void* multiplayerContext;
+    struct CupidUART uart;
 };
 
 void cupid_serial_init(struct CupidSerial* serial, struct CupidGBA* gba);
