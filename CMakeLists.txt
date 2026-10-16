@@ -18,6 +18,7 @@ set(CUPID_SERIAL_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified
 set(CUPID_HALT_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified firmware HALT probes")
 set(CUPID_AUDIO_TEST_ROM "" CACHE FILEPATH "Locally built audio signal cartridge ROM")
 set(CUPID_FIFO_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified FIFO DMA cartridges")
+set(CUPID_FIFO_SOURCE_ROM "" CACHE FILEPATH "Checksum-verified FIFO base cartridge rebuilt from its pinned source")
 set(CUPID_TEST_BIOS "" CACHE FILEPATH "External BIOS for local hardware suite checks")
 
 add_library(cupid_build_options INTERFACE)
@@ -175,6 +176,20 @@ if(BUILD_TESTING)
                 set_tests_properties(rom.fifo-${case}-external PROPERTIES TIMEOUT 100)
             endif()
         endforeach()
+    endif()
+
+    if(CUPID_FIFO_SOURCE_ROM)
+        add_test(NAME rom.fifo-base-source COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_fifo_probe.py
+            --rom ${CUPID_FIFO_SOURCE_ROM} --runner $<TARGET_FILE:cupidgba-headless> --test base-source)
+        set_tests_properties(rom.fifo-base-source PROPERTIES TIMEOUT 100)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME rom.fifo-base-source-external COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_fifo_probe.py
+                --rom ${CUPID_FIFO_SOURCE_ROM} --runner $<TARGET_FILE:cupidgba-headless>
+                --test base-source --bios ${CUPID_TEST_BIOS})
+            set_tests_properties(rom.fifo-base-source-external PROPERTIES TIMEOUT 100)
+        endif()
     endif()
 
     add_executable(test_serial tests/gba/serial/test_serial.c)

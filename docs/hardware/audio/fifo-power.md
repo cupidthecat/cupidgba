@@ -37,6 +37,36 @@ requires a passing result at both boundaries; display code cannot conceal an
 earlier failure by overwriting the result register. No cartridge or BIOS image
 is distributed.
 
+The bundled base image differs from its accompanying assembly source. Its
+second timer-read path loads the expectation into the measured register and
+branches on the preceding comparison flags. Its data contains `0x00800098`,
+but that path never compares the second timer reading. The source instead
+loads `0x0080008B` into the expected-value register and compares both readings,
+requiring `0x00800068` and `0x0080008B`. The bundled input remains unchanged;
+its terminal cannot qualify that absent second comparison.
+
+`CUPID_FIFO_SOURCE_ROM` enables the additional source-built image, with a
+separate digest, result-display address and terminal. FASMARM 1.44 reproduces
+its 2,524 bytes from the pinned source, compared with 2,520 bundled bytes.
+The eight other FIFO inputs, nineteen available prefetch sources and nine DMA
+sources reproduce their bundled images byte for byte. The legacy prefetch
+boundary input has no corresponding source in the pinned checkout.
+
+Build the source variant into a separate private directory:
+
+```sh
+python tests/roms/build_fifo_source.py --directory /path/to/local/source \
+  --assembler /path/to/fasmarm --output /path/to/private/fifo-source.gba
+```
+
+The builder verifies all six source/include files, ignoring only carriage
+returns, and requires the complete expected output digest. It works from an
+isolated copy and refuses an output inside the source checkout or an existing
+file with different contents. Configure `CUPID_FIFO_SOURCE_ROM` with that output
+path alongside the original `CUPID_FIFO_PROBE_DIR`. Both BIOS selections retain
+the same frame, instruction and process guards. The source case remains a
+timing failure; the current model reads `0x62` at its first `0x68` comparison.
+
 The current main-based candidate passes six of eighteen cartridge runs.
 The base, prefetch, IRQ, threshold, IRQ-latch and one disable group still fail
 on both BIOS paths. Original inputs, comparisons and budgets are retained,

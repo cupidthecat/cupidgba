@@ -9,6 +9,15 @@ original pre-display result and terminal must pass. The current main-based
 profile passes six of eighteen runs; its twelve failures remain enabled and
 unresolved. See [FIFO power](../hardware/audio/fifo-power.md).
 
+`CUPID_FIFO_SOURCE_ROM` adds the separately rebuilt base cartridge with either
+BIOS path. The original source includes a second timer comparison missing from
+the bundled image; both inputs remain registered independently. Reproduce it
+with `tests/roms/build_fifo_source.py` and a local FASMARM executable as described
+in the FIFO guide. The builder checks every source/include byte apart from line
+endings, verifies the complete output digest and refuses to replace source files
+or a different existing output. Both profiles retain their 360-frame,
+150-million-step, 90-second process and 100-second CTest bounds.
+
 Hosted Linux qualification uses the explicit Ubuntu 24.04 release for GCC
 Release and Clang Debug with address/undefined-behavior sanitizers. This keeps
 an automatic `ubuntu-latest` release migration from changing the compiler,

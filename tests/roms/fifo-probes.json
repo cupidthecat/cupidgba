@@ -1,5 +1,13 @@
 {
   "revision": "66f5f1d60cd7030b600606886c76f5c821ecaf9d",
+  "source_files": {
+    "fifo_dma/fifo.asm": "25f2812ae0bc20e370e16a0224884fbd13940863f9d534f32b9482e1523ec5a2",
+    "lib/constants.inc": "37beac33faeff0145bef879d92f1a94062f33e175fefcb3a0d3481759c22d924",
+    "lib/macros.inc": "25b0ff553c4ca99d76ec82c8c9db874e25d6eed58e2e69fa27f1a0fe7a8c46d4",
+    "lib/header.asm": "e9d1e8c7b6382eeb1b7059423ec365e32911f702eadfa51804a2119438a87357",
+    "lib/text.asm": "77e579d6cf0db182fd24e8d420c8c0a81592d78197e8fb06accc8bcfb43db17e",
+    "lib/glyphs.asm": "538beb37f40b1fd56beed9253e0e9eab25444c748adba7440a2093f49e3cbcc9"
+  },
   "cases": [
     {
       "name": "base",
@@ -63,6 +71,13 @@
       "sha256": "5c521ac9695365c7c0f3228cd0578b2ceb9efa5a89f205990ad3ae78a58452b8",
       "checkpoint": "0x80001e8",
       "terminal": "0x8000360"
+    },
+    {
+      "name": "base-source",
+      "path": "fifo.gba",
+      "sha256": "a347d97325b5548f5bb596826bcabdaa271963f79e879906f7ea4ce399b683f8",
+      "checkpoint": "0x80004b0",
+      "terminal": "0x8000628"
     }
   ]
 }

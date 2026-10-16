@@ -11,7 +11,9 @@ import subprocess
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--directory', type=Path, required=True)
+    inputs = parser.add_mutually_exclusive_group(required=True)
+    inputs.add_argument('--directory', type=Path)
+    inputs.add_argument('--rom', type=Path)
     parser.add_argument('--runner', type=Path, required=True)
     parser.add_argument('--bios', type=Path)
     parser.add_argument('--test', required=True)
@@ -20,7 +22,7 @@ def main():
     case = next((case for case in cases if case['name'] == args.test), None)
     if case is None:
         parser.error('Unknown FIFO cartridge')
-    rom = args.directory / case['path']
+    rom = args.rom if args.rom else args.directory / case['path']
     data = rom.read_bytes()
     if hashlib.sha256(data).hexdigest() != case['sha256']:
         raise SystemExit('FIFO cartridge checksum mismatch')
