@@ -85,6 +85,21 @@ if(BUILD_TESTING)
     add_test(NAME rom.rtc-parameters COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_parameters.py --runner $<TARGET_FILE:cupidgba-headless>)
     set_tests_properties(rom.rtc-parameters PROPERTIES TIMEOUT 30)
+    foreach(mode arm thumb)
+        foreach(width 2 4)
+            add_test(NAME rom.rtc-calendar-${mode}-${width} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_calendar.py
+                --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width ${width})
+            set_tests_properties(rom.rtc-calendar-${mode}-${width} PROPERTIES TIMEOUT 30)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.rtc-calendar-${mode}-${width}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_calendar.py
+                    --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width ${width}
+                    --bios ${CUPID_TEST_BIOS})
+                set_tests_properties(rom.rtc-calendar-${mode}-${width}-external PROPERTIES TIMEOUT 30)
+            endif()
+        endforeach()
+    endforeach()
     if(CUPID_TEST_BIOS)
         add_test(NAME rom.rtc-parameters-external COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_parameters.py --runner $<TARGET_FILE:cupidgba-headless>

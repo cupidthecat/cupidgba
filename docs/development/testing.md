@@ -514,6 +514,17 @@ CPU modes and stacks before invoking firmware; they do not qualify BIOS boot.
 Platform checks exercise manual tilt input. See the
 [sensor model and unqualified timing](../hardware/cartridge/tilt.md).
 
+The four `rom.rtc-calendar-*` groups require complete ARM/Thumb calendar drivers
+through both GPIO access widths and all three ROM windows. Independent expected
+records cover all one hundred years, month ends, both hour formats, weekday and
+minute/second fields. Each of 3,072 records requires all eighteen returned bytes,
+complete table/output pointers and a passing terminal. Missing-device and
+wrong-expectation controls must finish with their exact expected failure counts.
+`CUPID_TEST_BIOS` repeats all four groups. Their thirty-second CTest deadlines,
+twenty-second process limits and five-million-step/120-frame guards are fixed.
+These are explicit-entry drivers; they do not boot firmware or qualify partial
+or active-output date writes. See [RTC limits](../hardware/cartridge/rtc.md).
+
 `gba.rtc-parameters-component` observes every sixteen-bit parameter payload
 through both command directions, including each partial word, repeated levels,
 released input and chip-select abort. `gba.rtc-parameters-bus` checks ARM/Thumb

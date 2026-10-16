@@ -220,6 +220,23 @@ outputs require cartridge captures.
 
 ## Qualification boundary
 
+Four `rom.rtc-calendar-*` groups execute complete owned ARM/Thumb date/time
+drivers through halfword and word GPIO accesses in all three ROM windows.
+Their 3,072 complete records cover all one hundred years, February and other
+month ends, every hour in both formats, independent weekdays and the full
+minute/second range. Each record verifies the seven-byte date after writing,
+the three-byte time after a separate write, the complete date again to retain
+the untouched fields, and control readback. All 55,296 received serial bytes
+must match independently constructed expected records. `CUPID_TEST_BIOS`
+repeats the corpus with an external image, for 6,144 records and 110,592 bytes.
+
+Missing-device controls must finish every record and fail each nonzero expected
+byte. Separate controls change one expected byte per record and require exactly
+256 failures while retaining the complete actual serial output. These checks
+use explicit guest entry, fixed execution guards and owned inputs. They qualify
+complete normal frames with interrupt outputs disabled; partial/overrun writes,
+active-output transactions and physical serial propagation remain unqualified.
+
 Native tests cover calendar correction and rollover, wire commands, complete
 responses, directions, ARM/Thumb instruction accesses, ROM preservation,
 CPU/DMA word endpoints, burst addressing, reset and battery persistence.
