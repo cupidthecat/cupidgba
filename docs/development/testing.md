@@ -50,7 +50,15 @@ the `0xF4` versus `0xF5` comparison remains a failure. The original execution
 guards and 90-second process deadline remain, with 100 seconds in CTest.
 
 Hosted Linux qualification uses the explicit Ubuntu 24.04 release for GCC
-Release and Clang Debug with address/undefined-behavior sanitizers. This keeps
+Release and Clang Debug with address/undefined-behavior sanitizers. The complete
+Clang profile uses `-O1 -g`, matching local cartridge qualification and
+[AddressSanitizer's build guidance](https://clang.llvm.org/docs/AddressSanitizer.html#usage).
+A second default Debug sanitizer build runs all 232 native ARM, core, GBA,
+platform and runner checks without optimization. The complete profile retains
+all 247 checks, including all fifteen cartridge cases, their original frame
+counts and process deadlines. Unoptimized full-cartridge runs timed out on
+slower hosted workers; those failures remain recorded rather than increasing
+their limits. Both compiler flag sets appear in the job log. This keeps
 an automatic `ubuntu-latest` release migration from changing the compiler,
 sanitizer and firmware-assembler baseline. Windows checks use GCC and SDL2.
 Both checkout steps pin a verified Node.js 24 action revision. An OS release

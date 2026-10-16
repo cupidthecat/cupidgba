@@ -54,14 +54,31 @@ jobs:
           python3 tests/roms/check_console.py --fetch --directory .local-research/test-roms
           python3 tests/roms/check_ppu.py --fetch --directory .local-research/test-roms
       - name: Configure
-        run: >-
-          cmake -S . -B build -DCMAKE_C_COMPILER=${{ matrix.compiler }}
-          -DCMAKE_BUILD_TYPE=${{ matrix.mode }} -DCUPID_SANITIZERS=${{ matrix.sanitizers }}
-          -DCUPID_TEST_ROM_DIR=${{ github.workspace }}/.local-research/test-roms
+        run: |
+          sanitizer_flags=()
+          if [ "${{ matrix.compiler }}" = clang ]; then
+            sanitizer_flags+=('-DCMAKE_C_FLAGS_DEBUG=-O1 -g')
+          fi
+          cmake -S . -B build -DCMAKE_C_COMPILER=${{ matrix.compiler }} \
+            -DCMAKE_BUILD_TYPE=${{ matrix.mode }} -DCUPID_SANITIZERS=${{ matrix.sanitizers }} \
+            "${sanitizer_flags[@]}" \
+            -DCUPID_TEST_ROM_DIR=${{ github.workspace }}/.local-research/test-roms
       - name: Build
         run: cmake --build build --parallel 2
       - name: Test
         run: ctest --test-dir build --output-on-failure
+      - name: Check unoptimized native core
+        if: matrix.compiler == 'clang'
+        run: |
+          # Keep default Debug coverage alongside the full sanitized -O1 run.
+          # Cartridge frame counts, assertions and process limits stay intact.
+          cat build/CMakeFiles/cupid_core.dir/flags.make
+          cmake -S . -B build-debug -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_BUILD_TYPE=Debug -DCUPID_SANITIZERS=ON \
+            -DCUPID_TEST_ROM_DIR=${{ github.workspace }}/.local-research/test-roms
+          cmake --build build-debug --parallel 2
+          cat build-debug/CMakeFiles/cupid_core.dir/flags.make
+          ctest --test-dir build-debug -R '^(arm|core|gba|platform|runner)\.' --output-on-failure
       - name: Check live audio threading
         if: matrix.compiler == 'clang'
         run: |
