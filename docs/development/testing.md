@@ -265,6 +265,11 @@ adds the external comparisons. See [display timing](../hardware/video-timing.md)
 The native renderer tests advance the actual fetch and merge pipeline. They
 cover all six display modes, OBJ, windows, mosaic, effects, affine and display
 latches, writes between stages, CPU/DMA bus beats, blanking and clock wrap.
+The four `gba.object-mosaic-*` groups check complete normal/affine screens,
+all mosaic sizes, both OBJ color depths and HBlank fetch budgets. They also
+require line-counter progression after fetching stops, size-change/frame phases
+and identical bulk/single-clock results while the budget changes. Run them with
+`ctest --test-dir build -R '^gba.object-mosaic-' --output-on-failure`.
 The optional raster and access observers use unchanged inputs and source-derived
 expectations rather than hashes of hardware photographs:
 

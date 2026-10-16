@@ -218,6 +218,13 @@ if(BUILD_TESTING)
     add_test(NAME gba.render COMMAND test_render)
     set_tests_properties(gba.render PROPERTIES TIMEOUT 10)
 
+    add_executable(test_object_mosaic tests/gba/test_object_mosaic.c)
+    target_link_libraries(test_object_mosaic PRIVATE cupid_core)
+    foreach(group normal affine phase clock)
+        add_test(NAME gba.object-mosaic-${group} COMMAND test_object_mosaic ${group})
+        set_tests_properties(gba.object-mosaic-${group} PROPERTIES TIMEOUT 30)
+    endforeach()
+
     add_executable(test_color tests/gba/test_color.c)
     target_link_libraries(test_color PRIVATE cupid_core)
     add_test(NAME gba.color COMMAND test_color)

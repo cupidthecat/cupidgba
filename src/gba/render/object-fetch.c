@@ -168,18 +168,20 @@ static void fetch_texture(struct CupidVideo* v, uint64_t time) {
 
 void cupid_pixel_object(struct CupidVideo* v, uint64_t time) {
     struct CupidObjectFetch* f = &v->pipeline.objects;
-    if (!f->active || time < f->start || f->cycle >= f->limit) return;
-    f->cycle = (unsigned)(time - f->start);
-    if (f->cycle >= f->limit) return;
-    if (DISPCNT_OBJ_ENABLE(v->dispcnt) && !(f->cycle & 1)) {
-        fetch_texture(v, time);
-        fetch_attributes(v, time);
-    }
-    if (f->cycle == 1192) {
+    if (!f->active || time < f->start) return;
+    unsigned cycle = (unsigned)(time - f->start);
+    /* Vertical mosaic keeps its line phase after HBlank-free stops fetching. */
+    if (cycle == 1192) {
         if (f->line < 159) {
             if (++v->pipeline.objMosaicY == (unsigned)MOSAIC_OBJ_V(v->mosaic) + 1) v->pipeline.objMosaicY = 0;
             v->pipeline.objMosaicY &= 15;
         } else v->pipeline.objMosaicY = 0;
+    }
+    if (f->cycle >= f->limit || cycle >= f->limit) return;
+    f->cycle = cycle;
+    if (DISPCNT_OBJ_ENABLE(v->dispcnt) && !(f->cycle & 1)) {
+        fetch_texture(v, time);
+        fetch_attributes(v, time);
     }
     ++f->cycle;
 }

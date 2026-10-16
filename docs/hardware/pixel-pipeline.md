@@ -45,6 +45,9 @@ Horizontal and vertical windows use comparison flags. Window controls determine
 which layers and effects participate at merge time. BG and OBJ mosaic counters
 retain their phase across fetch and merge stages. OBJ pixels are prepared for
 the next line by a separate attribute, matrix and texture fetch engine.
+HBlank-free mode shortens the OBJ fetch budget; the vertical mosaic counter
+still advances at the line boundary and resets at the existing frame edge.
+Changing the budget does not restart the mosaic group or extend memory fetches.
 
 Display control passes through three line latches sampled at clock 40. BG
 fetching requires both the current and latched enable. Forced blank remains
@@ -72,6 +75,17 @@ Native regressions cover modes 0 through 5, frame selection, clipping, text
 scroll/flip/palette banks, affine coordinate and reference latches, normal and
 affine OBJ, OBJ windows, rectangular windows, mosaic, effects, forced blank,
 per-beat CPU/DMA writes and late dispatch across clock wrap.
+
+Four OBJ mosaic groups check normal and identity-affine sprites with both
+color depths and fetch budgets. They cover all sixteen horizontal and vertical
+sizes at an unaligned screen position and require all 4,915,200 pixels across
+128 complete screens, including the backdrop. Phase checks retain the existing
+size-change wrap and frame reset, require OAM/VRAM fetches to stop at the shorter
+budget, and compare changing budgets under bulk and single-clock dispatch at
+three clock epochs. All four groups fail against the preceding implementation:
+its shortened fetch loop also stopped vertical mosaic progression. These checks
+qualify this fetch-budget interaction; they do not add physical counter-edge
+captures or establish the remaining reset and prohibited-OBJ behavior.
 
 The unchanged VRAM-mirror ROM passes all ten original register and CRC
 expectations with either BIOS path. Ten selections of the unchanged access
