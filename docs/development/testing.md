@@ -8,6 +8,16 @@ Both checkout steps pin a verified Node.js 24 action revision. An OS release
 upgrade needs the same complete test, firmware regeneration, Make and live
 ThreadSanitizer qualification as the current workflow.
 
+The ten `gba.uart-*` groups check 12,288 complete format-matrix frames, 124,928
+bit-center samples, FIFO capacity, errors, IRQs, connected peers, DMA/timer
+chronology and lifecycle. Owned ARM/Thumb guests each require 1,024 transferred
+bytes, full RAM output and guards, BIOS HALT wake and their passing terminal.
+Two corrupt-input controls must complete and reject the changed byte.
+`CUPID_TEST_BIOS` adds three external-image groups. Each retains a thirty-second
+deadline and the guest retains its million-step and three-million-clock guards.
+Hosted Clang reconstructs the owned driver. See [UART](../hardware/serial/uart.md)
+for the nominal baud model and remaining physical qualification.
+
 The eight `gba.joybus-*` groups check complete command/reply data, 1,024 payload
 patterns, 10,740 rejected frames, decoded register accesses, IRQ/HALT, DMA/timer
 chronology and lifecycle. The owned ARM/Thumb guest completes 256 receive/send

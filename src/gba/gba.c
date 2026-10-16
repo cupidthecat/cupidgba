@@ -5,6 +5,7 @@
 
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
+#include "serial/uart.h"
 
 /**
  * @brief Forward declarations for irqh callbacks.
@@ -232,7 +233,10 @@ void cupid_gba_stop(struct CupidGBA* gba) {
 }
 
 void cupid_gba_wake_stop(struct CupidGBA* gba, enum CupidIRQ sources) {
-    if (gba->stopped && (stop_sources(gba) & sources)) gba->stopped = false;
+    if (gba->stopped && (stop_sources(gba) & sources)) {
+        gba->stopped = false;
+        cupid_serial_uart_resume(&gba->serial);
+    }
 }
 
 /**
