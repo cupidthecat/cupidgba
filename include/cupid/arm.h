@@ -197,6 +197,8 @@ struct CupidARM {
     /** Halt state */
     int halted;
     bool irqDisableLatch; /**< IRQ mask sampled by the instruction pipeline */
+    /* User/current register ports overlap in the operand phase after LDM^. */
+    bool userBankPending, userBankActive;
 
     /**
      * Banked registers (one set per mode: USR/SYS, FIQ, IRQ, SVC, ABT, UND).

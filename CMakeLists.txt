@@ -19,6 +19,8 @@ set(CUPID_SERIAL_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified
 set(CUPID_HALT_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified firmware HALT probes")
 set(CUPID_PREFETCH_PROBE_DIR "" CACHE PATH "Root containing checksum-verified prefetcher and timing cartridge probes")
 set(CUPID_BUS_PAGE_PROBE_ROM "" CACHE FILEPATH "Local checksum-verified CPU/DMA page-boundary cartridge")
+set(CUPID_CPU_INTERACTION_PROBE_DIR "" CACHE PATH "Root containing checksum-verified CPU/DMA/IRQ cartridges")
+set(CUPID_USER_BANK_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified user-bank cartridge probes")
 set(CUPID_AUDIO_TEST_ROM "" CACHE FILEPATH "Locally built audio signal cartridge ROM")
 set(CUPID_TEST_BIOS "" CACHE FILEPATH "External BIOS for local hardware suite checks")
 
@@ -128,7 +130,7 @@ if(BUILD_TESTING)
     set_tests_properties(runner.observations PROPERTIES TIMEOUT 10)
     add_executable(test_observer tests/arm/test_observer.c)
     target_link_libraries(test_observer PRIVATE cupid_core)
-    foreach(group stream boundaries)
+    foreach(group stream boundaries bank)
         add_test(NAME arm.observer-${group} COMMAND test_observer ${group})
         set_tests_properties(arm.observer-${group} PROPERTIES TIMEOUT 10)
     endforeach()
@@ -249,6 +251,28 @@ if(BUILD_TESTING)
         endforeach()
     endif()
 
+    if(CUPID_CPU_INTERACTION_PROBE_DIR)
+        foreach(case halt-dma-irq halt-dma-irq-read-oam halt-irq
+                internal-cycle-dma-irq internal-cycle-dma-irq-7
+                internal-cycle-dma-irq-br internal-cycle-dma-irq-br1-iwram
+                internal-cycle-dma-irq-br-pre internal-cycle-dma-irq-br-pre-tim
+                internal-cycle-dma-irq-ldr-iwram internal-cycle-dma-irq-nop-iwram
+                internal-cycle-dma-irq-st internal-cycle-dma-irq-st-p3
+                internal-cycle-dma-mul internal-cycle-dma-mul-irq internal-cycle-dma-tim-br-pre)
+            add_test(NAME rom.cpu-interaction-${case} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_cpu_interaction_probe.py
+                --directory ${CUPID_CPU_INTERACTION_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless> --test ${case})
+            set_tests_properties(rom.cpu-interaction-${case} PROPERTIES TIMEOUT 100)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.cpu-interaction-${case}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_cpu_interaction_probe.py
+                    --directory ${CUPID_CPU_INTERACTION_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless>
+                    --test ${case} --bios ${CUPID_TEST_BIOS})
+                set_tests_properties(rom.cpu-interaction-${case}-external PROPERTIES TIMEOUT 100)
+            endif()
+        endforeach()
+    endif()
+
     add_executable(test_prefetch tests/gba/test_prefetch.c)
     target_link_libraries(test_prefetch PRIVATE cupid_core)
     add_test(NAME gba.prefetch COMMAND test_prefetch)
@@ -262,6 +286,30 @@ if(BUILD_TESTING)
     add_executable(test_cpu tests/arm/test_cpu.c)
     target_link_libraries(test_cpu PRIVATE cupid_core)
     add_test(NAME arm.cpu COMMAND test_cpu)
+
+    add_executable(test_user_bank tests/arm/test_user_bank.c tests/arm/user_bank_probe.c)
+    target_link_libraries(test_user_bank PRIVATE cupid_core)
+    foreach(group registers arithmetic memory control chronology observer)
+        add_test(NAME arm.user-bank-${group} COMMAND test_user_bank ${group})
+        set_tests_properties(arm.user-bank-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
+    if(CUPID_USER_BANK_PROBE_DIR)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        foreach(group alu immediate writeback branch load multiply-long accumulate-long swap)
+            add_test(NAME rom.user-bank-${group} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_user_bank_probe.py
+                --directory ${CUPID_USER_BANK_PROBE_DIR} --runner $<TARGET_FILE:test_user_bank> --test ${group})
+            set_tests_properties(rom.user-bank-${group} PROPERTIES TIMEOUT 100)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.user-bank-${group}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_user_bank_probe.py
+                    --directory ${CUPID_USER_BANK_PROBE_DIR} --runner $<TARGET_FILE:test_user_bank>
+                    --test ${group} --bios ${CUPID_TEST_BIOS})
+                set_tests_properties(rom.user-bank-${group}-external PROPERTIES TIMEOUT 100)
+            endif()
+        endforeach()
+    endif()
     set_tests_properties(arm.cpu PROPERTIES TIMEOUT 10)
 
     add_executable(test_bios tests/bios/test_bios.c)

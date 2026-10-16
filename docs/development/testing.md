@@ -1,6 +1,6 @@
 # Testing
 
-The `runner.observations` and two `arm.observer-*` groups require actual
+The `runner.observations` and three `arm.observer-*` groups require actual
 instruction-issue observations rather than a zero terminal alone. They use
 owned ARM/Thumb streams with deliberately skipped failure writes, ordered
 and repeated observations, malformed inputs, IRQ/HALT/STOP boundaries and
@@ -8,6 +8,20 @@ clock wrap. Each retains a ten-second deadline. The mixed-width and legacy
 prefetch observers pin the original comparison instruction bytes and values;
 source inputs, comparisons and run limits remain unchanged. See
 [prefetch qualification](../hardware/prefetch.md).
+The bank group observes a user-bank load and both following operand phases,
+checks the original bank values and results, and compares observed execution
+with execution without the hook across clock wrap. Observation runs before
+operand selection and must preserve the pending phase.
+
+`CUPID_CPU_INTERACTION_PROBE_DIR` adds sixteen original CPU/DMA/IRQ cartridges
+from a local input root. `CUPID_TEST_BIOS` repeats them with the external image.
+Every run checks the cartridge digest, its original encoded comparison values
+in issue order, the pre-display R12 result and the original terminal. The
+twenty comparison instructions also retain their CPU mode and opcode checks.
+The 360-frame, 150-million-step and 90-second process guards are unchanged;
+CTest allows 100 seconds. These cases expose unresolved IRQ return-address,
+HALT/timer and initial display-phase behavior. They remain enabled when the
+input root is supplied. See [CPU/DMA/IRQ interactions](../hardware/cpu/dma-irq-interactions.md).
 
 Hosted Linux qualification uses the explicit Ubuntu 24.04 release for GCC
 Release and Clang Debug with address/undefined-behavior sanitizers. This keeps
@@ -16,6 +30,17 @@ sanitizer and firmware-assembler baseline. Windows checks use GCC and SDL2.
 Both checkout steps pin a verified Node.js 24 action revision. An OS release
 upgrade needs the same complete test, firmware regeneration, Make and live
 ThreadSanitizer qualification as the current workflow.
+
+The six `arm.user-bank-*` groups check 840 complete user-bank transfers, operand
+phases, bank ownership, ALU flags, memory and branch behavior, predicates,
+reset/IRQ entry and real DMA/timer progress across clock wrap. All retain
+ten-second deadlines. `CUPID_USER_BANK_PROBE_DIR` names the local input root
+containing the `LDM` directory and adds eight original local
+cartridges, and `CUPID_TEST_BIOS` repeats them with the external image. The
+observer requires all 35 original failure guards, the FIQ pre-display result
+and the issued R0 terminal. Owned negative controls reject bypassed failure
+recording while retaining guest state and clocks. See
+[user-bank LDM](../hardware/cpu/user-bank-ldm.md) for the scope and input guards.
 
 The eight `gba.joybus-*` groups check complete command/reply data, 1,024 payload
 patterns, 10,740 rejected frames, decoded register accesses, IRQ/HALT, DMA/timer

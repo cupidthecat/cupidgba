@@ -4,6 +4,7 @@
  */
 
 #include "cupid/gba.h"
+#include "cupid/registers.h"
 #include <errno.h>
 
 /* Small-image boards select the upper ROM half; large boards also decode
@@ -32,6 +33,7 @@ static void begin_data_access(struct CupidARM* cpu, uint32_t address,
     unsigned penalty = cupid_prefetch_before_data(cpu->master, address);
     cupid_bus_advance(cpu, wait + 1 + penalty, true);
     cupid_prefetch_after_data(cpu->master);
+    CupidRegisterDataPhase(cpu);
 }
 
 static void end_data_access(struct CupidARM* cpu, int* cycles, bool load) {
@@ -1085,7 +1087,7 @@ uint32_t cupid_memory_store_multiple(struct CupidARM* cpu, uint32_t address,
     if (!mask) mask = 1 << ARM_PC;
     for (int i = 0; i < 16; i++) {
         if (!(mask & (1 << i))) continue;
-        int32_t val = cpu->gprs[i];
+        int32_t val = CupidReadRegister(cpu, (unsigned)i);
         if (i == ARM_PC) {
             val = (uint32_t)val + (cpu->executionMode == MODE_ARM ? WORD_SIZE_ARM : WORD_SIZE_THUMB);
         }

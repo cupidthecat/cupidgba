@@ -122,7 +122,7 @@ contention timing remains incomplete. EEPROM serial paths remain available, but
 their full width/size/peripheral behavior needs separate cartridge tests.
 The optional CPU/DMA page-boundary cartridge now passes the ROM-to-OAM
 decrement case at its original 63-clock timer comparison on both BIOS paths.
-Two other decrement page rows still fail on each path. Thirty-two native
+The two other decrement page rows also pass in the current candidate. Thirty-two native
 cases check fixed sources in all three ROM wait-state windows and decrementing
 ROM-to-OAM transfers, both widths and four clock anchors. They require the
 programmed pointer, complete destination data and exact completion clock.

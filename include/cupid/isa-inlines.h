@@ -78,6 +78,7 @@
 /** @name PC Write Helpers */
 
 static inline int32_t CupidARMWritePC(struct CupidARM* cpu) {
+	cpu->userBankPending = cpu->userBankActive = false;
 	uint32_t pc = cpu->gprs[ARM_PC] & ~(uint32_t)(WORD_SIZE_ARM - 1);
 	cpu->memory.setActiveRegion(cpu, pc);
 	if (cpu->memory.timed) cpu->memory.fetch(cpu, pc, WORD_SIZE_ARM, false);
@@ -93,6 +94,7 @@ static inline int32_t CupidARMWritePC(struct CupidARM* cpu) {
 }
 
 static inline int32_t CupidThumbWritePC(struct CupidARM* cpu) {
+	cpu->userBankPending = cpu->userBankActive = false;
 	uint32_t pc = cpu->gprs[ARM_PC] & ~(uint32_t)(WORD_SIZE_THUMB - 1);
 	cpu->memory.setActiveRegion(cpu, pc);
 	if (cpu->memory.timed) cpu->memory.fetch(cpu, pc, WORD_SIZE_THUMB, false);

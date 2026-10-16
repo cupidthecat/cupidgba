@@ -1,0 +1,294 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "alu",
+      "path": "LDM/LDM_ALU.gba",
+      "sha256": "8030717ae0cd0b6b399a2886f5fce346d885787f37abaf83caf22b55df9dd06f",
+      "checkpoint": "0x80002cc",
+      "result_register": 12,
+      "terminal": "0x8000450",
+      "guards": [
+        {
+          "address": "0x8000160",
+          "instruction": "0x1a000023",
+          "zero": 1,
+          "failure": 1
+        },
+        {
+          "address": "0x80001a8",
+          "instruction": "0x1a000013",
+          "zero": 1,
+          "failure": 2
+        },
+        {
+          "address": "0x80001c0",
+          "instruction": "0x1a00000f",
+          "zero": 1,
+          "failure": 3
+        },
+        {
+          "address": "0x80001d8",
+          "instruction": "0x1a00000b",
+          "zero": 1,
+          "failure": 4
+        },
+        {
+          "address": "0x8000228",
+          "instruction": "0x1a000012",
+          "zero": 1,
+          "failure": 5
+        },
+        {
+          "address": "0x8000240",
+          "instruction": "0x1a00000e",
+          "zero": 1,
+          "failure": 6
+        },
+        {
+          "address": "0x8000258",
+          "instruction": "0x1a00000a",
+          "zero": 1,
+          "failure": 7
+        },
+        {
+          "address": "0x8000270",
+          "instruction": "0x1a000006",
+          "zero": 1,
+          "failure": 8
+        },
+        {
+          "address": "0x80002bc",
+          "instruction": "0x1a000000",
+          "zero": 1,
+          "failure": 9
+        }
+      ]
+    },
+    {
+      "name": "immediate",
+      "path": "LDM/LDM_ALU_IMM.gba",
+      "sha256": "6380ea720898a2e61bd0d07b784d9c407867a2626211e91da3740fcf2e846998",
+      "checkpoint": "0x80001cc",
+      "result_register": 12,
+      "terminal": "0x8000350",
+      "guards": [
+        {
+          "address": "0x800015c",
+          "instruction": "0x1a000014",
+          "zero": 1,
+          "failure": 1
+        },
+        {
+          "address": "0x800018c",
+          "instruction": "0x1a00000a",
+          "zero": 1,
+          "failure": 2
+        },
+        {
+          "address": "0x800019c",
+          "instruction": "0x1a000008",
+          "zero": 1,
+          "failure": 3
+        }
+      ]
+    },
+    {
+      "name": "writeback",
+      "path": "LDM/LDM_ALU_Store.gba",
+      "sha256": "45d7f0c394fbb4282132e2684c6dabba5b629e029db3c291f319a2aaad2938a1",
+      "checkpoint": "0x8000280",
+      "result_register": 12,
+      "terminal": "0x8000404",
+      "guards": [
+        {
+          "address": "0x8000168",
+          "instruction": "0x1a000036",
+          "zero": 1,
+          "failure": 1
+        },
+        {
+          "address": "0x80001b0",
+          "instruction": "0xa000026",
+          "zero": 0,
+          "failure": 2
+        },
+        {
+          "address": "0x80001c8",
+          "instruction": "0xa000022",
+          "zero": 0,
+          "failure": 3
+        },
+        {
+          "address": "0x80001e4",
+          "instruction": "0xa00001d",
+          "zero": 0,
+          "failure": 4
+        },
+        {
+          "address": "0x80001fc",
+          "instruction": "0xa000019",
+          "zero": 0,
+          "failure": 5
+        },
+        {
+          "address": "0x8000210",
+          "instruction": "0xa000016",
+          "zero": 0,
+          "failure": 6
+        },
+        {
+          "address": "0x800022c",
+          "instruction": "0x1a000011",
+          "zero": 1,
+          "failure": 7
+        }
+      ]
+    },
+    {
+      "name": "branch",
+      "path": "LDM/LDM_Bx.gba",
+      "sha256": "707d6f94425dadd861afe9138d80bfb6b82ada6369eb4fead58879dbc092fae6",
+      "checkpoint": "0x8000178",
+      "result_register": 2,
+      "terminal": "0x80002fc",
+      "guards": []
+    },
+    {
+      "name": "load",
+      "path": "LDM/LDM_LD.gba",
+      "sha256": "30129a53e1f5090236f3a3928c888f087c26736fa7655343f8f7a1ec5b24b0ec",
+      "checkpoint": "0x8000210",
+      "result_register": 12,
+      "terminal": "0x8000394",
+      "guards": [
+        {
+          "address": "0x8000190",
+          "instruction": "0x1a000016",
+          "zero": 1,
+          "failure": 1
+        },
+        {
+          "address": "0x80001b4",
+          "instruction": "0x1a00000f",
+          "zero": 1,
+          "failure": 2
+        },
+        {
+          "address": "0x80001c4",
+          "instruction": "0x1a00000d",
+          "zero": 1,
+          "failure": 3
+        },
+        {
+          "address": "0x80001dc",
+          "instruction": "0x1a000009",
+          "zero": 1,
+          "failure": 4
+        }
+      ]
+    },
+    {
+      "name": "multiply-long",
+      "path": "LDM/LDM_MUL_UL_32.gba",
+      "sha256": "87b86b5856d8bf8614a3fcbc10eaabac812fbb4b2cf1c41bed302514dc32f444",
+      "checkpoint": "0x800022c",
+      "result_register": 12,
+      "terminal": "0x80003b0",
+      "guards": [
+        {
+          "address": "0x8000164",
+          "instruction": "0x1a00002a",
+          "zero": 1,
+          "failure": 1
+        },
+        {
+          "address": "0x80001dc",
+          "instruction": "0x1a00000e",
+          "zero": 1,
+          "failure": 2
+        },
+        {
+          "address": "0x80001e4",
+          "instruction": "0x1a00000e",
+          "zero": 1,
+          "failure": 3
+        }
+      ]
+    },
+    {
+      "name": "accumulate-long",
+      "path": "LDM/LDM_MUL_UL_SL.gba",
+      "sha256": "d642f537938d365e7496993313c51d68ad86161a195088d198c927231cba830e",
+      "checkpoint": "0x800028c",
+      "result_register": 12,
+      "terminal": "0x8000410",
+      "guards": [
+        {
+          "address": "0x8000164",
+          "instruction": "0x1a00003e",
+          "zero": 1,
+          "failure": 1
+        },
+        {
+          "address": "0x80001dc",
+          "instruction": "0x1a000022",
+          "zero": 1,
+          "failure": 2
+        },
+        {
+          "address": "0x80001e4",
+          "instruction": "0x1a000022",
+          "zero": 1,
+          "failure": 3
+        },
+        {
+          "address": "0x800022c",
+          "instruction": "0x1a000012",
+          "zero": 1,
+          "failure": 4
+        },
+        {
+          "address": "0x8000234",
+          "instruction": "0x1a000012",
+          "zero": 1,
+          "failure": 5
+        }
+      ]
+    },
+    {
+      "name": "swap",
+      "path": "LDM/LDM_Swap.gba",
+      "sha256": "856495a93ec9b528dadec5e2d0ba7cb5b2baec66836eae1e0a62397965d00e6b",
+      "checkpoint": "0x8000208",
+      "result_register": 12,
+      "terminal": "0x800038c",
+      "guards": [
+        {
+          "address": "0x800017c",
+          "instruction": "0x1a000019",
+          "zero": 1,
+          "failure": 1
+        },
+        {
+          "address": "0x80001b4",
+          "instruction": "0x1a00000d",
+          "zero": 1,
+          "failure": 2
+        },
+        {
+          "address": "0x80001c4",
+          "instruction": "0x1a00000b",
+          "zero": 1,
+          "failure": 3
+        },
+        {
+          "address": "0x80001cc",
+          "instruction": "0x1a00000b",
+          "zero": 1,
+          "failure": 4
+        }
+      ]
+    }
+  ]
+}
