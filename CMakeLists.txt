@@ -43,7 +43,8 @@ add_library(cupid_core STATIC
     src/core/timing.c
     src/gba/gba.c src/gba/memory.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
     src/gba/audio.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c
-    src/gba/hle-bios.c src/gba/bios/file.c src/gba/savedata.c src/gba/save/file.c src/gba/serial/serial.c
+    src/gba/hle-bios.c src/gba/bios/file.c src/gba/savedata.c src/gba/save/file.c
+    src/gba/serial/serial.c src/gba/serial/joybus.c
     src/gba/render/software.c src/gba/render/composite.c
     src/gba/render/mode0.c src/gba/render/mode2.c
     src/gba/render/mode3.c src/gba/render/mode4.c
@@ -184,6 +185,16 @@ if(BUILD_TESTING)
     target_link_libraries(test_multiplayer PRIVATE cupid_core)
     add_test(NAME gba.multiplayer COMMAND test_multiplayer)
     set_tests_properties(gba.multiplayer PROPERTIES TIMEOUT 10)
+    add_executable(test_joybus tests/gba/serial/test_joybus.c)
+    target_link_libraries(test_joybus PRIVATE cupid_core)
+    foreach(group commands payloads validation registers interrupts chronology lifecycle guest)
+        add_test(NAME gba.joybus-${group} COMMAND test_joybus ${group})
+        set_tests_properties(gba.joybus-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+    if(CUPID_TEST_BIOS)
+        add_test(NAME gba.joybus-guest-external COMMAND test_joybus guest ${CUPID_TEST_BIOS})
+        set_tests_properties(gba.joybus-guest-external PROPERTIES TIMEOUT 10)
+    endif()
 
     if(CUPID_BUILD_FRONTEND)
         add_test(NAME platform.bios-startup COMMAND ${Python3_EXECUTABLE}

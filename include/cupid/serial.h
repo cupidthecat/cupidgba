@@ -21,6 +21,13 @@ enum CupidSerialMode {
     SERIAL_JOY
 };
 
+enum CupidJoyCommand {
+    SERIAL_JOY_STATUS = 0x00,
+    SERIAL_JOY_READ = 0x14,
+    SERIAL_JOY_WRITE = 0x15,
+    SERIAL_JOY_RESET = 0xFF
+};
+
 struct CupidSerial {
     struct CupidGBA* gba;
     struct CupidTimingEvent edgeEvent;
@@ -87,5 +94,15 @@ bool cupid_serial_set_multiplayer_peer(struct CupidSerial* serial, unsigned play
  * same timestamp as its master. The caller owns synchronization between cores. */
 bool cupid_serial_multiplayer_receive(struct CupidSerial* serial, unsigned baud,
     const uint16_t received[4], bool error);
+
+/* Complete one JOY command at the peer's current emulated timestamp, after
+ * dispatching preceding events. The peer owns frame timing and synchronization;
+ * this entry point processes complete command bytes, without generating pins.
+ * Request sizes are one byte, or five bytes for WRITE. Replies contain three
+ * bytes for STATUS/RESET, five for READ, or one for WRITE. Returns zero without
+ * changing state or response on invalid buffers/lengths, another mode, or STOP.
+ * Request and response buffers may overlap. */
+size_t cupid_serial_joybus_command(struct CupidSerial* serial,
+    const uint8_t* request, size_t requestSize, uint8_t* response, size_t responseCapacity);
 
 #endif
