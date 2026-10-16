@@ -53,9 +53,9 @@ Hosted Linux qualification uses the explicit Ubuntu 24.04 release for GCC
 Release and Clang Debug with address/undefined-behavior sanitizers. The complete
 Clang profile uses `-O1 -g`, matching local cartridge qualification and
 [AddressSanitizer's build guidance](https://clang.llvm.org/docs/AddressSanitizer.html#usage).
-A second default Debug sanitizer build runs all 237 native ARM, core, GBA,
+A second default Debug sanitizer build runs all 238 native ARM, core, GBA,
 platform and runner checks without optimization. The complete profile retains
-all 252 checks, including all fifteen cartridge cases, their original frame
+all 253 checks, including all fifteen cartridge cases, their original frame
 counts and process deadlines. Unoptimized full-cartridge runs timed out on
 slower hosted workers; those failures remain recorded rather than increasing
 their limits. Both compiler flag sets appear in the job log. This keeps

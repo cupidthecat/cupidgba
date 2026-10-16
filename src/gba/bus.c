@@ -39,8 +39,10 @@ void cupid_bus_fetch(struct CupidARM* cpu, uint32_t address, unsigned width, boo
     bool refill = !sequential;
     sequential = sequential && !gba->memory.fetchNonseq;
     unsigned region = address >> GBA_BASE_OFFSET;
+    /* The page decoder uses the physical opcode address. Retain the logical
+     * stream address, including ARM A1, for the FIFO lookup below. */
     if (region >= GBA_REGION_ROM0 && region <= GBA_REGION_ROM2_EX &&
-        !(address & 0x1FFFF)) sequential = false;
+        !((address & ~(uint32_t)(width - 1)) & 0x1FFFF)) sequential = false;
     /* ROM mirrors have independently configured waits. The actual fetch
      * address selects the bank even when execution crosses a cached region. */
     unsigned wait;
