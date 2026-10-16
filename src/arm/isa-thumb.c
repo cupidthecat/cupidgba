@@ -554,8 +554,8 @@ DEFINE_INSTRUCTION_THUMB(SUB4,
 DEFINE_INSTRUCTION_THUMB(ILL, ARM_ILL)
 
 DEFINE_INSTRUCTION_THUMB(BKPT,
-	cpu->irqh.bkpt16(cpu, opcode & 0xFF);
-	currentCycles = 0;)
+	/* Retain the instruction fetch cost even when a host handles the hook. */
+	cpu->irqh.bkpt16(cpu, opcode & 0xFF);)
 
 DEFINE_INSTRUCTION_THUMB(SWI,
 	cpu->irqh.swi16(cpu, opcode & 0xFF))
