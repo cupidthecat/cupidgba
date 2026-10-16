@@ -53,9 +53,9 @@ Hosted Linux qualification uses the explicit Ubuntu 24.04 release for GCC
 Release and Clang Debug with address/undefined-behavior sanitizers. The complete
 Clang profile uses `-O1 -g`, matching local cartridge qualification and
 [AddressSanitizer's build guidance](https://clang.llvm.org/docs/AddressSanitizer.html#usage).
-A second default Debug sanitizer build runs all 245 native ARM, core, GBA,
+A second default Debug sanitizer build runs all 247 native ARM, core, GBA,
 platform and runner checks without optimization. The complete profile retains
-all 274 checks, including all twenty-nine cartridge cases, their original frame
+all 276 checks, including all twenty-nine cartridge cases, their original frame
 counts and process deadlines. Unoptimized full-cartridge runs timed out on
 slower hosted workers; those failures remain recorded rather than increasing
 their limits. Both compiler flag sets appear in the job log. The exported
@@ -67,10 +67,11 @@ Both checkout steps pin a verified Node.js 24 action revision. An OS release
 upgrade needs the same complete test, firmware regeneration, Make and live
 ThreadSanitizer qualification as the current workflow.
 
-The three `gba.display-irq-*` groups retain 3,456 complete display transactions
+The four `gba.display-irq-*` groups retain 4,608 complete display transactions
 and per-clock IRQ waveforms across both bus widths, three display regions,
-sixteen port phases and four clock epochs. Short pulses, persistent levels and
-captured stages use separate ten-second checks. They retain full data payloads,
+sixteen port phases and four clock epochs. Short pulses, persistent levels,
+captured stages and assertions accepted on the ready edge use separate
+ten-second checks. They retain full data payloads,
 physical clocks and internal-cycle counts. See
 [display waits and CPU IRQ sampling](../hardware/cpu/display-irq.md).
 

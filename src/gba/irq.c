@@ -1,5 +1,9 @@
 #include "cupid/gba.h"
 
+/* A completing CPU edge samples the previously accepted input. Peripheral
+ * assertions then precede CPU register writes on that same system clock. */
+enum { IRQ_SAMPLE_PHASE = 0, IRQ_ASSERT_PHASE = 1, IRQ_WRITE_PHASE = 2 };
+
 static void schedule_at(struct CupidGBA* gba, struct CupidTimingEvent* event, uint64_t when) {
     cupid_timing_schedule_absolute(&gba->timing, event, (int32_t)(uint32_t)when);
 }
@@ -113,12 +117,12 @@ void cupid_irq_init(struct CupidGBA* gba) {
     memset(&gba->irq, 0, sizeof(gba->irq));
     gba->cpu.irqDisableLatch = gba->cpu.cpsr.i;
     gba->irq.cpuClockResumeEvent = (struct CupidTimingEvent){.context = gba,
-        .callback = resume_cpu_clock, .name = "CPU IRQ clock release", .priority = 0};
+        .callback = resume_cpu_clock, .name = "CPU IRQ clock release", .priority = IRQ_SAMPLE_PHASE};
     for (unsigned i = 0; i < 4; i++) {
         struct CupidIRQRegisterWrite* write = &gba->irq.writes[i];
         write->gba = gba;
         write->event = (struct CupidTimingEvent){.context = write,
-            .callback = write_callback, .name = "Interrupt register write", .priority = 1};
+            .callback = write_callback, .name = "Interrupt register write", .priority = IRQ_WRITE_PHASE};
         struct CupidIRQSignalChange* available = &gba->irq.availableChanges[i];
         available->gba = gba;
         available->event = (struct CupidTimingEvent){.context = available,
@@ -137,7 +141,7 @@ void cupid_irq_write(struct CupidGBA* gba, uint32_t address, uint16_t value) {
     case REG_IME: gba->irq.pendingIME = value & 1; break;
     default: return;
     }
-    queue_write(gba, cupid_timing_global_time(&gba->timing) + 1, 1,
+    queue_write(gba, cupid_timing_global_time(&gba->timing) + 1, IRQ_WRITE_PHASE,
                 0, address == REG_IF ? value : 0);
 }
 
@@ -157,7 +161,7 @@ void cupid_irq_write8(struct CupidGBA* gba, uint32_t address, uint8_t value) {
 void cupid_raise_irq_at(struct CupidGBA* gba, enum CupidIRQ source, uint64_t timestamp) {
     cupid_gba_wake_stop(gba, source);
     gba->irq.pendingIF |= source;
-    queue_write(gba, timestamp + 1, 0, source, 0);
+    queue_write(gba, timestamp + 1, IRQ_ASSERT_PHASE, source, 0);
 }
 
 void cupid_raise_irq(struct CupidGBA* gba, enum CupidIRQ source, uint32_t late) {

@@ -14,15 +14,18 @@ The ready event precedes register acceptance on the same edge, matching the
 ordering of ordinary stretched CPU transfers. A captured IRQ stage survives
 the hold; an input pulse that disappears before sampling does not enter it.
 
-Three `gba.display-irq-*` groups check 3,456 owned transactions. They cover
+Four `gba.display-irq-*` groups check 4,608 owned transactions. They cover
 halfword and word reads, writes and opcode fetches in all three display regions,
 sixteen port phases, four clock epochs, short pulses, persistent levels and
 already captured stages. Waveforms sample every system clock through the wait
 and the following two CPU clocks. Full load values, partial and complete store
 payloads, elapsed clocks and internal-cycle accounting remain checked. Of these
-transactions, 1,692 wait for more than one clock. The preserved composition
-without dynamic CPU readiness fails all 1,692 waveform checks; the corrected
-owner preserves the same data and physical-clock fingerprint.
+transactions, 2,256 wait for more than one clock. The first three groups
+reject 1,692 waveform cases in the preserved composition without dynamic CPU
+readiness. The fourth group measures a matching request without an IRQ, then
+queues IF acceptance on its final ready edge. All 1,152 cases reject the
+preceding scheduler phase ordering. The corrected owner preserves the data
+and physical-clock fingerprints of both controls.
 
 The unchanged external-firmware HALT/OAM cartridge also passes both original
 comparisons, its pre-display result and terminal when the CPU and pixel models
