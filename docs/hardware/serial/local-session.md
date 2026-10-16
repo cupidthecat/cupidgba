@@ -56,6 +56,9 @@ four console sessions use multiplayer.
 
 Each CPU runs on a cooperative stack. Before consuming a fetch, data or
 internal interval, it yields its requested clock boundary to the session.
+Zero-clock boundaries dispatch due events on the executing stack. They consume
+no emulated time and need no context switch, including nested MMIO flushes
+inside peripheral callbacks.
 The host advances running console clocks together to the earliest CPU
 boundary, peripheral event or requested endpoint. It dispatches all events
 at that instant in priority order before releasing a CPU. Equal-priority
@@ -68,6 +71,8 @@ event can shorten that wait; fixed-duration CPU bus phases retain their full
 intervals. STOP freezes only that console's local clock, while session time
 and the other consoles continue. An eligible GPIO serial or keypad source
 can wake it through the existing IRQ path. UART does not wake STOP.
+If STOP arrives during an unfinished interval, the remaining clocks stay
+pending until wake; elapsed session time does not consume them.
 
 The coordinator adds no fitted delay or game-specific rule. It preserves the
 core's existing bit, completion, timer, IRQ and bus durations. Same-clock

@@ -20,6 +20,8 @@ struct CupidCable {
     bool connected, propagating, dirty, running, cancelling;
 };
 
+static void dispatch_events(struct CupidCable* cable);
+
 static void run_core(void* opaque) {
     struct CableNode* node = opaque;
     for (;;) {
@@ -35,6 +37,13 @@ static void run_core(void* opaque) {
 static int32_t synchronize(void* opaque, struct CupidTiming* timing, int32_t clocks) {
     struct CableNode* node = opaque;
     if (clocks < 0) abort();
+    /* No other CPU can run between equal-time boundaries of this CPU. Dispatch
+     * due peripherals directly, including nested clock flushes from MMIO in
+     * a peripheral callback, without switching an already suspended stack. */
+    if (!clocks) {
+        dispatch_events(node->cable);
+        return cupid_timing_next_event(timing);
+    }
     node->target = node->cable->now + (uint32_t)clocks;
     cupid_context_yield(node->context);
     return cupid_timing_next_event(timing);
@@ -222,7 +231,7 @@ bool cupid_cable_run(struct CupidCable* cable, uint32_t clocks) {
          * Finish them in player order before choosing the next clock. */
         for (unsigned i = 0; i < cable->count; ++i) {
             struct CableNode* node = &cable->nodes[i];
-            while ((!node->idle && node->target <= cable->now) || (node->idle && !node->gba->stopped)) {
+            while (!node->gba->stopped && ((!node->idle && node->target <= cable->now) || node->idle)) {
                 cupid_context_resume(node->context);
                 dispatch_events(cable);
             }
@@ -237,9 +246,11 @@ bool cupid_cable_run(struct CupidCable* cable, uint32_t clocks) {
             if (until >= 0 && (uint32_t)until < next - cable->now) next = cable->now + (uint32_t)until;
         }
         uint32_t elapsed = (uint32_t)(next - cable->now);
-        for (unsigned i = 0; i < cable->count; ++i)
-            if (!cable->nodes[i].gba->stopped)
-                cupid_timing_advance_clock(&cable->nodes[i].gba->timing, elapsed);
+        for (unsigned i = 0; i < cable->count; ++i) {
+            struct CableNode* node = &cable->nodes[i];
+            if (!node->gba->stopped) cupid_timing_advance_clock(&node->gba->timing, elapsed);
+            else if (!node->idle) node->target += elapsed;
+        }
         cable->now = next;
     }
     cable->running = false;

@@ -371,6 +371,45 @@ static void lifecycle(void) {
     destroy(&f);
 }
 
+static void stop_phase(struct CupidTiming* timing, void* context, uint32_t late) {
+    CHECK(late == 0);
+    CHECK(cupid_timing_global_time(timing) == UINT64_C(0x1FFFFFFF2));
+    cupid_gba_stop(context);
+}
+
+static void stopped_phase(void) {
+    /* Inject a clock-stop request inside a six-clock fetch. This checks the
+     * session's residual interval, independently of electrical STOP edges. */
+    struct Fixture f; const uint64_t epoch = UINT64_C(0x1FFFFFFF0); create(&f, 2, epoch);
+    struct CupidGBA* gba = f.cores[0];
+    const uint32_t program[] = {0xE2800001, 0xEAFFFFFD};
+    memcpy(gba->memory.ewram + 0x8000, program, sizeof(program));
+    gba->cpu.gprs[0] = 0; gba->cpu.halted = false;
+    gba->cpu.cpsr.i = 1; gba->cpu.irqDisableLatch = true;
+    _CupidSetMode(&gba->cpu, MODE_ARM);
+    gba->cpu.gprs[ARM_PC] = GBA_BASE_EWRAM + 0x8000;
+    CupidARMWritePC(&gba->cpu); gba->cpu.cycles = 0;
+    cupid_serial_write(&gba->serial, REG_RCNT, 0x8100);
+    cupid_serial_write(&f.cores[1]->serial, REG_RCNT, 0x8088);
+    cupid_irq_write(gba, REG_IE, IRQ_SIO);
+    struct CupidTimingEvent stop = {.context=gba, .callback=stop_phase,
+        .name="Owned mid-phase clock stop", .priority=0xA0};
+    cupid_timing_schedule(&gba->timing, &stop, 2);
+    CHECK(cupid_cable_run(f.cable, 2));
+    CHECK(gba->stopped && gba->cpu.gprs[0] == 0);
+    CHECK(cupid_cable_run(f.cable, 100));
+    CHECK(cupid_timing_global_time(&gba->timing) == epoch + 2);
+    CHECK(gba->cpu.gprs[0] == 0);
+    cupid_serial_write(&f.cores[1]->serial, REG_RCNT, 0x8080);
+    CHECK(!gba->stopped);
+    CHECK(cupid_cable_run(f.cable, 3));
+    CHECK(cupid_timing_global_time(&gba->timing) == epoch + 5 && gba->cpu.gprs[0] == 0);
+    CHECK(cupid_cable_run(f.cable, 1));
+    CHECK(cupid_timing_global_time(&gba->timing) == epoch + 6 && gba->cpu.gprs[0] == 1);
+    CHECK(cupid_cable_time(f.cable) == 106);
+    destroy(&f);
+}
+
 struct NaiveWire { struct CupidGBA* peer; unsigned stale; };
 static void naive_output(void* context, uint8_t mask, uint8_t levels, uint64_t timestamp) {
     struct NaiveWire* wire = context;
@@ -416,6 +455,7 @@ int main(int argc, char** argv) {
     }
     else if (!strcmp(argv[1], "chronology")) RUN(chronology);
     else if (!strcmp(argv[1], "lifecycle")) RUN(lifecycle);
+    else if (!strcmp(argv[1], "stopped-phase")) RUN(stopped_phase);
     else if (!strcmp(argv[1], "controls")) RUN(controls);
     else if (!strcmp(argv[1], "guest-dma")) { guestDma = true; guest(2, 1, 3); guest(3, 1, 3); }
     else if (!strcmp(argv[1], "guest-controls")) { guestFault = true; guest(2, 0, 3); guest(3, 1, 3); }
