@@ -58,7 +58,9 @@ platform and runner checks without optimization. The complete profile retains
 all 274 checks, including all twenty-nine cartridge cases, their original frame
 counts and process deadlines. Unoptimized full-cartridge runs timed out on
 slower hosted workers; those failures remain recorded rather than increasing
-their limits. Both compiler flag sets appear in the job log. This keeps
+their limits. Both compiler flag sets appear in the job log. The exported
+compiler commands also verify effective optimization for every translation
+unit, including flags inherited through linked targets. This keeps
 an automatic `ubuntu-latest` release migration from changing the compiler,
 sanitizer and firmware-assembler baseline. Windows checks use GCC and SDL2.
 Both checkout steps pin a verified Node.js 24 action revision. An OS release

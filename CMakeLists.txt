@@ -32,8 +32,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(cupid_build_options INTERFACE -Wall -Wextra -Werror)
     if(CUPID_SANITIZERS)
         target_compile_options(cupid_build_options INTERFACE
-            -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer
-            $<$<CONFIG:Debug>:-O1>)
+            -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
         target_link_options(cupid_build_options INTERFACE -fsanitize=address,undefined)
     endif()
     if(CUPID_THREAD_SANITIZER)

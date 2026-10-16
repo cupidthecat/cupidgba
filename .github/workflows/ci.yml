@@ -63,10 +63,14 @@ jobs:
           fi
           cmake -S . -B build -DCMAKE_C_COMPILER=${{ matrix.compiler }} \
             -DCMAKE_BUILD_TYPE=${{ matrix.mode }} -DCUPID_SANITIZERS=${{ matrix.sanitizers }} \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             "${sanitizer_flags[@]}" \
             -DCUPID_TEST_ROM_DIR=${{ github.workspace }}/.local-research/test-roms
       - name: Build
         run: cmake --build build --parallel 2
+      - name: Verify sanitized compiler optimization
+        if: matrix.compiler == 'clang'
+        run: python3 tests/platform/check_build_flags.py --compile-commands build/compile_commands.json --optimization O1
       - name: Test
         run: ctest --test-dir build --output-on-failure
       - name: Check unoptimized native core
@@ -77,9 +81,11 @@ jobs:
           cat build/CMakeFiles/cupid_core.dir/flags.make
           cmake -S . -B build-debug -DCMAKE_C_COMPILER=clang \
             -DCMAKE_BUILD_TYPE=Debug -DCUPID_SANITIZERS=ON \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -DCUPID_TEST_ROM_DIR=${{ github.workspace }}/.local-research/test-roms
           cmake --build build-debug --parallel 2
           cat build-debug/CMakeFiles/cupid_core.dir/flags.make
+          python3 tests/platform/check_build_flags.py --compile-commands build-debug/compile_commands.json --optimization none
           ctest --test-dir build-debug -R '^(arm|core|gba|platform|runner)\.' --output-on-failure
       - name: Check live audio threading
         if: matrix.compiler == 'clang'
