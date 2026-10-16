@@ -16,7 +16,7 @@ set(CUPID_BIOS_MATH_SUITE_ROM "" CACHE FILEPATH "Locally built BIOS math registe
 set(CUPID_IO_SUITE_ROM "" CACHE FILEPATH "Locally built I/O register-read suite ROM")
 set(CUPID_SERIAL_SUITE_ROM "" CACHE FILEPATH "Locally built serial timing and register suite ROM")
 set(CUPID_SERIAL_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified serial cartridge probes")
-set(CUPID_HALT_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified firmware HALT probes")
+set(CUPID_HALT_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified firmware HALT and IRQ probes")
 set(CUPID_PREFETCH_PROBE_DIR "" CACHE PATH "Root containing checksum-verified prefetcher and timing cartridge probes")
 set(CUPID_BUS_PAGE_PROBE_ROM "" CACHE FILEPATH "Local checksum-verified CPU/DMA page-boundary cartridge")
 set(CUPID_CPU_INTERACTION_PROBE_DIR "" CACHE PATH "Root containing checksum-verified CPU/DMA/IRQ cartridges")
@@ -221,6 +221,13 @@ if(BUILD_TESTING)
     target_link_libraries(test_irq_pulses PRIVATE cupid_core)
     add_test(NAME gba.irq-pulses COMMAND test_irq_pulses)
     set_tests_properties(gba.irq-pulses PROPERTIES TIMEOUT 10)
+
+    add_executable(test_irq_clock tests/gba/test_irq_clock.c tests/arm/irq_probe.c)
+    target_link_libraries(test_irq_clock PRIVATE cupid_core)
+    foreach(group waits pulses dma reset observer)
+        add_test(NAME gba.irq-clock-${group} COMMAND test_irq_clock ${group})
+        set_tests_properties(gba.irq-clock-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
     set_tests_properties(gba.irq PROPERTIES TIMEOUT 10)
 
     add_executable(test_dma tests/gba/test_dma.c)
@@ -670,6 +677,14 @@ if(BUILD_TESTING)
                 --directory ${CUPID_HALT_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless>
                 --bios ${CUPID_TEST_BIOS} --test ${case})
             set_tests_properties(rom.halt-probe-${case}-external PROPERTIES TIMEOUT 100)
+        endforeach()
+        foreach(case bl-1 bl-irq bl-irq-2 bl-irq-3 bl-irq-r14 ie if if-timer
+                irq-sub irq-sub-2 irq-sub-2-slow irq-sub-slow)
+            add_test(NAME rom.irq-probe-${case}-external COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_irq_probe.py
+                --directory ${CUPID_HALT_PROBE_DIR} --runner $<TARGET_FILE:test_irq_clock>
+                --bios ${CUPID_TEST_BIOS} --test ${case})
+            set_tests_properties(rom.irq-probe-${case}-external PROPERTIES TIMEOUT 100)
         endforeach()
     endif()
 

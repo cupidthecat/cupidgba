@@ -23,6 +23,29 @@ CTest allows 100 seconds. These cases expose unresolved IRQ return-address,
 HALT/timer and initial display-phase behavior. They remain enabled when the
 input root is supplied. See [CPU/DMA/IRQ interactions](../hardware/cpu/dma-irq-interactions.md).
 
+Four `gba.irq-clock-*` timing groups require 2,056 complete waveform clocks through
+stretched memory requests and real DMA. They check both fetch widths, all
+cartridge wait windows, RAM wait controls, CPU load/store data, repeated input
+pulses between ready edges, retained captured stages, internal multiply cycles,
+reset and clock wrap. IF and HALT-availability histories keep their original
+system-clock deadlines. A preserved preceding core fails all four groups.
+Each group has a ten-second deadline. The existing music-progress image and
+chronology expectations remain unchanged.
+The observer group independently rejects bypassed comparisons, wrong opcodes
+and modes, and missing visits in ARM/Thumb streams with zero result registers.
+Observed and unobserved runs retain complete guest state and clocks.
+
+With `CUPID_HALT_PROBE_DIR` and `CUPID_TEST_BIOS`, twelve additional
+`rom.irq-probe-*-external` cases require their 46 original comparison outcomes,
+CPU modes, opcodes, pre-display results and actually issued terminals. Original
+source and cartridge bytes are pinned; a byte-identical local rebuild locates
+the observations without changing the code. One input has a wide conditional
+guard encoding that is not a conditional branch on ARM7TDMI. Its observer
+checks the preceding comparison's Z flag at the actual issued halfword, so the
+guest cannot silently skip failure recording. The slow-return case passes;
+the `0xF4` versus `0xF5` comparison remains a failure. The original execution
+guards and 90-second process deadline remain, with 100 seconds in CTest.
+
 Hosted Linux qualification uses the explicit Ubuntu 24.04 release for GCC
 Release and Clang Debug with address/undefined-behavior sanitizers. This keeps
 an automatic `ubuntu-latest` release migration from changing the compiler,

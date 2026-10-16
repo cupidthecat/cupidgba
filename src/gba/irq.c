@@ -13,6 +13,7 @@ static void line_callback(struct CupidTiming* timing, void* context, uint32_t la
     (void)timing;
     (void)late;
     struct CupidIRQSignalChange* change = context;
+    change->pausedPending = false;
     change->gba->irq.line = change->value;
 }
 
@@ -38,10 +39,29 @@ static void update_lines(struct CupidGBA* gba, uint64_t when) {
     bool line = gba->ime && available;
     if (line != irq->logicalLine) {
         irq->logicalLine = line;
-        struct CupidIRQSignalChange* change = &irq->lineChanges[irq->nextLineChange];
-        irq->nextLineChange = (irq->nextLineChange + 1) % 4;
+        /* A level not yet sampled into the first CPU stage may change
+         * while the clock is held. Preserve an already latched first stage. */
+        struct CupidIRQSignalChange* change = NULL;
+        if (irq->cpuClockPaused) {
+            for (unsigned i = 0; i < 4; ++i) {
+                if (irq->lineChanges[i].pausedPending && irq->lineChanges[i].remaining == 2) {
+                    change = &irq->lineChanges[i];
+                    break;
+                }
+            }
+        }
+        if (!change) {
+            change = &irq->lineChanges[irq->nextLineChange];
+            irq->nextLineChange = (irq->nextLineChange + 1) % 4;
+            if (change->pausedPending) abort();
+        }
         change->value = line;
-        schedule_at(gba, &change->event, when + 2);
+        if (irq->cpuClockPaused) {
+            change->remaining = 2;
+            change->pausedPending = true;
+        } else {
+            schedule_at(gba, &change->event, when + 2);
+        }
     }
 }
 
@@ -87,9 +107,13 @@ static void queue_write(struct CupidGBA* gba, uint64_t when, unsigned priority,
     schedule_at(gba, &write->event, when);
 }
 
+static void resume_cpu_clock(struct CupidTiming* timing, void* context, uint32_t late);
+
 void cupid_irq_init(struct CupidGBA* gba) {
     memset(&gba->irq, 0, sizeof(gba->irq));
     gba->cpu.irqDisableLatch = gba->cpu.cpsr.i;
+    gba->irq.cpuClockResumeEvent = (struct CupidTimingEvent){.context = gba,
+        .callback = resume_cpu_clock, .name = "CPU IRQ clock release", .priority = 0};
     for (unsigned i = 0; i < 4; i++) {
         struct CupidIRQRegisterWrite* write = &gba->irq.writes[i];
         write->gba = gba;
@@ -142,4 +166,51 @@ void cupid_raise_irq(struct CupidGBA* gba, enum CupidIRQ source, uint32_t late) 
 
 void cupid_test_irq(struct CupidGBA* gba, uint32_t late) {
     update_lines(gba, current_time(gba, late));
+}
+
+void cupid_irq_pause_cpu(struct CupidGBA* gba) {
+    if (gba->irq.cpuClockPaused) abort();
+    gba->irq.cpuClockPaused = true;
+    uint32_t now = (uint32_t)cupid_timing_global_time(&gba->timing);
+    for (unsigned i = 0; i < 4; ++i) {
+        struct CupidIRQSignalChange* change = &gba->irq.lineChanges[i];
+        if (!cupid_timing_is_scheduled(&gba->timing, &change->event)) continue;
+        change->remaining = change->event.when - now;
+        if (!change->remaining || change->remaining > 2) abort();
+        change->pausedPending = true;
+        cupid_timing_deschedule(&gba->timing, &change->event);
+    }
+}
+
+static void resume_cpu(struct CupidGBA* gba, uint64_t now, unsigned completedClocks) {
+    if (!gba->irq.cpuClockPaused) abort();
+    gba->irq.cpuClockPaused = false;
+    for (unsigned i = 0; i < 4; ++i) {
+        struct CupidIRQSignalChange* change = &gba->irq.lineChanges[i];
+        if (!change->pausedPending) continue;
+        change->pausedPending = false;
+        schedule_at(gba, &change->event, now + change->remaining - completedClocks);
+    }
+}
+
+void cupid_irq_resume_cpu(struct CupidGBA* gba) {
+    /* Releasing DMA ownership allows a new CPU request; that request has not
+     * completed its ready edge yet. */
+    resume_cpu(gba, cupid_timing_global_time(&gba->timing), 0);
+}
+
+static void resume_cpu_clock(struct CupidTiming* timing, void* context, uint32_t late) {
+    struct CupidGBA* gba = context;
+    /* Priority zero samples an already accepted input before a register
+     * update on this same edge. A captured final stage publishes now. */
+    resume_cpu(gba, timing->globalCycles - late, 1);
+}
+
+void cupid_irq_hold_cpu(struct CupidGBA* gba, unsigned cycles) {
+    if (cycles < 2) abort();
+    cupid_irq_pause_cpu(gba);
+    /* Use a scheduled ready edge rather than splitting the board tick.
+     * Observer, timer, DMA and audio dispatch partitions stay unchanged. */
+    schedule_at(gba, &gba->irq.cpuClockResumeEvent,
+                cupid_timing_global_time(&gba->timing) + cycles);
 }

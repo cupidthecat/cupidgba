@@ -5,15 +5,22 @@ void cupid_bus_wait(struct CupidARM* cpu) {
     struct CupidGBA* gba = cpu->master;
     cpu->irqh.processEvents(cpu);
     cupid_dma_kick(gba, cupid_timing_global_time(&gba->timing));
+    bool waiting = gba->memory.dmaRunning && !gba->memory.busLocked;
+    /* The CPU waits for bus ownership; DMA's peripheral clocks still run. */
+    if (waiting) cupid_irq_pause_cpu(gba);
     while (gba->memory.dmaRunning && !gba->memory.busLocked) {
         cpu->cycles = cpu->nextEvent;
         cpu->irqh.processEvents(cpu);
     }
+    if (waiting) cupid_irq_resume_cpu(gba);
 }
 
 void cupid_bus_advance(struct CupidARM* cpu, unsigned cycles, bool occupied) {
     struct CupidGBA* gba = cpu->master;
     gba->memory.busBusy = occupied;
+    /* Wait states stretch one CPU bus cycle. Only its final ready edge
+     * advances the IRQ synchronizer. Keep peripheral dispatch in one batch. */
+    if (occupied && cycles > 1) cupid_irq_hold_cpu(gba, cycles);
     cpu->cycles += (int32_t)cycles;
     cpu->irqh.processEvents(cpu);
 }
