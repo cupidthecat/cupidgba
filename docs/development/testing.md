@@ -16,6 +16,13 @@ the preceding order; inactive-source controls pass with either order. The
 unchanged original IRQ cartridge now reaches its `0x008000AF` comparison and
 passes both result boundaries on each BIOS path. Other FIFO timing gaps remain.
 
+Playback checks keep exact elapsed-frame observations alongside sixty exact
+VSync-call duration checks. A frame spin may finish one or two clocks past its
+deadline because a CPU instruction must finish; FIFO/DMA arbitration determines
+that phase. The call-duration checks independently retain firmware execution
+costs. Complete PCM/state signatures, sample counts, source addresses, held
+samples and all existing loop budgets remain checked with both firmware paths.
+
 `CUPID_FIFO_SOURCE_ROM` adds the separately rebuilt base cartridge with either
 BIOS path. The original source includes a second timer comparison missing from
 the bundled image; both inputs remain registered independently. Reproduce it

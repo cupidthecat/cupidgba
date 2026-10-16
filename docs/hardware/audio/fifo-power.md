@@ -48,6 +48,13 @@ timer selection, disabled or non-FIFO timing and destination ownership.
 The level and chronology groups fail with the preceding audio implementation;
 the inactive-source controls pass with either implementation.
 
+Sound-driver and music-player playback checks retain complete PCM signatures,
+sample timestamps/counts, state images, DMA source positions and held samples.
+Their frame spins finish complete CPU instructions, so elapsed frame endpoints
+include the current FIFO/DMA scheduling phase. Sixty separate exact-duration
+checks retain each following VSync call independently of that spin-loop phase.
+Both firmware paths must satisfy the same observations and original run guards.
+
 `CUPID_FIFO_PROBE_DIR` enables nine original local FIFO/DMA cartridges.
 `CUPID_TEST_BIOS` repeats them with an external image. The manifest pins each
 input digest and its original result-display and terminal addresses. The runner
