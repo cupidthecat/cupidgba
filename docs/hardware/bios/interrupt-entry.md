@@ -34,14 +34,15 @@ original issued comparison plus both zero-result boundaries. Its observer's
 twenty owned executions reject changed input, missing comparisons, wrong
 opcodes and wrong instruction modes while retaining sampled state and clocks.
 
-The current Windows candidate passes six of eight original cartridge
-runs. The built-in fast second-return case fails its first comparison, and
-the external slow second-return case does not reach its comparisons within
-the existing guard. These failures remain enabled and also occur on the
-preceding core. Matching-header/library controls show that the address change
-repairs three original built-in cartridge runs; the preceding built-in image
-fails all four. The native matrix alone does not establish complete IRQ or
-startup accuracy.
+The current candidate passes seven of eight original cartridge runs on
+Windows and Linux. The external slow second-return case completes all three
+comparisons and both zero-result boundaries with the CPU timing model. The
+built-in fast second-return case still fails its first comparison (`0xDC`
+versus `0xDE`), and remains enabled. The delivered base firmware-layout fix
+passes six of eight; its separate CPU timing limitation remains recorded there.
+Matching-header/library controls show that moving the wrapper repairs three
+original built-in cartridge runs; the preceding built-in image fails all four.
+The native matrix alone does not establish complete IRQ or startup accuracy.
 
 A private control retains the external boot and substitutes the owned image
 at the first cartridge instruction. The relocated wrapper then passes all
