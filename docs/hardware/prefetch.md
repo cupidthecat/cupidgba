@@ -82,14 +82,22 @@ records the first ARM visit using the selected `--expect-loop-register`.
 Owned positive and negative cartridges check overwritten failures, missing
 checkpoints and terminal failures without changing ordinary runner behavior.
 
-The mixed-width pair and legacy boundary case additionally require their
-original comparison values at pinned instruction addresses. The mixed-width
-case must observe both 0x4C and 0x6A; its neighbor requires
-0x28, and the legacy boundary requires 0x29. The checker verifies the original
-instruction bytes, CPU mode, opcode, register value and complete observation
-order. An incorrectly calculated branch target can bypass a failure-recording
-instruction and still reach a zero result at both display and terminal; that
-path cannot satisfy these comparison observations.
+All twenty groups additionally require their original timing comparisons at
+pinned instruction addresses: 83 assertions from the nineteen source-backed
+groups and the binary-only legacy assertion, for 84 observations per BIOS
+path. Expectations retain the complete compared register value, including the
+timer control halfword in the ten full-word ARM assertions. Setup comparisons
+and iterative branch-control comparisons are not timing assertions. The
+checker verifies the original instruction bytes, CPU mode, opcode, register
+value and complete observation order. An incorrectly calculated branch target
+can bypass a failure-recording instruction and still reach a zero result at
+both display and terminal; that path cannot satisfy these observations.
+
+The mixed-width case must observe both 0x4C and 0x6A; its neighbor requires
+0x28, and the legacy boundary requires 0x29. Each source-backed value was
+checked against its unchanged assembly constant and original comparison
+instruction. ROM digests, original observations, result boundaries and all
+execution guards are retained.
 
 The runner's repeatable `--expect-register-at ADDRESS REGISTER VALUE` option
 samples through a read-only CPU instruction-issue hook. It does not sample
@@ -117,6 +125,15 @@ of its encoded 0x29 comparison. Its digest, comparison, pre-display result
 and terminal are retained; missing assembly limits source qualification.
 The expanded prefetch profile passes 38 of 40 runs. Covered boundary examples
 do not establish all page phases.
+
+Two private page-stop experiments, stopping before or after the boundary
+halfword, each passed only 34 of the 40 unchanged runs. Both regressed the
+first and third boundary cartridges on both BIOS paths and still failed the
+legacy comparison. Neither model is retained. Passive fetch/finish tracing
+preserves complete issued instruction/register/clock and final RAM
+fingerprints with logging disabled and enabled on both BIOS paths. It shows
+the current FIFO continuing across the buffered page edge; it does not
+establish the hardware's stop or restart phase.
 
 `CUPID_BUS_PAGE_PROBE_ROM` enables a separate fixed CPU/DMA page-boundary
 cartridge. The observer requires all eighteen original console results. The
