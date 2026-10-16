@@ -520,6 +520,8 @@ records cover all one hundred years, month ends, both hour formats, weekday and
 minute/second fields. Each of 3,072 records requires all eighteen returned bytes,
 complete table/output pointers and a passing terminal. Missing-device and
 wrong-expectation controls must finish with their exact expected failure counts.
+Separate guest trials poll through a complete RTC second and check the full
+year and weekday carry, coupling wire encoding to calendar advancement.
 `CUPID_TEST_BIOS` repeats all four groups. Their thirty-second CTest deadlines,
 twenty-second process limits and five-million-step/120-frame guards are fixed.
 These are explicit-entry drivers; they do not boot firmware or qualify partial

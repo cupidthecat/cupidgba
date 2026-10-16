@@ -229,6 +229,10 @@ the three-byte time after a separate write, the complete date again to retain
 the untouched fields, and control readback. All 55,296 received serial bytes
 must match independently constructed expected records. `CUPID_TEST_BIOS`
 repeats the corpus with an external image, for 6,144 records and 110,592 bytes.
+Another 24 guest trials poll through a complete RTC second and require the
+2099-to-2000 year carry, weekday wrap and all seven carried date bytes.
+Together the matrix and carry trials check 111,192 returned bytes. The carry
+checks couple serial encoding to actual calendar advancement.
 
 Missing-device controls must finish every record and fail each nonzero expected
 byte. Separate controls change one expected byte per record and require exactly
