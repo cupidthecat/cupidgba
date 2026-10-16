@@ -10,7 +10,8 @@ permissions:
 jobs:
   linux:
     name: Linux (${{ matrix.compiler }}, ${{ matrix.mode }})
-    runs-on: ubuntu-latest
+    # Keep compiler and sanitizer qualification on the tested Linux release.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -22,7 +23,7 @@ jobs:
             mode: Debug
             sanitizers: 'ON'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
       - name: Install SDL2
         run: sudo apt-get update && sudo apt-get install -y libsdl2-dev lld
       - name: Verify replacement BIOS source
@@ -36,6 +37,17 @@ jobs:
           python3 tests/bios/generate_affine_table.py --check
           python3 tests/bios/generate_music_table.py --check
           python3 tests/bios/generate_checksum_identity.py .local-research/hle-rebuilt.bin --check
+          clang --target=arm-none-eabi -march=armv4t -fuse-ld=lld -nostdlib \
+            '-Wl,-Ttext=0x02018000,--image-base=0x02018000,--oformat=binary,-e,0' \
+            tests/bios/music-callbacks.s -o .local-research/music-callbacks.bin
+          python3 tests/bios/generate_music_callbacks.py .local-research/music-callbacks.bin
+      - name: Verify owned serial driver source
+        if: matrix.compiler == 'clang'
+        run: |
+          clang --target=arm-none-eabi -march=armv4t -fuse-ld=lld -nostdlib \
+            '-Wl,-Ttext=0x03000000,--image-base=0x03000000,--oformat=binary,-e,0' \
+            tests/gba/serial/joybus-driver.s -o .local-research/joybus-driver.bin
+          python3 tests/gba/serial/generate_joybus_driver.py .local-research/joybus-driver.bin
       - name: Fetch verified test inputs
         run: |
           python3 tests/roms/check_rom.py --fetch --directory .local-research/test-roms
@@ -70,7 +82,7 @@ jobs:
       run:
         shell: msys2 {0}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
       - uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64

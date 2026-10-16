@@ -38,6 +38,17 @@ bridge. `music-pitch.inc` provides 180 octave/semitone indices and 12 Q31
 semitone factors reproduced with decimal arithmetic. Its generator supports
 `--write` and `--check`. The reset pointer subtraction has an explicit Thumb
 encoding so GNU and LLVM emit identical bytes for the same operation.
+`sound-mixer.s`, `sound-driver.s` and `sound-init.s` occupy reserved space
+before the pitch data. They contain the software mixer, work-area controls,
+PCM clearing, FIFO DMA cadence, playback-rate configuration and initialization.
+The integer ratio helper enters ARM with a direct instruction-state change.
+Mixing and reverb use ordinary signed integer instructions. `music-player.s`,
+`music-sequencer.s`, `music-commands.s` and `music-notes.s` implement lifecycle,
+track sequencing, exported commands and note allocation. `music-jump-table.s`
+provides the 36 callable entries at the observable BIOS data boundary.
+`multiboot.s` occupies the space after track-command data and before the fixed
+pitch table. It executes sender guards, word encryption, CRC, serial writes
+and completion polling through the CPU, retaining the 16 KiB image boundary.
 `checksum.s` reads all 4,096 image words through timed ARM loads and adds them.
 The reserved final word at `0x3FFC` comes from `checksum-identity.inc`. Its
 generator subtracts the sum of the preceding words from the replacement
@@ -48,3 +59,16 @@ After changing assembly, assemble once, run the identity generator with
 `--write`, reassemble and update the embedded bytes. `--check` verifies both
 the include and the completed image. Linux Clang CI runs the source, identity
 and mathematical table checks. External BIOS dumps are separate inputs.
+
+The owned native music callbacks also have assembly source. Reproduce their
+embedded fixture without external firmware:
+
+```sh
+clang --target=arm-none-eabi -march=armv4t -fuse-ld=lld -nostdlib \
+  '-Wl,-Ttext=0x02018000,--image-base=0x02018000,--oformat=binary,-e,0' \
+  tests/bios/music-callbacks.s -o .local-research/music-callbacks.bin
+python3 tests/bios/generate_music_callbacks.py .local-research/music-callbacks.bin
+```
+
+`--write` regenerates `music-callbacks.inc`. The callbacks run from owned RAM,
+record actual arguments/ownership and supply deterministic library responses.

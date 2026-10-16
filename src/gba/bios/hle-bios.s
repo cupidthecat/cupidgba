@@ -117,21 +117,7 @@ subs   pc, lr, #4
 .word 0
 .word 0x03A0E004
 
-@ Unimplemented
-SoundDriverInit:
-SoundDriverMode:
-SoundDriverMain:
-SoundDriverVsync:
-SoundChannelClear:
-MusicPlayerOpen:
-MusicPlayerStart:
-MusicPlayerStop:
-MusicPlayerContinue:
-MusicPlayerFadeOut:
-MultiBoot:
-SoundDriverVsyncOff:
-SoundDriverVsyncOn:
-
+@ Unused software-service entries return without work.
 NopCall:
 bx lr
 
@@ -241,26 +227,8 @@ tstne  r12, #0x0E000000
 0:
 bx     lr
 
-SoundDriverGetJumpList:
-stmfd  sp!, {r4-r10}
-ldr    r1, =NopCall
-mov    r3, r1
-mov    r4, r1
-mov    r5, r1
-mov    r6, r1
-mov    r7, r1
-mov    r8, r1
-mov    r9, r1
-mov    r10, r1
-stmia  r0!, {r1, r3-r10}
-stmia  r0!, {r1, r3-r10}
-stmia  r0!, {r1, r3-r10}
-stmia  r0!, {r1, r3-r10}
-mov    r1, #0
-ldmfd  sp!, {r4-r10}
-bx     lr
-
 .ltorg
+.org STALL_CALL_OFFSET
 
 StallCall:
 subs r11, #4
@@ -534,6 +502,8 @@ subs pc, lr, #4
 .include "src/gba/bios/checksum.s"
 .include "src/gba/bios/music-frequency.s"
 .include "src/gba/bios/hard-reset.s"
+.include "src/gba/bios/music-jump-table.s"
+.include "src/gba/bios/music-notes.s"
 
 @ The final word records the embedded image's additive identity.
 .org 0x3FFC

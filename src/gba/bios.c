@@ -45,12 +45,24 @@ void cupid_bios_swi(struct CupidGBA* gba, uint8_t comment) {
         /* Utility instructions expose their memory accesses and peripheral clocks. */
         cupid_arm_raise_swi(&gba->cpu);
         break;
+    case 0x1A: case 0x1B: case 0x1C: case 0x1D: case 0x1E: case 0x28: case 0x29:
+        /* Driver work-area and sound DMA accesses execute as firmware. */
+        cupid_arm_raise_swi(&gba->cpu);
+        break;
     case 0x1F:
         /* Fixed-point interpolation and the wave read run through firmware. */
         cupid_arm_raise_swi(&gba->cpu);
         break;
+    case 0x20: case 0x21: case 0x22: case 0x23: case 0x24: case 0x2A:
+        /* Music state, track commands and callable entries run through firmware. */
+        cupid_arm_raise_swi(&gba->cpu);
+        break;
     case 0x26:
         /* Warm reboot runs firmware reset writes and refills the entry pipeline. */
+        cupid_arm_raise_swi(&gba->cpu);
+        break;
+    case 0x25:
+        /* Download words and checksums use timed serial register accesses. */
         cupid_arm_raise_swi(&gba->cpu);
         break;
     default: break;    /** Unknown SWI */

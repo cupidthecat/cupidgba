@@ -41,6 +41,8 @@ musicKeyReady:
 .balign 4, 0
 .ltorg
 
+.include "src/gba/bios/music-player.s"
+
 .org 0x1DB4
 .thumb_func
 musicMultiplyHigh:
@@ -52,6 +54,13 @@ musicMultiplyARM:
     umull r2, r3, r0, r1
     adds r0, r3, #0
     bx lr
+
+.include "src/gba/bios/sound-mixer.s"
+.include "src/gba/bios/music-sequencer.s"
+.include "src/gba/bios/sound-driver.s"
+.include "src/gba/bios/sound-init.s"
+.include "src/gba/bios/music-commands.s"
+.include "src/gba/bios/multiboot.s"
 
 .org 0x3104
 .include "src/gba/bios/music-pitch.inc"

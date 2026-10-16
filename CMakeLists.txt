@@ -43,7 +43,8 @@ add_library(cupid_core STATIC
     src/core/timing.c
     src/gba/gba.c src/gba/memory.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
     src/gba/audio.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c
-    src/gba/hle-bios.c src/gba/bios/file.c src/gba/savedata.c src/gba/save/file.c src/gba/serial/serial.c
+    src/gba/hle-bios.c src/gba/bios/file.c src/gba/savedata.c src/gba/save/file.c
+    src/gba/serial/serial.c src/gba/serial/joybus.c
     src/gba/render/fetch.c src/gba/render/scanout.c src/gba/render/object-fetch.c)
 target_include_directories(cupid_core PUBLIC include)
 target_link_libraries(cupid_core PUBLIC cupid_build_options)
@@ -150,6 +151,20 @@ if(BUILD_TESTING)
     target_link_libraries(test_serial PRIVATE cupid_core)
     add_test(NAME gba.serial COMMAND test_serial)
     set_tests_properties(gba.serial PROPERTIES TIMEOUT 10)
+    add_executable(test_multiplayer tests/gba/serial/test_multiplayer.c)
+    target_link_libraries(test_multiplayer PRIVATE cupid_core)
+    add_test(NAME gba.multiplayer COMMAND test_multiplayer)
+    set_tests_properties(gba.multiplayer PROPERTIES TIMEOUT 10)
+    add_executable(test_joybus tests/gba/serial/test_joybus.c)
+    target_link_libraries(test_joybus PRIVATE cupid_core)
+    foreach(group commands payloads validation registers interrupts chronology lifecycle guest)
+        add_test(NAME gba.joybus-${group} COMMAND test_joybus ${group})
+        set_tests_properties(gba.joybus-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+    if(CUPID_TEST_BIOS)
+        add_test(NAME gba.joybus-guest-external COMMAND test_joybus guest ${CUPID_TEST_BIOS})
+        set_tests_properties(gba.joybus-guest-external PROPERTIES TIMEOUT 10)
+    endif()
 
     if(CUPID_BUILD_FRONTEND)
         add_test(NAME platform.bios-startup COMMAND ${Python3_EXECUTABLE}
@@ -258,6 +273,58 @@ if(BUILD_TESTING)
             set_tests_properties(gba.bios-checksum-${group}-external PROPERTIES TIMEOUT 10)
         endif()
     endforeach()
+
+    add_executable(test_bios_sound_driver tests/bios/test_sound_driver.c)
+    target_link_libraries(test_bios_sound_driver PRIVATE cupid_core)
+    foreach(group mode vsync clear pcm rates-0 rates-1 rates-2 chronology init
+                  frames-0 frames-1 frames-2 frames-3 hooks mix-irq playback
+                  mix-rates-0 mix-rates-1 mix-rates-2)
+        add_test(NAME gba.bios-sound-${group} COMMAND test_bios_sound_driver ${group})
+        set_tests_properties(gba.bios-sound-${group} PROPERTIES TIMEOUT 10)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME gba.bios-sound-${group}-external COMMAND test_bios_sound_driver ${group} --external-bios ${CUPID_TEST_BIOS})
+            set_tests_properties(gba.bios-sound-${group}-external PROPERTIES TIMEOUT 10)
+        endif()
+    endforeach()
+
+    add_executable(test_bios_music_player tests/bios/test_music_player.c)
+    target_link_libraries(test_bios_music_player PRIVATE cupid_core)
+    foreach(group open open-guards discovery start stop continue fade guards sequence irq
+                  clear-entry unlink-entry controllers-0 controllers-1 controllers-2 controllers-3
+                  controllers-4 fine-entry flow-entry port-entry rate-entry-0 rate-entry-1 rate-entry-2
+                  stop-entry fade-entry tie-entry source-guard track-entry songs-0 songs-1 songs-2 songs-3
+                  songs-4 hooks-arm hooks-thumb playback-0 playback-1 playback-2 progress)
+        add_test(NAME gba.bios-music-player-${group} COMMAND test_bios_music_player ${group})
+        set_tests_properties(gba.bios-music-player-${group} PROPERTIES TIMEOUT 10)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME gba.bios-music-player-${group}-external COMMAND test_bios_music_player ${group} --external-bios ${CUPID_TEST_BIOS})
+            set_tests_properties(gba.bios-music-player-${group}-external PROPERTIES TIMEOUT 10)
+        endif()
+    endforeach()
+
+    add_executable(test_bios_multiboot tests/bios/test_multiboot.c)
+    target_link_libraries(test_bios_multiboot PRIVATE cupid_core)
+    foreach(group guards normal-0 normal-1 normal-2 normal-3 multi-0 multi-1
+                  crc-reject offset-reject client-wait client-reject disconnect
+                  source-iwram source-rom-page bus-0 bus-1
+                  guard-matrix-0 guard-matrix-1 guard-matrix-2 guard-readonly guard-dma
+                  multi-2 multi-sparse multi-unselected multi-offset-reject multi-crc-reject)
+        add_test(NAME gba.bios-multiboot-${group} COMMAND test_bios_multiboot ${group})
+        set_tests_properties(gba.bios-multiboot-${group} PROPERTIES TIMEOUT 10)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME gba.bios-multiboot-${group}-external COMMAND test_bios_multiboot ${group} --external-bios ${CUPID_TEST_BIOS})
+            set_tests_properties(gba.bios-multiboot-${group}-external PROPERTIES TIMEOUT 10)
+        endif()
+    endforeach()
+
+    # Full-size protocol execution is a separate end-to-end profile. Existing
+    # small-download guards and ten-second deadlines remain unchanged.
+    add_test(NAME gba.bios-multiboot-maximum COMMAND test_bios_multiboot maximum)
+    set_tests_properties(gba.bios-multiboot-maximum PROPERTIES TIMEOUT 180 LABELS extended)
+    if(CUPID_TEST_BIOS)
+        add_test(NAME gba.bios-multiboot-maximum-external COMMAND test_bios_multiboot maximum --external-bios ${CUPID_TEST_BIOS})
+        set_tests_properties(gba.bios-multiboot-maximum-external PROPERTIES TIMEOUT 180 LABELS extended)
+    endif()
 
     add_executable(test_bios_power tests/bios/test_power.c)
     target_link_libraries(test_bios_power PRIVATE cupid_core)

@@ -6,6 +6,24 @@ enum { CONTROL_START = 0x80, CONTROL_IRQ = 0x4000 };
  * the electrical placement of this interval still needs pin measurements. */
 enum { COMPLETION_CLOCKS = 6 };
 
+/* Completion intervals by baud selector and final connected player slot.
+ * These are the current word-transfer model; electrical edge placement and
+ * transient cable behavior require separate qualification. */
+static const unsigned multiplayerClocks[4][4] = {
+    {31976, 63427, 94884, 125829},
+    {8378, 16241, 24104, 31457},
+    {5750, 10998, 16241, 20972},
+    {3140, 5755, 8376, 10486}
+};
+
+static unsigned multiplayer_slot_clock(unsigned baud, unsigned player) {
+    static const unsigned rates[] = {9600, 38400, 57600, 115200};
+    /* Eighteen bits per slot include start/data/stop. These nominal phases
+     * exclude unmeasured inter-player gaps; completion retains its separate
+     * modeled interval and final missing-player timeout. */
+    return (unsigned)((UINT64_C(16777216) * 18 * (player + 1) + rates[baud] / 2) / rates[baud]);
+}
+
 enum CupidSerialMode cupid_serial_mode(const struct CupidSerial* serial) {
     if (serial->rcnt & 0x8000) {
         return (serial->rcnt & 0x4000) ? SERIAL_JOY : SERIAL_GPIO;
@@ -30,7 +48,7 @@ static void update_outputs(struct CupidSerial* serial) {
         if (owner && (!serial->active || serial->clockHigh)) levels |= SERIAL_SC;
         if (serial->active ? serial->outputHigh : (serial->control & 8) != 0) levels |= SERIAL_SO;
     } else if (mode == SERIAL_JOY) {
-        /* Idle clock terminals; no JOY bus transaction engine is attached. */
+        /* Command peers exchange whole frames without generating pin edges. */
         mask = SERIAL_SC | SERIAL_SD;
     }
     if (mask == serial->outputMask && levels == serial->outputLevels) return;
@@ -51,7 +69,9 @@ static void cancel_transfer(struct CupidSerial* serial) {
 
 static void finish_transfer(struct CupidSerial* serial) {
     struct CupidGBA* gba = serial->gba;
-    if (serial->length32) {
+    if (serial->transferMode == SERIAL_MULTI) {
+        /* Each receive slot was published by its own preceding phase. */
+    } else if (serial->length32) {
         gba->memory.io[REG_SIODATA32_LO >> 1] = (uint16_t)serial->receive;
         gba->memory.io[REG_SIODATA32_HI >> 1] = (uint16_t)(serial->receive >> 16);
     } else {
@@ -87,6 +107,20 @@ static void edge_callback(struct CupidTiming* timing, void* context, uint32_t la
     (void)late;
     struct CupidSerial* serial = context;
     if (!serial->active) return;
+    if (serial->transferMode == SERIAL_MULTI && serial->multiplayerSlot <= serial->multiplayerLast) {
+        const unsigned slot = serial->multiplayerSlot++;
+        const unsigned elapsed = multiplayer_slot_clock(serial->multiplayerBaud, slot);
+        serial->gba->memory.io[(REG_SIODATA32_LO >> 1) + slot] = serial->multiplayerData[slot];
+        if (slot < serial->multiplayerLast) {
+            const unsigned next = multiplayer_slot_clock(serial->multiplayerBaud, slot + 1);
+            cupid_timing_schedule(timing, &serial->edgeEvent, (int32_t)(next - elapsed));
+            return;
+        }
+        if (serial->multiplayerCompletion > elapsed) {
+            cupid_timing_schedule(timing, &serial->edgeEvent, (int32_t)(serial->multiplayerCompletion - elapsed));
+            return;
+        }
+    }
     if (!serial->remaining) {
         finish_transfer(serial);
         return;
@@ -103,6 +137,7 @@ static void edge_callback(struct CupidTiming* timing, void* context, uint32_t la
 static void start_transfer(struct CupidSerial* serial) {
     struct CupidGBA* gba = serial->gba;
     serial->length32 = cupid_serial_mode(serial) == SERIAL_NORMAL32;
+    serial->transferMode = cupid_serial_mode(serial);
     serial->transmit = serial->length32 ?
         gba->memory.io[REG_SIODATA32_LO >> 1] | ((uint32_t)gba->memory.io[REG_SIODATA32_HI >> 1] << 16) :
         gba->memory.io[REG_SIOMLT_SEND >> 1] & 0xFF;
@@ -119,6 +154,40 @@ static void start_transfer(struct CupidSerial* serial) {
     }
 }
 
+static void schedule_multiplayer(struct CupidSerial* serial, unsigned baud) {
+    unsigned last = 0;
+    for (unsigned player = 1; player < 4; player++)
+        if (serial->multiplayerPlayers & (1u << player)) last = player;
+    serial->transferMode = SERIAL_MULTI;
+    serial->active = true;
+    serial->remaining = 0;
+    serial->internalClock = serial->multiplayerId == 0;
+    serial->multiplayerSlot = 0;
+    serial->multiplayerLast = last;
+    serial->multiplayerBaud = baud;
+    serial->multiplayerCompletion = multiplayerClocks[baud][last];
+    serial->control |= CONTROL_START;
+    serial->gba->memory.io[REG_SIOCNT >> 1] = serial->control;
+    for (unsigned player = 0; player < 4; player++)
+        serial->gba->memory.io[(REG_SIODATA32_LO >> 1) + player] = 0xFFFF;
+    cupid_timing_schedule(&serial->gba->timing, &serial->edgeEvent,
+                          (int32_t)multiplayer_slot_clock(baud, 0));
+}
+
+static void start_multiplayer(struct CupidSerial* serial) {
+    const unsigned baud = serial->control & 3;
+    const uint16_t transmitted = serial->gba->memory.io[REG_SIOMLT_SEND >> 1];
+    for (unsigned player = 0; player < 4; player++) serial->multiplayerData[player] = 0xFFFF;
+    serial->multiplayerError = false;
+    if (serial->multiplayerExchange)
+        serial->multiplayerError = !serial->multiplayerExchange(serial->multiplayerContext,
+            transmitted, baud, serial->multiplayerData, cupid_timing_global_time(&serial->gba->timing));
+    for (unsigned player = 0; player < 4; player++)
+        if (!(serial->multiplayerPlayers & (1u << player))) serial->multiplayerData[player] = 0xFFFF;
+    serial->multiplayerData[0] = transmitted;
+    schedule_multiplayer(serial, baud);
+}
+
 void cupid_serial_init(struct CupidSerial* serial, struct CupidGBA* gba) {
     memset(serial, 0, sizeof(*serial));
     serial->gba = gba;
@@ -132,12 +201,46 @@ void cupid_serial_reset(struct CupidSerial* serial) {
     serial->control = 0;
     serial->rcnt = 0x8000;
     serial->transmit = serial->receive = 0;
+    serial->transferMode = SERIAL_NORMAL8;
+    serial->multiplayerError = false;
+    memset(serial->multiplayerData, 0, sizeof(serial->multiplayerData));
+    serial->multiplayerSlot = serial->multiplayerLast = 0;
+    serial->multiplayerBaud = serial->multiplayerCompletion = 0;
     memset(&serial->gba->memory.io[REG_SIODATA32_LO >> 1], 0, 12);
     serial->gba->memory.io[REG_JOYCNT >> 1] = 0;
     memset(&serial->gba->memory.io[REG_JOY_RECV_LO >> 1], 0, 10);
     serial->gba->memory.io[REG_SIOCNT >> 1] = 0;
     serial->gba->memory.io[REG_RCNT >> 1] = serial->rcnt;
     update_outputs(serial);
+}
+
+bool cupid_serial_set_multiplayer_peer(struct CupidSerial* serial, unsigned playerId,
+    uint8_t players, bool (*exchange)(void*, uint16_t, unsigned, uint16_t[4], uint64_t), void* context) {
+    if (playerId > 3 || players > 15 || (players & (players + 1)) ||
+        (players && !(players & (1u << playerId)))) return false;
+    if (serial->active && serial->transferMode == SERIAL_MULTI) {
+        cancel_transfer(serial);
+        serial->control &= ~CONTROL_START;
+        serial->gba->memory.io[REG_SIOCNT >> 1] = serial->control;
+    }
+    serial->multiplayerId = playerId;
+    serial->multiplayerPlayers = players;
+    serial->multiplayerExchange = exchange;
+    serial->multiplayerContext = context;
+    serial->multiplayerError = false;
+    return true;
+}
+
+bool cupid_serial_multiplayer_receive(struct CupidSerial* serial, unsigned baud,
+    const uint16_t received[4], bool error) {
+    if (baud > 3 || !serial->multiplayerId || serial->active || serial->gba->stopped ||
+        cupid_serial_mode(serial) != SERIAL_MULTI || !serial->multiplayerPlayers) return false;
+    for (unsigned player = 0; player < 4; player++)
+        serial->multiplayerData[player] = serial->multiplayerPlayers & (1u << player) ? received[player] : 0xFFFF;
+    serial->multiplayerData[serial->multiplayerId] = serial->gba->memory.io[REG_SIOMLT_SEND >> 1];
+    serial->multiplayerError = error;
+    schedule_multiplayer(serial, baud);
+    return true;
 }
 
 void cupid_serial_set_output_callback(struct CupidSerial* serial,
@@ -169,7 +272,10 @@ uint16_t cupid_serial_read(struct CupidSerial* serial, uint32_t address) {
     switch (address) {
     case REG_SIOCNT:
         switch ((serial->control >> 12) & 3) {
-        case SERIAL_MULTI: return (serial->control & 0x7F83) | 0xC;
+        case SERIAL_MULTI:
+            return (serial->control & 0x7F83) | 8 | (serial->multiplayerId << 4) |
+                ((serial->multiplayerId || !serial->multiplayerPlayers) ? 4 : 0) |
+                (serial->multiplayerError ? 0x40 : 0);
         case SERIAL_UART: return (serial->control & 0x7F8F) | 0x20;
         default: return (serial->control & 0x7F8B) | (cupid_serial_pins(serial) & SERIAL_SI);
         }
@@ -203,8 +309,23 @@ static void write_masked(struct CupidSerial* serial, uint32_t address, uint16_t 
         if (serial->active && (mode != before || !(serial->control & CONTROL_START))) cancel_transfer(serial);
         *data = serial->control;
         update_outputs(serial);
-        if (!wasStarted && (serial->control & CONTROL_START) &&
-            (mode == SERIAL_NORMAL8 || mode == SERIAL_NORMAL32)) start_transfer(serial);
+        if (!wasStarted && (serial->control & CONTROL_START)) {
+            if (mode == SERIAL_NORMAL8 || mode == SERIAL_NORMAL32) start_transfer(serial);
+            else if (mode == SERIAL_MULTI && !serial->multiplayerId && serial->multiplayerPlayers) start_multiplayer(serial);
+            else if (mode == SERIAL_MULTI && !serial->multiplayerPlayers) {
+                /* An unassigned endpoint retains the request latch, but has no
+                 * cable clock owner. It cannot publish words or a completion. */
+                serial->transferMode = SERIAL_MULTI;
+                serial->active = true;
+                serial->remaining = 0;
+                serial->internalClock = false;
+            }
+            else if (mode == SERIAL_MULTI) {
+                /* Once assigned as a child, Start is read-only. */
+                serial->control &= ~CONTROL_START;
+                *data = serial->control;
+            }
+        }
         return;
     }
     case REG_RCNT:
