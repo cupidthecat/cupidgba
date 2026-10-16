@@ -35,9 +35,13 @@ POSTFLG states for BIOS/RAM/ROM origins. See
 [HardReset](../hardware/bios/hard-reset.md) for complete counts and startup
 qualification limits.
 
-The six `arm.undefined-*` groups cover exception-entry clocks, caller banks
+The six general `arm.undefined-*` groups cover exception-entry clocks, caller banks
 and ARM/Thumb return, predicates, clock wrap and the internal-cycle timer/DMA
-interval. Each retains a ten-second deadline; see [undefined entry](../hardware/cpu/undefined-entry.md).
+interval. Five additional `arm.undefined-bkpt-*` groups require 391,436
+observations of unsupported breakpoint encodings, exception return, complete
+immediates, predicates, explicit host hooks and peripheral progress. Both
+timed and static paths retain their opcode fetch costs. All eleven groups
+retain ten-second deadlines; see [undefined entry](../hardware/cpu/undefined-entry.md).
 
 The six `arm.cp14-*` groups check decoded register transfers, complete selector
 coverage, r15 flags, predicates, retained undefined exceptions and timer/DMA
