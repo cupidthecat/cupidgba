@@ -560,6 +560,27 @@ acknowledgements, STOP and console reset. It keeps the existing IRQ stage
 delays and does not replace the original CPU/bus cartridge checks. See
 [interrupt ownership and remaining sampling limits](../hardware/interrupts.md).
 
+Set `CUPID_SAVED_STATUS_PROBE_DIR` to the private source directory containing
+`psr/psr.gba` to register the saved-status cartridge. `CUPID_TEST_BIOS` adds its
+external BIOS path. The checker verifies the pinned 2052-byte input, all five
+original ARM comparisons, their operands and privilege modes, the original
+display checkpoint and terminal instruction. Both result boundaries must issue
+with R12=0. The dedicated probe retains the 360-frame, 150-million-step,
+660-frame clock ceiling and 90-second process limits. It does not change the
+generic headless runner's observation protocol or distribute the cartridge.
+
+The ten `arm.saved-status-*` groups require 1,139,864 observations across
+reads, register/immediate writes, masks, predicates, banks, waits, clock wrap,
+static/timed clients and timer/DMA/IRQ interactions. Five
+`arm.instruction-observer-*` groups cover initialization/reset ownership,
+ARM/Thumb issue, all ARM predicates, HALT/STOP and real timer IRQ preemption.
+Their owned programs reach zero-result boundaries even when changed input or
+an IRQ return bypasses a required comparison. The observer rejects those runs,
+wrong opcodes/modes/privileges/operands, missing or reordered comparisons and
+duplicates. Sampled register/bank/status, pipeline, RAM, I/O and clock equality
+checks verify passive observation; these samples do not describe every piece
+of emulator state. See [saved-status transfers](../hardware/cpu/saved-status-transfers.md).
+
 Passing these checks establishes the listed cases. They do not cover every CPU
 encoding, every bus or arbitration edge, every timer/IRQ interaction, raster
 effects, audio fidelity, cartridge peripherals, save persistence, or link
