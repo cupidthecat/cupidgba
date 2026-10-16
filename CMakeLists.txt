@@ -17,6 +17,7 @@ set(CUPID_SERIAL_SUITE_ROM "" CACHE FILEPATH "Locally built serial timing and re
 set(CUPID_SERIAL_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified serial cartridge probes")
 set(CUPID_HALT_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified firmware HALT probes")
 set(CUPID_USER_BANK_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified user-bank cartridge probes")
+set(CUPID_SAVED_STATUS_PROBE_DIR "" CACHE PATH "Directory containing the checksum-verified saved-status cartridge")
 set(CUPID_AUDIO_TEST_ROM "" CACHE FILEPATH "Locally built audio signal cartridge ROM")
 set(CUPID_TEST_BIOS "" CACHE FILEPATH "External BIOS for local hardware suite checks")
 
@@ -220,6 +221,37 @@ if(BUILD_TESTING)
     add_executable(test_cpu tests/arm/test_cpu.c)
     target_link_libraries(test_cpu PRIVATE cupid_core)
     add_test(NAME arm.cpu COMMAND test_cpu)
+
+    add_executable(test_saved_status tests/arm/test_saved_status.c)
+    target_link_libraries(test_saved_status PRIVATE cupid_core)
+    foreach(group reads registers immediate-0 immediate-4 immediate-8 immediate-12 timing predicates banks events)
+        add_test(NAME arm.saved-status-${group} COMMAND test_saved_status ${group})
+        set_tests_properties(arm.saved-status-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
+    add_executable(test_instruction_observer tests/arm/test_instruction_observer.c tests/arm/instruction_probe.c)
+    target_link_libraries(test_instruction_observer PRIVATE cupid_core)
+    foreach(group lifecycle execution arbitration guards passivity)
+        add_test(NAME arm.instruction-observer-${group} COMMAND test_instruction_observer ${group})
+        set_tests_properties(arm.instruction-observer-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
+    add_executable(saved_status_probe tests/arm/saved_status_probe.c tests/arm/instruction_probe.c)
+    target_link_libraries(saved_status_probe PRIVATE cupid_core)
+    if(CUPID_SAVED_STATUS_PROBE_DIR)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        add_test(NAME rom.saved-status COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_saved_status_probe.py
+            --directory ${CUPID_SAVED_STATUS_PROBE_DIR} --runner $<TARGET_FILE:saved_status_probe>)
+        set_tests_properties(rom.saved-status PROPERTIES TIMEOUT 100)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME rom.saved-status-external COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_saved_status_probe.py
+                --directory ${CUPID_SAVED_STATUS_PROBE_DIR} --runner $<TARGET_FILE:saved_status_probe>
+                --bios ${CUPID_TEST_BIOS})
+            set_tests_properties(rom.saved-status-external PROPERTIES TIMEOUT 100)
+        endif()
+    endif()
 
     add_executable(test_user_bank tests/arm/test_user_bank.c tests/arm/user_bank_probe.c)
     target_link_libraries(test_user_bank PRIVATE cupid_core)

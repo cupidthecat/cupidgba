@@ -1,0 +1,15 @@
+{
+  "source_revision": "66f5f1d60cd7030b600606886c76f5c821ecaf9d",
+  "path": "psr/psr.gba",
+  "sha256": "fdc15b00ab5bfc183c5bec539e39bedb623f646358f0a95eddf8757026fb4bad",
+  "bytes": 2052,
+  "checkpoint": "0x080002d8",
+  "terminal": "0x08000450",
+  "observations": [
+    {"address": "0x080001cc", "instruction": "0xe351001f", "mode": "arm", "privilege": "0x1f", "register": 1, "value": "0x1f"},
+    {"address": "0x080001e4", "instruction": "0xe3510017", "mode": "arm", "privilege": "0x17", "register": 1, "value": "0x17"},
+    {"address": "0x08000204", "instruction": "0xe351001f", "mode": "arm", "privilege": "0x1f", "register": 1, "value": "0x1f"},
+    {"address": "0x0800022c", "instruction": "0xe3510013", "mode": "arm", "privilege": "0x13", "register": 1, "value": "0x13"},
+    {"address": "0x08000294", "instruction": "0xe35800e4", "mode": "arm", "privilege": "0x1f", "register": 8, "value": "0xe4"}
+  ]
+}
