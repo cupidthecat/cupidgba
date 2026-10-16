@@ -4,9 +4,10 @@ The `runner.observations` and three `arm.observer-*` groups require actual
 instruction-issue observations rather than a zero terminal alone. They use
 owned ARM/Thumb streams with deliberately skipped failure writes, ordered
 and repeated observations, malformed inputs, IRQ/HALT/STOP boundaries and
-clock wrap. Each retains a ten-second deadline. The mixed-width and legacy
-prefetch observers pin the original comparison instruction bytes and values;
-source inputs, comparisons and run limits remain unchanged. See
+clock wrap. Each retains a ten-second deadline. All twenty prefetch groups
+pin their 84 original timing comparison instruction addresses, bytes, modes
+and complete register values on each BIOS path. Source inputs, comparisons
+and run limits remain unchanged. See
 [prefetch qualification](../hardware/prefetch.md).
 The bank group observes a user-bank load and both following operand phases,
 checks the original bank values and results, and compares observed execution
