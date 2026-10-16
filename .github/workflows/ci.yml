@@ -52,6 +52,10 @@ jobs:
             '-Wl,-Ttext=0x03001000,--image-base=0x03000000,--oformat=binary,-e,0' \
             tests/gba/serial/uart-driver.s -o .local-research/uart-driver.bin
           python3 tests/gba/serial/generate_uart_driver.py .local-research/uart-driver.bin
+          clang --target=arm-none-eabi -march=armv4t -fuse-ld=lld -nostdlib \
+            '-Wl,-Ttext=0x03001000,--image-base=0x03000000,--oformat=binary,-e,0' \
+            tests/gba/serial/cable-driver.s -o .local-research/cable-driver.bin
+          python3 tests/gba/serial/generate_cable_driver.py .local-research/cable-driver.bin
       - name: Fetch verified test inputs
         run: |
           python3 tests/roms/check_rom.py --fetch --directory .local-research/test-roms
@@ -71,8 +75,8 @@ jobs:
         run: |
           cmake -S . -B build-thread -DCMAKE_C_COMPILER=clang \
             -DCMAKE_BUILD_TYPE=Debug -DCUPID_THREAD_SANITIZER=ON
-          cmake --build build-thread --target test_audio_output --parallel 2
-          ctest --test-dir build-thread -R '^platform.audio$' --output-on-failure
+          cmake --build build-thread --target test_audio_output test_local --parallel 2
+          ctest --test-dir build-thread -R '^platform[.](audio|local-live-audio)$' --output-on-failure
       - name: Verify Makefile build
         if: matrix.compiler == 'gcc'
         run: make --jobs=2

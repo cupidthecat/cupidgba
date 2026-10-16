@@ -1,5 +1,15 @@
 # Testing
 
+Local-session checks are `gba.cable-*` and `platform.local-*`. They cover
+complete paired guest bytes and words, multiplayer receive slots, bus/event
+coordination, cancellation, STOP, SDL input/video/audio and independent battery
+files. Guest matrix cases have separate CTest entries; each retains its clock
+guard and every payload comparison. See [local sessions](../hardware/serial/local-session.md)
+for the host API and scope. With `CUPID_TEST_BIOS`, the owned word and UART
+guest cases also run with the external firmware. Reconstruct `cable-driver.s`
+at `0x03001000` with the same ARMv4T binary-link flags as the UART driver and
+verify all 512 bytes with `tests/gba/serial/generate_cable_driver.py`.
+
 Hosted Linux qualification uses the explicit Ubuntu 24.04 release for GCC
 Release and Clang Debug with address/undefined-behavior sanitizers. This keeps
 an automatic `ubuntu-latest` release migration from changing the compiler,

@@ -170,3 +170,84 @@ bool cupid_platform_poll_events(struct CupidPlatform* plat, struct CupidGBA* gba
 
     return true;
 }
+
+static bool controller_assigned(const struct CupidPlatform* platforms, unsigned count, SDL_JoystickID id) {
+    for (unsigned i = 0; i < count; ++i)
+        if (platforms[i].controller && platforms[i].controllerIndex == id) return true;
+    return false;
+}
+
+bool cupid_platform_poll_local(struct CupidPlatform* platforms, struct CupidGBA* const cores[],
+                               unsigned count, unsigned* focus, bool* connected) {
+    if (!platforms || !cores || !focus || !connected || count < 2 || count > 4 || *focus >= count) return false;
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        switch (event.type) {
+        case SDL_QUIT: return false;
+        case SDL_WINDOWEVENT:
+            if (event.window.event == SDL_WINDOWEVENT_CLOSE) return false;
+            if (event.window.event == SDL_WINDOWEVENT_FOCUS_LOST)
+                for (unsigned i = 0; i < count; ++i) platforms[i].keyboardKeys = 0;
+            break;
+        case SDL_KEYDOWN:
+        case SDL_KEYUP: {
+            const bool pressed = event.type == SDL_KEYDOWN;
+            if (pressed && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) return false;
+            if (pressed && !event.key.repeat && event.key.keysym.scancode == SDL_SCANCODE_TAB) {
+                platforms[*focus].keyboardKeys = 0;
+                *focus = (*focus + 1) % count;
+            } else if (pressed && !event.key.repeat && event.key.keysym.scancode == SDL_SCANCODE_F9) {
+                *connected = !*connected;
+            } else {
+                if (pressed && event.key.repeat) break;
+                for (size_t i = 0; i < KEY_MAP_SIZE; ++i) {
+                    if (event.key.keysym.scancode != keyMap[i].scancode) continue;
+                    const uint16_t mask = (uint16_t)(1u << keyMap[i].bit);
+                    if (pressed) platforms[*focus].keyboardKeys |= mask;
+                    else for (unsigned j = 0; j < count; ++j) platforms[j].keyboardKeys &= (uint16_t)~mask;
+                }
+            }
+            break;
+        }
+        case SDL_MOUSEBUTTONDOWN:
+            if (event.button.button == SDL_BUTTON_LEFT && platforms[0].window) {
+                int width, height;
+                SDL_GetWindowSize(platforms[0].window, &width, &height);
+                const unsigned rows = count > 2 ? 2 : 1;
+                if (width > 0 && height > 0 && event.button.x >= 0 && event.button.y >= 0 &&
+                    event.button.x < width && event.button.y < height) {
+                    unsigned selected = (unsigned)event.button.x * 2 / (unsigned)width +
+                        2 * ((unsigned)event.button.y * rows / (unsigned)height);
+                    if (selected < count) {
+                        platforms[*focus].keyboardKeys = 0;
+                        *focus = selected;
+                    }
+                }
+            }
+            break;
+        case SDL_CONTROLLERDEVICEREMOVED:
+            for (unsigned i = 0; i < count; ++i) {
+                if (platforms[i].controller && platforms[i].controllerIndex == event.cdevice.which) {
+                    SDL_GameControllerClose(platforms[i].controller);
+                    platforms[i].controller = NULL;
+                    platforms[i].controllerIndex = -1;
+                }
+            }
+            break;
+        }
+    }
+    for (int device = 0; device < SDL_NumJoysticks(); ++device) {
+        SDL_JoystickID id = SDL_JoystickGetDeviceInstanceID(device);
+        if (id < 0 || !SDL_IsGameController(device) || controller_assigned(platforms, count, id)) continue;
+        for (unsigned i = 0; i < count; ++i) {
+            if (platforms[i].controller) continue;
+            open_controller(&platforms[i], device);
+            if (platforms[i].controller) break;
+        }
+    }
+    for (unsigned i = 0; i < count; ++i) {
+        cores[i]->keysActive = platforms[i].keyboardKeys | controller_keys(&platforms[i]);
+        cupid_gba_test_keypad_irq(cores[i]);
+    }
+    return true;
+}

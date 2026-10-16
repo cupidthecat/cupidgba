@@ -19,9 +19,10 @@ SRC_RENDER   = src/gba/render/software.c src/gba/render/composite.c \
                src/gba/render/mode0.c src/gba/render/mode2.c \
                src/gba/render/mode3.c src/gba/render/mode4.c \
                src/gba/render/mode5.c src/gba/render/obj.c
-SRC_PLATFORM = src/platform/main.c src/platform/audio.c src/platform/input.c
+SRC_PLATFORM = src/platform/main.c src/platform/local.c src/platform/window.c src/platform/audio.c src/platform/input.c src/platform/context.c
+SRC_LINK     = src/link/cable.c
 
-SRCS = $(SRC_ARM) $(SRC_GBA) $(SRC_CORE) $(SRC_RENDER) $(SRC_PLATFORM)
+SRCS = $(SRC_ARM) $(SRC_GBA) $(SRC_CORE) $(SRC_RENDER) $(SRC_PLATFORM) $(SRC_LINK)
 OBJS = $(SRCS:.c=.o)
 DEPS = $(OBJS:.o=.d)
 

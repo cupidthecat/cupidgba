@@ -67,8 +67,9 @@ struct CupidSerial {
     uint8_t inputLevels;
     uint8_t outputMask;
     uint8_t outputLevels;
+    enum CupidSerialMode outputMode;
 
-    /* Reports driven levels and directions at emulated clock timestamps.
+    /* Reports driven levels, directions and mode changes at emulated timestamps.
      * A connected device may change its inputs synchronously in this callback. */
     void (*outputChanged)(void* context, uint8_t mask, uint8_t levels, uint64_t timestamp);
     void* outputContext;
@@ -80,6 +81,10 @@ struct CupidSerial {
     bool (*multiplayerExchange)(void* context, uint16_t transmitted, unsigned baud,
                                 uint16_t received[4], uint64_t timestamp);
     void* multiplayerContext;
+    /* Optional local-session policies. Ready is queried without advancing a
+     * clock. Cancellation is reported after releasing this endpoint's frame. */
+    bool (*multiplayerReady)(void* context);
+    void (*multiplayerCancelled)(void* context);
     struct CupidUART uart;
 };
 

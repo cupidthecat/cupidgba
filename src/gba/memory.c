@@ -51,7 +51,8 @@ static void sync_io(struct CupidARM* cpu, int* cycleCounter) {
     if (!cycleCounter) return;
     cpu->cycles += *cycleCounter + 1;
     *cycleCounter = -1;
-    if (cpu->cycles >= cpu->nextEvent) cpu->irqh.processEvents(cpu);
+    if (cpu->cycles >= cpu->nextEvent || ((struct CupidGBA*)cpu->master)->timing.synchronize)
+        cpu->irqh.processEvents(cpu);
 }
 
 /**
