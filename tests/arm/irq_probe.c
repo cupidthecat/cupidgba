@@ -20,7 +20,7 @@ static void observe_irq_instruction(const struct CupidARM* cpu, void* context) {
     struct IRQObservation* observation = context;
     const struct IRQExpectation* expected = observation->expected;
     const bool thumb = cpu->executionMode == MODE_THUMB;
-    uint32_t address = (uint32_t)cpu->gprs[ARM_PC] - (thumb ? 2u : 4u);
+    uint32_t address = cupid_arm_instruction_address(cpu);
     for (unsigned i = 0; i < expected->count; ++i) {
         const struct IRQGuard* guard = &expected->guards[i];
         if (address != guard->address) continue;
@@ -60,7 +60,7 @@ static struct IRQObservation execute(struct CupidGBA* gba, const struct IRQExpec
             /* The callback sees issue after IRQ/HALT arbitration. Require the
              * original self-branch to complete, rather than just peek its PC. */
             observation.valid &= gba->cpu.executionMode == MODE_ARM
-                && (uint32_t)gba->cpu.gprs[ARM_PC] == expected->terminal + 4
+                && cupid_arm_instruction_address(&gba->cpu) == expected->terminal
                 && gba->cpu.prefetch[0] == 0xEAFFFFFE;
             break;
         }

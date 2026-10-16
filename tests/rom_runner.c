@@ -35,7 +35,7 @@ struct RegisterObservations {
 static void observe_instruction(const struct CupidARM* cpu, void* context) {
     struct RegisterObservations* observations = context;
     const bool thumb = cpu->executionMode == MODE_THUMB;
-    const uint32_t pc = (uint32_t)cpu->gprs[ARM_PC] - (thumb ? 2u : 4u);
+    const uint32_t pc = cupid_arm_instruction_address(cpu);
     bool watched = false;
     for (unsigned i = 0; i < observations->count; i++) {
         if (observations->entries[i].address == pc) { watched = true; break; }
@@ -156,13 +156,13 @@ int main(int argc, char** argv) {
     while (completed < frames && steps < stepLimit &&
            cupid_timing_global_time(&gba->timing) < cycleLimit) {
         if (checkpointAddress && !checkpoint && gba->cpu.executionMode == MODE_ARM &&
-            (uint32_t)gba->cpu.gprs[ARM_PC] - 4 == checkpointAddress) {
+            cupid_arm_instruction_address(&gba->cpu) == checkpointAddress) {
             checkpoint = true;
             checkpointValue = (uint32_t)gba->cpu.gprs[expectedRegister];
         }
         if (expectedRegister >= 0 && gba->cpu.executionMode == MODE_ARM &&
             (uint32_t)gba->cpu.gprs[ARM_PC] >= GBA_BASE_ROM0 &&
-            (!terminalAddress || (uint32_t)gba->cpu.gprs[ARM_PC] - 4 == terminalAddress) &&
+            (!terminalAddress || cupid_arm_instruction_address(&gba->cpu) == terminalAddress) &&
             gba->cpu.prefetch[0] == UINT32_C(0xEAFFFFFE)) {
             terminal = true;
             break;

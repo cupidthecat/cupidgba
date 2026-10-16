@@ -51,9 +51,12 @@ unsigned cupid_prefetch_fetch(struct CupidGBA* gba, uint32_t address, unsigned w
     unsigned region = address >> GBA_BASE_OFFSET;
     if (region < GBA_REGION_ROM0 || region > GBA_REGION_ROM2_EX) return cycles;
     memory->prefetchUnit.width = width;
+    /* Align the CPU's word query, preserving the halfword FIFO cursor. A
+     * Thumb-to-ARM transition can leave A1 set in the logical fetch stream. */
+    uint32_t lookup = address & ~(uint32_t)(width - 1);
     if (memory->prefetchUnit.active) {
         unsigned halfwords = width / 2;
-        if (memory->prefetchUnit.count >= halfwords && address == memory->prefetchUnit.head) {
+        if (memory->prefetchUnit.count >= halfwords && lookup == memory->prefetchUnit.head) {
             memory->prefetchUnit.count -= halfwords;
             memory->prefetchUnit.head += width;
             if (!memory->prefetchUnit.remaining && memory->prefetch && !memory->prefetchUnit.paused) {
@@ -65,13 +68,13 @@ unsigned cupid_prefetch_fetch(struct CupidGBA* gba, uint32_t address, unsigned w
         /* A branch can join a started background read only at the FIFO
          * head. Sequential CPU demand can keep an unstarted burst alive. */
         if (memory->prefetchUnit.remaining &&
-            (!refill || (memory->prefetchUnit.engaged && address == memory->prefetchUnit.head)) &&
-            (address == memory->prefetchUnit.tail ||
-             (address == memory->prefetchUnit.head && memory->prefetchUnit.count < halfwords))) {
+            (!refill || (memory->prefetchUnit.engaged && lookup == memory->prefetchUnit.head)) &&
+            (lookup == memory->prefetchUnit.tail ||
+             (lookup == memory->prefetchUnit.head && memory->prefetchUnit.count < halfwords))) {
             /* A word may already have its first halfword buffered. Only the
              * outstanding halfwords need cartridge clocks; changing CPU
              * instruction width does not invalidate the FIFO's addresses. */
-            unsigned cached = address == memory->prefetchUnit.head ? memory->prefetchUnit.count : 0;
+            unsigned cached = lookup == memory->prefetchUnit.head ? memory->prefetchUnit.count : 0;
             unsigned needed = halfwords - cached;
             memory->prefetchUnit.fetchKind = FETCH_PENDING;
             memory->prefetchUnit.busy = true;

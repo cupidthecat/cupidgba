@@ -22,12 +22,18 @@ halfword adds the measured arbitration clock. DMA uses the same fill and
 cancellation paths; it does not replace the CPU's buffered stream with a
 separate cycle estimate. See [DMA and bus ownership](dma.md).
 
-CPU fetch callbacks carry the actual fetch address, including branch pipeline
+CPU fetch callbacks carry the logical fetch address, including branch pipeline
 refills and the discarded IRQ fetch. A matching FIFO entry survives an ARM/Thumb
 width change, including an exception return from BIOS or RAM. An unrelated
 target starts a new stream. An uncached fetch at a 128 KiB ROM
 boundary uses nonsequential timing. WAITCNT changes update access costs and
 track a pending burst restart when prefetch is disabled.
+
+ARM opcode words are read at aligned physical addresses even when interworking
+retains bit 1 in R15. The FIFO compares that aligned CPU word query against its
+halfword cursor, preserving the cursor and the logical stream independently.
+See [CPU instruction addresses](cpu/instruction-addresses.md) for operand and
+observation behavior.
 
 A sequential CPU request can continue a cartridge burst before background
 filling has received an idle bus clock. A branch refill can join an in-flight
@@ -77,8 +83,8 @@ Owned positive and negative cartridges check overwritten failures, missing
 checkpoints and terminal failures without changing ordinary runner behavior.
 
 The mixed-width pair and legacy boundary case additionally require their
-original comparison values at pinned instruction addresses. The failing
-mixed-width case must observe both 0x4C and 0x6A; its passing neighbor requires
+original comparison values at pinned instruction addresses. The mixed-width
+case must observe both 0x4C and 0x6A; its neighbor requires
 0x28, and the legacy boundary requires 0x29. The checker verifies the original
 instruction bytes, CPU mode, opcode, register value and complete observation
 order. An incorrectly calculated branch target can bypass a failure-recording
@@ -97,18 +103,19 @@ the exact 128-observation capacity and invalid arguments. CPU tests retain
 guest state and clocks with observation enabled, including failed ARM
 predicates, branch refills, IRQ arbitration, HALT/STOP, reset and clock wrap.
 
-The current candidate passes sixteen of the seventeen original prefetch
-cartridges on each BIOS path, including all Thumb-only branch groups. The
-remaining Thumb-to-ARM case reads 0x66 where its second comparison requires
-0x6A. It contains a `BX PC` at 0x0800016E; the state-transition alignment and
-timing need further qualification. Its failure remains registered.
+The current candidate passes all seventeen original prefetch cartridges on
+each BIOS path, including all Thumb-only branch groups. The mixed-width case
+containing `BX PC` at 0x0800016E now reaches both original 0x4C and 0x6A
+comparisons with the required values. Retaining the logical PC's bit 1 while
+aligning opcode queries repairs the earlier second-comparison value of 0x66.
+No instruction bytes, expected values or timing constants change.
 
 Both live WAITCNT groups pass on each BIOS path with their original 0xBD
 timer comparison. These are specific enable/disabled sequences, not a complete
 mid-stream write matrix. The binary-only boundary group reads 0x21 instead
 of its encoded 0x29 comparison. Its digest, comparison, pre-display result
 and terminal are retained; missing assembly limits source qualification.
-The expanded prefetch profile passes 36 of 40 runs. Covered boundary examples
+The expanded prefetch profile passes 38 of 40 runs. Covered boundary examples
 do not establish all page phases.
 
 `CUPID_BUS_PAGE_PROBE_ROM` enables a separate fixed CPU/DMA page-boundary
@@ -126,11 +133,11 @@ The firmware timing cases execute the built-in math and copy routines through
 the timed CPU. See [BIOS execution](bios.md) for their coverage. Both complete
 timing checks require all observations to pass.
 
-An additional original IRQ-return cartridge still times out with an external
-BIOS because its wait loop accepts an earlier return address than it expects.
-The FIFO correction preserves matching Thumb entries at the later exception
-return; it does not establish the earlier IRQ sampling point. This failure
-remains unresolved, with the original ROM, comparisons and run budget retained.
+The additional original slow IRQ-return cartridge passes all three original
+comparisons with the external BIOS. CPU-clock IRQ synchronization continues
+through bus waits while DMA holds CPU acceptance. The separate strong IRQ
+corpus retains an unresolved flag comparison; see
+[CPU/DMA/IRQ interactions](cpu/dma-irq-interactions.md).
 
 The full-queue pause/drain/restart and nearby Thumb branch cases above now
 have source-cartridge and native coverage. Other refill phases, broader WAITCNT changes and

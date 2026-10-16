@@ -71,6 +71,20 @@ def main():
             assert 'checkpoint=yes r12=0 result=PASS' in rejected.stdout and 'terminal=yes r12=0 result=PASS' in rejected.stdout
             assert 'observations=2/2 result=FAIL' in rejected.stdout
 
+        # BX PC at a halfword offset: logical ARM +26h, physical opcode +24h.
+        # Preserve the logical PC operand while matching issued byte addresses,
+        # including the checkpoint and terminal with A1 still set.
+        data = bytearray(256)
+        struct.pack_into('<3I', data, 0, 0xE3A0C0A5, 0xE59F1004, 0xE12FFF11)
+        struct.pack_into('<I', data, 0x10, 0x08000023)
+        struct.pack_into('<H', data, 0x22, 0x4778)
+        struct.pack_into('<4I', data, 0x24, 0xE28F0000, 0xE3A0C000, 0xE1A01000, 0xEAFFFFFE)
+        rom.write_bytes(data)
+        misaligned = run(0x0800002C, 0x08000030, [(0x08000028, 0, 0x0800002E), (0x0800002C, 12, 0)])
+        assert misaligned.returncode == 0 and 'observations=2/2 result=PASS' in misaligned.stdout, misaligned.stdout + misaligned.stderr
+        assert 'checkpoint=yes r12=0 result=PASS' in misaligned.stdout and 'terminal=yes r12=0 result=PASS' in misaligned.stdout
+        assert 'pc=08000028 mode=arm opcode=e3a0c000 r0=0800002e' in misaligned.stdout
+
         checkpoint, terminal, probes = image()
         missing = run(checkpoint, terminal, probes + [(0x08000044, 0, 0)])
         assert missing.returncode == 1 and 'observations=2/3 result=MISSING' in missing.stdout

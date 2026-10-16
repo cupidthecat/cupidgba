@@ -15,9 +15,8 @@ struct Trace { struct Observation records[32]; unsigned count; };
 static void observe(const struct CupidARM* cpu, void* context) {
     struct Trace* trace = context;
     CHECK(trace->count < 32);
-    const bool thumb = cpu->executionMode == MODE_THUMB;
     trace->records[trace->count++] = (struct Observation){
-        .address = (uint32_t)cpu->gprs[ARM_PC] - (thumb ? 2u : 4u),
+        .address = cupid_arm_instruction_address(cpu),
         .opcode = cpu->prefetch[0], .r0 = (uint32_t)cpu->gprs[0],
         .clock = cupid_timing_global_time(&cpu->master->timing),
         .mode = cpu->executionMode, .bank = cpu->privilegeMode,
