@@ -54,3 +54,12 @@ remain useful checks of their covered cases. They do not supersede these
 failures. The CPU/bus and DMA acceptance remain open in #10 and #8. See
 [interrupt ownership](../interrupts.md), [DMA](../dma.md) and
 [Game Pak prefetch](../prefetch.md).
+
+CPU-ready sampling, peripheral IF acceptance and CPU register writes use
+separate scheduler phases. A new level accepted on the completing ready edge
+enters the following CPU clock. Queue insertion time cannot change that sample.
+The `gba.irq-clock-ordering` group checks 48 complete waveforms and 384 clocks
+across IWRAM, EWRAM and ROM, both fetch widths and four clock epochs. It queues
+the identical IF deadline before a request and during its wait. IF acceptance,
+HALT availability and the final CPU line must retain their original deadlines
+in both arrangements. The preserved preceding core rejects this regression.

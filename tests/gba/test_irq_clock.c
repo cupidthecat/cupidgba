@@ -244,6 +244,45 @@ static void reset_discards_a_latched_pending_cpu_signal(void) {
     for (unsigned step = 0; step < 8; ++step) { cupid_gba_step(gba); CHECK(!gba->irq.line); }
     destroy(gba);
 }
+struct PreparedIRQ {
+    struct CupidGBA* gba;
+    struct CupidTimingEvent event;
+    uint64_t timestamp;
+};
+static void prepare_irq(struct CupidTiming* timing, void* context, uint32_t late) {
+    (void)timing; (void)late;
+    struct PreparedIRQ* input = context;
+    cupid_raise_irq_at(input->gba, IRQ_TIMER0, input->timestamp);
+}
+static void same_ready_edge_retains_input_order(void) {
+    const struct { uint32_t address; unsigned width, clocks; } cases[] = {
+        {GBA_BASE_IWRAM,2,1}, {GBA_BASE_IWRAM,4,1},
+        {GBA_BASE_EWRAM,2,3}, {GBA_BASE_EWRAM,4,6},
+        {GBA_BASE_ROM0,2,5}, {GBA_BASE_ROM0,4,8}
+    };
+    for (unsigned epoch = 0; epoch < 4; ++epoch) for (unsigned i = 0; i < 6; ++i)
+    for (unsigned deferred = 0; deferred < 2; ++deferred) {
+        struct CupidGBA* gba = machine(origins[epoch], 0);
+        struct History history; history_start(&history,gba,cases[i].clocks + 4);
+        struct PreparedIRQ input = {.gba=gba,.timestamp=origins[epoch]+cases[i].clocks-1};
+        if (deferred) {
+            input.event = (struct CupidTimingEvent){.context=&input,.callback=prepare_irq,
+                .priority=0,.name="Deferred IRQ preparation"};
+            cupid_timing_schedule(&gba->timing,&input.event,1);
+        } else cupid_raise_irq_at(gba,IRQ_TIMER0,input.timestamp);
+        /* Both preparations accept IF on the final ready edge. Queue creation
+         * time cannot move that new level into the already completing sample. */
+        fetch(gba,cases[i].address,cases[i].width); finish_history(&history);
+        for (unsigned sample = 0; sample < history.count; ++sample) {
+            unsigned clock = sample + 1;
+            CHECK(history.samples[sample].flags == (clock >= cases[i].clocks ? IRQ_TIMER0 : 0));
+            CHECK(history.samples[sample].available == (clock >= cases[i].clocks + 1));
+            CHECK(history.samples[sample].line == (clock >= cases[i].clocks + 2));
+        }
+        destroy(gba);
+    }
+}
+
 int cupid_test_irq_source_probe(int argc, char** argv);
 void cupid_test_irq_source_observer(void);
 int main(int argc, char** argv) {
@@ -253,6 +292,7 @@ int main(int argc, char** argv) {
     else if (!strcmp(argv[1], "pulses")) RUN(unclocked_pulses_and_latched_stage_ownership);
     else if (!strcmp(argv[1], "dma")) RUN(dma_waits_freeze_sampling_but_internal_cycles_run);
     else if (!strcmp(argv[1], "reset")) RUN(reset_discards_a_latched_pending_cpu_signal);
+    else if (!strcmp(argv[1], "ordering")) RUN(same_ready_edge_retains_input_order);
     else if (!strcmp(argv[1], "observer")) cupid_test_irq_source_observer();
     else CHECK(false);
     printf("Verified %u complete waveform clocks\n", waveformClocks);

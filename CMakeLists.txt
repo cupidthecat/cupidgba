@@ -231,7 +231,7 @@ if(BUILD_TESTING)
 
     add_executable(test_irq_clock tests/gba/test_irq_clock.c tests/arm/irq_probe.c)
     target_link_libraries(test_irq_clock PRIVATE cupid_core)
-    foreach(group waits pulses dma reset observer)
+    foreach(group waits pulses dma reset observer ordering)
         add_test(NAME gba.irq-clock-${group} COMMAND test_irq_clock ${group})
         set_tests_properties(gba.irq-clock-${group} PROPERTIES TIMEOUT 10)
     endforeach()
