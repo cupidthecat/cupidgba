@@ -48,7 +48,7 @@ static void update_outputs(struct CupidSerial* serial) {
         if (owner && (!serial->active || serial->clockHigh)) levels |= SERIAL_SC;
         if (serial->active ? serial->outputHigh : (serial->control & 8) != 0) levels |= SERIAL_SO;
     } else if (mode == SERIAL_JOY) {
-        /* Idle clock terminals; no JOY bus transaction engine is attached. */
+        /* Command peers exchange whole frames without generating pin edges. */
         mask = SERIAL_SC | SERIAL_SD;
     }
     if (mask == serial->outputMask && levels == serial->outputLevels) return;
