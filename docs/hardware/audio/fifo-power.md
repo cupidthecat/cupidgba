@@ -10,7 +10,16 @@ A transition from enabled to disabled discards queued words in both channels.
 Writing the enabled value again preserves the queue. The current implementation
 keeps the staged word and held output separate from the queued storage. Its
 phase through a power transition remains a hardware qualification limit.
-The change does not alter the existing timer, mixer or DMA clock model.
+Timer periods, mixer deadlines and DMA bus-phase durations retain their
+existing values.
+
+On each timer overflow, an empty staged word takes the oldest queued word
+before the FIFO decides whether to request DMA. Three or fewer words remaining
+in queued storage request a refill through the existing two-clock activation
+path. An occupied stage keeps its current bytes and does not consume another
+word. This ordering lets the word load itself cross the refill threshold.
+DMA still transfers four words, retains its programmed source progress and
+publishes each destination write at its existing bus deadline.
 
 ## Regression coverage
 
@@ -29,6 +38,15 @@ The five `gba.fifo-power-*` groups require 160 owned observations:
 The clock anchors include signed and unsigned 32-bit wrap and a later epoch.
 Each group keeps its ten-second deadline. All five groups fail against the
 preceding core without changing their assertions.
+
+The three `gba.fifo-refill-*` groups add 1,248 complete cases. They cover all
+eight queued-word levels and four reachable staged-byte counts, both FIFOs,
+both sound DMA channels, both timers and four clock anchors. Other cases
+retain each of four DMA publications, signed sample order, completion IRQs,
+an independent running timer, bulk versus single-clock dispatch, master power,
+timer selection, disabled or non-FIFO timing and destination ownership.
+The level and chronology groups fail with the preceding audio implementation;
+the inactive-source controls pass with either implementation.
 
 `CUPID_FIFO_PROBE_DIR` enables nine original local FIFO/DMA cartridges.
 `CUPID_TEST_BIOS` repeats them with an external image. The manifest pins each
@@ -67,8 +85,10 @@ path alongside the original `CUPID_FIFO_PROBE_DIR`. Both BIOS selections retain
 the same frame, instruction and process guards. The source case remains a
 timing failure; the current model reads `0x62` at its first `0x68` comparison.
 
-The current main-based candidate passes six of eighteen cartridge runs.
-The base, prefetch, IRQ, threshold, IRQ-latch and one disable group still fail
+The current candidate passes eight of eighteen bundled cartridge runs.
+The IRQ cartridge requires and receives `0x008000AF` at its original comparison
+on both BIOS paths; the preceding implementation reads `0x008000AE` there.
+The base, prefetch, threshold, IRQ-latch and one disable group still fail
 on both BIOS paths. Original inputs, comparisons and budgets are retained,
 and all failures remain registered when the profile is enabled. The base
 cartridge still fails in its second timing case after the power correction.

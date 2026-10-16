@@ -6,8 +6,15 @@ DMA and queued-word disposal. Each keeps a ten-second deadline. The optional
 `CUPID_FIFO_PROBE_DIR` points to a local directory containing the nine pinned
 FIFO/DMA cartridges. `CUPID_TEST_BIOS` repeats all nine with that image. Both the
 original pre-display result and terminal must pass. The current main-based
-profile passes six of eighteen runs; its twelve failures remain enabled and
+profile passes eight of eighteen runs; its ten bundled failures remain enabled and
 unresolved. See [FIFO power](../hardware/audio/fifo-power.md).
+
+The three `gba.fifo-refill-*` groups retain 1,248 complete level, chronology and
+selection cases under ten-second deadlines. Timer consumption loads the staged
+word before testing the remaining queue for a DMA refill. Two groups reject
+the preceding order; inactive-source controls pass with either order. The
+unchanged original IRQ cartridge now reaches its `0x008000AF` comparison and
+passes both result boundaries on each BIOS path. Other FIFO timing gaps remain.
 
 `CUPID_FIFO_SOURCE_ROM` adds the separately rebuilt base cartridge with either
 BIOS path. The original source includes a second timer comparison missing from

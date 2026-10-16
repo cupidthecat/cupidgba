@@ -636,7 +636,20 @@ void cupid_audio_sample_fifo(struct CupidAudio* audio, int fifoId, uint64_t time
         fifoSize = GBA_AUDIO_FIFO_SIZE - channel->fifoRead + channel->fifoWrite;
     }
 
-    /** Request DMA refill if running low. */
+    /** Pop next 32-bit word into internal buffer if empty. */
+    if (channel->internalRemaining == 0) {
+        if (fifoSize > 0) {
+            channel->internalSample = channel->fifo[channel->fifoRead];
+            channel->internalRemaining = 4;
+            channel->fifoRead = (channel->fifoRead + 1) % GBA_AUDIO_FIFO_SIZE;
+            --fifoSize;
+            _audioDebugLog(audio, "fifo%d pop word=0x%08X remainingWords=%d", fifoId,
+                channel->internalSample, fifoSize);
+        }
+    }
+
+    /** Request DMA refill if running low. The timer's word load updates the
+     * queue level before this request; the staged bytes remain independent. */
     if ((GBA_AUDIO_FIFO_SIZE - fifoSize) > 4 && channel->dmaSource > 0) {
         struct CupidGBA* gba = audio->gba;
         int dmaCh = channel->dmaSource;
@@ -647,17 +660,6 @@ void cupid_audio_sample_fifo(struct CupidAudio* audio, int fifoId, uint64_t time
                 uint32_t destination = GBA_BASE_IO + (fifoId ? REG_FIFO_B_LO : REG_FIFO_A_LO);
                 if (dma->nextDest == destination) cupid_dma_request_fifo(gba, dmaCh, timestamp);
             }
-        }
-    }
-
-    /** Pop next 32-bit word into internal buffer if empty. */
-    if (channel->internalRemaining == 0) {
-        if (fifoSize > 0) {
-            channel->internalSample = channel->fifo[channel->fifoRead];
-            channel->internalRemaining = 4;
-            channel->fifoRead = (channel->fifoRead + 1) % GBA_AUDIO_FIFO_SIZE;
-            _audioDebugLog(audio, "fifo%d pop word=0x%08X remainingWords=%d", fifoId,
-                channel->internalSample, fifoSize - 1);
         }
     }
 

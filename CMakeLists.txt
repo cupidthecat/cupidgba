@@ -162,6 +162,13 @@ if(BUILD_TESTING)
         set_tests_properties(gba.fifo-power-${group} PROPERTIES TIMEOUT 10)
     endforeach()
 
+    add_executable(test_fifo_refill tests/gba/audio/test_fifo_refill.c)
+    target_link_libraries(test_fifo_refill PRIVATE cupid_core)
+    foreach(group levels chronology selection)
+        add_test(NAME gba.fifo-refill-${group} COMMAND test_fifo_refill ${group})
+        set_tests_properties(gba.fifo-refill-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
     if(CUPID_FIFO_PROBE_DIR)
         foreach(case base prefetch irq threshold overflow irq-latch disable-3 disable-4 disable-5)
             add_test(NAME rom.fifo-${case} COMMAND ${Python3_EXECUTABLE}
