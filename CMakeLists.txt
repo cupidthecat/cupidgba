@@ -96,7 +96,8 @@ if(BUILD_TESTING)
 
     add_executable(test_undefined tests/arm/test_undefined.c)
     target_link_libraries(test_undefined PRIVATE cupid_core)
-    foreach(group timed untimed state conditions phase dma)
+    foreach(group timed untimed state conditions phase dma
+                  bkpt-encodings bkpt-timed bkpt-untimed bkpt-hooks bkpt-events)
         add_test(NAME arm.undefined-${group} COMMAND test_undefined ${group})
         set_tests_properties(arm.undefined-${group} PROPERTIES TIMEOUT 10)
     endforeach()
