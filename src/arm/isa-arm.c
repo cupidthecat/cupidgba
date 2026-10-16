@@ -743,13 +743,19 @@ DEFINE_INSTRUCTION_ARM(BX,
 
 /** @name PSR Transfer */
 
+/* User and System modes have no saved-status bank. Their SPSR read alias is
+ * the live CPSR; writing that alias must not change CPSR or an exception bank. */
+static inline bool _hasSavedStatusBank(const struct CupidARM* cpu) {
+	return cpu->privilegeMode != MODE_USR && cpu->privilegeMode != MODE_SYS;
+}
+
 DEFINE_INSTRUCTION_ARM(MRS,
 	int rd = (opcode >> 12) & 0xF;
 	CupidWriteRegister(cpu, rd, cpu->cpsr.packed);)
 
 DEFINE_INSTRUCTION_ARM(MRSR,
 	int rd = (opcode >> 12) & 0xF;
-	CupidWriteRegister(cpu, rd, cpu->spsr.packed);)
+	CupidWriteRegister(cpu, rd, _hasSavedStatusBank(cpu) ? cpu->spsr.packed : cpu->cpsr.packed);)
 
 DEFINE_INSTRUCTION_ARM(MSR,
 	int c = opcode & 0x00010000;
@@ -782,7 +788,9 @@ DEFINE_INSTRUCTION_ARM(MSRR,
 	int32_t operand = CupidReadRegister(cpu, opcode & 0xF);
 	int32_t mask = (c ? 0x000000FF : 0) | (f ? 0xFF000000 : 0);
 	mask &= PSR_USER_MASK | PSR_PRIV_MASK | PSR_STATE_MASK;
-	cpu->spsr.packed = (cpu->spsr.packed & ~mask) | (operand & mask) | 0x00000010;)
+	if (_hasSavedStatusBank(cpu)) {
+		cpu->spsr.packed = (cpu->spsr.packed & ~mask) | (operand & mask) | 0x00000010;
+	})
 
 /** MSR immediate variants (used in immediate ALU block rows 0x32, 0x36) */
 DEFINE_INSTRUCTION_ARM(MSRI,
@@ -818,7 +826,9 @@ DEFINE_INSTRUCTION_ARM(MSRRI,
 	int32_t operand = cpu->shifterOperand;
 	int32_t mask = (c ? 0x000000FF : 0) | (f ? 0xFF000000 : 0);
 	mask &= PSR_USER_MASK | PSR_PRIV_MASK | PSR_STATE_MASK;
-	cpu->spsr.packed = (cpu->spsr.packed & ~mask) | (operand & mask) | 0x00000010;)
+	if (_hasSavedStatusBank(cpu)) {
+		cpu->spsr.packed = (cpu->spsr.packed & ~mask) | (operand & mask) | 0x00000010;
+	})
 
 /** @name Coprocessor Register Transfers */
 
