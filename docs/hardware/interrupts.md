@@ -73,8 +73,11 @@ real DMA transfers, multiply internal-cycle overlap and reset. Memory regions,
 both fetch widths, wait controls and four clock anchors retain their existing
 transfer durations. The preceding core fails all four groups. Four original
 external-firmware load, branch and store cartridges now reach their encoded
-IRQ return addresses; two HALT/timer cases and the built-in startup cases
-remain unresolved. See [CPU/DMA/IRQ interactions](cpu/dma-irq-interactions.md).
+IRQ return addresses. The CPU-only parent retains two HALT/timer failures.
+The combined pixel-pipeline draft repairs the external HALT/OAM case; the
+separate DMA/HALT timer comparison and built-in startup cases remain unresolved.
+See [CPU/DMA/IRQ interactions](cpu/dma-irq-interactions.md) and
+[display bus waits](cpu/display-irq.md).
 
 The additional observer group rejects skipped comparisons, wrong opcodes or
 modes and missing visits in owned ARM/Thumb streams that still report zero.

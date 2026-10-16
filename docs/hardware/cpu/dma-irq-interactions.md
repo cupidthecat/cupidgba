@@ -12,14 +12,22 @@ instructions. It checks the mode and encoded opcode as well as the register
 value. Both the pre-display R12 result and original terminal must report zero.
 The original input bytes, comparisons and execution guards remain unchanged.
 
-The current candidate passes sixteen of the thirty-two runs: fourteen with the
-external BIOS and two with built-in firmware. Sixteen runs fail. Four external
+The CPU-only parent passes sixteen of the thirty-two runs: fourteen with the
+external BIOS and two with built-in firmware. Four external
 cases now match their encoded IRQ return addresses: the ordinary load, branch
 and two store cases. Two external HALT
 cases reach the correct return address but read timer values `0x88` versus
 `0x87`, and `0xDC` versus `0xDD`. These are unresolved failures. The built-in
 results additionally depend on initial display phase; they do not qualify
 that phase or justify changing a fixed startup offset.
+
+With the pixel pipeline and display-bus owner integrated, the external
+HALT/OAM case also passes its original `0x74` return-address and `0xDD` timer
+comparisons, pre-display result and terminal. This combined draft passes
+seventeen of the thirty-two runs, including fifteen externally. The separate
+`0x88` versus `0x87` DMA/HALT timer comparison and fourteen built-in runs remain
+failures. See [display bus waits](display-irq.md) for the shared request owner
+and its CPU-ready waveform coverage.
 
 The CPU samples its synchronized IRQ input at instruction boundaries. Its
 synchronizer keeps two CPU-clock stages after register acceptance. DMA bus
