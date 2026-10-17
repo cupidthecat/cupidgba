@@ -145,9 +145,23 @@ photographs and scaled images provide visual comparisons, not raw framebuffer
 hashes. The complete CPU/bus, BIOS math, DMA, timer/IRQ and status suites remain
 required alongside these checks.
 
-The exact BG reference-DMA column and the first few pixels after display-latch
-changes still differ between diagnostic implementations and need targeted
-hardware qualification. Color regressions check fractional vectors, all raw-color
+Reference writes retain independently written axes and become the next line's
+affine origin. PA/PC writes affect future fetch steps; PB/PD writes participate
+in the line step at its actual deadline. Display-enable latches materialize
+earlier fetch clocks before publishing their new value. These are the selected
+logical rules. They are implemented without retroactive pixel fetches.
+
+Eight raster groups retain 396 owned scenes: eleven reference, matrix and
+display operations at eighteen clock positions with two texture periods.
+They check complete expected geometry and bulk/one-clock dispatch equality
+across 792 frames and 30,412,800 monochrome endpoint pixels. The asymmetric
+period-seven texture prevents a two-pixel shift from hiding in a checkerboard.
+Expected frames include the first activation pixels, writes around clock 40,
+fetch/merge boundaries, HBlank and line end. These are geometry and logical
+phase checks; channel expansion remains covered by the separate color tests.
+
+Broader BG reference-DMA sequences and the exact physical column in the supplied
+photographs remain unmeasured. Color regressions check fractional vectors, all raw-color
 endpoints, coefficient saturation and red/blue symmetry. Scanout tests retain
 the extra green bit through direct bitmap, background palette, backdrop and
 semi-transparent OBJ inputs. These qualify the implemented numerical model;

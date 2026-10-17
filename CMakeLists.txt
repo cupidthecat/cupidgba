@@ -598,6 +598,13 @@ if(BUILD_TESTING)
     add_test(NAME gba.render COMMAND test_render)
     set_tests_properties(gba.render PROPERTIES TIMEOUT 10)
 
+    add_executable(test_raster tests/gba/test_raster.c)
+    target_link_libraries(test_raster PRIVATE cupid_core)
+    foreach(group RANGE 0 7)
+        add_test(NAME gba.raster-frame-${group} COMMAND test_raster ${group})
+        set_tests_properties(gba.raster-frame-${group} PROPERTIES TIMEOUT 30)
+    endforeach()
+
     add_executable(test_object_shape tests/gba/test_object_shape.c)
     target_link_libraries(test_object_shape PRIVATE cupid_core)
     foreach(mode normal alpha window hidden)
