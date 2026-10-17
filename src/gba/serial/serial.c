@@ -56,9 +56,10 @@ void cupid_serial_refresh_pins(struct CupidSerial* serial) {
         if (serial->uart.outputHigh) levels |= SERIAL_SO;
         if (!cupid_serial_uart_ready(serial)) levels |= SERIAL_SD;
     }
-    if (mask == serial->outputMask && levels == serial->outputLevels) return;
+    if (mask == serial->outputMask && levels == serial->outputLevels && mode == serial->outputMode) return;
     serial->outputMask = mask;
     serial->outputLevels = levels;
+    serial->outputMode = mode;
     if (serial->outputChanged) {
         serial->outputChanged(serial->outputContext, mask, levels,
                              cupid_timing_global_time(&serial->gba->timing));
@@ -66,10 +67,12 @@ void cupid_serial_refresh_pins(struct CupidSerial* serial) {
 }
 
 static void cancel_transfer(struct CupidSerial* serial) {
+    bool multiplayer = serial->active && serial->transferMode == SERIAL_MULTI;
     cupid_timing_deschedule(&serial->gba->timing, &serial->edgeEvent);
     serial->active = false;
     serial->remaining = 0;
     serial->clockHigh = true;
+    if (multiplayer && serial->multiplayerCancelled) serial->multiplayerCancelled(serial->multiplayerContext);
 }
 
 static void finish_transfer(struct CupidSerial* serial) {
@@ -281,7 +284,9 @@ uint16_t cupid_serial_read(struct CupidSerial* serial, uint32_t address) {
     case REG_SIOCNT:
         switch ((serial->control >> 12) & 3) {
         case SERIAL_MULTI:
-            return (serial->control & 0x7F83) | 8 | (serial->multiplayerId << 4) |
+            return (serial->control & 0x7F83) |
+                ((!serial->multiplayerReady || serial->multiplayerReady(serial->multiplayerContext)) ? 8 : 0) |
+                (serial->multiplayerId << 4) |
                 ((serial->multiplayerId || !serial->multiplayerPlayers) ? 4 : 0) |
                 (serial->multiplayerError ? 0x40 : 0);
         case SERIAL_UART: return cupid_serial_uart_status(serial);

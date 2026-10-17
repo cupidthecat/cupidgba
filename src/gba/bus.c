@@ -6,8 +6,10 @@ void cupid_bus_wait(struct CupidARM* cpu) {
     cpu->irqh.processEvents(cpu);
     cupid_dma_kick(gba, cupid_timing_global_time(&gba->timing));
     while (gba->memory.dmaRunning && !gba->memory.busLocked) {
+        gba->timing.waitingForEvent = true;
         cpu->cycles = cpu->nextEvent;
         cpu->irqh.processEvents(cpu);
+        gba->timing.waitingForEvent = false;
     }
 }
 
