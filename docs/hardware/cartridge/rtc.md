@@ -19,8 +19,11 @@ CPU and DMA word data accesses, and ARM opcode fetches that start a Game Pak
 access, use two halfword strobes. The first port is
 sampled or written before the second strobe, with scheduler events running
 between them. DMA uses the cartridge burst counter to select the physical
-port. Byte stores currently leave the port unchanged. That byte policy and
-the alias decoder still need direct hardware qualification.
+port. Byte stores repeat the byte on both lanes of one aligned halfword
+strobe, including odd byte addresses, and retain the ordinary cartridge wait.
+Byte reads select the addressed lane; GPIO data is in the low byte. This is
+the selected bus model. Its electrical lane behavior and the alias decoder
+remain unmeasured.
 
 The RTC accepts control, date, time and interrupt-parameter transactions over clock, serial-data
 and chip-select pins. Command and payload bits are sampled on rising clock
@@ -273,6 +276,23 @@ firmware paths run these groups, including missing-device, deliberately wrong
 expectation and year-carry controls. The original 32 cartridge variants and
 their expected records remain byte-identical.
 
+Byte-access drivers use STRB/LDRB through ARM and Thumb in all three ROM
+windows. Both store-address lanes cover ordinary and continued frames, with
+the same calendar tables, complete response comparisons, passing terminals
+and execution guards. Sixteen groups across both firmware paths require
+12,288 complete records and 48 year-carry trials, totalling 222,384 returned
+bytes for valid devices. Missing-device and changed-expectation controls retain
+their complete output and exact mismatch counts. All 64 earlier halfword/word
+cartridges and their expected records remain byte-identical.
+
+Two native byte groups require 1,536 complete value/direction/control frames
+and 576 timed strobe cases. These retain ROM/save isolation, absent devices,
+unused addresses, every wait setting, both address lanes, sequential access,
+prefetch enablement, timer/IRQ progress and clock wrap. Events immediately
+before and at the data deadline see the old output; the next clock sees the
+new output. The preceding core fails both native controls and the complete
+byte-driven calendar transfers.
+
 Native tests cover calendar correction and rollover, wire commands, complete
 responses, directions, ARM/Thumb instruction accesses, ROM preservation,
 CPU/DMA word endpoints, burst addressing, reset and battery persistence.
@@ -338,11 +358,27 @@ strobes retain the original deadline through late dispatch and clock wrap;
 live STOP and console reset preserve the window. Version 3 roundtrips it with
 output enabled or disabled, rejects impossible windows and preserves legacy
 semantics without replaying powered-off requests. Time writes during an active
-output still need further qualification.
+output use the same complete-frame commit and divider reset. They preserve a
+held minute/alarm latch; frequency output is recomputed at the reset divider,
+and an alarm can latch when the new time matches. The native
+`gba.rtc-active-transactions` group checks 1,968 complete and aborted calendar
+frames across all four output modes, both initial levels and clock wrap.
+It verifies each partial prefix, the final rising edge, output state and the
+next deadline. These checks establish the selected logical policy; physical
+partial-register and active-write phase effects remain unmeasured.
+
+The parameter register accepts sixteen bits, then ignores further clocks until
+chip select is released. The same native group checks 3,120 word/overrun/restart
+cases for both command directions, four complete words, frequency output on
+or off and up to 64 extra clocks containing command-shaped data. Selecting the
+device again must accept a new complete word. This bounded transaction policy
+does not establish electrical behavior beyond an ordinary word.
 
 The power detector exposes an explicit sample input: a failure latches the
 flag and stops sampling; reading control rearms it. Voltage thresholds and
 physical sampling phases are not scheduled. Mid-stream WAITCNT changes,
 full-buffer restart and page-boundary timing still need hardware qualification.
-Partial writes, electrical contention, floating inputs and invalid wire
-timing also need further work. Issue #28 remains open for these gaps.
+Electrical contention, floating inputs, invalid wire timing and physical
+partial-register effects remain unqualified. The complete-frame, fixed-word
+and ordinary bus policies above provide deterministic behavior for these
+source-selected boundaries.

@@ -75,7 +75,7 @@ def cases(rollover=False):
     return table, expected
 
 
-def cartridge(thumb, width, bank, present=True, wrong_expected=False, rollover=False, continued=False):
+def cartridge(thumb, width, bank, present=True, wrong_expected=False, rollover=False, continued=False, lane=0):
     code = ContinuedThumbDriver(thumb) if continued and thumb else Driver(thumb)
     table, expected = cases(rollover)
     rows = 1 if rollover else 256
@@ -84,7 +84,7 @@ def cartridge(thumb, width, bank, present=True, wrong_expected=False, rollover=F
         # still completes all transfers and must record exactly 256 failures.
         for row in range(rows):
             table[row * 29 + 8] ^= 1
-    gpio = 0x080000C4 + bank * 0x02000000
+    gpio = 0x080000C4 + bank * 0x02000000 + (lane if width == 1 else 0)
     code.load(0, gpio)
     code.load(4, 0x08001000)
     code.load(5, 0x02000020)
@@ -98,12 +98,23 @@ def cartridge(thumb, width, bank, present=True, wrong_expected=False, rollover=F
         else:
             code.load(register, value)
 
-    def store_half(value, offset):
+    def store_register(value, offset):
         immediate(1, value)
-        code.emit((0x8001 | offset // 2 << 6) if thumb else (0xE1C010B0 | offset))
+        if width == 1:
+            code.emit((0x7001 | offset << 6) if thumb else (0xE5C01000 | offset))
+        else:
+            code.emit((0x8001 | offset // 2 << 6) if thumb else (0xE1C010B0 | offset))
+
+    def port_instruction(register, load=False):
+        if thumb:
+            opcode = {1: (0x7000, 0x7800), 2: (0x8000, 0x8800), 4: (0x6000, 0x6800)}[width][load]
+            return opcode | register
+        opcode = {1: (0xE5C00000, 0xE5D00000), 2: (0xE1C000B0, 0xE1D000B0),
+                  4: (0xE5800000, 0xE5900000)}[width][load]
+        return opcode | register << 12
 
     def direction(mask):
-        store_half(mask, 2)
+        store_register(mask, 2)
         if width == 4:
             code.load(3, mask << 16)
             code.emit(0x4698 if thumb else 0xE1A08003)
@@ -112,7 +123,7 @@ def cartridge(thumb, width, bank, present=True, wrong_expected=False, rollover=F
         immediate(1, value)
         if width == 4:
             code.emit(0x4441 if thumb else 0xE1811008)  # Add the retained direction halfword.
-        code.emit((0x6001 if thumb else 0xE5801000) if width == 4 else (0x8001 if thumb else 0xE1C010B0))
+        code.emit(port_instruction(1))
 
     def next_byte(register):
         if thumb:
@@ -153,7 +164,7 @@ def cartridge(thumb, width, bank, present=True, wrong_expected=False, rollover=F
             code.emit(0x3701 if thumb else 0xE2877001)
             code.label(name)
 
-    store_half(1, 4)
+    store_register(1, 4)
     code.label('row')
     command(0x46)
     send()  # Control: 12/24-hour mode, with interrupt outputs disabled.
@@ -201,7 +212,7 @@ def cartridge(thumb, width, bank, present=True, wrong_expected=False, rollover=F
     code.emit(0x6087 if thumb else 0xE5807008)
     code.emit(0x60C5 if thumb else 0xE580500C)
     code.emit(0x6104 if thumb else 0xE5804010)
-    immediate(1, (bank << 16) | (width << 8) | thumb)
+    immediate(1, (lane << 24) | (bank << 16) | (width << 8) | thumb)
     code.emit(0x6141 if thumb else 0xE5801014)
     code.emit(0x46BC if thumb else 0xE1A0C007)
     code.load(0, 0x08000110)
@@ -212,9 +223,9 @@ def cartridge(thumb, width, bank, present=True, wrong_expected=False, rollover=F
         code.emit(op)
     if width == 4:
         code.emit(0x4443 if thumb else 0xE1833008)
-    code.emit((0x6003 if thumb else 0xE5803000) if width == 4 else (0x8003 if thumb else 0xE1C030B0))
+    code.emit(port_instruction(3))
     code.emit(0x3301 if thumb else 0xE2833001)
-    code.emit((0x6003 if thumb else 0xE5803000) if width == 4 else (0x8003 if thumb else 0xE1C030B0))
+    code.emit(port_instruction(3))
     code.emit(0x0849 if thumb else 0xE1A010A1)
     code.emit(0x3A01 if thumb else 0xE2522001)
     code.branch('send-bit', 1)
@@ -226,8 +237,14 @@ def cartridge(thumb, width, bank, present=True, wrong_expected=False, rollover=F
     immediate(3, 4)
     if width == 4:
         code.emit(0x4443 if thumb else 0xE1833008)
-    code.emit((0x6003 if thumb else 0xE5803000) if width == 4 else (0x8003 if thumb else 0xE1C030B0))
-    code.emit((0x6803 if thumb else 0xE5903000) if width == 4 else (0x8803 if thumb else 0xE1D030B0))
+    code.emit(port_instruction(3))
+    # Either byte address writes the aligned port. Read the low byte explicitly
+    # so the odd-address driver does not mistake the unused high byte for SIO.
+    if width == 1 and lane:
+        code.emit(0x3801 if thumb else 0xE2400001)
+    code.emit(port_instruction(3, True))
+    if width == 1 and lane:
+        code.emit(0x3001 if thumb else 0xE2800001)
     if thumb:
         for op in (0x079B, 0x0FDB, 0x01DB, 0x0849, 0x4319):
             code.emit(op)
@@ -237,7 +254,7 @@ def cartridge(thumb, width, bank, present=True, wrong_expected=False, rollover=F
     immediate(3, 5)
     if width == 4:
         code.emit(0x4443 if thumb else 0xE1833008)
-    code.emit((0x6003 if thumb else 0xE5803000) if width == 4 else (0x8003 if thumb else 0xE1C030B0))
+    code.emit(port_instruction(3))
     code.emit(0x3A01 if thumb else 0xE2522001)
     code.branch('read-bit', 1)
     code.emit(0x4770 if thumb else 0xE12FFF1E)
@@ -260,9 +277,12 @@ def main():
     parser.add_argument('--runner', required=True)
     parser.add_argument('--bios')
     parser.add_argument('--mode', choices=('arm', 'thumb'), required=True)
-    parser.add_argument('--width', type=int, choices=(2, 4), required=True)
+    parser.add_argument('--width', type=int, choices=(1, 2, 4), required=True)
+    parser.add_argument('--lane', type=int, choices=(0, 1), default=0, help='Byte-store address lane; reads use the low byte')
     parser.add_argument('--continued', action='store_true', help='Write two complete payloads without releasing chip select')
     args = parser.parse_args()
+    if args.lane and args.width != 1:
+        parser.error('--lane requires byte accesses')
     thumb = args.mode == 'thumb'
     with tempfile.TemporaryDirectory(prefix='cupidgba-rtc-calendar-') as directory:
         root = Path(directory)
@@ -270,7 +290,7 @@ def main():
         configurations += [(0, False, False, False), (0, True, True, False)]
         configurations += [(b, True, False, True) for b in range(3)]
         for bank, present, wrong, rollover in configurations:
-            image, expected = cartridge(thumb, args.width, bank, present, wrong, rollover, args.continued)
+            image, expected = cartridge(thumb, args.width, bank, present, wrong, rollover, args.continued, args.lane)
             rows = 1 if rollover else 256
             rom, ram = root / 'owned.gba', root / 'record.bin'
             rom.write_bytes(image)
@@ -285,7 +305,8 @@ def main():
                 raise SystemExit('Calendar driver failed its complete terminal: ' + result.stdout + result.stderr)
             record = ram.read_bytes()
             header = (0x43544331, rows, failures, 0x02000020 + len(expected),
-                      0x08001000 + rows * 29 + (7 if rollover else 0), (bank << 16) | (args.width << 8) | thumb)
+                      0x08001000 + rows * 29 + (7 if rollover else 0),
+                      (args.lane << 24) | (bank << 16) | (args.width << 8) | thumb)
             if len(record) != 0x40000 or struct.unpack_from('<6I', record) != header:
                 raise SystemExit('Incomplete calendar driver counts or pointers')
             actual = record[0x20:0x20 + len(expected)]
@@ -298,6 +319,7 @@ def main():
             print(f'PASS {args.mode} width={args.width} bank={bank} present={present} wrong_expected={wrong}: '
                   f'{rows} complete date/time records, {len(expected)} serial bytes, {failures} expected failures'
                   + ('; complete one-second year rollover' if rollover else '')
+                  + (f'; byte store lane={args.lane}' if args.width == 1 else '')
                   + ('; continued calendar frames' if args.continued else ''))
 
 

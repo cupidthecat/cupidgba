@@ -1,5 +1,20 @@
 # Testing
 
+The two `gba.gpio-byte-*` groups cover 1,536 complete port frames and 576
+strobe/wait/timer/IRQ cases. The `rom.rtc-calendar-byte-*` groups retain the
+complete calendar matrix, carry trials and negative controls through actual
+ARM/Thumb byte instructions, both store-address lanes and both firmware paths.
+The earlier halfword/word inputs and expectations remain byte-identical.
+Native checks retain ten-second deadlines; guest groups retain thirty-second
+deadlines and their original frame/step/process guards. See
+[cartridge GPIO](../hardware/cartridge/rtc.md) for behavior and limits.
+
+`gba.rtc-active-transactions` checks 1,968 active/inactive calendar frame and
+abort cases plus 3,120 parameter-word overrun/restart cases. Its ten-second
+deadline covers complete output/deadline comparisons across clock wrap.
+These checks cover the selected logical policy and leave physical serial
+propagation and partial-register effects unqualified.
+
 Local-session checks are `gba.cable-*` and `platform.local-*`. They cover
 complete paired guest bytes and words, multiplayer receive slots, bus/event
 coordination, cancellation, STOP, SDL input/video/audio and independent battery

@@ -943,7 +943,15 @@ void cupid_memory_store8(struct CupidARM* cpu, uint32_t address, int8_t value, i
         /** Cannot Store8 to OAM. */
         break;
     case GBA_REGION_ROM0:
-        /* Byte stores do not strobe the cartridge GPIO registers. */
+    case GBA_REGION_ROM0_EX:
+    case GBA_REGION_ROM1:
+    case GBA_REGION_ROM1_EX:
+    case GBA_REGION_ROM2:
+    case GBA_REGION_ROM2_EX:
+        /* The 16-bit cartridge bus repeats a byte on both lanes. GPIO sees
+         * the aligned halfword strobe after the ordinary bus wait. */
+        cupid_cartridge_gpio_write(gba, address & ~1u, (uint16_t)((uint8_t)value * 0x0101u));
+        wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
         break;
     case GBA_REGION_SRAM:
     case GBA_REGION_SRAM_MIRROR:
