@@ -12,22 +12,29 @@ instructions. It checks the mode and encoded opcode as well as the register
 value. Both the pre-display R12 result and original terminal must report zero.
 The original input bytes, comparisons and execution guards remain unchanged.
 
-The CPU-only parent passes sixteen of the thirty-two runs: fourteen with the
-external BIOS and two with built-in firmware. Four external
-cases now match their encoded IRQ return addresses: the ordinary load, branch
-and two store cases. Two external HALT
-cases reach the correct return address but read timer values `0x88` versus
-`0x87`, and `0xDC` versus `0xDD`. These are unresolved failures. The built-in
-results additionally depend on initial display phase; they do not qualify
-that phase or justify changing a fixed startup offset.
+The selected fast entry aligns its display line position with full firmware
+boot at first cartridge issue; see [reset entry](../bios/reset-entry.md). The
+previous early display phase explains the formerly built-in-only failures
+across internal-cycle, branch, store and DMA pause/preemption cases. This is an
+initial-state correction, with no additional IRQ latency or bus timing credit.
+The independent startup waveform groups retain the complete status, request
+and frame-counter chronology through two frame periods and clock wrap.
 
-With the pixel pipeline and display-bus owner integrated, the external
-HALT/OAM case also passes its original `0x74` return-address and `0xDD` timer
-comparisons, pre-display result and terminal. This combined draft passes
-seventeen of the thirty-two runs, including fifteen externally. The separate
-`0x88` versus `0x87` DMA/HALT timer comparison and fourteen built-in runs remain
-failures. See [display bus waits](display-irq.md) for the shared request owner
-and its CPU-ready waveform coverage.
+The ordinary HALT/DMA case still reaches its encoded return address but reads
+`0x88` instead of `0x87` with either firmware path. The OAM variant additionally
+depends on display-memory arbitration: the CPU/bus stack reads `0xDC` instead
+of `0xDD`, while the pixel stack satisfies that comparison. These remaining
+boundaries stay enabled in their respective profiles. A passing startup phase
+does not establish every power-on register, timer-divider phase or physical
+IRQ sampling edge.
+
+With the pixel pipeline and display-bus owner integrated, the HALT/OAM case
+passes its original `0x74` return-address and `0xDD` timer comparisons,
+pre-display result and terminal with both firmware paths. The combined Windows
+profile passes thirty of the thirty-two interaction runs, including fifteen
+externally. The separate `0x88` versus `0x87` DMA/HALT timer comparison remains
+failed with both paths. See [display bus waits](display-irq.md) for the shared
+request owner and its CPU-ready waveform coverage.
 
 The CPU samples its synchronized IRQ input at instruction boundaries. Its
 synchronizer keeps two CPU-clock stages after register acceptance. DMA bus

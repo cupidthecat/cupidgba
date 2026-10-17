@@ -56,7 +56,7 @@ Native regressions cover these transitions and CPU access widths. The local
 external-BIOS timer suite checks 90 IRQ observations and 936 count-up results;
 see [testing](../development/testing.md). The CPU's pipeline and exception
 registers are described in the
-[ARM7TDMI technical reference manual](https://support.arm.com/documentation/ddi0210/c/).
+[ARM7TDMI technical reference manual](https://documentation-service.arm.com/static/5e8e1323fd977155116a3129).
 
 `gba.irq-pulses` checks every publication in a sequence that previously lost
 the enabled-request pulse. It covers repeated queue reuse, single-clock and
@@ -73,9 +73,10 @@ real DMA transfers, multiply internal-cycle overlap and reset. Memory regions,
 both fetch widths, wait controls and four clock anchors retain their existing
 transfer durations. The preceding core fails all four groups. Four original
 external-firmware load, branch and store cartridges now reach their encoded
-IRQ return addresses. The CPU-only parent retains two HALT/timer failures.
-The combined pixel-pipeline draft repairs the external HALT/OAM case; the
-separate DMA/HALT timer comparison and built-in startup cases remain unresolved.
+IRQ return addresses. The selected [fast entry](bios/reset-entry.md) now
+aligns the initial display phase with full firmware boot, correcting the
+formerly built-in-only interaction failures. The HALT/DMA timer comparison
+remains open; the OAM variant depends on the selected display-memory arbiter.
 See [CPU/DMA/IRQ interactions](cpu/dma-irq-interactions.md) and
 [display bus waits](cpu/display-irq.md).
 
