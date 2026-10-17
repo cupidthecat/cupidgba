@@ -15,6 +15,10 @@ releases that console's held keyboard keys. Controllers belong to separate
 consoles in attachment order, with each instance assigned once. F9 disconnects
 or reconnects the local connection. Escape or closing the window exits and
 flushes every battery. The title identifies keyboard focus and connection.
+The selected console also receives sensor keys: F1 through F4 adjust tilt,
+F5/F6 adjust sunlight, F7/F8 adjust the gyroscope, F10 centers tilt and F11
+centers the gyroscope. F9 retains its connection action. Each controller's
+rumble follows its own console and stops on removal or shutdown.
 Each viewport retains the last image completed at its console's existing
 VBlank handoff. Drawing the next scanline cannot change that published image.
 A stopped console keeps its last complete image while the others continue.
@@ -26,6 +30,10 @@ single-console play keeps `game.sav`; local play does not import or overwrite
 it. Every ROM, BIOS and existing slot battery is checked before any console
 runs. A failed startup flushes none of them. Automatic flushes occur every
 300 session frame intervals and on a successful session's shutdown.
+RTC batteries use the matching `.p1.rtc` through `.p4.rtc` paths. RTC, clock
+seed, offline-clock and other cartridge options apply separately to every
+slot. Existing single-console `.rtc` files retain their paths. All RTC files
+are validated before startup, including when a later slot contains bad data.
 
 `--frames N` ends a local session after N frame intervals. It provides bounded
 runs without relying on window input. Omit it for normal play. BIOS, scale
@@ -78,6 +86,15 @@ and the other consoles continue. An eligible GPIO serial or keypad source
 can wake it through the existing IRQ path. UART does not wake STOP.
 If STOP arrives during an unfinished interval, the remaining clocks stay
 pending until wake; elapsed session time does not consume them.
+The cartridge RTC continues on its separate oscillator. Its next output edge
+participates in the session's deadline selection, and an eligible Game Pak
+request can wake that console at the selected endpoint. The other consoles
+keep running; no frozen CPU or system-peripheral interval consumes battery
+clocks. A disabled wake source can retain a pending request during STOP.
+All running clocks reach that endpoint first. The session completes every
+stopped battery interval before publishing wake-caused pin changes. A UART
+start therefore reaches its peer at the endpoint, and a GPIO-woken peer
+retains its preceding frozen system interval.
 
 The coordinator adds no fitted delay or game-specific rule. It preserves the
 core's existing bit, completion, timer, IRQ and bus durations. Same-clock

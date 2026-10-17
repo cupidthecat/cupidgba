@@ -152,6 +152,7 @@ struct CupidARMMemory {
     void (*lock)(struct CupidARM* cpu, bool locked);
     bool timed;             /**< CPU execution advances individual bus phases */
     bool dataSequential;
+    bool (*readOpcode)(struct CupidARM* cpu, uint32_t address, unsigned width, uint32_t* value);
 
     /** Current access source for timing/debug */
     enum CupidAccessSource accessSource;

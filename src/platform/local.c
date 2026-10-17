@@ -62,11 +62,21 @@ static bool set_save_type(struct CupidGBA* gba, const char* name) {
     return false;
 }
 
-static bool flush_saves(struct CupidGBA* const cores[], char paths[4][512], unsigned count) {
+static bool flush_saves(struct CupidGBA* const cores[], char paths[4][512],
+                         struct CupidPlatformRTC rtc[], unsigned count) {
     bool ok = true;
+    bool wall = false;
+    for (unsigned i = 0; i < count; ++i) wall |= cores[i]->cartridge.rtcPresent && rtc[i].offlineWall;
+    uint64_t stamp = 0;
+    const bool host = !wall || cupid_platform_rtc_host_clock(NULL, &stamp);
     for (unsigned i = 0; i < count; ++i) {
         if (!cupid_savedata_save_file(&cores[i]->memory.savedata, paths[i])) {
             fprintf(stderr, "Error: Cannot save console %u to %s: %s\n", i + 1, paths[i], strerror(errno));
+            ok = false;
+        }
+        if ((!host && cores[i]->cartridge.rtcPresent && rtc[i].offlineWall) ||
+            !cupid_platform_rtc_save(cores[i], &rtc[i], stamp)) {
+            fprintf(stderr, "Error: Cannot save console %u RTC to %s: %s\n", i + 1, rtc[i].path, strerror(errno));
             ok = false;
         }
     }
@@ -74,8 +84,13 @@ static bool flush_saves(struct CupidGBA* const cores[], char paths[4][512], unsi
 }
 
 int cupid_platform_run_local(const char* const paths[], unsigned count, const char* bios,
-                             const char* saveType, int scale, unsigned frames) {
+                             const char* saveType, int scale, unsigned frames,
+                             const struct CupidLocalDevices* devices) {
     if (!paths || count < 2 || count > 4) return 1;
+    static const struct CupidLocalDevices defaults = {
+        .rtcPresence = -1, .peripherals = CUPID_PLATFORM_PERIPHERALS_DEFAULT
+    };
+    if (!devices) devices = &defaults;
     struct CupidGBA* cores[4] = {0};
     struct CupidPlatform platforms[4] = {0};
     struct CupidPlatformAudioMix mix;
@@ -83,7 +98,11 @@ int cupid_platform_run_local(const char* const paths[], unsigned count, const ch
     struct CupidCable* cable = NULL;
     struct CupidLocalFrames published = {0};
     const uint32_t* framesReady[4] = {0};
-    char saves[4][512];
+    char saves[4][512], rtcPaths[4][512];
+    struct CupidPlatformRTC rtc[4] = {0};
+    struct CupidRTCDateTime hostDate;
+    uint64_t hostStamp = 0;
+    bool hostRead = false;
     unsigned created = 0;
     int result = 1;
     bool initialized = false, started = false;
@@ -101,10 +120,27 @@ int cupid_platform_run_local(const char* const paths[], unsigned count, const ch
         cupid_gba_create(cores[i]);
         ++created;
         if (!cupid_load_rom(cores[i], paths[i]) || !set_save_type(cores[i], saveType)) goto cleanup;
+        if (devices->rtcPresence >= 0) cupid_cartridge_enable_rtc(cores[i], devices->rtcPresence != 0);
+        cupid_platform_peripherals_configure(cores[i], &devices->peripherals);
         if (bios && !cupid_load_bios(cores[i], bios)) goto cleanup;
         cupid_gba_reset(cores[i]);
         if (!cupid_savedata_load_file(&cores[i]->memory.savedata, saves[i]) && errno != ENOENT) {
             fprintf(stderr, "Error: Cannot load save %s: %s\n", saves[i], strerror(errno));
+            goto cleanup;
+        }
+        memcpy(rtcPaths[i], saves[i], strlen(saves[i]) + 1);
+        memcpy(rtcPaths[i] + strlen(rtcPaths[i]) - 4, ".rtc", 5);
+        rtc[i] = devices->rtc;
+        rtc[i].path = rtcPaths[i];
+        if (cores[i]->cartridge.rtcPresent && rtc[i].offlineWall && !hostRead) {
+            if (!cupid_platform_rtc_host_clock(&hostDate, &hostStamp)) {
+                fprintf(stderr, "Error: Cannot read RTC host clock: %s\n", strerror(errno));
+                goto cleanup;
+            }
+            hostRead = true;
+        }
+        if (!cupid_platform_rtc_load(cores[i], &rtc[i], hostRead ? &hostDate : NULL, hostStamp)) {
+            fprintf(stderr, "Error: Cannot load RTC state %s: %s\n", rtcPaths[i], strerror(errno));
             goto cleanup;
         }
     }
@@ -119,6 +155,8 @@ int cupid_platform_run_local(const char* const paths[], unsigned count, const ch
                                         SDL_TEXTUREACCESS_STREAMING, GBA_SCREEN_WIDTH, GBA_SCREEN_HEIGHT);
         if (!textures[i]) goto cleanup;
     }
+    for (unsigned i = 0; i < count; ++i)
+        cupid_cartridge_set_rumble_output(cores[i], cupid_platform_rumble_changed, &platforms[i]);
     cable = cupid_cable_create(cores, count);
     if (!cable) { fprintf(stderr, "Error: Cannot create local cable session\n"); goto cleanup; }
     cupid_cable_set_frame_callback(cable, cupid_platform_capture_local_frame, &published);
@@ -147,7 +185,7 @@ int cupid_platform_run_local(const char* const paths[], unsigned count, const ch
         char title[128];
         snprintf(title, sizeof(title), "CupidGBA - Console %u keyboard - %s", focus + 1, connected ? "Connected" : "Disconnected");
         SDL_SetWindowTitle(platforms[0].window, title);
-        if (!(completed % 300) && !flush_saves(cores, saves, count)) result = 1;
+        if (!(completed % 300) && !flush_saves(cores, saves, rtc, count)) result = 1;
         uint64_t now = SDL_GetPerformanceCounter();
         if (now < next) {
             uint64_t delay = (next - now) * 1000 / frequency;
@@ -158,7 +196,8 @@ int cupid_platform_run_local(const char* const paths[], unsigned count, const ch
     }
     printf("Local session finished: %u frames\n", completed);
 cleanup:
-    if (started && !flush_saves(cores, saves, count)) result = 1;
+    if (started && !flush_saves(cores, saves, rtc, count)) result = 1;
+    for (unsigned i = 0; i < created; ++i) cupid_cartridge_set_rumble_output(cores[i], NULL, NULL);
     /* Stop the callback before releasing the queues it borrows. */
     if (platforms[0].audioDevice) {
         SDL_CloseAudioDevice(platforms[0].audioDevice);

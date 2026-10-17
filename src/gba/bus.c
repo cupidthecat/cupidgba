@@ -47,7 +47,8 @@ void cupid_bus_fetch(struct CupidARM* cpu, uint32_t address, unsigned width, boo
     }
     gba->memory.fetchNonseq = false;
     unsigned cycles = cupid_prefetch_fetch(gba, address, width, wait + 1);
-    cupid_bus_advance(cpu, cycles, true);
+    if (!gba->cartridge.readable || !cupid_cartridge_fetch_bus(gba, address, width, cycles))
+        cupid_bus_advance(cpu, cycles, true);
     cupid_prefetch_finish_fetch(gba);
     /* The caller reads the opcode before releasing ownership of the bus. */
     gba->memory.lastWasDMA = false;

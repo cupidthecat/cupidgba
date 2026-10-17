@@ -66,6 +66,7 @@ bool cupid_platform_init(struct CupidPlatform* plat, int scale) {
 }
 
 void cupid_platform_deinit(struct CupidPlatform* plat) {
+    cupid_platform_rumble_stop(plat);
     if (plat->audioDevice) SDL_CloseAudioDevice(plat->audioDevice);
     if (plat->controller) SDL_GameControllerClose(plat->controller);
     if (plat->texture) SDL_DestroyTexture(plat->texture);

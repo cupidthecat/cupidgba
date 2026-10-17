@@ -82,6 +82,7 @@ void cupid_gba_create(struct CupidGBA* gba) {
 
     /** Init timing scheduler and wire CPU cycle and next-event counters. */
     cupid_timing_init(&gba->timing, &gba->cpu.cycles, &gba->cpu.nextEvent);
+    cupid_cartridge_init(gba);
     cupid_serial_init(&gba->serial, gba);
 
 }
@@ -98,7 +99,10 @@ void cupid_gba_reset(struct CupidGBA* gba) {
     gba->cpu.master = gba;
 
     /** Clear timing event queue first. */
+    cupid_rtc_sync(&gba->cartridge.rtc, cupid_timing_global_time(&gba->timing));
     cupid_timing_clear(&gba->timing);
+    cupid_rtc_rebase(&gba->cartridge.rtc, 0);
+    cupid_cartridge_reset_bus(gba);
 
     /**
      * Reset the CPU into masked ARM Supervisor mode and refill the reset vector.
@@ -155,6 +159,7 @@ static void _cupidGBAReset(struct CupidARM* cpu) {
     gba->stopped = false;
     gba->haltIRQSample = false;
     gba->haltIRQSampleValid = false;
+    gba->intervalOvershoot = 0;
     gba->keysLast = 0x0400;
 
     /**
@@ -228,6 +233,7 @@ void cupid_gba_stop(struct CupidGBA* gba) {
      * peripheral deadlines in place while the system clock is frozen. */
     gba->cpu.nextEvent = gba->cpu.cycles;
     gba->cpu.irqh.processEvents(&gba->cpu);
+    cupid_cartridge_rtc_sync(gba);
     cupid_gba_halt(gba);
     gba->stopped = (stop_sources(gba) & gba->irqf) == 0;
 }
@@ -239,10 +245,15 @@ void cupid_gba_wake_stop(struct CupidGBA* gba, enum CupidIRQ sources) {
     }
 }
 
+uint64_t cupid_gba_advance_stopped_time(struct CupidGBA* gba, uint64_t clocks) {
+    return cupid_cartridge_advance_stopped_time(gba, clocks);
+}
+
 /**
  * @brief Destroy a GBA instance.
  */
 void cupid_gba_destroy(struct CupidGBA* gba) {
+    cupid_cartridge_deinit(gba);
     cupid_video_deinit(&gba->video);
     cupid_memory_deinit(gba);
     cupid_timing_deinit(&gba->timing);
@@ -335,6 +346,32 @@ void cupid_gba_run_frame(struct CupidGBA* gba) {
 
     while (!gba->frameReady && !gba->stopped) {
         cupid_gba_step(gba);
+    }
+}
+
+void cupid_gba_run_interval(struct CupidGBA* gba, uint32_t clocks) {
+    gba->frameReady = false;
+    uint64_t remaining = clocks;
+    if (gba->intervalOvershoot >= remaining) {
+        gba->intervalOvershoot -= remaining;
+        return;
+    }
+    remaining -= gba->intervalOvershoot;
+    gba->intervalOvershoot = 0;
+    while (remaining) {
+        uint64_t elapsed;
+        if (gba->stopped) {
+            elapsed = cupid_gba_advance_stopped_time(gba, remaining);
+        } else {
+            const uint64_t before = cupid_timing_global_time(&gba->timing);
+            cupid_gba_step(gba);
+            elapsed = cupid_timing_global_time(&gba->timing) - before;
+        }
+        if (elapsed >= remaining) {
+            gba->intervalOvershoot = elapsed - remaining;
+            break;
+        }
+        remaining -= elapsed;
     }
 }
 

@@ -2,8 +2,16 @@
 #ifndef CUPID_LOCAL_H
 #define CUPID_LOCAL_H
 #include "cupid/platform.h"
+#include "cupid/platform/rtc.h"
+#include "cupid/platform/peripherals.h"
+struct CupidLocalDevices {
+    int rtcPresence;
+    struct CupidPlatformRTC rtc;
+    struct CupidPlatformPeripherals peripherals;
+};
 int cupid_platform_run_local(const char* const paths[], unsigned count, const char* bios,
-                             const char* saveType, int scale, unsigned frames);
+                             const char* saveType, int scale, unsigned frames,
+                             const struct CupidLocalDevices* devices);
 bool cupid_platform_local_save_path(const char* rom, unsigned player, char* out, size_t capacity);
 struct CupidLocalFrames { uint32_t* pixels[4]; };
 void cupid_platform_capture_local_frame(void* context, unsigned player, const uint32_t* pixels, uint64_t timestamp);

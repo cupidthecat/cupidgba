@@ -65,6 +65,25 @@ static void input(void) {
         key(SDL_SCANCODE_Z, false);
         CHECK(cupid_platform_poll_local(platforms, cores, 4, &focus, &connected));
     }
+    for (unsigned i = 0; i < 4; ++i) {
+        cupid_cartridge_enable_solar(cores[i], true);
+        cupid_cartridge_enable_gyro(cores[i], true);
+        cupid_cartridge_enable_tilt(cores[i], true);
+        cupid_cartridge_set_solar_level(cores[i], 128);
+        CHECK(cupid_cartridge_set_gyro_sample(cores[i], 1000));
+        CHECK(cupid_cartridge_set_tilt_sample(cores[i], 1000, 2000));
+    }
+    key(SDL_SCANCODE_F5, true); key(SDL_SCANCODE_F7, true); key(SDL_SCANCODE_F2, true);
+    CHECK(cupid_platform_poll_local(platforms, cores, 4, &focus, &connected));
+    for (unsigned i = 0; i < 4; ++i) {
+        CHECK(cores[i]->cartridge.solar.threshold == (i ? 127 : 143));
+        CHECK(cores[i]->cartridge.gyro.sample == (i ? 1000 : 872));
+        CHECK(cores[i]->cartridge.tilt.inputX == (i ? 1000 : 1032));
+        CHECK(cores[i]->cartridge.tilt.inputY == 2000);
+    }
+    key_event(SDL_SCANCODE_F7, true, true);
+    CHECK(cupid_platform_poll_local(platforms, cores, 4, &focus, &connected));
+    CHECK(cores[0]->cartridge.gyro.sample == 872);
     for (unsigned i = 0; i < 4; ++i)
         CHECK(SDL_JoystickSetVirtualButton(joysticks[i], SDL_CONTROLLER_BUTTON_B, i == 2) == 0);
     SDL_JoystickUpdate();
@@ -78,6 +97,13 @@ static void input(void) {
     CHECK(cupid_platform_poll_local(platforms, cores, 4, &focus, &connected)); CHECK(!connected);
     key(SDL_SCANCODE_F9, true);
     CHECK(cupid_platform_poll_local(platforms, cores, 4, &focus, &connected)); CHECK(connected);
+    CHECK(cores[0]->cartridge.gyro.sample == 872);
+    key(SDL_SCANCODE_F11, true); key(SDL_SCANCODE_F10, true);
+    CHECK(cupid_platform_poll_local(platforms, cores, 4, &focus, &connected));
+    CHECK(cores[0]->cartridge.gyro.sample == CUPID_GYRO_NEUTRAL);
+    CHECK(cores[0]->cartridge.tilt.inputX == CUPID_TILT_NEUTRAL);
+    CHECK(cores[0]->cartridge.tilt.inputY == CUPID_TILT_NEUTRAL);
+    CHECK(cores[1]->cartridge.gyro.sample == 1000 && cores[1]->cartridge.tilt.inputX == 1000);
     for (unsigned i = 0; i < 4; ++i) {
         SDL_GameControllerClose(platforms[i].controller); SDL_JoystickClose(joysticks[i]);
         cupid_gba_destroy(cores[i]); free(cores[i]);
