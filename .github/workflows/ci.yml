@@ -113,8 +113,10 @@ jobs:
           python tests/roms/check_console.py --fetch --directory .local-research/test-roms
           python tests/roms/check_ppu.py --fetch --directory .local-research/test-roms
       - name: Configure
+        # Keep input fetching and CTest on the same installed interpreter.
         run: >-
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DPython3_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')"
           -DCUPID_TEST_ROM_DIR="$(pwd)/.local-research/test-roms"
       - name: Build
         run: cmake --build build --parallel 2

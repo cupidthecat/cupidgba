@@ -14,6 +14,10 @@ Hosted Linux qualification uses the explicit Ubuntu 24.04 release for GCC
 Release and Clang Debug with address/undefined-behavior sanitizers. This keeps
 an automatic `ubuntu-latest` release migration from changing the compiler,
 sanitizer and firmware-assembler baseline. Windows checks use GCC and SDL2.
+The Windows configure step selects the same Python interpreter used to fetch
+the inputs. This keeps CTest from switching to a separate host installation
+when both provide the same Python version. The input-download regression
+retains its ten-second limit and eight-second diagnostic traceback.
 Both checkout steps pin a verified Node.js 24 action revision. An OS release
 upgrade needs the same complete test, firmware regeneration, Make and live
 ThreadSanitizer qualification as the current workflow.
