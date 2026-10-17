@@ -111,6 +111,11 @@ it against its existing elapsed-clock budget. It reports `stopped_cycles`
 separately; STOP creates no video frames or audio samples. Single CPU steps and
 `cupid_gba_run_frame` still return while stopped and do not infer elapsed time.
 
+The single-console display keeps the last image published at the core's
+VBlank handoff. The next visible scanlines and stopped battery intervals do
+not replace that image. This uses the existing frame deadline and leaves
+guest execution, audio samples and frame pacing unchanged.
+
 ## Battery files
 
 The SDL2 frontend keeps a separate `.rtc` file beside the cartridge, using the

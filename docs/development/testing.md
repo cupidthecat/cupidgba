@@ -308,6 +308,11 @@ cycle sweeps and, with an external BIOS, startup. The default instruction limit
 is unchanged. `CUPID_TEST_ROM_DIR` registers all four checks, and `CUPID_TEST_BIOS`
 adds the external comparisons. See [display timing](../hardware/video-timing.md).
 
+The native video group also checks complete frame publication across clock
+and counter wrap, late dispatch, STOP, reset and observer removal. A partially
+drawn next frame is its negative control: every published pixel must retain
+the preceding complete image.
+
 The optional locally built count-up/IRQ suite has a separate observer:
 
 ```sh

@@ -39,6 +39,8 @@ const int CupidObjSizes[16][2] = {
  */
 void cupid_video_init(struct CupidVideo* video, struct CupidGBA* gba) {
     video->gba = gba;
+    video->frameCallback = NULL;
+    video->frameContext = NULL;
     if (!video->vram) video->vram = calloc(GBA_SIZE_VRAM / 2, sizeof(uint16_t));
     /** Palette and outputBuffer are inline arrays zeroed by reset. */
 
@@ -100,8 +102,16 @@ void cupid_video_skip_bios(struct CupidVideo* video) {
 }
 
 void cupid_video_deinit(struct CupidVideo* video) {
+    video->frameCallback = NULL;
+    video->frameContext = NULL;
     free(video->vram);  video->vram = NULL;
     /** Palette and outputBuffer are inline, no free needed. */
+}
+
+void cupid_video_set_frame_callback(struct CupidVideo* video,
+    void (*callback)(void*, const uint32_t*, uint64_t), void* context) {
+    video->frameCallback = callback;
+    video->frameContext = context;
 }
 
 /**
@@ -214,6 +224,8 @@ static void _startHdraw(struct CupidTiming* timing, void* context, uint32_t cycl
 
     /** Write updated DISPSTAT back to IO mirror. */
     gba->memory.io[REG_DISPSTAT >> 1] = video->dispstat;
+    if (video->vcount == VIDEO_VDRAW_LINES && video->frameCallback)
+        video->frameCallback(video->frameContext, video->outputBuffer, cupid_timing_global_time(timing));
 }
 
 void cupid_video_update_match(struct CupidVideo* video) {

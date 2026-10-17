@@ -25,6 +25,11 @@ static bool flush_rtc(struct CupidGBA* gba, struct CupidPlatformRTC* config) {
     return cupid_platform_rtc_save(gba, config, stamp);
 }
 
+static void capture_completed_frame(void* context, const uint32_t* pixels, uint64_t clock) {
+    (void)clock;
+    memcpy(context, pixels, GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT * sizeof(*pixels));
+}
+
 /**
  * @brief Derive a .sav path from a ROM path.
  */
@@ -252,6 +257,14 @@ int main(int argc, char* argv[]) {
         cupid_gba_destroy(&gba);
         return 1;
     }
+    uint32_t* completedFrame = calloc(GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT, sizeof(*completedFrame));
+    if (!completedFrame) {
+        fprintf(stderr, "Error: Cannot allocate completed frame\n");
+        cupid_platform_deinit(&plat);
+        cupid_gba_destroy(&gba);
+        return 1;
+    }
+    cupid_video_set_frame_callback(&gba.video, capture_completed_frame, completedFrame);
     cupid_cartridge_set_rumble_output(&gba, cupid_platform_rumble_changed, &plat);
 
     /** Initialize audio. */
@@ -291,8 +304,8 @@ int main(int argc, char* argv[]) {
         cupid_gba_run_interval(&gba, VIDEO_TOTAL_LENGTH);
         if (plat.audioDevice) SDL_UnlockAudioDevice(plat.audioDevice);
 
-        /** Present framebuffer. */
-        cupid_platform_render_frame(&plat, gba.video.outputBuffer);
+        /** Retain the last complete image while the next frame draws or STOP waits. */
+        cupid_platform_render_frame(&plat, completedFrame);
 
         /** Periodic save flush. */
         if (++saveFlushCounter >= SAVE_FLUSH_FRAMES) {
@@ -340,6 +353,8 @@ int main(int argc, char* argv[]) {
     }
     cupid_cartridge_set_rumble_output(&gba, NULL, NULL);
     cupid_platform_deinit(&plat);
+    cupid_video_set_frame_callback(&gba.video, NULL, NULL);
+    free(completedFrame);
     cupid_gba_destroy(&gba);
     printf("CupidGBA exited.\n");
     return result;
