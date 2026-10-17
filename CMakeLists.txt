@@ -7,15 +7,24 @@ set(CMAKE_C_EXTENSIONS OFF)
 option(CUPID_BUILD_FRONTEND "Build the SDL2 frontend" ON)
 option(CUPID_SANITIZERS "Enable address and undefined behavior sanitizers" OFF)
 option(CUPID_THREAD_SANITIZER "Enable the thread sanitizer" OFF)
+option(CUPID_FAST_CONTEXT "Use native context switching when available on Linux" ON)
 set(CUPID_TEST_ROM_DIR "" CACHE PATH "Directory containing checksum-verified external test ROMs")
 set(CUPID_TIMER_SUITE_ROM "" CACHE FILEPATH "Locally built timer and IRQ suite ROM")
 set(CUPID_DMA_SUITE_ROM "" CACHE FILEPATH "Locally built DMA transfer suite ROM")
+set(CUPID_DMA_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified DMA arbitration cartridges")
 set(CUPID_BUS_SUITE_ROM "" CACHE FILEPATH "Locally built CPU and bus timing suite ROM")
 set(CUPID_BIOS_MATH_SUITE_ROM "" CACHE FILEPATH "Locally built BIOS math register suite ROM")
 set(CUPID_IO_SUITE_ROM "" CACHE FILEPATH "Locally built I/O register-read suite ROM")
 set(CUPID_SERIAL_SUITE_ROM "" CACHE FILEPATH "Locally built serial timing and register suite ROM")
+set(CUPID_RTC_STATE_ROM "" CACHE FILEPATH "Checksum-verified local RTC state corpus with RAM result transport")
 set(CUPID_SERIAL_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified serial cartridge probes")
-set(CUPID_HALT_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified firmware HALT probes")
+set(CUPID_HALT_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified firmware HALT and IRQ probes")
+set(CUPID_PREFETCH_PROBE_DIR "" CACHE PATH "Root containing checksum-verified prefetcher and timing cartridge probes")
+set(CUPID_BUS_PAGE_PROBE_ROM "" CACHE FILEPATH "Local checksum-verified CPU/DMA page-boundary cartridge")
+set(CUPID_CPU_INTERACTION_PROBE_DIR "" CACHE PATH "Root containing checksum-verified CPU/DMA/IRQ cartridges")
+set(CUPID_USER_BANK_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified user-bank cartridge probes")
+set(CUPID_SAVED_STATUS_PROBE_DIR "" CACHE PATH "Directory containing the checksum-verified saved-status cartridge")
+set(CUPID_FIRMWARE_IRQ_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified firmware IRQ return cartridges")
 set(CUPID_AUDIO_TEST_ROM "" CACHE FILEPATH "Locally built audio signal cartridge ROM")
 set(CUPID_FIFO_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified FIFO DMA cartridges")
 set(CUPID_FIFO_SOURCE_ROM "" CACHE FILEPATH "Checksum-verified FIFO base cartridge rebuilt from its pinned source")
@@ -41,11 +50,14 @@ endif()
 
 add_library(cupid_core STATIC
     src/arm/arm.c src/arm/isa-arm.c src/arm/isa-thumb.c
-    src/core/timing.c
+    src/core/timing.c src/core/file.c
     src/gba/gba.c src/gba/memory.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
     src/gba/audio.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c
     src/gba/hle-bios.c src/gba/bios/file.c src/gba/savedata.c src/gba/save/file.c
-    src/gba/serial/serial.c src/gba/serial/joybus.c
+    src/gba/serial/serial.c src/gba/serial/joybus.c src/gba/serial/uart.c
+    src/gba/cartridge/rtc.c src/gba/cartridge/gpio.c src/gba/cartridge/battery.c src/gba/cartridge/solar.c
+    src/gba/cartridge/gyro.c
+    src/gba/cartridge/tilt.c
     src/gba/render/software.c src/gba/render/composite.c
     src/gba/render/mode0.c src/gba/render/mode2.c
     src/gba/render/mode3.c src/gba/render/mode4.c
@@ -56,20 +68,248 @@ if(NOT WIN32)
     target_link_libraries(cupid_core PUBLIC m)
 endif()
 
+add_library(cupid_link STATIC src/link/cable.c src/platform/context.c)
+target_link_libraries(cupid_link PUBLIC cupid_core)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CUPID_FAST_CONTEXT)
+    find_library(CUPID_CONTEXT_LIBRARY NAMES boost_context)
+    find_path(CUPID_CONTEXT_INCLUDE_DIR NAMES boost/version.hpp)
+    set(cupid_context_version 0)
+    if(CUPID_CONTEXT_INCLUDE_DIR)
+        file(STRINGS "${CUPID_CONTEXT_INCLUDE_DIR}/boost/version.hpp" cupid_context_version_line
+            REGEX "^#define BOOST_VERSION [0-9]+")
+        string(REGEX REPLACE ".*BOOST_VERSION ([0-9]+).*" "\\1" cupid_context_version "${cupid_context_version_line}")
+    endif()
+    if(CUPID_CONTEXT_LIBRARY AND cupid_context_version GREATER_EQUAL 106100)
+        target_compile_definitions(cupid_link PRIVATE CUPID_USE_FCONTEXT=1)
+        target_link_libraries(cupid_link PRIVATE ${CUPID_CONTEXT_LIBRARY})
+        message(STATUS "Local contexts: native C ABI (${cupid_context_version})")
+    else()
+        message(STATUS "Local contexts: portable backend; native support needs Boost.Context 1.61 or later")
+    endif()
+endif()
+
 if(CUPID_BUILD_FRONTEND)
     find_package(SDL2 2.24 REQUIRED CONFIG)
-    add_executable(cupidgba src/platform/main.c src/platform/audio.c src/platform/input.c)
+    add_executable(cupidgba src/platform/main.c src/platform/local.c src/platform/window.c
+        src/platform/audio.c src/platform/input.c src/platform/rtc.c src/platform/peripherals.c src/platform/rumble.c)
     if(TARGET SDL2::SDL2main)
         target_link_libraries(cupidgba PRIVATE SDL2::SDL2main)
     endif()
-    target_link_libraries(cupidgba PRIVATE cupid_core SDL2::SDL2)
+    target_link_libraries(cupidgba PRIVATE cupid_link SDL2::SDL2)
 endif()
 
-add_executable(cupidgba-headless tests/rom_runner.c)
+add_executable(cupidgba-headless tests/rom_runner.c src/platform/peripherals.c)
 target_link_libraries(cupidgba-headless PRIVATE cupid_core)
 
 include(CTest)
 if(BUILD_TESTING)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME rom.cartridge-peripherals COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_peripherals.py --runner $<TARGET_FILE:cupidgba-headless>)
+    set_tests_properties(rom.cartridge-peripherals PROPERTIES TIMEOUT 30)
+    add_test(NAME rom.cartridge-gyro COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_gyro.py --runner $<TARGET_FILE:cupidgba-headless>)
+    set_tests_properties(rom.cartridge-gyro PROPERTIES TIMEOUT 30)
+    add_test(NAME rom.cartridge-tilt COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_tilt.py --runner $<TARGET_FILE:cupidgba-headless>)
+    set_tests_properties(rom.cartridge-tilt PROPERTIES TIMEOUT 30)
+    add_test(NAME rom.rtc-parameters COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_parameters.py --runner $<TARGET_FILE:cupidgba-headless>)
+    set_tests_properties(rom.rtc-parameters PROPERTIES TIMEOUT 30)
+    foreach(mode arm thumb)
+        foreach(width 2 4)
+            add_test(NAME rom.rtc-calendar-${mode}-${width} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_calendar.py
+                --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width ${width})
+            set_tests_properties(rom.rtc-calendar-${mode}-${width} PROPERTIES TIMEOUT 30)
+            add_test(NAME rom.rtc-calendar-continued-${mode}-${width} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_calendar.py
+                --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width ${width} --continued)
+            set_tests_properties(rom.rtc-calendar-continued-${mode}-${width} PROPERTIES TIMEOUT 30)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.rtc-calendar-${mode}-${width}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_calendar.py
+                    --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width ${width}
+                    --bios ${CUPID_TEST_BIOS})
+                set_tests_properties(rom.rtc-calendar-${mode}-${width}-external PROPERTIES TIMEOUT 30)
+                add_test(NAME rom.rtc-calendar-continued-${mode}-${width}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_calendar.py
+                    --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width ${width}
+                    --bios ${CUPID_TEST_BIOS} --continued)
+                set_tests_properties(rom.rtc-calendar-continued-${mode}-${width}-external PROPERTIES TIMEOUT 30)
+            endif()
+        endforeach()
+    endforeach()
+    foreach(mode arm thumb)
+        foreach(lane 0 1)
+            foreach(stream byte byte-continued)
+                set(stream_option)
+                if(stream STREQUAL "byte-continued")
+                    set(stream_option --continued)
+                endif()
+                add_test(NAME rom.rtc-calendar-${stream}-${mode}-${lane} COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_calendar.py
+                    --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width 1 --lane ${lane} ${stream_option})
+                set_tests_properties(rom.rtc-calendar-${stream}-${mode}-${lane} PROPERTIES TIMEOUT 30)
+                if(CUPID_TEST_BIOS)
+                    add_test(NAME rom.rtc-calendar-${stream}-${mode}-${lane}-external COMMAND ${Python3_EXECUTABLE}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_calendar.py
+                        --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width 1 --lane ${lane}
+                        --bios ${CUPID_TEST_BIOS} ${stream_option})
+                    set_tests_properties(rom.rtc-calendar-${stream}-${mode}-${lane}-external PROPERTIES TIMEOUT 30)
+                endif()
+            endforeach()
+        endforeach()
+    endforeach()
+    if(CUPID_TEST_BIOS)
+        add_test(NAME rom.rtc-parameters-external COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_parameters.py --runner $<TARGET_FILE:cupidgba-headless>
+            --bios ${CUPID_TEST_BIOS})
+        set_tests_properties(rom.rtc-parameters-external PROPERTIES TIMEOUT 30)
+        add_test(NAME rom.cartridge-tilt-external COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_tilt.py --runner $<TARGET_FILE:cupidgba-headless>
+            --bios ${CUPID_TEST_BIOS})
+        set_tests_properties(rom.cartridge-tilt-external PROPERTIES TIMEOUT 30)
+        add_test(NAME rom.cartridge-gyro-external COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_gyro.py --runner $<TARGET_FILE:cupidgba-headless>
+            --bios ${CUPID_TEST_BIOS})
+        set_tests_properties(rom.cartridge-gyro-external PROPERTIES TIMEOUT 30)
+        add_test(NAME rom.cartridge-peripherals-external COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_peripherals.py --runner $<TARGET_FILE:cupidgba-headless>
+            --bios ${CUPID_TEST_BIOS})
+        set_tests_properties(rom.cartridge-peripherals-external PROPERTIES TIMEOUT 30)
+    endif()
+    if(CUPID_BUILD_FRONTEND)
+        add_executable(test_peripherals tests/platform/test_peripherals.c
+            src/platform/peripherals.c src/platform/rumble.c src/platform/input.c)
+        target_link_libraries(test_peripherals PRIVATE cupid_core SDL2::SDL2)
+        add_test(NAME platform.cartridge-peripherals COMMAND test_peripherals)
+        set_tests_properties(platform.cartridge-peripherals PROPERTIES TIMEOUT 10)
+    endif()
+    add_executable(test_rumble tests/gba/cartridge/test_rumble.c)
+    target_link_libraries(test_rumble PRIVATE cupid_core)
+    add_test(NAME gba.cartridge-rumble COMMAND test_rumble ${CMAKE_CURRENT_BINARY_DIR})
+    set_tests_properties(gba.cartridge-rumble PROPERTIES TIMEOUT 10)
+    add_executable(test_solar tests/gba/cartridge/test_solar.c)
+    target_link_libraries(test_solar PRIVATE cupid_core)
+    foreach(group component bus interactions)
+        add_test(NAME gba.solar-${group} COMMAND test_solar --${group})
+        set_tests_properties(gba.solar-${group} PROPERTIES TIMEOUT 10)
+        if(CUPID_TEST_BIOS AND NOT group STREQUAL "component")
+            add_test(NAME gba.solar-${group}-external COMMAND test_solar --${group} ${CUPID_TEST_BIOS})
+            set_tests_properties(gba.solar-${group}-external PROPERTIES TIMEOUT 10)
+        endif()
+    endforeach()
+    add_executable(test_gyro tests/gba/cartridge/test_gyro.c)
+    target_link_libraries(test_gyro PRIVATE cupid_core)
+    add_test(NAME gba.gyro COMMAND test_gyro)
+    set_tests_properties(gba.gyro PROPERTIES TIMEOUT 10)
+    add_executable(test_tilt tests/gba/cartridge/test_tilt.c)
+    target_link_libraries(test_tilt PRIVATE cupid_core)
+    add_test(NAME gba.tilt COMMAND test_tilt)
+    set_tests_properties(gba.tilt PROPERTIES TIMEOUT 10)
+    add_executable(test_rtc tests/gba/cartridge/test_rtc.c)
+    target_link_libraries(test_rtc PRIVATE cupid_core)
+    add_test(NAME gba.rtc-calendar COMMAND test_rtc)
+    set_tests_properties(gba.rtc-calendar PROPERTIES TIMEOUT 10)
+    add_executable(test_rtc_calendar_framing tests/gba/cartridge/test_rtc_calendar_framing.c)
+    target_link_libraries(test_rtc_calendar_framing PRIVATE cupid_core)
+    add_test(NAME gba.rtc-calendar-framing COMMAND test_rtc_calendar_framing)
+    set_tests_properties(gba.rtc-calendar-framing PROPERTIES TIMEOUT 10)
+    add_executable(test_rtc_active tests/gba/cartridge/test_rtc_active.c)
+    target_link_libraries(test_rtc_active PRIVATE cupid_core)
+    add_test(NAME gba.rtc-active-transactions COMMAND test_rtc_active)
+    set_tests_properties(gba.rtc-active-transactions PROPERTIES TIMEOUT 10)
+    add_executable(test_rtc_outputs tests/gba/cartridge/test_rtc_outputs.c)
+    target_link_libraries(test_rtc_outputs PRIVATE cupid_core)
+    add_test(NAME gba.rtc-outputs COMMAND test_rtc_outputs)
+    set_tests_properties(gba.rtc-outputs PROPERTIES TIMEOUT 10)
+    add_executable(test_rtc_parameters tests/gba/cartridge/test_rtc_parameters.c)
+    target_link_libraries(test_rtc_parameters PRIVATE cupid_core)
+    add_test(NAME gba.rtc-parameters-component COMMAND test_rtc_parameters component)
+    set_tests_properties(gba.rtc-parameters-component PROPERTIES TIMEOUT 30)
+    add_test(NAME gba.rtc-parameters-bus COMMAND test_rtc_parameters bus)
+    set_tests_properties(gba.rtc-parameters-bus PROPERTIES TIMEOUT 10)
+    add_executable(test_rtc_minute tests/gba/cartridge/test_rtc_minute.c)
+    target_link_libraries(test_rtc_minute PRIVATE cupid_core)
+    add_test(NAME gba.rtc-minute COMMAND test_rtc_minute)
+    set_tests_properties(gba.rtc-minute PROPERTIES TIMEOUT 10)
+    add_executable(test_rtc_irq tests/gba/cartridge/test_rtc_irq.c)
+    target_link_libraries(test_rtc_irq PRIVATE cupid_core)
+    add_test(NAME gba.rtc-irq COMMAND test_rtc_irq)
+    set_tests_properties(gba.rtc-irq PROPERTIES TIMEOUT 10)
+    add_executable(test_rtc_stop tests/gba/cartridge/test_rtc_stop.c)
+    target_link_libraries(test_rtc_stop PRIVATE cupid_core)
+    add_test(NAME gba.rtc-stop COMMAND test_rtc_stop)
+    set_tests_properties(gba.rtc-stop PROPERTIES TIMEOUT 10)
+    add_executable(test_cartridge_gpio tests/gba/cartridge/test_gpio.c)
+    target_link_libraries(test_cartridge_gpio PRIVATE cupid_core)
+    add_test(NAME gba.cartridge-gpio COMMAND test_cartridge_gpio)
+    set_tests_properties(gba.cartridge-gpio PROPERTIES TIMEOUT 10)
+    add_executable(test_gpio_bytes tests/gba/cartridge/test_gpio_bytes.c)
+    target_link_libraries(test_gpio_bytes PRIVATE cupid_core)
+    foreach(group values strobes)
+        add_test(NAME gba.gpio-byte-${group} COMMAND test_gpio_bytes ${group})
+        set_tests_properties(gba.gpio-byte-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+    add_executable(test_rtc_battery tests/gba/cartridge/test_battery.c)
+    target_link_libraries(test_rtc_battery PRIVATE cupid_core)
+    add_test(NAME gba.rtc-battery COMMAND test_rtc_battery ${CMAKE_CURRENT_BINARY_DIR})
+    set_tests_properties(gba.rtc-battery PROPERTIES TIMEOUT 10)
+    add_executable(test_rtc_config tests/platform/test_rtc_config.c src/platform/rtc.c)
+    target_link_libraries(test_rtc_config PRIVATE cupid_core)
+    add_test(NAME platform.rtc-config COMMAND test_rtc_config ${CMAKE_CURRENT_BINARY_DIR})
+    set_tests_properties(platform.rtc-config PROPERTIES TIMEOUT 10)
+    add_executable(test_context tests/platform/test_context.c)
+    target_include_directories(test_context PRIVATE src/platform)
+    target_link_libraries(test_context PRIVATE cupid_link)
+    add_test(NAME platform.context COMMAND test_context)
+    set_tests_properties(platform.context PROPERTIES TIMEOUT 10)
+
+    add_executable(test_cable tests/gba/serial/test_cable.c)
+    add_executable(test_rtc_link tests/gba/cartridge/test_link.c)
+    target_link_libraries(test_rtc_link PRIVATE cupid_link)
+    add_test(NAME gba.rtc-local-stop COMMAND test_rtc_link)
+    set_tests_properties(gba.rtc-local-stop PROPERTIES TIMEOUT 10)
+    target_link_libraries(test_cable PRIVATE cupid_link)
+    foreach(group normal uart multiplayer chronology lifecycle stopped-phase controls guest-dma guest-controls)
+        add_test(NAME gba.cable-${group} COMMAND test_cable ${group})
+        set_tests_properties(gba.cable-${group} PROPERTIES TIMEOUT 30)
+        if(CUPID_TEST_BIOS AND (group STREQUAL "guest-dma" OR group STREQUAL "guest-controls"))
+            add_test(NAME gba.cable-${group}-external COMMAND test_cable ${group} --external-bios ${CUPID_TEST_BIOS})
+            set_tests_properties(gba.cable-${group}-external PROPERTIES TIMEOUT 30)
+        endif()
+    endforeach()
+    foreach(multi RANGE 0 1)
+        if(multi)
+            set(word_last 11)
+        else()
+            set(word_last 3)
+        endif()
+        foreach(selection RANGE 0 ${word_last})
+            add_test(NAME gba.cable-word-${multi}-${selection} COMMAND test_cable word-guest ${multi} ${selection})
+            set_tests_properties(gba.cable-word-${multi}-${selection} PROPERTIES TIMEOUT 30)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME gba.cable-word-${multi}-${selection}-external
+                    COMMAND test_cable word-guest ${multi} ${selection} --external-bios ${CUPID_TEST_BIOS})
+                set_tests_properties(gba.cable-word-${multi}-${selection}-external PROPERTIES TIMEOUT 30)
+            endif()
+        endforeach()
+    endforeach()
+    foreach(mode RANGE 0 3)
+        foreach(fifo RANGE 0 1)
+            foreach(baud RANGE 0 3)
+                add_test(NAME gba.cable-guest-${mode}-${fifo}-${baud} COMMAND test_cable guest ${mode} ${fifo} ${baud})
+                set_tests_properties(gba.cable-guest-${mode}-${fifo}-${baud} PROPERTIES TIMEOUT 30)
+                if(CUPID_TEST_BIOS)
+                    add_test(NAME gba.cable-guest-${mode}-${fifo}-${baud}-external
+                        COMMAND test_cable guest ${mode} ${fifo} ${baud} --external-bios ${CUPID_TEST_BIOS})
+                    set_tests_properties(gba.cable-guest-${mode}-${fifo}-${baud}-external PROPERTIES TIMEOUT 30)
+                endif()
+            endforeach()
+        endforeach()
+    endforeach()
+
     add_executable(test_timing tests/core/test_timing.c)
     target_link_libraries(test_timing PRIVATE cupid_core)
     add_test(NAME core.timing COMMAND test_timing)
@@ -96,7 +336,8 @@ if(BUILD_TESTING)
 
     add_executable(test_undefined tests/arm/test_undefined.c)
     target_link_libraries(test_undefined PRIVATE cupid_core)
-    foreach(group timed untimed state conditions phase dma)
+    foreach(group timed untimed state conditions phase dma
+                  bkpt-encodings bkpt-timed bkpt-untimed bkpt-hooks bkpt-events)
         add_test(NAME arm.undefined-${group} COMMAND test_undefined ${group})
         set_tests_properties(arm.undefined-${group} PROPERTIES TIMEOUT 10)
     endforeach()
@@ -127,10 +368,18 @@ if(BUILD_TESTING)
     set_tests_properties(runner.observations PROPERTIES TIMEOUT 10)
     add_executable(test_observer tests/arm/test_observer.c)
     target_link_libraries(test_observer PRIVATE cupid_core)
-    foreach(group stream boundaries)
+    foreach(group stream boundaries bank)
         add_test(NAME arm.observer-${group} COMMAND test_observer ${group})
         set_tests_properties(arm.observer-${group} PROPERTIES TIMEOUT 10)
     endforeach()
+
+    add_executable(test_pc_address tests/arm/test_pc_address.c)
+    target_link_libraries(test_pc_address PRIVATE cupid_core)
+    foreach(group refill operands interworking observer page)
+        add_test(NAME arm.pc-address-${group} COMMAND test_pc_address ${group})
+        set_tests_properties(arm.pc-address-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
     add_test(NAME runner.fifo-comparisons COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_fifo_comparisons.py
         --runner $<TARGET_FILE:cupidgba-headless>)
@@ -183,6 +432,13 @@ if(BUILD_TESTING)
         set_tests_properties(gba.fifo-refill-${group} PROPERTIES TIMEOUT 10)
     endforeach()
 
+    add_executable(test_fifo_lanes tests/gba/audio/test_fifo_lanes.c)
+    target_link_libraries(test_fifo_lanes PRIVATE cupid_core)
+    foreach(group lanes cpu dma mixed)
+        add_test(NAME gba.fifo-lanes-${group} COMMAND test_fifo_lanes ${group})
+        set_tests_properties(gba.fifo-lanes-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
     if(CUPID_FIFO_PROBE_DIR)
         foreach(case base prefetch irq threshold overflow irq-latch disable-3 disable-4 disable-5)
             add_test(NAME rom.fifo-${case} COMMAND ${Python3_EXECUTABLE}
@@ -213,8 +469,30 @@ if(BUILD_TESTING)
         endif()
     endif()
 
+    add_executable(test_audio_dac tests/gba/test_audio_dac.c)
+    target_link_libraries(test_audio_dac PRIVATE cupid_core)
+    foreach(group levels routing chronology firmware)
+        add_test(NAME gba.audio-dac-${group} COMMAND test_audio_dac ${group})
+        set_tests_properties(gba.audio-dac-${group} PROPERTIES TIMEOUT 30)
+    endforeach()
+
     add_executable(test_serial tests/gba/serial/test_serial.c)
     target_link_libraries(test_serial PRIVATE cupid_core)
+
+    add_executable(test_uart tests/gba/serial/test_uart.c tests/gba/serial/test_uart_guest.c)
+    target_link_libraries(test_uart PRIVATE cupid_core)
+    foreach(group formats fifo errors interrupts peers chronology lifecycle)
+        add_test(NAME gba.uart-${group} COMMAND test_uart ${group})
+        set_tests_properties(gba.uart-${group} PROPERTIES TIMEOUT 30)
+    endforeach()
+    foreach(group guest-arm guest-thumb guest-controls)
+        add_test(NAME gba.uart-${group} COMMAND test_uart ${group})
+        set_tests_properties(gba.uart-${group} PROPERTIES TIMEOUT 30)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME gba.uart-${group}-external COMMAND test_uart ${group} --external-bios ${CUPID_TEST_BIOS})
+            set_tests_properties(gba.uart-${group}-external PROPERTIES TIMEOUT 30)
+        endif()
+    endforeach()
     add_test(NAME gba.serial COMMAND test_serial)
     set_tests_properties(gba.serial PROPERTIES TIMEOUT 10)
     add_executable(test_multiplayer tests/gba/serial/test_multiplayer.c)
@@ -237,7 +515,7 @@ if(BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_bios_startup.py
             --frontend $<TARGET_FILE:cupidgba>)
         set_tests_properties(platform.bios-startup PROPERTIES TIMEOUT 10)
-        add_executable(test_input tests/platform/test_input.c src/platform/input.c)
+        add_executable(test_input tests/platform/test_input.c src/platform/input.c src/platform/rumble.c)
         target_link_libraries(test_input PRIVATE cupid_core SDL2::SDL2)
         foreach(group bindings mixed axes lifecycle irq)
             add_test(NAME platform.input-${group} COMMAND test_input ${group})
@@ -247,6 +525,18 @@ if(BUILD_TESTING)
         target_link_libraries(test_audio_output PRIVATE cupid_core SDL2::SDL2)
         add_test(NAME platform.audio COMMAND test_audio_output)
         set_tests_properties(platform.audio PROPERTIES TIMEOUT 10)
+        add_executable(test_local tests/platform/test_local.c src/platform/local.c src/platform/window.c src/platform/audio.c src/platform/input.c src/platform/rumble.c src/platform/rtc.c src/platform/peripherals.c)
+        target_link_libraries(test_local PRIVATE cupid_link SDL2::SDL2)
+        foreach(group input video publication audio live-audio paths)
+            add_test(NAME platform.local-${group} COMMAND test_local ${group})
+            set_tests_properties(platform.local-${group} PROPERTIES TIMEOUT 15)
+        endforeach()
+        add_test(NAME platform.local-startup COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_local_startup.py --frontend $<TARGET_FILE:cupidgba>)
+        set_tests_properties(platform.local-startup PROPERTIES TIMEOUT 30)
+        add_test(NAME platform.local-rtc COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_local_rtc.py --frontend $<TARGET_FILE:cupidgba>)
+        set_tests_properties(platform.local-rtc PROPERTIES TIMEOUT 15)
         find_package(Python3 REQUIRED COMPONENTS Interpreter)
         add_test(NAME platform.save-startup COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_save_startup.py
@@ -259,20 +549,112 @@ if(BUILD_TESTING)
     add_test(NAME gba.timer COMMAND test_timer)
     set_tests_properties(gba.timer PROPERTIES TIMEOUT 10)
 
+    add_executable(test_timer_edges tests/gba/test_timer_edges.c)
+    target_link_libraries(test_timer_edges PRIVATE cupid_core)
+    foreach(channel RANGE 0 3)
+        foreach(selector RANGE 0 3)
+            add_test(NAME gba.timer-edges-${channel}-${selector} COMMAND test_timer_edges ${channel} ${selector})
+            set_tests_properties(gba.timer-edges-${channel}-${selector} PROPERTIES TIMEOUT 30)
+        endforeach()
+    endforeach()
+
     add_executable(test_irq tests/gba/test_irq.c)
     target_link_libraries(test_irq PRIVATE cupid_core)
     add_test(NAME gba.irq COMMAND test_irq)
+    add_executable(test_irq_pulses tests/gba/test_irq_pulses.c)
+    target_link_libraries(test_irq_pulses PRIVATE cupid_core)
+    add_test(NAME gba.irq-pulses COMMAND test_irq_pulses)
+    set_tests_properties(gba.irq-pulses PROPERTIES TIMEOUT 10)
+
+    add_executable(test_irq_clock tests/gba/test_irq_clock.c tests/arm/irq_probe.c)
+    target_link_libraries(test_irq_clock PRIVATE cupid_core)
+    foreach(group waits pulses dma reset observer ordering)
+        add_test(NAME gba.irq-clock-${group} COMMAND test_irq_clock ${group})
+        set_tests_properties(gba.irq-clock-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+    add_executable(test_irq_clock_gpio tests/gba/test_irq_clock_gpio.c)
+    target_link_libraries(test_irq_clock_gpio PRIVATE cupid_core)
+    foreach(group fetch load store)
+        add_test(NAME gba.irq-clock-gpio-${group} COMMAND test_irq_clock_gpio ${group})
+        set_tests_properties(gba.irq-clock-gpio-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
     set_tests_properties(gba.irq PROPERTIES TIMEOUT 10)
+
+    add_executable(test_keypad tests/gba/test_keypad.c)
+    target_link_libraries(test_keypad PRIVATE cupid_core)
+    foreach(group 0 1 2 3 transitions guest chronology)
+        add_test(NAME gba.keypad-control-${group} COMMAND test_keypad ${group})
+        set_tests_properties(gba.keypad-control-${group} PROPERTIES TIMEOUT 30)
+    endforeach()
 
     add_executable(test_dma tests/gba/test_dma.c)
     target_link_libraries(test_dma PRIVATE cupid_core)
     add_test(NAME gba.dma COMMAND test_dma)
     set_tests_properties(gba.dma PROPERTIES TIMEOUT 10)
 
+    add_executable(test_dma_pages tests/gba/dma/test_pages.c)
+    target_link_libraries(test_dma_pages PRIVATE cupid_core)
+    foreach(width halfword word)
+        add_test(NAME gba.dma-pages-${width} COMMAND test_dma_pages ${width})
+        set_tests_properties(gba.dma-pages-${width} PROPERTIES TIMEOUT 10)
+    endforeach()
+
+    if(CUPID_DMA_PROBE_DIR)
+        foreach(case mode-change pause-end-1 pause-end-2 pause-end-3 pause-end-4 pause-mid-1 pause-mid-2 rom-preemption rom-fixed)
+            add_test(NAME rom.dma-probe-${case} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_dma_probe.py
+                --directory ${CUPID_DMA_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless> --test ${case})
+            set_tests_properties(rom.dma-probe-${case} PROPERTIES TIMEOUT 100)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.dma-probe-${case}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_dma_probe.py
+                    --directory ${CUPID_DMA_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless>
+                    --test ${case} --bios ${CUPID_TEST_BIOS})
+                set_tests_properties(rom.dma-probe-${case}-external PROPERTIES TIMEOUT 100)
+            endif()
+        endforeach()
+    endif()
+
+    if(CUPID_CPU_INTERACTION_PROBE_DIR)
+        foreach(case halt-dma-irq halt-dma-irq-read-oam halt-irq
+                internal-cycle-dma-irq internal-cycle-dma-irq-7
+                internal-cycle-dma-irq-br internal-cycle-dma-irq-br1-iwram
+                internal-cycle-dma-irq-br-pre internal-cycle-dma-irq-br-pre-tim
+                internal-cycle-dma-irq-ldr-iwram internal-cycle-dma-irq-nop-iwram
+                internal-cycle-dma-irq-st internal-cycle-dma-irq-st-p3
+                internal-cycle-dma-mul internal-cycle-dma-mul-irq internal-cycle-dma-tim-br-pre)
+            add_test(NAME rom.cpu-interaction-${case} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_cpu_interaction_probe.py
+                --directory ${CUPID_CPU_INTERACTION_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless> --test ${case})
+            set_tests_properties(rom.cpu-interaction-${case} PROPERTIES TIMEOUT 100)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.cpu-interaction-${case}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_cpu_interaction_probe.py
+                    --directory ${CUPID_CPU_INTERACTION_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless>
+                    --test ${case} --bios ${CUPID_TEST_BIOS})
+                set_tests_properties(rom.cpu-interaction-${case}-external PROPERTIES TIMEOUT 100)
+            endif()
+        endforeach()
+    endif()
+
     add_executable(test_prefetch tests/gba/test_prefetch.c)
     target_link_libraries(test_prefetch PRIVATE cupid_core)
     add_test(NAME gba.prefetch COMMAND test_prefetch)
     set_tests_properties(gba.prefetch PROPERTIES TIMEOUT 10)
+
+    add_executable(test_prefetch_boundary tests/gba/test_prefetch_boundary.c)
+    target_link_libraries(test_prefetch_boundary PRIVATE cupid_core)
+    foreach(group RANGE 0 3)
+        add_test(NAME gba.prefetch-boundary-${group} COMMAND test_prefetch_boundary ${group})
+        set_tests_properties(gba.prefetch-boundary-${group} PROPERTIES TIMEOUT 30)
+    endforeach()
+
+    add_executable(test_fast_boot tests/gba/test_fast_boot.c)
+    target_link_libraries(test_fast_boot PRIVATE cupid_core)
+    foreach(group RANGE 0 3)
+        add_test(NAME gba.fast-boot-phase-${group} COMMAND test_fast_boot ${group})
+        set_tests_properties(gba.fast-boot-phase-${group} PROPERTIES TIMEOUT 30)
+    endforeach()
 
     add_executable(test_video tests/gba/test_video.c)
     target_link_libraries(test_video PRIVATE cupid_core)
@@ -282,12 +664,100 @@ if(BUILD_TESTING)
     add_executable(test_cpu tests/arm/test_cpu.c)
     target_link_libraries(test_cpu PRIVATE cupid_core)
     add_test(NAME arm.cpu COMMAND test_cpu)
+
+    add_executable(test_saved_status tests/arm/test_saved_status.c)
+    target_link_libraries(test_saved_status PRIVATE cupid_core)
+    foreach(group reads registers immediate-0 immediate-4 immediate-8 immediate-12 timing predicates banks events)
+        add_test(NAME arm.saved-status-${group} COMMAND test_saved_status ${group})
+        set_tests_properties(arm.saved-status-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
+    add_executable(test_instruction_observer tests/arm/test_instruction_observer.c tests/arm/instruction_probe.c)
+    target_link_libraries(test_instruction_observer PRIVATE cupid_core)
+    foreach(group lifecycle execution arbitration guards passivity)
+        add_test(NAME arm.instruction-observer-${group} COMMAND test_instruction_observer ${group})
+        set_tests_properties(arm.instruction-observer-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
+    add_executable(saved_status_probe tests/arm/saved_status_probe.c tests/arm/instruction_probe.c)
+    target_link_libraries(saved_status_probe PRIVATE cupid_core)
+    if(CUPID_SAVED_STATUS_PROBE_DIR)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        add_test(NAME rom.saved-status COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_saved_status_probe.py
+            --directory ${CUPID_SAVED_STATUS_PROBE_DIR} --runner $<TARGET_FILE:saved_status_probe>)
+        set_tests_properties(rom.saved-status PROPERTIES TIMEOUT 100)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME rom.saved-status-external COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_saved_status_probe.py
+                --directory ${CUPID_SAVED_STATUS_PROBE_DIR} --runner $<TARGET_FILE:saved_status_probe>
+                --bios ${CUPID_TEST_BIOS})
+            set_tests_properties(rom.saved-status-external PROPERTIES TIMEOUT 100)
+        endif()
+    endif()
+
+    add_executable(test_user_bank tests/arm/test_user_bank.c tests/arm/user_bank_probe.c tests/arm/user_bank_gpio.c)
+    target_link_libraries(test_user_bank PRIVATE cupid_core)
+    foreach(group registers arithmetic memory control chronology observer)
+        add_test(NAME arm.user-bank-${group} COMMAND test_user_bank ${group})
+        set_tests_properties(arm.user-bank-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+    foreach(window RANGE 0 2)
+        add_test(NAME arm.user-bank-gpio-${window} COMMAND test_user_bank gpio ${CMAKE_CURRENT_BINARY_DIR} ${window})
+        set_tests_properties(arm.user-bank-gpio-${window} PROPERTIES TIMEOUT 30)
+    endforeach()
+
+    if(CUPID_USER_BANK_PROBE_DIR)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        foreach(group alu immediate writeback branch load multiply-long accumulate-long swap)
+            add_test(NAME rom.user-bank-${group} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_user_bank_probe.py
+                --directory ${CUPID_USER_BANK_PROBE_DIR} --runner $<TARGET_FILE:test_user_bank> --test ${group})
+            set_tests_properties(rom.user-bank-${group} PROPERTIES TIMEOUT 100)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.user-bank-${group}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_user_bank_probe.py
+                    --directory ${CUPID_USER_BANK_PROBE_DIR} --runner $<TARGET_FILE:test_user_bank>
+                    --test ${group} --bios ${CUPID_TEST_BIOS})
+                set_tests_properties(rom.user-bank-${group}-external PROPERTIES TIMEOUT 100)
+            endif()
+        endforeach()
+    endif()
     set_tests_properties(arm.cpu PROPERTIES TIMEOUT 10)
 
     add_executable(test_bios tests/bios/test_bios.c)
     target_link_libraries(test_bios PRIVATE cupid_core)
     add_test(NAME gba.bios COMMAND test_bios)
     set_tests_properties(gba.bios PROPERTIES TIMEOUT 10)
+
+    add_executable(test_bios_irq tests/bios/test_irq.c tests/arm/irq_probe.c)
+    target_link_libraries(test_bios_irq PRIVATE cupid_core)
+    foreach(group arm thumb events)
+        add_test(NAME gba.bios-irq-${group} COMMAND test_bios_irq ${group})
+        set_tests_properties(gba.bios-irq-${group} PROPERTIES TIMEOUT 10)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME gba.bios-irq-${group}-external COMMAND test_bios_irq ${group} --bios ${CUPID_TEST_BIOS})
+            set_tests_properties(gba.bios-irq-${group}-external PROPERTIES TIMEOUT 10)
+        endif()
+    endforeach()
+    add_test(NAME gba.bios-irq-observer COMMAND test_bios_irq observer)
+    set_tests_properties(gba.bios-irq-observer PROPERTIES TIMEOUT 10)
+    if(CUPID_FIRMWARE_IRQ_PROBE_DIR)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        foreach(group irq-sub irq-sub-2 irq-sub-slow irq-sub-2-slow)
+            add_test(NAME rom.firmware-${group} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_firmware_irq_probe.py
+                --directory ${CUPID_FIRMWARE_IRQ_PROBE_DIR} --runner $<TARGET_FILE:test_bios_irq> --test ${group})
+            set_tests_properties(rom.firmware-${group} PROPERTIES TIMEOUT 100)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.firmware-${group}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_firmware_irq_probe.py
+                    --directory ${CUPID_FIRMWARE_IRQ_PROBE_DIR} --runner $<TARGET_FILE:test_bios_irq>
+                    --test ${group} --bios ${CUPID_TEST_BIOS})
+                set_tests_properties(rom.firmware-${group}-external PROPERTIES TIMEOUT 100)
+            endif()
+        endforeach()
+    endif()
 
     add_executable(test_bios_math_copy tests/bios/test_math_copy.c)
     target_link_libraries(test_bios_math_copy PRIVATE cupid_core)
@@ -475,10 +945,16 @@ if(BUILD_TESTING)
     add_test(NAME gba.bios-affine-object COMMAND test_bios_affine --object)
     set_tests_properties(gba.bios-affine-background gba.bios-affine-object PROPERTIES TIMEOUT 10)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME rom.rtc-stop COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_stop.py
+        --runner $<TARGET_FILE:cupidgba-headless>)
+    set_tests_properties(rom.rtc-stop PROPERTIES TIMEOUT 30)
     add_test(NAME gba.bios-affine-table COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/bios/generate_affine_table.py --check)
 
     if(CUPID_TEST_BIOS)
+        add_test(NAME gba.rtc-stop-external COMMAND test_rtc_stop ${CUPID_TEST_BIOS})
+        set_tests_properties(gba.rtc-stop-external PROPERTIES TIMEOUT 10)
         add_test(NAME gba.bios-affine-background-external COMMAND test_bios_affine --background --external-bios ${CUPID_TEST_BIOS})
         add_test(NAME gba.bios-affine-object-external COMMAND test_bios_affine --object --external-bios ${CUPID_TEST_BIOS})
         set_tests_properties(gba.bios-affine-background-external gba.bios-affine-object-external PROPERTIES TIMEOUT 10)
@@ -494,6 +970,8 @@ if(BUILD_TESTING)
         set_tests_properties(gba.bios-data-cartridge-external PROPERTIES TIMEOUT 10)
         add_test(NAME gba.bios-bias-external COMMAND test_bios_data_services --bias --external-bios ${CUPID_TEST_BIOS})
         set_tests_properties(gba.bios-bias-external PROPERTIES TIMEOUT 10)
+        add_test(NAME gba.audio-dac-firmware-external COMMAND test_audio_dac firmware ${CUPID_TEST_BIOS})
+        set_tests_properties(gba.audio-dac-firmware-external PROPERTIES TIMEOUT 30)
     endif()
 
     if(CUPID_TEST_ROM_DIR)
@@ -601,6 +1079,39 @@ if(BUILD_TESTING)
         endif()
     endif()
 
+    if(CUPID_PREFETCH_PROBE_DIR)
+        foreach(case boundary-1 boundary-2 boundary-3 boundary-4 branch-thumb
+                     branch-thumb-2 branch-thumb-3 branch-thumb-4 branch-thumb-5 branch-thumb-6
+                     branch-thumb-arm branch-thumb-arm-3 branch-thumb-arm-4 dma full-arm full-arm-2 full-thumb
+                     wait-enable wait-disabled boundary-legacy)
+            add_test(NAME rom.prefetch-${case} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_prefetch_probe.py
+                --directory ${CUPID_PREFETCH_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless> --test ${case})
+            set_tests_properties(rom.prefetch-${case} PROPERTIES TIMEOUT 95)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.prefetch-${case}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_prefetch_probe.py
+                    --directory ${CUPID_PREFETCH_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless>
+                    --bios ${CUPID_TEST_BIOS} --test ${case})
+                set_tests_properties(rom.prefetch-${case}-external PROPERTIES TIMEOUT 95)
+            endif()
+        endforeach()
+    endif()
+
+    if(CUPID_BUS_PAGE_PROBE_ROM)
+        add_test(NAME rom.bus-page-boundary COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_bus_page_probe.py
+            --rom ${CUPID_BUS_PAGE_PROBE_ROM} --runner $<TARGET_FILE:cupidgba-headless>)
+        set_tests_properties(rom.bus-page-boundary PROPERTIES TIMEOUT 50)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME rom.bus-page-boundary-external COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_bus_page_probe.py
+                --rom ${CUPID_BUS_PAGE_PROBE_ROM} --runner $<TARGET_FILE:cupidgba-headless>
+                --bios ${CUPID_TEST_BIOS})
+            set_tests_properties(rom.bus-page-boundary-external PROPERTIES TIMEOUT 50)
+        endif()
+    endif()
+
     if(CUPID_HALT_PROBE_DIR AND CUPID_TEST_BIOS)
         find_package(Python3 REQUIRED COMPONENTS Interpreter)
         foreach(case halt_pc halt_pc_2 halt_pc_3 halt_pc_4)
@@ -609,6 +1120,14 @@ if(BUILD_TESTING)
                 --directory ${CUPID_HALT_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless>
                 --bios ${CUPID_TEST_BIOS} --test ${case})
             set_tests_properties(rom.halt-probe-${case}-external PROPERTIES TIMEOUT 100)
+        endforeach()
+        foreach(case bl-1 bl-irq bl-irq-2 bl-irq-3 bl-irq-r14 ie if if-timer
+                irq-sub irq-sub-2 irq-sub-2-slow irq-sub-slow)
+            add_test(NAME rom.irq-probe-${case}-external COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_irq_probe.py
+                --directory ${CUPID_HALT_PROBE_DIR} --runner $<TARGET_FILE:test_irq_clock>
+                --bios ${CUPID_TEST_BIOS} --test ${case})
+            set_tests_properties(rom.irq-probe-${case}-external PROPERTIES TIMEOUT 100)
         endforeach()
     endif()
 
@@ -653,6 +1172,20 @@ if(BUILD_TESTING)
                 --rom ${CUPID_AUDIO_TEST_ROM} --runner $<TARGET_FILE:cupidgba-headless> --test ${case})
             set_tests_properties(rom.audio-${case} PROPERTIES TIMEOUT 130)
         endforeach()
+    endif()
+
+    if(CUPID_RTC_STATE_ROM)
+        add_test(NAME rom.rtc-state COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_state.py
+            --rom ${CUPID_RTC_STATE_ROM} --runner $<TARGET_FILE:cupidgba-headless>)
+        set_tests_properties(rom.rtc-state PROPERTIES TIMEOUT 100)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME rom.rtc-state-external COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_state.py
+                --rom ${CUPID_RTC_STATE_ROM} --bios ${CUPID_TEST_BIOS}
+                --runner $<TARGET_FILE:cupidgba-headless>)
+            set_tests_properties(rom.rtc-state-external PROPERTIES TIMEOUT 100)
+        endif()
     endif()
 
     if(CUPID_TIMER_SUITE_ROM)

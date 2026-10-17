@@ -13,6 +13,25 @@ phase through a power transition remains a hardware qualification limit.
 Timer periods, mixer deadlines and DMA bus-phase durations retain their
 existing values.
 
+## Access widths
+
+Each accepted byte, halfword or word port store appends one storage word. A
+byte replaces its addressed eight-bit lane; a halfword replaces its addressed
+sixteen-bit lane. Other lanes retain the next write slot's contents. The
+selected behavior uses that storage slot directly, rather than combining two
+separate halfword stores into one word.
+
+A complete 32-bit bus request appends once. The memory dispatcher retains its
+request width through I/O publication, so the ordinary two-halfword register
+dispatch cannot enqueue that word twice. Existing CPU and DMA bus waits still
+own the publication deadline. FIFO reads retain their open-bus behavior.
+
+FIFO reset control bits discard queued words while retaining the current
+staged bytes and held output. A full machine reset clears all of that state.
+The selected lane and reset policies have logical regression coverage;
+physical propagation, overflow contents and partial-write behavior remain
+unmeasured.
+
 On each timer overflow, an empty staged word takes the oldest queued word
 before the FIFO decides whether to request DMA. Three or fewer words remaining
 in queued storage request a refill through the existing two-clock activation
@@ -47,6 +66,14 @@ an independent running timer, bulk versus single-clock dispatch, master power,
 timer selection, disabled or non-FIFO timing and destination ownership.
 The level and chronology groups fail with the preceding audio implementation;
 the inactive-source controls pass with either implementation.
+
+Four `gba.fifo-lanes-*` groups require 256 complete access-width scenes across
+both FIFOs and four clock epochs, including counter crossings. Golden queued
+words and signed output-byte sequences cover all byte lanes, both halfwords,
+full words, occupied stages and seven-word mixed streams. The 112 ARM/Thumb
+pairs retain ordinary I/O request clocks. Twenty-four DMA cases retain all
+32 paired transfer/IRQ observations, source progress and completion state.
+Each group keeps a ten-second deadline and rejects the preceding implementation.
 
 Sound-driver and music-player playback checks retain complete PCM signatures,
 sample timestamps/counts, state images, DMA source positions and held samples.
@@ -106,14 +133,11 @@ path alongside the original `CUPID_FIFO_PROBE_DIR`. Both BIOS selections retain
 the same frame, instruction and process guards. The source case remains a
 timing failure; the current model reads `0x62` at its first `0x68` comparison.
 
-The current candidate passes eight of eighteen bundled cartridge runs.
-The IRQ cartridge requires and receives `0x008000AF` at its original comparison
-on both BIOS paths; the preceding implementation reads `0x008000AE` there.
-The base, prefetch, threshold, IRQ-latch and one disable group still fail
-on both BIOS paths. Original inputs, comparisons and budgets are retained,
-and all failures remain registered when the profile is enabled. The base
-cartridge still fails in its second timing case after the power correction.
-These results do not qualify the complete FIFO/DMA timing model. Queue capacity,
-overflow behavior, powered-on partial writes, staged-word reset, exact refill
-thresholds and timer/DMA/IRQ phases need further work. See
-[DMA](../dma.md) and [audio timing](timing.md).
+The IRQ cartridge retains its original `0x008000AF` comparison with both live
+operands and both firmware paths. Original base, prefetch, threshold and
+IRQ-latch timing failures remain enabled, including the separate source base.
+Every original input, comparison and execution guard remains required. The
+power, refill and access-width regressions cover their selected logical model;
+complete FIFO/DMA timing acceptance remains open in #76. Physical queue capacity,
+overflow contents, lane latching, reset pipeline behavior and timer/DMA/IRQ
+edges remain unmeasured. See [DMA](../dma.md) and [audio timing](timing.md).

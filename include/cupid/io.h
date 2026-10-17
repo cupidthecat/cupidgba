@@ -177,6 +177,7 @@ enum CupidIRQ {
 /** @name API */
 void cupid_io_init(struct CupidGBA* gba);
 void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value);
+void cupid_io_write32(struct CupidGBA* gba, uint32_t addr, uint32_t value);
 void cupid_io_write8(struct CupidGBA* gba, uint32_t addr, uint8_t value);
 uint16_t cupid_io_read(struct CupidGBA* gba, uint32_t addr);
 void cupid_raise_irq(struct CupidGBA* gba, enum CupidIRQ irq, uint32_t cyclesLate);

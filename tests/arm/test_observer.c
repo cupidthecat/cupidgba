@@ -8,18 +8,19 @@ struct Observation {
     uint64_t clock;
     enum CupidExecMode mode;
     enum CupidPrivMode bank;
+    bool bankPending, bankActive;
 };
 struct Trace { struct Observation records[32]; unsigned count; };
 
 static void observe(const struct CupidARM* cpu, void* context) {
     struct Trace* trace = context;
     CHECK(trace->count < 32);
-    const bool thumb = cpu->executionMode == MODE_THUMB;
     trace->records[trace->count++] = (struct Observation){
-        .address = (uint32_t)cpu->gprs[ARM_PC] - (thumb ? 2u : 4u),
+        .address = cupid_arm_instruction_address(cpu),
         .opcode = cpu->prefetch[0], .r0 = (uint32_t)cpu->gprs[0],
         .clock = cupid_timing_global_time(&cpu->master->timing),
-        .mode = cpu->executionMode, .bank = cpu->privilegeMode};
+        .mode = cpu->executionMode, .bank = cpu->privilegeMode,
+        .bankPending = cpu->userBankPending, .bankActive = cpu->userBankActive};
 }
 static struct CupidGBA* machine(uint64_t clock) {
     struct CupidGBA* gba = calloc(1, sizeof(*gba)); CHECK(gba);
@@ -118,10 +119,56 @@ static void arbitration_refills_and_reset_do_not_fabricate_issue(void) {
     destroy(gba);
 }
 
+static void observation_preserves_user_bank_operand_phase(void) {
+    const uint64_t clocks[] = {0, UINT32_MAX - UINT64_C(4), UINT64_C(0x300000000)};
+    for (unsigned origin = 0; origin < 3; ++origin) {
+        struct CupidGBA* plain = machine(clocks[origin]);
+        struct CupidGBA* traced = machine(clocks[origin]);
+        struct CupidGBA* machines[] = {plain, traced};
+        const uint32_t code[] = {0xE8D00100, 0xE1A01008, 0xE1A02008, 0xEAFFFFFE};
+        const uint32_t input = 0x2222;
+        for (unsigned i = 0; i < 2; ++i) {
+            struct CupidGBA* gba = machines[i];
+            cupid_arm_set_priv_mode(&gba->cpu, MODE_FIQ);
+            gba->cpu.cpsr.packed = MODE_FIQ | 0xC0;
+            gba->cpu.gprs[0] = GBA_BASE_IWRAM + 0x2000;
+            gba->cpu.gprs[8] = 0x1111;
+            memcpy(gba->memory.iwram, code, sizeof(code));
+            memcpy(gba->memory.iwram + 0x2000, &input, sizeof(input));
+            gba->cpu.gprs[ARM_PC] = GBA_BASE_IWRAM;
+            CupidARMWritePC(&gba->cpu);
+        }
+        struct Trace trace = {0};
+        traced->cpu.instructionObserver = observe;
+        traced->cpu.instructionObserverContext = &trace;
+        for (unsigned step = 0; step < 3; ++step) {
+            cupid_gba_step(plain); cupid_gba_step(traced);
+            CHECK(trace.count == step + 1);
+            const struct Observation* record = &trace.records[step];
+            CHECK(record->address == GBA_BASE_IWRAM + step * 4 && record->opcode == code[step]);
+            CHECK(record->mode == MODE_ARM && record->bank == MODE_FIQ);
+            /* Issue observation precedes operand selection. The pending load
+             * phase is visible once; observing it must not consume it. */
+            CHECK(record->bankPending == (step == 1) && !record->bankActive);
+            CHECK(!memcmp(plain->cpu.gprs, traced->cpu.gprs, sizeof(plain->cpu.gprs)));
+            CHECK(!memcmp(plain->cpu.bankedRegisters, traced->cpu.bankedRegisters, sizeof(plain->cpu.bankedRegisters)));
+            CHECK(!memcmp(plain->cpu.prefetch, traced->cpu.prefetch, sizeof(plain->cpu.prefetch)));
+            CHECK(plain->cpu.cpsr.packed == traced->cpu.cpsr.packed);
+            CHECK(plain->cpu.userBankPending == traced->cpu.userBankPending);
+            CHECK(!plain->cpu.userBankActive && !traced->cpu.userBankActive);
+            CHECK(cupid_timing_global_time(&plain->timing) == cupid_timing_global_time(&traced->timing));
+        }
+        CHECK(traced->cpu.gprs[1] == 0x3333 && traced->cpu.gprs[2] == 0x1111);
+        CHECK(traced->cpu.gprs[8] == 0x1111 && traced->cpu.bankedRegisters[BANK_NONE][2] == 0x2222);
+        destroy(plain); destroy(traced);
+    }
+}
+
 int main(int argc, char** argv) {
     CHECK(argc == 2);
     if (!strcmp(argv[1], "stream")) RUN(streams_are_passive_and_include_failed_predicates);
     else if (!strcmp(argv[1], "boundaries")) RUN(arbitration_refills_and_reset_do_not_fabricate_issue);
+    else if (!strcmp(argv[1], "bank")) RUN(observation_preserves_user_bank_operand_phase);
     else CHECK(false);
     return 0;
 }

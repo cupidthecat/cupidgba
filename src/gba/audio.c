@@ -715,7 +715,9 @@ static int16_t _applyBias(struct CupidAudio* audio, int32_t sample) {
     } else if (sample < 0) {
         sample = 0;
     }
-    return (int16_t)(((sample - bias) * audio->masterVolume * 3) >> 4);
+    /* The DAC midpoint is fixed. Removing the programmed bias here would
+     * erase its output shift and could wrap valid levels in signed PCM. */
+    return (int16_t)(((sample - 0x200) * audio->masterVolume * 3) >> 4);
 }
 
 /**

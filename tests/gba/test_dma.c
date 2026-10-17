@@ -384,6 +384,73 @@ static void waitstates_gamepak_counter_and_burst_restart(void) {
     destroy(gba);
 }
 
+static void fixed_rom_sources_keep_their_pointer_and_advance_cartridge_data(void) {
+    const uint64_t clocks[] = {0, INT32_MAX - 2u, UINT32_MAX - 2u, UINT64_C(0x300000000)};
+    const uint32_t banks[] = {GBA_BASE_ROM0, GBA_BASE_ROM1, GBA_BASE_ROM2};
+    const unsigned sequential[] = {3, 5, 9};
+    const uint32_t words[] = {0x12345678, 0x9ABCDEF0, 0x13579BDF, 0x2468ACE0};
+    const uint16_t halves[] = {0x5678, 0x1234, 0xDEF0, 0x9ABC};
+    for (unsigned epoch = 0; epoch < 4; epoch++) for (unsigned bank = 0; bank < 3; bank++) {
+        for (unsigned word = 0; word < 2; word++) {
+            struct CupidGBA* gba = machine(clocks[epoch]);
+            gba->memory.rom = calloc(1, 0x2000);
+            CHECK(gba->memory.rom);
+            gba->memory.romSize = 0x2000;
+            memcpy(gba->memory.rom + 0x100, words, sizeof(words));
+            unsigned width = word ? 4 : 2;
+            uint32_t source = banks[bank] + 0x100, dest = GBA_BASE_IWRAM + 0x100;
+            start(gba, 3, source, dest, 4, (uint16_t)(0x8100 | (word << 10)));
+            unsigned duration = 13 + (word ? 7 : 3) * sequential[bank];
+            tick(gba, (int)duration);
+            const struct CupidDMA* dma = &gba->memory.dma[3];
+            CHECK(!dma->enable && !gba->memory.dmaRunning);
+            CHECK(dma->nextSource == source && dma->nextDest == dest + 4 * width);
+            CHECK(dma->busyUntil == clocks[epoch] + duration - 1);
+            for (unsigned i = 0; i < 4; i++) {
+                uint32_t actual = word ? (uint32_t)cupid_memory_load32(&gba->cpu, dest + i * width, NULL)
+                                       : cupid_memory_loadU16(&gba->cpu, dest + i * width, NULL);
+                CHECK(actual == (word ? words[i] : halves[i]));
+            }
+            destroy(gba);
+        }
+    }
+}
+
+static void decrementing_rom_sources_can_cross_back_into_oam(void) {
+    const uint64_t clocks[] = {0, INT32_MAX - 2u, UINT32_MAX - 2u, UINT64_C(0x300000000)};
+    const unsigned widths[] = {4, 2};
+    const uint16_t rom[] = {0x0123, 0x4567, 0x89AB, 0xCDEF, 0x2345,
+                            0x6789, 0xABCD, 0xEF01, 0x3456, 0x789A};
+    const uint32_t words[] = {0x67892345, 0xEF01ABCD, 0x789A3456, 0x12345678};
+    const uint16_t halves[] = {0x89AB, 0xCDEF, 0x2345, 0x1234};
+    for (unsigned epoch = 0; epoch < 4; epoch++) for (unsigned size = 0; size < 2; size++) {
+        struct CupidGBA* gba = machine(clocks[epoch]);
+        gba->memory.rom = calloc(1, 0x2000);
+        CHECK(gba->memory.rom);
+        gba->memory.romSize = 0x2000;
+        memcpy(gba->memory.rom, rom, sizeof(rom));
+        cupid_memory_store32(&gba->cpu, GBA_BASE_OAM + 0x3FC, 0x12345678, NULL);
+        unsigned width = widths[size];
+        uint32_t dest = GBA_BASE_IWRAM + 0x100;
+        start(gba, 3, GBA_BASE_ROM0 + 2 * width, dest, 4,
+              (uint16_t)(0x8080 | (width == 4 ? 0x0400 : 0)));
+        tick(gba, 40);
+        const struct CupidDMA* dma = &gba->memory.dma[3];
+        uint64_t duration = dma->busyUntil - clocks[epoch] + 1;
+        unsigned expected = width == 4 ? 29 : 20;
+        if (duration != expected)
+            fprintf(stderr, "ROM-to-OAM DMA clocks: observed %u, expected %u\n", (unsigned)duration, expected);
+        CHECK(duration == expected && !dma->enable && !gba->memory.dmaRunning);
+        CHECK(dma->nextSource == GBA_BASE_ROM0 - 2 * width && dma->nextDest == dest + 4 * width);
+        for (unsigned i = 0; i < 4; i++) {
+            uint32_t actual = width == 4 ? (uint32_t)cupid_memory_load32(&gba->cpu, dest + i * width, NULL)
+                                         : cupid_memory_loadU16(&gba->cpu, dest + i * width, NULL);
+            CHECK(actual == (width == 4 ? words[i] : halves[i]));
+        }
+        destroy(gba);
+    }
+}
+
 static void display_requests_and_blanking_modes(void) {
     struct CupidGBA* gba = machine(0);
     cupid_memory_store32(&gba->cpu, GBA_BASE_IWRAM, 0x12345678, NULL);
@@ -467,6 +534,8 @@ int main(void) {
     RUN(fifo_refills_and_irqs_match_late_dispatch);
     RUN(pending_and_preempted_transfers_can_be_cancelled);
     RUN(waitstates_gamepak_counter_and_burst_restart);
+    RUN(fixed_rom_sources_keep_their_pointer_and_advance_cartridge_data);
+    RUN(decrementing_rom_sources_can_cross_back_into_oam);
     RUN(display_requests_and_blanking_modes);
     RUN(cpu_internal_cycles_restart_fetches_and_precede_branch_refills);
     return 0;

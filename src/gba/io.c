@@ -10,6 +10,23 @@
 
 #include "cupid/gba.h"
 
+/* Each accepted FIFO port access appends one complete storage word. Narrow
+ * accesses replace only their addressed lanes in the next write slot. */
+static void fifo_store(struct CupidGBA* gba, uint32_t addr, uint32_t value, unsigned width) {
+    if (!gba->audio.enable) return;
+    const uint32_t base = addr & ~3u;
+    struct CupidAudioFIFO* fifo = base == REG_FIFO_A_LO ? &gba->audio.chA : &gba->audio.chB;
+    unsigned shift = (addr & 3u) * 8;
+    uint32_t mask = width == 4 ? UINT32_MAX : ((UINT32_C(1) << (width * 8)) - 1) << shift;
+    uint32_t word = (fifo->fifo[fifo->fifoWrite] & ~mask) | ((value << shift) & mask);
+    cupid_audio_fifo_write(fifo, word);
+    /* These write-only backing latches describe the next storage slot.
+     * CPU reads still use the existing open-bus path. */
+    uint32_t next = fifo->fifo[fifo->fifoWrite];
+    gba->memory.io[base >> 1] = (uint16_t)next;
+    gba->memory.io[(base >> 1) + 1] = (uint16_t)(next >> 16);
+}
+
 static int32_t affine_high(int32_t previous, uint16_t high) {
     uint32_t raw = ((uint32_t)previous & 0xFFFFu) | ((uint32_t)(high & 0x0FFFu) << 16);
     return (int32_t)(raw ^ 0x08000000u) - 0x08000000;
@@ -193,29 +210,11 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
         cupid_audio_write_register(&gba->audio, addr, value);
         break;
 
-    /**
-     * FIFO writes: store32 splits into two 16-bit writes (LO then HI).
-     * Buffer the LO half, push the full 32-bit word on the HI write.
-     * This avoids double-pushing each DMA word.
-     * Master sound power gates both strobes, including byte-write merges.
-     */
-    case REG_FIFO_A_LO:
-        if (!gba->audio.enable) return;
-        gba->memory.io[addr >> 1] = value;
-        return;
-    case REG_FIFO_A_HI:
-        if (!gba->audio.enable) return;
-        cupid_audio_fifo_write(&gba->audio.chA,
-            (uint32_t)gba->memory.io[REG_FIFO_A_LO >> 1] | ((uint32_t)value << 16));
-        return;
-    case REG_FIFO_B_LO:
-        if (!gba->audio.enable) return;
-        gba->memory.io[addr >> 1] = value;
-        return;
-    case REG_FIFO_B_HI:
-        if (!gba->audio.enable) return;
-        cupid_audio_fifo_write(&gba->audio.chB,
-            (uint32_t)gba->memory.io[REG_FIFO_B_LO >> 1] | ((uint32_t)value << 16));
+    /* Halfword stores append independently. Complete word requests use the
+     * 32-bit dispatcher below, which appends once at the same bus deadline. */
+    case REG_FIFO_A_LO: case REG_FIFO_A_HI:
+    case REG_FIFO_B_LO: case REG_FIFO_B_HI:
+        fifo_store(gba, addr, value, 2);
         return;
 
     /**
@@ -344,8 +343,14 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
 
     case REG_KEYCNT:
         value &= 0xC3FF;
+        /* Newly selected buttons have not contributed to a previous AND
+         * request. Keep the unmatched sentinel and the other held history
+         * so enabling a condition can observe buttons already pressed. */
+        if (gba->keysLast < 0x400) {
+            uint16_t newlySelected = value & ~gba->memory.io[REG_KEYCNT >> 1] & 0x3FF;
+            gba->keysLast &= ~newlySelected;
+        }
         gba->memory.io[REG_KEYCNT >> 1] = value;
-        gba->keysLast = gba->keysActive;
         cupid_gba_test_keypad_irq(gba);
         return;  /** already stored */
 
@@ -406,8 +411,23 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
  * not repeat side effects. Other writes merge into their register halfword.
  * HALTCNT at 0x301 is byte-only.
  */
+void cupid_io_write32(struct CupidGBA* gba, uint32_t addr, uint32_t value) {
+    if (addr >= GBA_SIZE_IO) return;
+    addr &= ~3u;
+    if (addr == REG_FIFO_A_LO || addr == REG_FIFO_B_LO) {
+        fifo_store(gba, addr, value, 4);
+        return;
+    }
+    cupid_io_write(gba, addr, (uint16_t)value);
+    cupid_io_write(gba, addr + 2, (uint16_t)(value >> 16));
+}
+
 void cupid_io_write8(struct CupidGBA* gba, uint32_t addr, uint8_t value) {
     if (addr >= GBA_SIZE_IO) return;
+    if (addr >= REG_FIFO_A_LO && addr <= REG_FIFO_B_HI + 1) {
+        fifo_store(gba, addr, value, 1);
+        return;
+    }
     if ((addr >= REG_SOUND1CNT_L && addr <= REG_SOUNDBIAS + 1) ||
         (addr >= REG_WAVE_RAM0_LO && addr <= REG_WAVE_RAM3_HI + 1)) {
         cupid_audio_write_register8(&gba->audio, addr, value);

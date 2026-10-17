@@ -12,6 +12,11 @@ bytes retain the qualified routing, volume and FIFO reset masks described in
 [I/O registers](../io-registers.md). Reserved register bytes have no write side
 effects.
 
+Powered FIFO byte and halfword stores append a word while replacing only the
+addressed lanes of its next storage slot. Word requests append once at the
+existing bus deadline. Queue storage, staged bytes and the held output retain
+separate state; see [FIFO access and power](fifo-power.md).
+
 Wave RAM holds two 16-byte banks. The CPU window at `0x04000090` through
 `0x0400009F` accesses the bank opposite the programmed playback bank. Byte,
 halfword and word reads use the actual waveform storage. A byte write retains

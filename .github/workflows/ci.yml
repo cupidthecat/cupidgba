@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
       - name: Install SDL2
-        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev lld
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev lld libboost-context-dev
       - name: Verify replacement BIOS source
         if: matrix.compiler == 'clang'
         run: |
@@ -48,27 +48,60 @@ jobs:
             '-Wl,-Ttext=0x03000000,--image-base=0x03000000,--oformat=binary,-e,0' \
             tests/gba/serial/joybus-driver.s -o .local-research/joybus-driver.bin
           python3 tests/gba/serial/generate_joybus_driver.py .local-research/joybus-driver.bin
+          clang --target=arm-none-eabi -march=armv4t -fuse-ld=lld -nostdlib \
+            '-Wl,-Ttext=0x03001000,--image-base=0x03000000,--oformat=binary,-e,0' \
+            tests/gba/serial/uart-driver.s -o .local-research/uart-driver.bin
+          python3 tests/gba/serial/generate_uart_driver.py .local-research/uart-driver.bin
+          clang --target=arm-none-eabi -march=armv4t -fuse-ld=lld -nostdlib \
+            '-Wl,-Ttext=0x03001000,--image-base=0x03000000,--oformat=binary,-e,0' \
+            tests/gba/serial/cable-driver.s -o .local-research/cable-driver.bin
+          python3 tests/gba/serial/generate_cable_driver.py .local-research/cable-driver.bin
       - name: Fetch verified test inputs
         run: |
           python3 tests/roms/check_rom.py --fetch --directory .local-research/test-roms
           python3 tests/roms/check_console.py --fetch --directory .local-research/test-roms
           python3 tests/roms/check_ppu.py --fetch --directory .local-research/test-roms
       - name: Configure
-        run: >-
-          cmake -S . -B build -DCMAKE_C_COMPILER=${{ matrix.compiler }}
-          -DCMAKE_BUILD_TYPE=${{ matrix.mode }} -DCUPID_SANITIZERS=${{ matrix.sanitizers }}
-          -DCUPID_TEST_ROM_DIR=${{ github.workspace }}/.local-research/test-roms
+        run: |
+          sanitizer_flags=()
+          if [ "${{ matrix.compiler }}" = clang ]; then
+            sanitizer_flags+=('-DCMAKE_C_FLAGS_DEBUG=-O1 -g')
+          fi
+          cmake -S . -B build -DCMAKE_C_COMPILER=${{ matrix.compiler }} \
+            -DCMAKE_BUILD_TYPE=${{ matrix.mode }} -DCUPID_SANITIZERS=${{ matrix.sanitizers }} \
+            "${sanitizer_flags[@]}" \
+            -DCUPID_TEST_ROM_DIR=${{ github.workspace }}/.local-research/test-roms
       - name: Build
         run: cmake --build build --parallel 2
       - name: Test
         run: ctest --test-dir build --output-on-failure
+      - name: Check unoptimized native core
+        if: matrix.compiler == 'clang'
+        run: |
+          # Keep default Debug coverage alongside the full sanitized -O1 run.
+          # Cartridge frame counts, assertions and process limits stay intact.
+          cat build/CMakeFiles/cupid_core.dir/flags.make
+          cmake -S . -B build-debug -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_BUILD_TYPE=Debug -DCUPID_SANITIZERS=ON \
+            -DCUPID_TEST_ROM_DIR=${{ github.workspace }}/.local-research/test-roms
+          cmake --build build-debug --parallel 2
+          cat build-debug/CMakeFiles/cupid_core.dir/flags.make
+          ctest --test-dir build-debug -R '^(arm|core|gba|platform|runner)\.' --output-on-failure
       - name: Check live audio threading
         if: matrix.compiler == 'clang'
         run: |
           cmake -S . -B build-thread -DCMAKE_C_COMPILER=clang \
             -DCMAKE_BUILD_TYPE=Debug -DCUPID_THREAD_SANITIZER=ON
-          cmake --build build-thread --target test_audio_output --parallel 2
-          ctest --test-dir build-thread -R '^platform.audio$' --output-on-failure
+          cmake --build build-thread --target test_audio_output test_local test_context --parallel 2
+          ctest --test-dir build-thread -R '^platform[.](audio|local-live-audio|context)$' --output-on-failure
+      - name: Check portable context fallback
+        if: matrix.compiler == 'clang'
+        run: |
+          cmake -S . -B build-context-portable -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_BUILD_TYPE=Debug -DCUPID_SANITIZERS=ON -DCUPID_FAST_CONTEXT=OFF
+          cmake --build build-context-portable --target test_cable test_local test_context --parallel 2
+          ctest --test-dir build-context-portable --output-on-failure \
+            -R '^gba[.]cable-(normal|uart|multiplayer|chronology|lifecycle|stopped-phase|controls|guest-dma|guest-controls|guest-2-1-3|guest-3-0-3|word-1-8)$|^platform[.](local-publication|context)$'
       - name: Verify Makefile build
         if: matrix.compiler == 'gcc'
         run: make --jobs=2
@@ -97,8 +130,10 @@ jobs:
           python tests/roms/check_console.py --fetch --directory .local-research/test-roms
           python tests/roms/check_ppu.py --fetch --directory .local-research/test-roms
       - name: Configure
+        # Keep input fetching and CTest on the same installed interpreter.
         run: >-
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DPython3_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')"
           -DCUPID_TEST_ROM_DIR="$(pwd)/.local-research/test-roms"
       - name: Build
         run: cmake --build build --parallel 2

@@ -1,0 +1,390 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "name": "bl-1",
+      "path": "BL_1.gba",
+      "sha256": "4174d2bcd6cecd42e47be255f41b90bd1a17b92ddf1e3be4067652bc16d54e33",
+      "checkpoint": "0x8000190",
+      "terminal": "0x8000308",
+      "guards": [
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x8000160",
+          "instruction": "0xd110"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x8000180",
+          "instruction": "0xd101"
+        }
+      ]
+    },
+    {
+      "name": "bl-irq",
+      "path": "BL_IRQ.gba",
+      "sha256": "d6eb0e1f578b2433acb7deb3ed7403df9b49cf4613ce420c99d39978c5badfc0",
+      "checkpoint": "0x80002cc",
+      "terminal": "0x8000444",
+      "guards": [
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x800020a",
+          "instruction": "0xd14c"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x800023e",
+          "instruction": "0xd135"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x8000270",
+          "instruction": "0xd11f"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x80002a0",
+          "instruction": "0xd10a"
+        }
+      ]
+    },
+    {
+      "name": "bl-irq-2",
+      "path": "BL_IRQ_2.gba",
+      "sha256": "a16f7f74b66f722a0f78d33822c66fc2d78d1577c1f57d078736cefd94afeaa6",
+      "checkpoint": "0x8000340",
+      "terminal": "0x80004b8",
+      "guards": [
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "continuation": "0x8084",
+          "address": "0x8000202",
+          "instruction": "0xf040"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x8000234",
+          "instruction": "0xd16e"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x8000266",
+          "instruction": "0xd158"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x800029a",
+          "instruction": "0xd141"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x80002d0",
+          "instruction": "0xd129"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x8000308",
+          "instruction": "0xd110"
+        }
+      ]
+    },
+    {
+      "name": "bl-irq-3",
+      "path": "BL_IRQ_3.gba",
+      "sha256": "9acfd7d5a34726effd1ef35cc0348ea907e357e2f3e7c20b8bcd29ecc7965bfa",
+      "checkpoint": "0x8000308",
+      "terminal": "0x8000480",
+      "guards": [
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x8000208",
+          "instruction": "0xd169"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x800023c",
+          "instruction": "0xd152"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x8000270",
+          "instruction": "0xd13b"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x80002a4",
+          "instruction": "0xd124"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x80002d8",
+          "instruction": "0xd10d"
+        }
+      ]
+    },
+    {
+      "name": "bl-irq-r14",
+      "path": "BL_IRQ_R14.gba",
+      "sha256": "ff6611135d87d69cc2cf6f08cc8aa8516650c656c569562f618a51322e0fa9f1",
+      "checkpoint": "0x8000200",
+      "terminal": "0x8000378",
+      "guards": [
+        {
+          "mode": "arm",
+          "zero": 1,
+          "address": "0x8000198",
+          "instruction": "0x1a000000"
+        }
+      ]
+    },
+    {
+      "name": "ie",
+      "path": "IE.gba",
+      "sha256": "89c5034ec30693fdc188ddaaffcb3fae64ccacc84f82cbbdbaf484469dffaea9",
+      "checkpoint": "0x80002c0",
+      "terminal": "0x8000438",
+      "guards": [
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x80001fe",
+          "instruction": "0xd14c"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x800022e",
+          "instruction": "0xd137"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x8000260",
+          "instruction": "0xd121"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x8000294",
+          "instruction": "0xd10a"
+        }
+      ]
+    },
+    {
+      "name": "if",
+      "path": "IF.gba",
+      "sha256": "97470b11be500b2b1d8be32d1e24780225f371286c43dec309d8258487bfb0a1",
+      "checkpoint": "0x80003f0",
+      "terminal": "0x8000568",
+      "guards": [
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x80001bc",
+          "instruction": "0xd130"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x80001da",
+          "instruction": "0xd124"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x80001fa",
+          "instruction": "0xd117"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x800021c",
+          "instruction": "0xd109"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x800025c",
+          "instruction": "0xd13c"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x8000282",
+          "instruction": "0xd12c"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x80002aa",
+          "instruction": "0xd11b"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x80002d4",
+          "instruction": "0xd109"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x8000342",
+          "instruction": "0xd143"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x800036c",
+          "instruction": "0xd131"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x8000398",
+          "instruction": "0xd11e"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x80003c6",
+          "instruction": "0xd10a"
+        }
+      ]
+    },
+    {
+      "name": "if-timer",
+      "path": "IF_Timer.gba",
+      "sha256": "f58a113ff0763de4d2054eacd1d92e89aa66475054cf89909c3f3e0f9a040779",
+      "checkpoint": "0x8000218",
+      "terminal": "0x8000390",
+      "guards": [
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x8000178",
+          "instruction": "0xd13c"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x800019e",
+          "instruction": "0xd12c"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x80001c6",
+          "instruction": "0xd11b"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x80001f0",
+          "instruction": "0xd109"
+        }
+      ]
+    },
+    {
+      "name": "irq-sub",
+      "path": "IRQ_sub.gba",
+      "sha256": "2bc63329f8dd10edd9b231c605de9b3ff9d096598de3ceacd2ec7d6819f8a8f4",
+      "checkpoint": "0x8000250",
+      "terminal": "0x80003c8",
+      "guards": [
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x800023e",
+          "instruction": "0xd102"
+        }
+      ]
+    },
+    {
+      "name": "irq-sub-2",
+      "path": "IRQ_sub_2.gba",
+      "sha256": "808155b942d068a72e2e20e990a6d790fba077eda8567cb8262f1f5de3d80589",
+      "checkpoint": "0x8000220",
+      "terminal": "0x8000398",
+      "guards": [
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x80001f4",
+          "instruction": "0xd108"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x80001fc",
+          "instruction": "0xd107"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x8000200",
+          "instruction": "0xd108"
+        }
+      ]
+    },
+    {
+      "name": "irq-sub-2-slow",
+      "path": "IRQ_sub_2_slow.gba",
+      "sha256": "9c6cf257e39cc1729536a1b7ad346440f2b56c70c80210f061a578b3a985eaa0",
+      "checkpoint": "0x8000220",
+      "terminal": "0x8000398",
+      "guards": [
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x80001f4",
+          "instruction": "0xd108"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x80001fc",
+          "instruction": "0xd107"
+        },
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x8000200",
+          "instruction": "0xd108"
+        }
+      ]
+    },
+    {
+      "name": "irq-sub-slow",
+      "path": "IRQ_sub_slow.gba",
+      "sha256": "e1d0be6780f4e8254a73b2292987d5021cbfeb46ff3209150beba56235f28a14",
+      "checkpoint": "0x8000250",
+      "terminal": "0x80003c8",
+      "guards": [
+        {
+          "mode": "thumb",
+          "zero": 1,
+          "address": "0x800023e",
+          "instruction": "0xd102"
+        }
+      ]
+    }
+  ]
+}

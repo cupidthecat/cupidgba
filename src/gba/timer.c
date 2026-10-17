@@ -69,8 +69,9 @@ static void control_callback(struct CupidTiming* timing, void* context, uint32_t
     uint64_t mask = (UINT64_C(1) << timer->prescaleBits) - 1;
     uint64_t epoch = when & ~mask;
     if (!wasEnabled) {
-        /* A stopped FFFF counter can overflow before loading the reload.
-         * Otherwise the enable pipeline postpones the first counting edge. */
+        /* At a shared prescaler boundary, a stopped FFFF reaches the next
+         * divided tick before loading the reload. Other enables load it now
+         * and postpone the counting epoch by one clock. */
         if (timer->counter != 0xFFFF || (when & mask)) {
             timer->counter = timer->reload;
             epoch++;

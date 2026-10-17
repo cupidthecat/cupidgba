@@ -156,6 +156,8 @@ struct CupidDMA {
     bool     transferWord;
     bool     externalSeen;
     uint32_t accessAddress;  /**< Address sampled by the current bus phase */
+    unsigned gpioHalfCycles; /**< Second halfword strobe of a cartridge port word */
+    uint16_t gpioReadLow;
 };
 
 /**
@@ -244,14 +246,20 @@ extern const char GBA_ROM_WAITSTATES[4];       /**< { 4, 3, 2, 8 } */
 extern const char GBA_ROM_WAITSTATES_SEQ[6];   /**< { 2, 1, 4, 1, 8, 1 } */
 
 /** @name GBA Memory */
+enum CupidPrefetchFetchKind {
+    CUPID_PREFETCH_NONE, CUPID_PREFETCH_CACHED, CUPID_PREFETCH_PENDING, CUPID_PREFETCH_START
+};
+
 struct CupidPrefetch {
     uint64_t epoch;           /**< Last clock accounted for by the fetch unit */
     uint32_t head, tail;      /**< Oldest cached and next in-flight addresses */
     uint32_t address;         /**< Current CPU fetch address */
     unsigned count, width;   /**< Buffered halfwords and current CPU fetch width */
     unsigned duty, remaining; /**< Full and remaining cartridge halfword clocks */
-    unsigned fetchKind;
-    bool active, busy;        /**< Engaged stream and occupied Game Pak bus */
+    enum CupidPrefetchFetchKind fetchKind;
+    bool active, busy;        /**< Prefetch stream and occupied Game Pak bus */
+    bool paused;              /**< Full queue must drain before burst restart */
+    bool engaged;             /**< Background burst has received idle bus clocks */
     bool disabled;            /**< Pending burst restart after WAITCNT disable */
 };
 
@@ -281,6 +289,7 @@ struct CupidMemory {
     bool lastWasDMA;
     uint32_t dmaBus;
     uint32_t dmaROMAddress;  /**< Game Pak counter shared by DMA reads/writes */
+    bool dmaROMBoundary;    /**< The preceding ROM strobe ended a programmed page */
 
     /**
      * Wait-state tables (indexed by region = address >> 24).
@@ -346,11 +355,15 @@ void cupid_bus_fetch(struct CupidARM* cpu, uint32_t address, unsigned width, boo
 void cupid_bus_finish(struct CupidARM* cpu);
 void cupid_bus_wait(struct CupidARM* cpu);
 void cupid_bus_advance(struct CupidARM* cpu, unsigned cycles, bool occupied);
+/* Split board strobes may belong to one CPU request. Begin with its complete
+ * duration, then advance each part without adding another CPU-ready edge. */
+void cupid_bus_begin_transfer(struct CupidARM* cpu, unsigned cycles, bool occupied);
+void cupid_bus_advance_part(struct CupidARM* cpu, unsigned cycles);
 void cupid_bus_release(struct CupidARM* cpu);
 void cupid_bus_lock(struct CupidARM* cpu, bool locked);
 void cupid_prefetch_update(struct CupidGBA* gba, uint64_t timestamp);
 unsigned cupid_prefetch_fetch(struct CupidGBA* gba, uint32_t address, unsigned width,
-                              unsigned cycles);
+                              unsigned cycles, bool refill);
 void cupid_prefetch_finish_fetch(struct CupidGBA* gba);
 unsigned cupid_prefetch_before_data(struct CupidGBA* gba, uint32_t address);
 void cupid_prefetch_after_data(struct CupidGBA* gba);

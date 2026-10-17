@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "cupid/gba.h"
 
-enum DMAPhase { DMA_IDLE, DMA_HEAD, DMA_READ, DMA_WRITE, DMA_TAIL };
+enum DMAPhase { DMA_IDLE, DMA_HEAD, DMA_READ, DMA_READ_HIGH, DMA_WRITE, DMA_WRITE_HIGH, DMA_TAIL };
 
 static void phase_callback(struct CupidTiming* timing, void* context, uint32_t late);
 
@@ -26,6 +26,7 @@ static void phase_at(struct CupidGBA* gba, enum DMAPhase phase, uint64_t when) {
 static unsigned access_cycles(struct CupidMemory* memory, struct CupidDMA* dma,
                               uint32_t address, bool read) {
     dma->accessAddress = address;
+    dma->gpioHalfCycles = 0;
     unsigned penalty = cupid_prefetch_before_data(dma->gba, address);
     if (read && address < GBA_BASE_EWRAM) return 1 + penalty;
     unsigned region = address >> GBA_BASE_OFFSET;
@@ -35,10 +36,13 @@ static unsigned access_cycles(struct CupidMemory* memory, struct CupidDMA* dma,
         dma->externalSeen = true;
     }
     if (region >= GBA_REGION_ROM0 && region <= GBA_REGION_ROM2_EX) {
-        /* Sequential strobes advance the cartridge counter even on writes.
-         * A source/destination crossover continues that same bus burst. */
+        /* The programmed address predicts the next access's page restart.
+         * Fixed and decrementing pointers retain that delayed boundary edge.
+         * Nonsequential strobes latch an address; sequential reads and writes
+         * advance the shared counter, including source/destination crossovers. */
+        if (memory->dmaROMBoundary) sequential = false;
+        memory->dmaROMBoundary = !((address + (dma->transferWord ? 4 : 2)) & 0x1FFFF);
         if (!sequential) memory->dmaROMAddress = address & 0x01FFFFFF;
-        if (!(memory->dmaROMAddress & 0x1FFFF)) sequential = false;
         bool eeprom = cupid_memory_is_eeprom_address(memory, address) &&
             (memory->savedata.type == SAVE_EEPROM || memory->savedata.type == SAVE_EEPROM512);
         if (!eeprom) dma->accessAddress = (address & 0xFE000000) | memory->dmaROMAddress;
@@ -46,9 +50,14 @@ static unsigned access_cycles(struct CupidMemory* memory, struct CupidDMA* dma,
     }
     bool word = dma->transferWord && region != GBA_REGION_SRAM &&
                 region != GBA_REGION_SRAM_MIRROR;
-    return 1 + penalty + (unsigned)(word
+    unsigned cycles = 1 + penalty + (unsigned)(word
         ? (sequential ? memory->waitstatesSeq32[region] : memory->waitstatesNonseq32[region])
         : (sequential ? memory->waitstatesSeq16[region] : memory->waitstatesNonseq16[region]));
+    if (word && cupid_cartridge_gpio_address(dma->gba, dma->accessAddress)) {
+        dma->gpioHalfCycles = (unsigned)memory->waitstatesSeq16[region] + 1;
+        cycles -= dma->gpioHalfCycles;
+    }
+    return cycles;
 }
 
 static void read_next(struct CupidGBA* gba, uint64_t when) {
@@ -65,10 +74,9 @@ static void read_next(struct CupidGBA* gba, uint64_t when) {
     dma->transferWord = dma->wordTransfer || dma->fifo;
     int width = dma->transferWord ? 4 : 2;
     static const int offsets[] = {1, -1, 0, 0};
+    /* The DMA pointer keeps its programmed step. Sequential ROM strobes
+     * use the separate cartridge counter in access_cycles(). */
     dma->sourceOffset = offsets[dma->srcControl] * width;
-    if (dma->nextSource >= GBA_BASE_ROM0 && dma->nextSource < GBA_BASE_SRAM) {
-        dma->sourceOffset = width;
-    }
     dma->destOffset = dma->fifo ? 0 : (dma->destControl == 3 ? width
         : offsets[dma->destControl] * width);
     dma->nextSource &= ~(uint32_t)(width - 1);
@@ -125,7 +133,9 @@ static void read_value(struct CupidGBA* gba, struct CupidDMA* dma) {
     if (dma->nextSource < GBA_BASE_EWRAM) return;
     gba->performingDMA = 1 | (dma->id << 1);
     uint32_t value;
-    if (dma->transferWord) {
+    if (gba->memory.dmaPhase == DMA_READ_HIGH) {
+        value = dma->gpioReadLow | (uint32_t)cupid_memory_loadU16(&gba->cpu, dma->accessAddress + 2, NULL) << 16;
+    } else if (dma->transferWord) {
         value = cupid_memory_load32(&gba->cpu, dma->accessAddress, NULL);
     } else {
         value = cupid_memory_loadU16(&gba->cpu, dma->accessAddress, NULL);
@@ -140,8 +150,10 @@ static void read_value(struct CupidGBA* gba, struct CupidDMA* dma) {
 static void write_value(struct CupidGBA* gba, struct CupidDMA* dma) {
     uint32_t value = dma->latch;
     gba->performingDMA = 1 | (dma->id << 1);
-    if (dma->transferWord) {
-        cupid_memory_store32(&gba->cpu, dma->nextDest, (int32_t)value, NULL);
+    if (gba->memory.dmaPhase == DMA_WRITE_HIGH) {
+        cupid_memory_store16(&gba->cpu, dma->accessAddress + 2, (int16_t)(value >> 16), NULL);
+    } else if (dma->transferWord) {
+        cupid_memory_store32(&gba->cpu, dma->accessAddress, (int32_t)value, NULL);
     } else {
         value >>= (dma->nextDest & 2) * 8;
         if (cupid_memory_is_eeprom_address(&gba->memory, dma->nextDest)) {
@@ -153,10 +165,10 @@ static void write_value(struct CupidGBA* gba, struct CupidDMA* dma) {
             if (save->type == SAVE_EEPROM || save->type == SAVE_EEPROM512) {
                 cupid_savedata_write_eeprom(save, (uint16_t)value, (uint32_t)dma->nextCount);
             } else {
-                cupid_memory_store16(&gba->cpu, dma->nextDest, (int16_t)value, NULL);
+                cupid_memory_store16(&gba->cpu, dma->accessAddress, (int16_t)value, NULL);
             }
         } else {
-            cupid_memory_store16(&gba->cpu, dma->nextDest, (int16_t)value, NULL);
+            cupid_memory_store16(&gba->cpu, dma->accessAddress, (int16_t)value, NULL);
         }
     }
     gba->memory.lastWasDMA = true;
@@ -180,11 +192,25 @@ static void phase_callback(struct CupidTiming* timing, void* context, uint32_t l
         struct CupidDMA* dma = &memory->dma[memory->activeDMA];
         if (!dma->enable) {
             read_next(gba, when);
-        } else if (memory->dmaPhase == DMA_READ) {
+        } else if (memory->dmaPhase == DMA_READ || memory->dmaPhase == DMA_READ_HIGH) {
+            if (memory->dmaPhase == DMA_READ && dma->gpioHalfCycles) {
+                gba->performingDMA = 1 | (dma->id << 1);
+                dma->gpioReadLow = (uint16_t)cupid_memory_loadU16(&gba->cpu, dma->accessAddress, NULL);
+                gba->performingDMA = 0;
+                phase_at(gba, DMA_READ_HIGH, when + dma->gpioHalfCycles);
+                return;
+            }
             cupid_prefetch_after_data(gba);
             read_value(gba, dma);
             phase_at(gba, DMA_WRITE, when + access_cycles(memory, dma, dma->nextDest, false));
-        } else if (memory->dmaPhase == DMA_WRITE) {
+        } else if (memory->dmaPhase == DMA_WRITE || memory->dmaPhase == DMA_WRITE_HIGH) {
+            if (memory->dmaPhase == DMA_WRITE && dma->gpioHalfCycles) {
+                gba->performingDMA = 1 | (dma->id << 1);
+                cupid_memory_store16(&gba->cpu, dma->accessAddress, (int16_t)dma->latch, NULL);
+                gba->performingDMA = 0;
+                phase_at(gba, DMA_WRITE_HIGH, when + dma->gpioHalfCycles);
+                return;
+            }
             cupid_prefetch_after_data(gba);
             write_value(gba, dma);
             dma->nextSource += (uint32_t)dma->sourceOffset;
@@ -219,6 +245,7 @@ void cupid_dma_reset(struct CupidGBA* gba) {
     gba->memory.dmaRunning = false;
     gba->memory.dmaBus = 0;
     gba->memory.dmaROMAddress = 0;
+    gba->memory.dmaROMBoundary = false;
     gba->memory.lastWasDMA = false;
     gba->cpuBlocked = false;
 }
@@ -261,9 +288,6 @@ void cupid_dma_write_cnt(struct CupidGBA* gba, int ch, uint16_t value) {
         dma->nextCount = dma->fifo ? 4 : (int32_t)transfer_count(dma);
         static const int offsets[] = {1, -1, 0, 0};
         dma->sourceOffset = offsets[dma->srcControl] * (int)width;
-        if (dma->source >= GBA_BASE_ROM0 && dma->source < GBA_BASE_SRAM) {
-            dma->sourceOffset = (int)width;
-        }
         dma->destOffset = dma->fifo ? 0 : (dma->destControl == 3 ? (int)width
             : offsets[dma->destControl] * (int)width);
         if (dma->timing == DMA_TIMING_NOW) cupid_dma_transfer(gba, ch);
