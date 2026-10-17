@@ -26,6 +26,8 @@ set(CUPID_USER_BANK_PROBE_DIR "" CACHE PATH "Directory containing checksum-verif
 set(CUPID_SAVED_STATUS_PROBE_DIR "" CACHE PATH "Directory containing the checksum-verified saved-status cartridge")
 set(CUPID_FIRMWARE_IRQ_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified firmware IRQ return cartridges")
 set(CUPID_AUDIO_TEST_ROM "" CACHE FILEPATH "Locally built audio signal cartridge ROM")
+set(CUPID_FIFO_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified FIFO DMA cartridges")
+set(CUPID_FIFO_SOURCE_ROM "" CACHE FILEPATH "Checksum-verified FIFO base cartridge rebuilt from its pinned source")
 set(CUPID_TEST_BIOS "" CACHE FILEPATH "External BIOS for local hardware suite checks")
 
 add_library(cupid_build_options INTERFACE)
@@ -378,6 +380,11 @@ if(BUILD_TESTING)
         set_tests_properties(arm.pc-address-${group} PROPERTIES TIMEOUT 10)
     endforeach()
 
+    add_test(NAME runner.fifo-comparisons COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_fifo_comparisons.py
+        --runner $<TARGET_FILE:cupidgba-headless>)
+    set_tests_properties(runner.fifo-comparisons PROPERTIES TIMEOUT 10)
+
     add_executable(test_cartridge_image tests/gba/cartridge/test_image.c)
     target_link_libraries(test_cartridge_image PRIVATE cupid_core)
     foreach(group decoder dma sizes replacement)
@@ -410,6 +417,57 @@ if(BUILD_TESTING)
     target_link_libraries(test_audio PRIVATE cupid_core)
     add_test(NAME gba.audio COMMAND test_audio)
     set_tests_properties(gba.audio PROPERTIES TIMEOUT 10)
+
+    add_executable(test_fifo_power tests/gba/audio/test_fifo_power.c)
+    target_link_libraries(test_fifo_power PRIVATE cupid_core)
+    foreach(group writes cpu dma phases transitions)
+        add_test(NAME gba.fifo-power-${group} COMMAND test_fifo_power ${group})
+        set_tests_properties(gba.fifo-power-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
+    add_executable(test_fifo_refill tests/gba/audio/test_fifo_refill.c)
+    target_link_libraries(test_fifo_refill PRIVATE cupid_core)
+    foreach(group levels chronology selection)
+        add_test(NAME gba.fifo-refill-${group} COMMAND test_fifo_refill ${group})
+        set_tests_properties(gba.fifo-refill-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
+    add_executable(test_fifo_lanes tests/gba/audio/test_fifo_lanes.c)
+    target_link_libraries(test_fifo_lanes PRIVATE cupid_core)
+    foreach(group lanes cpu dma mixed)
+        add_test(NAME gba.fifo-lanes-${group} COMMAND test_fifo_lanes ${group})
+        set_tests_properties(gba.fifo-lanes-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
+    if(CUPID_FIFO_PROBE_DIR)
+        foreach(case base prefetch irq threshold overflow irq-latch disable-3 disable-4 disable-5)
+            add_test(NAME rom.fifo-${case} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_fifo_probe.py
+                --directory ${CUPID_FIFO_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless> --test ${case})
+            set_tests_properties(rom.fifo-${case} PROPERTIES TIMEOUT 100)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.fifo-${case}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_fifo_probe.py
+                    --directory ${CUPID_FIFO_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless>
+                    --test ${case} --bios ${CUPID_TEST_BIOS})
+                set_tests_properties(rom.fifo-${case}-external PROPERTIES TIMEOUT 100)
+            endif()
+        endforeach()
+    endif()
+
+    if(CUPID_FIFO_SOURCE_ROM)
+        add_test(NAME rom.fifo-base-source COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_fifo_probe.py
+            --rom ${CUPID_FIFO_SOURCE_ROM} --runner $<TARGET_FILE:cupidgba-headless> --test base-source)
+        set_tests_properties(rom.fifo-base-source PROPERTIES TIMEOUT 100)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME rom.fifo-base-source-external COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_fifo_probe.py
+                --rom ${CUPID_FIFO_SOURCE_ROM} --runner $<TARGET_FILE:cupidgba-headless>
+                --test base-source --bios ${CUPID_TEST_BIOS})
+            set_tests_properties(rom.fifo-base-source-external PROPERTIES TIMEOUT 100)
+        endif()
+    endif()
 
     add_executable(test_audio_dac tests/gba/test_audio_dac.c)
     target_link_libraries(test_audio_dac PRIVATE cupid_core)

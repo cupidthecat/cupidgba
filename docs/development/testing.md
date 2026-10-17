@@ -1,5 +1,50 @@
 # Testing
 
+On WSL, keep Linux executable output on native Linux storage. Repeated
+sanitizer process startup through a Windows mount can dominate short CLI
+checks. `CMAKE_RUNTIME_OUTPUT_DIRECTORY` selects executable placement while
+preserving source, compiler flags, inputs and deadlines. Preserve exact copies
+outside volatile storage; an idle WSL shutdown can clear memory-backed output.
+Restore those verified binaries within the same process that runs the checks.
+
+The five `gba.fifo-power-*` groups cover 160 owned observations of ignored
+sound-off writes, ARM/Thumb stores, complete DMA transfers, power edges during
+DMA and queued-word disposal. Each keeps a ten-second deadline. The optional
+`CUPID_FIFO_PROBE_DIR` points to a local directory containing the nine pinned
+FIFO/DMA cartridges. `CUPID_TEST_BIOS` repeats all nine with that image. Both the
+original pre-display result, ordered comparisons and terminal must pass. Known
+FIFO timing failures remain enabled. See [FIFO power](../hardware/audio/fifo-power.md).
+
+The three `gba.fifo-refill-*` groups retain 1,248 complete level, chronology and
+selection cases under ten-second deadlines. Timer consumption loads the staged
+word before testing the remaining queue for a DMA refill. Two groups reject
+the preceding order; inactive-source controls pass with either order. The
+unchanged original IRQ cartridge now reaches its `0x008000AF` comparison and
+passes both result boundaries on each BIOS path. Other FIFO timing gaps remain.
+
+Four `gba.fifo-lanes-*` groups cover 256 complete access-width scenes with
+ten-second deadlines. They retain every queued word and signed output byte,
+occupied-stage behavior, ARM/Thumb I/O request clocks, 32-clock DMA/IRQ histories
+and mixed-width output order across both FIFOs and counter crossings. All four
+reject the preceding lower-port latching behavior. Original FIFO cartridges,
+comparisons and execution guards remain unchanged.
+
+Playback checks keep exact elapsed-frame observations alongside sixty exact
+VSync-call duration checks. A frame spin may finish one or two clocks past its
+deadline because a CPU instruction must finish; FIFO/DMA arbitration determines
+that phase. The call-duration checks independently retain firmware execution
+costs. Complete PCM/state signatures, sample counts, source addresses, held
+samples and all existing loop budgets remain checked with both firmware paths.
+
+`CUPID_FIFO_SOURCE_ROM` adds the separately rebuilt base cartridge with either
+BIOS path. The original source includes a second timer comparison missing from
+the bundled image; both inputs remain registered independently. Reproduce it
+with `tests/roms/build_fifo_source.py` and a local FASMARM executable as described
+in the FIFO guide. The builder checks every source/include byte apart from line
+endings, verifies the complete output digest and refuses to replace source files
+or a different existing output. Both profiles retain their 360-frame,
+150-million-step, 90-second process and 100-second CTest bounds.
+
 The `runner.observations` and three `arm.observer-*` groups require actual
 instruction-issue observations rather than a zero terminal alone. They use
 owned ARM/Thumb streams with deliberately skipped failure writes, ordered
@@ -643,6 +688,25 @@ native 240x160 framebuffer, written as a binary PPM file. Step and emulated-cycl
 budgets bound execution; `--expect-loop-register` reports the result register
 at an ARM branch to itself. `--terminal-address` restricts that observation to
 a specific instruction address.
+
+`--expect-register-at ADDRESS REGISTER VALUE` requires an ordered issued
+instruction and its live register value. `--expect-register-pair-at ADDRESS
+REGISTER VALUE REGISTER VALUE` checks both operands at the same instruction.
+The runner allows up to 128 ordered observations. Missing, extra, reordered
+or wrong values fail even when both result boundaries contain zero. Records
+include actual ARM/Thumb mode and opcode for pinned-input verification.
+Observation runs after IRQ arbitration and includes failed ARM predicates;
+HALT/STOP polls and discarded exception fetches do not issue instructions.
+
+The `arm.observer-*`, `runner.observations` and `runner.fifo-comparisons`
+groups check passive state/clock preservation, IRQ replacement, reset ownership,
+branches, failed predicates, complete comparison operands and bypassed failure
+writes. Their ten-second deadlines and owned process guards remain fixed.
+The FIFO manifest preserves all 26 original comparisons, including the source
+base's second `8Bh` comparison that is absent from the bundled image. See
+[FIFO power](../hardware/audio/fifo-power.md) for the retained timing failures.
+
+
 `--checkpoint-address ADDRESS` additionally records the selected register at
 the first ARM visit to that address. Success requires both the checkpoint and
 terminal values to be zero. An unvisited checkpoint fails, even if later guest
