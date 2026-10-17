@@ -45,8 +45,8 @@ and library. The runner also executes an owned BX-PC cartridge whose ARM
 comparison, checkpoint and terminal addresses differ from its logical PC.
 The original unchanged mixed-width cartridge now passes both 0x4C and 0x6A
 comparisons, its pre-display result and terminal with either BIOS path. The
-full prefetch profile passes 38/40; the two legacy boundary failures remain
-enabled. These results qualify the covered address sequences, not complete
+full prefetch profile now passes 40/40 after the buffered page restart fix.
+These results qualify the covered address sequences, not complete
 CPU or cartridge timing accuracy.
 
 The additional `arm.pc-address-page` group checks 96 executed two-instruction
@@ -58,4 +58,6 @@ R15, physical issue addresses and both complete pipeline words remain checked.
 The preceding core fails this group with its own headers and library. A separate
 diagnostic records 80 failing clock comparisons before the fix and zero after
 it. Existing mixed-width inputs and all four preceding address groups remain
-unchanged. Buffered page-edge combinations still require separate coverage.
+unchanged. The four additional buffered page groups in
+[Game Pak prefetch](../prefetch.md#validation) retain logical ARM A1 while
+forcing the physical boundary's N transfer through the ordinary stop path.

@@ -53,7 +53,10 @@ unsigned cupid_prefetch_fetch(struct CupidGBA* gba, uint32_t address, unsigned w
     /* Align the CPU's word query, preserving the halfword FIFO cursor. A
      * Thumb-to-ARM transition can leave A1 set in the logical fetch stream. */
     uint32_t lookup = address & ~(uint32_t)(width - 1);
-    if (memory->prefetchUnit.active) {
+    /* A physical 128 KiB page edge restarts the cartridge transfer. The bus
+     * has selected N timing; do not bypass it with a cached or pending hit.
+     * Keep the ordinary stop path's in-flight halfword cancellation below. */
+    if (memory->prefetchUnit.active && (lookup & 0x1FFFF)) {
         unsigned halfwords = width / 2;
         if (memory->prefetchUnit.count >= halfwords && lookup == memory->prefetchUnit.head) {
             memory->prefetchUnit.count -= halfwords;

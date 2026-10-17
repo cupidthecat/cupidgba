@@ -14,6 +14,14 @@ checks the original bank values and results, and compares observed execution
 with execution without the hook across clock wrap. Observation runs before
 operand selection and must preserve the pending phase.
 
+Four `gba.prefetch-boundary-*` groups compare 37,632 boundary/miss/cache scene
+triples across every ROM window and wait setting, FIFO occupancy and in-flight
+phase, full/paused queues, ARM/Thumb request types and four clock epochs.
+Owned mapped opcode values, logical ARM A1, exact transfer clocks and final
+FIFO state are required. All four reject the preceding implementation; each
+keeps a thirty-second deadline. Original cartridge inputs and comparisons
+remain unchanged.
+
 Three `arm.user-bank-gpio-*` groups require 15,360 paired RAM/cartridge-port
 scenes after actual `LDM^` and `STM` instructions. They cover every adjacent
 banked-register pair in the five privileged modes, all block addressing modes
@@ -526,6 +534,20 @@ input. Omit `--bios` from the command above to check the built-in path.
 These results establish the tested wait and timer interactions and do not
 establish complete BIOS parity.
 See [BIOS execution](../hardware/bios.md) for the wait-loop behavior and limits.
+
+The owned timer edge matrix needs no external input:
+
+```sh
+cmake --build build --target test_timer_edges --parallel 2
+ctest --test-dir build -R '^gba[.]timer-edges-' --output-on-failure
+```
+
+Its sixteen channel/prescaler groups retain a 30-second deadline each. They
+check all prescaler phases and access widths, stopped-FFFF enable behavior,
+cascade observations, IRQ acknowledgement before/at/after overflow and actual
+clock-boundary crossings. The expected states use overflow deadlines and
+observed register sequences; the fixture never assigns a timer's counter.
+See [timers](../hardware/timers.md) for the selected timing and coverage limits.
 
 The optional local DMA transfer suite has its own observer:
 
