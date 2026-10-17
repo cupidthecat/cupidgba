@@ -85,6 +85,7 @@ void cupid_gba_create(struct CupidGBA* gba) {
     /* Bus helpers are available before power-on reset, so their IRQ clock
      * owner must already have valid event callbacks. */
     cupid_irq_init(gba);
+    cupid_savedata_bind_timing(&gba->memory.savedata, &gba->timing);
     cupid_cartridge_init(gba);
     cupid_serial_init(&gba->serial, gba);
 
@@ -101,6 +102,9 @@ void cupid_gba_reset(struct CupidGBA* gba) {
     /** Ensure master pointer is valid. */
     gba->cpu.master = gba;
 
+    /* Accepted cartridge operations retain their remaining duration while
+     * the system scheduler is rebased by console reset. */
+    cupid_savedata_bind_timing(&gba->memory.savedata, NULL);
     /** Clear timing event queue first. */
     cupid_rtc_sync(&gba->cartridge.rtc, cupid_timing_global_time(&gba->timing));
     cupid_timing_clear(&gba->timing);
@@ -123,6 +127,7 @@ void cupid_gba_reset(struct CupidGBA* gba) {
     if (!gba->memory.fullBios) {
         cupid_gba_skip_bios(gba);
     }
+    cupid_savedata_bind_timing(&gba->memory.savedata, &gba->timing);
 }
 
 /**
@@ -249,7 +254,11 @@ void cupid_gba_wake_stop(struct CupidGBA* gba, enum CupidIRQ sources) {
 }
 
 uint64_t cupid_gba_advance_stopped_time(struct CupidGBA* gba, uint64_t clocks) {
-    return cupid_cartridge_advance_stopped_time(gba, clocks);
+    /* RTC output can wake STOP before the supplied interval ends. Self-timed
+     * save operations consume only that same accepted cartridge interval. */
+    const uint64_t elapsed = cupid_cartridge_advance_stopped_time(gba, clocks);
+    cupid_savedata_advance_clock(&gba->memory.savedata, elapsed);
+    return elapsed;
 }
 
 /**
@@ -263,10 +272,11 @@ void cupid_gba_destroy(struct CupidGBA* gba) {
 }
 
 /**
- * @brief Process events for subsystems not wired into timing.
+ * @brief Flush accumulated CPU clocks and dispatch due scheduler events.
  */
 void cupid_gba_process_events(struct CupidGBA* gba) {
-    (void)gba;
+    gba->cpu.nextEvent = gba->cpu.cycles;
+    gba->cpu.irqh.processEvents(&gba->cpu);
 }
 
 /**
@@ -410,8 +420,6 @@ static void _cupidProcessEvents(struct CupidARM* cpu) {
     }
     gba->earlyExit = false;
 
-    /** Tick subsystems not yet wired into the timing scheduler. */
-    cupid_gba_process_events(gba);
 }
 
 /**

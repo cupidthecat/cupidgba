@@ -22,7 +22,7 @@ endif
 SRC_ARM      = src/arm/arm.c src/arm/isa-arm.c src/arm/isa-thumb.c
 SRC_GBA      = src/gba/gba.c src/gba/memory.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c \
                src/gba/audio.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c \
-               src/gba/hle-bios.c src/gba/bios/file.c src/gba/savedata.c src/gba/save/file.c \
+               src/gba/hle-bios.c src/gba/bios/file.c src/gba/savedata.c src/gba/save/file.c src/gba/save/programming.c \
                src/gba/serial/serial.c src/gba/serial/joybus.c src/gba/serial/uart.c \
                src/gba/cartridge/rtc.c src/gba/cartridge/gpio.c src/gba/cartridge/battery.c src/gba/cartridge/solar.c \
                src/gba/cartridge/gyro.c src/gba/cartridge/tilt.c

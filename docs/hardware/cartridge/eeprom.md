@@ -33,8 +33,10 @@ reset and reload. Each group has a ten-second deadline.
 Cancelled-write cases also check that a resumed transfer cannot access past
 either save capacity; they do not establish electrical cancellation behavior.
 
-These checks qualify CupidGBA's address and capacity model. Physical alias
-captures, programming latency, busy polling, malformed transfer lengths,
-interrupted commands, and electrical wire behavior remain unqualified. The
-current write and ready-bit timing still needs separate work under
+Write/read fixtures wait for the configured programming interval before
+comparing the complete data. These checks qualify the address and capacity
+model. Physical alias captures, chip-specific durations, malformed transfer
+lengths, interrupted commands and electrical wire behavior remain unqualified.
+Writes and ready polling use [save programming](programming.md); its default
+durations are estimates. Complete cartridge accuracy remains open under
 [issue 1](https://github.com/cupidthecat/cupidgba/issues/1).

@@ -11,7 +11,10 @@ replacement BIOS and HLE calls. `-s` selects integer window scaling from 1 to 10
 (default 3). Supply a BIOS and ROM you are authorized to use.
 
 The emulator detects save hardware from the ROM. `-S` overrides it with `sram`,
-`sram512`, `flash512`, `flash1m`, `eeprom`, `eeprom512`, or `none`. The SDL2 frontend
+`sram512`, `flash512`, `flash1m`, `sst39vf512`, `eeprom`, `eeprom512`, or `none`.
+`sst39vf512` selects a fixed 64-KiB Flash device with its documented identity,
+command set and nominal programming intervals; see [save programming](../hardware/cartridge/programming.md).
+The SDL2 frontend
 stores battery saves next to the ROM using the same base name and `.sav`
 extension. It flushes them periodically and on exit. Invalid or incompatible
 save files stop startup with an error. Failed writes keep the previous file;

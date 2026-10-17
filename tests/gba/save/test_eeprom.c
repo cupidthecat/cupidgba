@@ -29,6 +29,7 @@ static void send(struct CupidSavedata* save, unsigned bits, unsigned block, bool
     uint16_t wire[81];
     unsigned n = request(wire, bits, block, write);
     for (unsigned i = 0; i < n; i++) cupid_savedata_write_eeprom(save, wire[i], n - i);
+    if (write) cupid_savedata_advance_clock(save, save->eepromProgramClocks);
 }
 
 static void readback(struct CupidSavedata* save, const uint8_t expected[8]) {
@@ -75,6 +76,7 @@ static void every_address_selects_a_complete_block(void) {
         CHECK(save.writeAddress == size * 8);
         cupid_savedata_write_eeprom(&save, 1, 2);
         cupid_savedata_write_eeprom(&save, 0, 1);
+        cupid_savedata_advance_clock(&save, save.eepromProgramClocks);
         CHECK(save.type == types[t] && save.size == size);
         send(&save, bits, t ? 0x3FF : 0x3F, false);
         readback(&save, payload);
@@ -101,6 +103,7 @@ static void transfer_width_selects_capacity_before_the_address(void) {
             for (unsigned i = 512; i < 8192; i++) CHECK(save.data[i] == 0xFF);
             for (unsigned i = 2; i < n; i++) cupid_savedata_write_eeprom(&save, wire[i], n - i);
             if (write) {
+                cupid_savedata_advance_clock(&save, save.eepromProgramClocks);
                 CHECK(!memcmp(save.data + block * 8, payload, 8));
                 CHECK(save.dirty && save.command == EEPROM_COMMAND_NULL);
                 send(&save, 14, block, false);
@@ -180,6 +183,7 @@ static void dma_retains_framing_data_and_clock_wrap(void) {
                 unsigned n = request(wire, 14, blocks[a], true);
                 uint32_t port = large ? 0x0DFFFF00 : 0x0D001000;
                 dma(gba, GBA_BASE_EWRAM + 0x100, port, n);
+                cupid_timing_tick(&gba->timing, (int32_t)gba->memory.savedata.eepromProgramClocks);
                 CHECK(gba->memory.savedata.type == SAVE_EEPROM);
                 CHECK(gba->memory.savedata.size == 8192);
                 CHECK(gba->memory.savedata.dirty);
@@ -195,7 +199,8 @@ static void dma_retains_framing_data_and_clock_wrap(void) {
                 }
                 CHECK(gba->memory.savedata.command == EEPROM_COMMAND_NULL);
                 CHECK(cupid_memory_load16(&gba->cpu, port, NULL) == 1);
-                CHECK(cupid_timing_global_time(&gba->timing) == clocks[c] + 12288);
+                CHECK(cupid_timing_global_time(&gba->timing) == clocks[c] + 12288 +
+                      gba->memory.savedata.eepromProgramClocks);
                 cupid_gba_destroy(gba);
                 free(gba);
             }

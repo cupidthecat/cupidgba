@@ -51,11 +51,14 @@ static bool set_save_type(struct CupidGBA* gba, const char* name) {
     if (!name) return true;
     static const struct { const char* name; enum CupidSaveType type; } types[] = {
         {"sram", SAVE_SRAM}, {"sram512", SAVE_SRAM512}, {"flash512", SAVE_FLASH512},
+        {"sst39vf512", SAVE_FLASH512},
         {"flash1m", SAVE_FLASH1M}, {"eeprom", SAVE_EEPROM}, {"eeprom512", SAVE_EEPROM512}, {"none", SAVE_NONE}
     };
     for (unsigned i = 0; i < sizeof(types) / sizeof(types[0]); ++i) {
         if (strcmp(name, types[i].name)) continue;
         cupid_savedata_force_type(&gba->memory.savedata, types[i].type);
+        if (!strcmp(name, "sst39vf512"))
+            return cupid_savedata_set_flash_profile(&gba->memory.savedata, FLASH_PROFILE_SST39VF512);
         return true;
     }
     fprintf(stderr, "Error: Unknown save type '%s'\n", name);
