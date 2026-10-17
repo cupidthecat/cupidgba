@@ -63,3 +63,14 @@ across IWRAM, EWRAM and ROM, both fetch widths and four clock epochs. It queues
 the identical IF deadline before a request and during its wait. IF acceptance,
 HALT availability and the final CPU line must retain their original deadlines
 in both arrangements. The preserved preceding core rejects this regression.
+
+GPIO word requests retain two timed 16-bit cartridge strobes and one CPU-ready
+edge. Releasing the synchronizer at both strobes previously advanced an
+unrelated timer IRQ one clock early. The three `gba.irq-clock-gpio-*` groups
+compare complete ordinary-ROM and GPIO histories for opcode fetches, loads and
+stores: 11,952 paired waveforms and 388,032 clock observations across all three
+cartridge windows, wait controls, both request types, prefetch enabled/disabled
+and four clock epochs. They retain the same total request clocks, IF acceptance
+and HALT availability. The preserved preceding core fails all three groups.
+This checks consistency within the CPU-ready model; it does not establish
+physical GPIO propagation delays.

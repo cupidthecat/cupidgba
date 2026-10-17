@@ -9,20 +9,30 @@ void cupid_bus_wait(struct CupidARM* cpu) {
     /* The CPU waits for bus ownership; DMA's peripheral clocks still run. */
     if (waiting) cupid_irq_pause_cpu(gba);
     while (gba->memory.dmaRunning && !gba->memory.busLocked) {
+        gba->timing.waitingForEvent = true;
         cpu->cycles = cpu->nextEvent;
         cpu->irqh.processEvents(cpu);
+        gba->timing.waitingForEvent = false;
     }
     if (waiting) cupid_irq_resume_cpu(gba);
 }
 
-void cupid_bus_advance(struct CupidARM* cpu, unsigned cycles, bool occupied) {
+void cupid_bus_begin_transfer(struct CupidARM* cpu, unsigned cycles, bool occupied) {
     struct CupidGBA* gba = cpu->master;
     gba->memory.busBusy = occupied;
     /* Wait states stretch one CPU bus cycle. Only its final ready edge
-     * advances the IRQ synchronizer. Keep peripheral dispatch in one batch. */
+     * advances the IRQ synchronizer; peripheral clocks continue throughout. */
     if (occupied && cycles > 1) cupid_irq_hold_cpu(gba, cycles);
+}
+
+void cupid_bus_advance_part(struct CupidARM* cpu, unsigned cycles) {
     cpu->cycles += (int32_t)cycles;
     cpu->irqh.processEvents(cpu);
+}
+
+void cupid_bus_advance(struct CupidARM* cpu, unsigned cycles, bool occupied) {
+    cupid_bus_begin_transfer(cpu, cycles, occupied);
+    cupid_bus_advance_part(cpu, cycles);
 }
 
 void cupid_bus_release(struct CupidARM* cpu) {
@@ -57,7 +67,8 @@ void cupid_bus_fetch(struct CupidARM* cpu, uint32_t address, unsigned width, boo
     }
     gba->memory.fetchNonseq = false;
     unsigned cycles = cupid_prefetch_fetch(gba, address, width, wait + 1, refill);
-    cupid_bus_advance(cpu, cycles, true);
+    if (!gba->cartridge.readable || !cupid_cartridge_fetch_bus(gba, address, width, cycles))
+        cupid_bus_advance(cpu, cycles, true);
     cupid_prefetch_finish_fetch(gba);
     /* The caller reads the opcode before releasing ownership of the bus. */
     gba->memory.lastWasDMA = false;

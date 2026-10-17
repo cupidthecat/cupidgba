@@ -52,3 +52,18 @@ Reset and BIOS-skipped display phases also lack hardware captures.
 Rendering operates by scanline; pixel fetches, bus contention, mid-line register effects,
 forced-blank transitions and full PPU accuracy require separate work. The
 status and request results do not establish those behaviors.
+
+## Completed display images
+
+`cupid_video_set_frame_callback` observes the existing line-160 frame handoff
+after register mirrors update. It supplies borrowed RGBA pixels and the
+console-clock deadline, including during late event dispatch. A caller copies
+the pixels to retain the completed image. The callback runs on the emulation
+thread and must not change the core or advance time. Install or clear it while
+paused; its host ownership survives console reset.
+
+The frontend retains that complete image while the next frame draws and
+during STOP. Frame pacing and the RTC interval still consume their existing
+clocks. Publication changes no scanline, IRQ, DMA or audio deadline. Native
+checks cover every pixel, a partially drawn next-frame control, counter and
+clock wrap, STOP, late dispatch, reset and observer removal.
