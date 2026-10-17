@@ -14,6 +14,14 @@ checks the original bank values and results, and compares observed execution
 with execution without the hook across clock wrap. Observation runs before
 operand selection and must preserve the pending phase.
 
+Three `arm.user-bank-gpio-*` groups require 15,360 paired RAM/cartridge-port
+scenes after actual `LDM^` and `STM` instructions. They cover every adjacent
+banked-register pair in the five privileged modes, all block addressing modes
+and writeback choices, each cartridge window, wait controls, prefetch and
+clock wrap. The first stored word retains the register read-port conflict;
+the next uses the current bank after the word's two strobes complete. Every
+group has a thirty-second deadline and rejects the preceding implementation.
+
 `CUPID_CPU_INTERACTION_PROBE_DIR` adds sixteen original CPU/DMA/IRQ cartridges
 from a local input root. `CUPID_TEST_BIOS` repeats them with the external image.
 Every run checks the cartridge digest, its original encoded comparison values
