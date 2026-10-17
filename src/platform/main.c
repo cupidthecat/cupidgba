@@ -7,34 +7,21 @@
 #include "cupid/platform.h"
 #include "cupid/platform/rtc.h"
 #include "cupid/platform/peripherals.h"
+#include "local.h"
+#include <limits.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 /**
  * @brief Frames between automatic save flushes.
  */
 #define SAVE_FLUSH_FRAMES 300
 
-static bool host_clock(struct CupidRTCDateTime* date, uint64_t* stamp) {
-    time_t now = time(NULL);
-    if (now == (time_t)-1 || now < 0) { errno = EIO; return false; }
-    *stamp = (uint64_t)now;
-    if (date) {
-        const struct tm* local = localtime(&now);
-        if (!local || local->tm_year < 100 || local->tm_year > 199) { errno = EINVAL; return false; }
-        *date = (struct CupidRTCDateTime){(uint8_t)(local->tm_year - 100), (uint8_t)(local->tm_mon + 1),
-            (uint8_t)local->tm_mday, (uint8_t)local->tm_wday, (uint8_t)local->tm_hour,
-            (uint8_t)local->tm_min, (uint8_t)local->tm_sec};
-    }
-    return true;
-}
-
 static bool flush_rtc(struct CupidGBA* gba, struct CupidPlatformRTC* config) {
     uint64_t stamp = 0;
-    if (gba->cartridge.rtcPresent && config->offlineWall && !host_clock(NULL, &stamp)) return false;
+    if (gba->cartridge.rtcPresent && config->offlineWall && !cupid_platform_rtc_host_clock(NULL, &stamp)) return false;
     return cupid_platform_rtc_save(gba, config, stamp);
 }
 
@@ -57,105 +44,12 @@ static bool derive_save_path(const char* romPath, char* out, size_t outSize) {
 }
 
 /**
- * @brief Platform implementation.
- */
-
-bool cupid_platform_init(struct CupidPlatform* plat, int scale) {
-    memset(plat, 0, sizeof(*plat));
-    plat->scale = scale;
-    plat->windowWidth = GBA_SCREEN_WIDTH * scale;
-    plat->windowHeight = GBA_SCREEN_HEIGHT * scale;
-    plat->running = true;
-
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER) < 0) {
-        fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
-        return false;
-    }
-
-    plat->window = SDL_CreateWindow(
-        "CupidGBA",
-        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        plat->windowWidth, plat->windowHeight,
-        SDL_WINDOW_SHOWN
-    );
-    if (!plat->window) {
-        fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
-        return false;
-    }
-
-    plat->renderer = SDL_CreateRenderer(plat->window, -1,
-        SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    if (!plat->renderer) {
-        fprintf(stderr, "SDL_CreateRenderer failed: %s\n", SDL_GetError());
-        return false;
-    }
-
-    plat->texture = SDL_CreateTexture(plat->renderer,
-        SDL_PIXELFORMAT_ABGR8888,
-        SDL_TEXTUREACCESS_STREAMING,
-        GBA_SCREEN_WIDTH, GBA_SCREEN_HEIGHT);
-    if (!plat->texture) {
-        fprintf(stderr, "SDL_CreateTexture failed: %s\n", SDL_GetError());
-        return false;
-    }
-
-    /** Open the first available game controller if present. */
-    plat->controller = NULL;
-    plat->controllerIndex = -1;
-    for (int i = 0; i < SDL_NumJoysticks(); i++) {
-        if (SDL_IsGameController(i)) {
-            plat->controller = SDL_GameControllerOpen(i);
-            if (plat->controller) {
-                plat->controllerIndex = SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(plat->controller));
-                printf("CUPID: Opened controller: %s\n",
-                       SDL_GameControllerName(plat->controller));
-                break;
-            }
-        }
-    }
-
-    return true;
-}
-
-void cupid_platform_deinit(struct CupidPlatform* plat) {
-    cupid_platform_rumble_stop(plat);
-    if (plat->audioDevice) SDL_CloseAudioDevice(plat->audioDevice);
-    if (plat->controller) SDL_GameControllerClose(plat->controller);
-    if (plat->texture) SDL_DestroyTexture(plat->texture);
-    if (plat->renderer) SDL_DestroyRenderer(plat->renderer);
-    if (plat->window) SDL_DestroyWindow(plat->window);
-    SDL_Quit();
-}
-
-void cupid_platform_render_frame(struct CupidPlatform* plat, const uint32_t* framebuffer) {
-    void* pixels;
-    int pitch;
-    if (SDL_LockTexture(plat->texture, NULL, &pixels, &pitch) == 0) {
-        /**
-         * Copy each row while respecting texture pitch.
-         * Pitch may differ from GBA_SCREEN_WIDTH * 4.
-         */
-        const uint8_t* src = (const uint8_t*)framebuffer;
-        uint8_t* dst = (uint8_t*)pixels;
-        int rowBytes = GBA_SCREEN_WIDTH * (int)sizeof(uint32_t);
-        for (int y = 0; y < GBA_SCREEN_HEIGHT; y++) {
-            memcpy(dst, src, rowBytes);
-            src += rowBytes;
-            dst += pitch;
-        }
-        SDL_UnlockTexture(plat->texture);
-    }
-    SDL_RenderClear(plat->renderer);
-    SDL_RenderCopy(plat->renderer, plat->texture, NULL, NULL);
-    SDL_RenderPresent(plat->renderer);  /** VSync wait. */
-}
-
-/**
  * @brief Print CLI usage.
  */
 
 static void printUsage(const char* progname) {
     fprintf(stderr, "Usage: %s rom.gba [-b bios.bin] [-s scale] [-S savetype]\n", progname);
+    fprintf(stderr, "       %s rom.gba --link peer.gba [--link third.gba] [--link fourth.gba] [--frames count]\n", progname);
     fprintf(stderr, "\nSave types (GBA): sram, sram512, flash512, flash1m, eeprom, eeprom512, none\n");
     fprintf(stderr, "\nRTC: --rtc auto|on|off  --rtc-time YYYY-MM-DDTHH:MM:SS\n");
     fprintf(stderr, "     --rtc-offline pause|wall (default: pause; wall includes powered-off time)\n");
@@ -184,10 +78,23 @@ int main(int argc, char* argv[]) {
     struct CupidRTCDateTime rtcSeed;
     struct CupidPlatformRTC rtcConfig = {0};
     struct CupidPlatformPeripherals peripherals = CUPID_PLATFORM_PERIPHERALS_DEFAULT;
+    const char* linked[4] = {0};
+    unsigned peerCount = 0, frames = 0;
 
     /** Parse CLI arguments. */
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-b") == 0 && i + 1 < argc) {
+        if (strcmp(argv[i], "--link") == 0 && i + 1 < argc && peerCount < 3) {
+            linked[++peerCount] = argv[++i];
+        } else if (strcmp(argv[i], "--frames") == 0 && i + 1 < argc) {
+            char* end;
+            errno = 0;
+            const char* text = argv[++i];
+            unsigned long value = strtoul(text, &end, 10);
+            if (text[0] < '0' || text[0] > '9' || *end || errno || !value || value > UINT_MAX) {
+                fprintf(stderr, "Error: Invalid frame count: %s\n", text); return 1;
+            }
+            frames = (unsigned)value;
+        } else if (strcmp(argv[i], "-b") == 0 && i + 1 < argc) {
             biosPath = argv[++i];
         } else if (strcmp(argv[i], "-s") == 0 && i + 1 < argc) {
             scale = atoi(argv[++i]);
@@ -249,6 +156,13 @@ int main(int argc, char* argv[]) {
         printUsage(argv[0]);
         return 1;
     }
+
+    if (peerCount) {
+        linked[0] = romPath;
+        const struct CupidLocalDevices devices = {rtcPresence, rtcConfig, peripherals};
+        return cupid_platform_run_local(linked, peerCount + 1, biosPath, saveTypeStr, scale, frames, &devices);
+    }
+    if (frames) { fprintf(stderr, "Error: --frames requires --link\n"); return 1; }
 
     /** GBA path. */
 
@@ -323,7 +237,7 @@ int main(int argc, char* argv[]) {
     rtcConfig.path = rtcPath;
     struct CupidRTCDateTime hostDate;
     uint64_t hostStamp = 0;
-    if (gba.cartridge.rtcPresent && rtcConfig.offlineWall && !host_clock(&hostDate, &hostStamp)) {
+    if (gba.cartridge.rtcPresent && rtcConfig.offlineWall && !cupid_platform_rtc_host_clock(&hostDate, &hostStamp)) {
         fprintf(stderr, "Error: Cannot read RTC host clock: %s\n", strerror(errno));
         cupid_gba_destroy(&gba); return 1;
     }

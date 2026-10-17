@@ -14,6 +14,9 @@ cmake --build build --parallel 2
 ./build/cupidgba game.gba -b /path/to/gba-bios.bin
 ```
 
+Local play: `cupidgba first.gba --link second.gba`. See
+[local sessions](docs/hardware/serial/local-session.md) for controls and saves.
+
 The Linux Makefile also supports `make`. The BIOS argument is optional;
 without it, the emulator uses a built-in replacement BIOS and HLE calls.
 See [build instructions](docs/development/building.md) for Windows and core

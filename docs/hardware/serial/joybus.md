@@ -50,7 +50,8 @@ The command interface and existing guest access-width model are software
 behavior. Subword electrical acknowledgement, status sampling within a read
 response, partial wire packets, clock recovery, cable waveforms and physical
 latency remain unmeasured. No host-console transport or JOY boot loader is
-provided by this interface. UART and full link compatibility remain open.
+provided by this interface. [UART](uart.md) uses a separate pin engine; full
+link compatibility remains open.
 
 ## Verification
 

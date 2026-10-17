@@ -103,6 +103,41 @@ static void open_controller(struct CupidPlatform* plat, int index) {
  * @brief Poll SDL events and update key state.
  */
 
+static void peripheral_key(struct CupidGBA* gba, SDL_Scancode code, bool local) {
+    /* F9 owns the local connection; F11 resets its selected gyroscope. */
+    const SDL_Scancode gyroReset = local ? SDL_SCANCODE_F11 : SDL_SCANCODE_F9;
+    if (gba->cartridge.tiltPresent) {
+        int x = gba->cartridge.tilt.inputX, y = gba->cartridge.tilt.inputY;
+        switch (code) {
+        case SDL_SCANCODE_F1: x -= 32; break;
+        case SDL_SCANCODE_F2: x += 32; break;
+        case SDL_SCANCODE_F3: y -= 32; break;
+        case SDL_SCANCODE_F4: y += 32; break;
+        case SDL_SCANCODE_F10: x = y = CUPID_TILT_NEUTRAL; break;
+        default: break;
+        }
+        cupid_cartridge_set_tilt_sample(gba,
+            (uint16_t)(x < 0 ? 0 : x > 4095 ? 4095 : x),
+            (uint16_t)(y < 0 ? 0 : y > 4095 ? 4095 : y));
+    }
+    if (gba->cartridge.solarPresent &&
+        (code == SDL_SCANCODE_F5 || code == SDL_SCANCODE_F6)) {
+        int level = 255 - gba->cartridge.solar.threshold;
+        level += code == SDL_SCANCODE_F5 ? -16 : 16;
+        cupid_cartridge_set_solar_level(gba, (uint8_t)(level < 0 ? 0 : level > 255 ? 255 : level));
+    }
+    if (gba->cartridge.gyroPresent &&
+        (code == SDL_SCANCODE_F7 ||
+         code == SDL_SCANCODE_F8 ||
+         code == gyroReset)) {
+        int sample = gba->cartridge.gyro.sample;
+        if (code == gyroReset) sample = CUPID_GYRO_NEUTRAL;
+        else sample += code == SDL_SCANCODE_F7 ? -128 : 128;
+        cupid_cartridge_set_gyro_sample(gba,
+            (uint16_t)(sample < 0 ? 0 : sample > 4095 ? 4095 : sample));
+    }
+}
+
 bool cupid_platform_poll_events(struct CupidPlatform* plat, struct CupidGBA* gba) {
     SDL_JoystickID removed = -1;
     SDL_Event event;
@@ -118,36 +153,7 @@ bool cupid_platform_poll_events(struct CupidPlatform* plat, struct CupidGBA* gba
                 plat->running = false;
                 return false;
             }
-            if (gba->cartridge.tiltPresent) {
-                int x = gba->cartridge.tilt.inputX, y = gba->cartridge.tilt.inputY;
-                switch (event.key.keysym.scancode) {
-                case SDL_SCANCODE_F1: x -= 32; break;
-                case SDL_SCANCODE_F2: x += 32; break;
-                case SDL_SCANCODE_F3: y -= 32; break;
-                case SDL_SCANCODE_F4: y += 32; break;
-                case SDL_SCANCODE_F10: x = y = CUPID_TILT_NEUTRAL; break;
-                default: break;
-                }
-                cupid_cartridge_set_tilt_sample(gba,
-                    (uint16_t)(x < 0 ? 0 : x > 4095 ? 4095 : x),
-                    (uint16_t)(y < 0 ? 0 : y > 4095 ? 4095 : y));
-            }
-            if (gba->cartridge.solarPresent &&
-                (event.key.keysym.scancode == SDL_SCANCODE_F5 || event.key.keysym.scancode == SDL_SCANCODE_F6)) {
-                int level = 255 - gba->cartridge.solar.threshold;
-                level += event.key.keysym.scancode == SDL_SCANCODE_F5 ? -16 : 16;
-                cupid_cartridge_set_solar_level(gba, (uint8_t)(level < 0 ? 0 : level > 255 ? 255 : level));
-            }
-            if (gba->cartridge.gyroPresent &&
-                (event.key.keysym.scancode == SDL_SCANCODE_F7 ||
-                 event.key.keysym.scancode == SDL_SCANCODE_F8 ||
-                 event.key.keysym.scancode == SDL_SCANCODE_F9)) {
-                int sample = gba->cartridge.gyro.sample;
-                if (event.key.keysym.scancode == SDL_SCANCODE_F9) sample = CUPID_GYRO_NEUTRAL;
-                else sample += event.key.keysym.scancode == SDL_SCANCODE_F7 ? -128 : 128;
-                cupid_cartridge_set_gyro_sample(gba,
-                    (uint16_t)(sample < 0 ? 0 : sample > 4095 ? 4095 : sample));
-            }
+            peripheral_key(gba, event.key.keysym.scancode, false);
             for (size_t i = 0; i < KEY_MAP_SIZE; i++) {
                 if (event.key.keysym.scancode == keyMap[i].scancode) {
                     plat->keyboardKeys |= (uint16_t)(1u << keyMap[i].bit);
@@ -200,5 +206,89 @@ bool cupid_platform_poll_events(struct CupidPlatform* plat, struct CupidGBA* gba
     /** Test keypad IRQ after key state changes. */
     cupid_gba_test_keypad_irq(gba);
 
+    return true;
+}
+
+static bool controller_assigned(const struct CupidPlatform* platforms, unsigned count, SDL_JoystickID id) {
+    for (unsigned i = 0; i < count; ++i)
+        if (platforms[i].controller && platforms[i].controllerIndex == id) return true;
+    return false;
+}
+
+bool cupid_platform_poll_local(struct CupidPlatform* platforms, struct CupidGBA* const cores[],
+                               unsigned count, unsigned* focus, bool* connected) {
+    if (!platforms || !cores || !focus || !connected || count < 2 || count > 4 || *focus >= count) return false;
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        switch (event.type) {
+        case SDL_QUIT: return false;
+        case SDL_WINDOWEVENT:
+            if (event.window.event == SDL_WINDOWEVENT_CLOSE) return false;
+            if (event.window.event == SDL_WINDOWEVENT_FOCUS_LOST)
+                for (unsigned i = 0; i < count; ++i) platforms[i].keyboardKeys = 0;
+            break;
+        case SDL_KEYDOWN:
+        case SDL_KEYUP: {
+            const bool pressed = event.type == SDL_KEYDOWN;
+            if (pressed && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) return false;
+            if (pressed && !event.key.repeat && event.key.keysym.scancode == SDL_SCANCODE_TAB) {
+                platforms[*focus].keyboardKeys = 0;
+                *focus = (*focus + 1) % count;
+            } else if (pressed && !event.key.repeat && event.key.keysym.scancode == SDL_SCANCODE_F9) {
+                *connected = !*connected;
+            } else {
+                if (pressed && event.key.repeat) break;
+                if (pressed) peripheral_key(cores[*focus], event.key.keysym.scancode, true);
+                for (size_t i = 0; i < KEY_MAP_SIZE; ++i) {
+                    if (event.key.keysym.scancode != keyMap[i].scancode) continue;
+                    const uint16_t mask = (uint16_t)(1u << keyMap[i].bit);
+                    if (pressed) platforms[*focus].keyboardKeys |= mask;
+                    else for (unsigned j = 0; j < count; ++j) platforms[j].keyboardKeys &= (uint16_t)~mask;
+                }
+            }
+            break;
+        }
+        case SDL_MOUSEBUTTONDOWN:
+            if (event.button.button == SDL_BUTTON_LEFT && platforms[0].window) {
+                int width, height;
+                SDL_GetWindowSize(platforms[0].window, &width, &height);
+                const unsigned rows = count > 2 ? 2 : 1;
+                if (width > 0 && height > 0 && event.button.x >= 0 && event.button.y >= 0 &&
+                    event.button.x < width && event.button.y < height) {
+                    unsigned selected = (unsigned)event.button.x * 2 / (unsigned)width +
+                        2 * ((unsigned)event.button.y * rows / (unsigned)height);
+                    if (selected < count) {
+                        platforms[*focus].keyboardKeys = 0;
+                        *focus = selected;
+                    }
+                }
+            }
+            break;
+        case SDL_CONTROLLERDEVICEREMOVED:
+            for (unsigned i = 0; i < count; ++i) {
+                if (platforms[i].controller && platforms[i].controllerIndex == event.cdevice.which) {
+                    cupid_platform_rumble_stop(&platforms[i]);
+                    SDL_GameControllerClose(platforms[i].controller);
+                    platforms[i].controller = NULL;
+                    platforms[i].controllerIndex = -1;
+                }
+            }
+            break;
+        }
+    }
+    for (int device = 0; device < SDL_NumJoysticks(); ++device) {
+        SDL_JoystickID id = SDL_JoystickGetDeviceInstanceID(device);
+        if (id < 0 || !SDL_IsGameController(device) || controller_assigned(platforms, count, id)) continue;
+        for (unsigned i = 0; i < count; ++i) {
+            if (platforms[i].controller) continue;
+            open_controller(&platforms[i], device);
+            if (platforms[i].controller) break;
+        }
+    }
+    for (unsigned i = 0; i < count; ++i) {
+        cores[i]->keysActive = platforms[i].keyboardKeys | controller_keys(&platforms[i]);
+        cupid_gba_test_keypad_irq(cores[i]);
+        cupid_platform_rumble_refresh(&platforms[i]);
+    }
     return true;
 }

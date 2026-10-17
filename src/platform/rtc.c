@@ -2,6 +2,21 @@
 #include "cupid/gba.h"
 #include "cupid/platform/rtc.h"
 #include <errno.h>
+#include <time.h>
+
+bool cupid_platform_rtc_host_clock(struct CupidRTCDateTime* date, uint64_t* stamp) {
+    time_t now = time(NULL);
+    if (now == (time_t)-1 || now < 0) { errno = EIO; return false; }
+    *stamp = (uint64_t)now;
+    if (date) {
+        const struct tm* local = localtime(&now);
+        if (!local || local->tm_year < 100 || local->tm_year > 199) { errno = EINVAL; return false; }
+        *date = (struct CupidRTCDateTime){(uint8_t)(local->tm_year - 100), (uint8_t)(local->tm_mon + 1),
+            (uint8_t)local->tm_mday, (uint8_t)local->tm_wday, (uint8_t)local->tm_hour,
+            (uint8_t)local->tm_min, (uint8_t)local->tm_sec};
+    }
+    return true;
+}
 
 bool cupid_platform_rtc_load(struct CupidGBA* gba, struct CupidPlatformRTC* config,
                              const struct CupidRTCDateTime* hostDate, uint64_t hostStamp) {

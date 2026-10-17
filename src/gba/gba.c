@@ -5,6 +5,7 @@
 
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
+#include "serial/uart.h"
 
 /**
  * @brief Forward declarations for irqh callbacks.
@@ -238,7 +239,10 @@ void cupid_gba_stop(struct CupidGBA* gba) {
 }
 
 void cupid_gba_wake_stop(struct CupidGBA* gba, enum CupidIRQ sources) {
-    if (gba->stopped && (stop_sources(gba) & sources)) gba->stopped = false;
+    if (gba->stopped && (stop_sources(gba) & sources)) {
+        gba->stopped = false;
+        cupid_serial_uart_resume(&gba->serial);
+    }
 }
 
 uint64_t cupid_gba_advance_stopped_time(struct CupidGBA* gba, uint64_t clocks) {
@@ -314,6 +318,7 @@ void cupid_gba_step(struct CupidGBA* gba) {
         if (cpu->cycles >= cpu->nextEvent) cpu->irqh.processEvents(cpu);
     }
     if (cpu->halted) {
+        gba->timing.waitingForEvent = true;
         cpu->cycles = cpu->nextEvent;
     } else {
         if (irqLine && !cpu->irqDisableLatch) {
@@ -327,9 +332,10 @@ void cupid_gba_step(struct CupidGBA* gba) {
         else cupid_arm_step(cpu);
     }
 
-    if (cpu->cycles >= cpu->nextEvent) {
+    if (cpu->cycles >= cpu->nextEvent || gba->timing.synchronize) {
         cpu->irqh.processEvents(cpu);
     }
+    gba->timing.waitingForEvent = false;
 }
 
 /**
@@ -387,7 +393,9 @@ static void _cupidProcessEvents(struct CupidARM* cpu) {
 
     /** Tick the timing scheduler and fire due callbacks (e.g. IRQ). */
     int32_t nextEvent = cpu->nextEvent;
-    while (cpu->cycles >= nextEvent) {
+    bool synchronize = gba->timing.synchronize != NULL;
+    while (cpu->cycles >= nextEvent || synchronize) {
+        synchronize = false;
         cpu->nextEvent = INT32_MAX;
         nextEvent = 0;
         int32_t cycles = cpu->cycles;

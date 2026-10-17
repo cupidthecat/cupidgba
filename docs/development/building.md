@@ -1,6 +1,11 @@
 # Building
 
-The emulator uses C11 and SDL2 2.24 or later. Frontend regressions use SDL2's
+Local console sessions can use `libboost-context-dev` on Linux for native
+stack switching. CMake detects it without adding C++ source to the project.
+Without it, or with `CUPID_FAST_CONTEXT=OFF`, the portable backend remains
+available. Windows uses its native fiber API. See [local sessions](../hardware/serial/local-session.md).
+
+The emulator uses C11 and SDL2 2.24 or later. The input regressions use SDL2's
 extended virtual joystick API. The core and headless test runner have no SDL2
 dependency. CMake keeps generated files in the chosen build directory. The
 Makefile is also supported on Linux and tracks header dependencies.

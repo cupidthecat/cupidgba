@@ -1,5 +1,15 @@
 # Testing
 
+Local-session checks are `gba.cable-*` and `platform.local-*`. They cover
+complete paired guest bytes and words, multiplayer receive slots, bus/event
+coordination, cancellation, STOP, SDL input/video/audio and independent battery
+files. Guest matrix cases have separate CTest entries; each retains its clock
+guard and every payload comparison. See [local sessions](../hardware/serial/local-session.md)
+for the host API and scope. With `CUPID_TEST_BIOS`, the owned word and UART
+guest cases also run with the external firmware. Reconstruct `cable-driver.s`
+at `0x03001000` with the same ARMv4T binary-link flags as the UART driver and
+verify all 512 bytes with `tests/gba/serial/generate_cable_driver.py`.
+
 Hosted Linux qualification uses the explicit Ubuntu 24.04 release for GCC
 Release and Clang Debug with address/undefined-behavior sanitizers. This keeps
 an automatic `ubuntu-latest` release migration from changing the compiler,
@@ -7,6 +17,16 @@ sanitizer and firmware-assembler baseline. Windows checks use GCC and SDL2.
 Both checkout steps pin a verified Node.js 24 action revision. An OS release
 upgrade needs the same complete test, firmware regeneration, Make and live
 ThreadSanitizer qualification as the current workflow.
+
+The ten `gba.uart-*` groups check 12,288 complete format-matrix frames, 124,928
+bit-center samples, FIFO capacity, errors, IRQs, connected peers, DMA/timer
+chronology and lifecycle. Owned ARM/Thumb guests each require 1,024 transferred
+bytes, full RAM output and guards, BIOS HALT wake and their passing terminal.
+Two corrupt-input controls must complete and reject the changed byte.
+`CUPID_TEST_BIOS` adds three external-image groups. Each retains a thirty-second
+deadline and the guest retains its million-step and three-million-clock guards.
+Hosted Clang reconstructs the owned driver. See [UART](../hardware/serial/uart.md)
+for the nominal baud model and remaining physical qualification.
 
 The six `arm.user-bank-*` groups check 840 complete user-bank transfers, operand
 phases, bank ownership, ALU flags, memory and branch behavior, predicates,
@@ -464,7 +484,7 @@ result inspection.
 `--dump-ewram FILE` provides the result counters and failure log for the local
 timer suite observer.
 The example explicitly allows at most one instruction per emulated clock for
-600 frames (600 × 280896 clocks). The runner's default 50-million-step guard
+600 frames (600 Ã— 280896 clocks). The runner's default 50-million-step guard
 can stop a valid long run when prefetch permits more instructions per frame.
 This changes the observation budget; it does not change emulation timing or
 any hardware test expectation.
