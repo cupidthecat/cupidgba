@@ -270,8 +270,9 @@ void cupid_gba_process_events(struct CupidGBA* gba) {
  * @brief Test keypad IRQ after key changes or KEYCNT writes.
  *
  * KEYCNT bit 14 is IRQ enable, bit 15 is AND condition.
- * AND mode fires once when all selected keys become pressed (edge-detect).
- * OR mode fires whenever any selected key is pressed.
+ * AND mode suppresses the same matching held-key state until it changes or
+ * a newly selected button invalidates that history. OR mode requests on
+ * every check with at least one selected button held.
  */
 void cupid_gba_test_keypad_irq(struct CupidGBA* gba) {
     uint16_t keysLast   = gba->keysLast;
