@@ -103,6 +103,21 @@ if(BUILD_TESTING)
     add_test(NAME rom.flash-profile COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_flash_profile.py --runner $<TARGET_FILE:cupidgba-headless>)
     set_tests_properties(rom.flash-profile PROPERTIES TIMEOUT 15)
+    foreach(profile flash512 flash1m sst39vf512)
+        foreach(mode arm thumb)
+            add_test(NAME rom.flash-driver-${profile}-${mode} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_flash_driver.py
+                --runner $<TARGET_FILE:cupidgba-headless> --profile ${profile} --mode ${mode})
+            set_tests_properties(rom.flash-driver-${profile}-${mode} PROPERTIES TIMEOUT 30)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.flash-driver-${profile}-${mode}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_flash_driver.py
+                    --runner $<TARGET_FILE:cupidgba-headless> --profile ${profile} --mode ${mode}
+                    --bios ${CUPID_TEST_BIOS})
+                set_tests_properties(rom.flash-driver-${profile}-${mode}-external PROPERTIES TIMEOUT 30)
+            endif()
+        endforeach()
+    endforeach()
     if(CUPID_TEST_BIOS)
         add_test(NAME rom.flash-profile-external COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_flash_profile.py --runner $<TARGET_FILE:cupidgba-headless>
@@ -411,7 +426,7 @@ if(BUILD_TESTING)
 
     add_executable(test_flash_profile tests/gba/save/test_flash_profile.c)
     target_link_libraries(test_flash_profile PRIVATE cupid_core)
-    foreach(group selection edges cpu)
+    foreach(group selection edges cpu dma)
         add_test(NAME gba.flash-profile-${group} COMMAND test_flash_profile ${group})
         set_tests_properties(gba.flash-profile-${group} PROPERTIES TIMEOUT 10)
     endforeach()

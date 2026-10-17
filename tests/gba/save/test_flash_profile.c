@@ -221,6 +221,110 @@ static void cpu(void) {
     puts("PASS eight ARM/Thumb Flash command and poll streams with independent timer deadline");
 }
 
+struct DMAScene {
+    struct CupidGBA* gba;
+    uint64_t start, ready;
+    uint32_t offset, length;
+    unsigned operation, observations;
+    uint8_t sampled;
+};
+
+static void dma_observe(struct CupidTiming* timing, void* context, uint32_t late) {
+    (void)late;
+    struct DMAScene* scene = context;
+    struct CupidGBA* gba = scene->gba;
+    struct CupidSavedata* save = &gba->memory.savedata;
+    const uint64_t clock = cupid_timing_global_time(timing);
+    const unsigned phase = (unsigned)(clock - scene->start);
+    const bool ready = clock >= scene->ready;
+    CHECK(phase >= 7 && phase <= 10);
+    CHECK(save->programming != ready && save->dirty == ready);
+    for (size_t i = 0; i < save->size; i++) {
+        uint8_t wanted = scene->operation ? 0x5A : 0xFF;
+        if (ready && i >= scene->offset && i - scene->offset < scene->length)
+            wanted = scene->operation ? 0xFF : 0x25;
+        CHECK(save->data[i] == wanted);
+    }
+    if (phase == 7) {
+        CHECK(gba->memory.dma[3].latch == 0 && gba->cpuBlocked);
+    } else {
+        CHECK(gba->memory.dma[3].latch == (uint32_t)scene->sampled * UINT32_C(0x01010101));
+    }
+    for (unsigned i = 0x30; i < 0x50; i++) {
+        uint8_t wanted = phase >= 9 && i >= 0x40 && i < 0x42 ? scene->sampled : 0xCC;
+        CHECK(gba->memory.iwram[i] == wanted);
+    }
+    const unsigned irq = gba->irq.pendingIF | gba->irqf;
+    CHECK(((irq & IRQ_DMA3) != 0) == (phase >= 9));
+    CHECK(((irq & IRQ_TIMER0) != 0) == (phase >= 10));
+    CHECK(gba->cpuBlocked == (phase < 10));
+    scene->observations++;
+}
+
+static void dma(void) {
+    unsigned scenes = 0;
+    for (unsigned epoch = 0; epoch < 4; epoch++) for (unsigned profile = 0; profile < 3; profile++)
+    for (unsigned operation = 0; operation < 3; operation++) for (int edge = -1; edge <= 1; edge++)
+    for (unsigned late = 0; late < 2; late++) {
+        struct CupidGBA* gba = machine(epochs[epoch]);
+        struct CupidSavedata* save = &gba->memory.savedata;
+        if (profile != 0) {
+            CHECK(cupid_savedata_set_flash_profile(save, FLASH_PROFILE_DEFAULT));
+            if (profile == 2) {
+                cupid_savedata_force_type(save, SAVE_FLASH1M);
+                command(save, 0xB0); cupid_savedata_write_flash(save, 0, 1);
+            }
+        }
+        const uint32_t bank = profile == 2 ? 0x10000 : 0;
+        const uint16_t address = operation == 0 ? 0x2344 : operation == 1 ? 0x5000 : 0;
+        const uint32_t offset = operation == 2 ? 0 : bank + address;
+        const uint32_t length = operation == 0 ? 1 : operation == 1 ? 4096 : (uint32_t)save->size;
+        const uint32_t duration = profile == 0 ? durations[operation] : operation == 0 ? 650 : 30000;
+        memset(save->data, operation ? 0x5A : 0xFF, save->size);
+        if (operation == 0) {
+            command(save, 0xA0); cupid_savedata_write_flash(save, address, 0x25);
+        } else {
+            command(save, 0x80);
+            if (operation == 2) command(save, 0x10);
+            else {
+                cupid_savedata_write_flash(save, 0x5555, 0xAA);
+                cupid_savedata_write_flash(save, 0x2AAA, 0x55);
+                cupid_savedata_write_flash(save, address, 0x30);
+            }
+        }
+        CHECK(save->programming && save->readyClock == epochs[epoch] + duration);
+        /* This bus model requests DMA at +2, enters its head phase at +3,
+         * samples the default five-clock save access at +8, writes IWRAM at
+         * +9 and releases the CPU at +10. The ready edge straddles that read. */
+        CHECK(gba->memory.waitstatesSeq16[GBA_REGION_SRAM] == 4);
+        const uint64_t start = save->readyClock + edge - 8;
+        cupid_timing_tick(&gba->timing, (int32_t)(start - epochs[epoch]));
+        cupid_timer_write_reload(gba, 0, 0xFFF8);
+        cupid_timer_write_control(gba, 0, 0xC0);
+        memset(gba->memory.iwram + 0x30, 0xCC, 0x20);
+        cupid_dma_write_sad(gba, 3, GBA_BASE_SRAM + address);
+        cupid_dma_write_dad(gba, 3, GBA_BASE_IWRAM + 0x40);
+        cupid_dma_write_cnt_lo(gba, 3, 1);
+        cupid_dma_write_cnt(gba, 3, 0xC000);
+        struct DMAScene scene = {.gba = gba, .start = start, .ready = save->readyClock,
+            .offset = offset, .length = length, .operation = operation,
+            .sampled = edge < 0 ? (operation ? 0 : 0x80) : (operation ? 0xFF : 0x25)};
+        struct CupidTimingEvent observations[4];
+        for (unsigned i = 0; i < 4; i++) {
+            observations[i] = (struct CupidTimingEvent){.callback = dma_observe, .context = &scene, .priority = 1};
+            cupid_timing_schedule(&gba->timing, &observations[i], (int32_t)i + 7);
+        }
+        if (late) cupid_timing_tick(&gba->timing, 12);
+        else for (unsigned i = 0; i < 12; i++) cupid_timing_tick(&gba->timing, 1);
+        CHECK(scene.observations == 4 && !save->programming && save->dirty);
+        CHECK(!gba->memory.dmaRunning && !gba->cpuBlocked && gba->memory.activeDMA == -1);
+        destroy(gba);
+        scenes++;
+    }
+    CHECK(scenes == 216);
+    puts("PASS 216 complete Flash DMA/timer scenes: before/at/after ready, captured read data, IRQ/release order, late dispatch and clock wrap");
+}
+
 static void lifecycle(const char* directory) {
     /* The build directory owns this fixture's save image. */
     char path[1024];
@@ -261,6 +365,7 @@ int main(int argc, char** argv) {
     if (!strcmp(argv[1], "selection")) selection();
     else if (!strcmp(argv[1], "edges")) edges();
     else if (!strcmp(argv[1], "cpu")) cpu();
+    else if (!strcmp(argv[1], "dma")) dma();
     else if (!strcmp(argv[1], "lifecycle")) { CHECK(argc == 3); lifecycle(argv[2]); }
     else CHECK(false);
     return 0;

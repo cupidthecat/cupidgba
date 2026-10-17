@@ -19,7 +19,7 @@ from chip calibration. Each group retains a ten-second deadline; see
 [save programming](../hardware/cartridge/programming.md).
 
 `gba.save-programming-rtc-stop` adds 192 complete interactions between save
-programming and an RTC wake during STOP. The four `gba.flash-profile-*` groups
+programming and an RTC wake during STOP. The five `gba.flash-profile-*` groups
 cover explicit chip selection, nominal ready edges, complete images, actual
 ARM/Thumb strobes and lifecycle; each has a ten-second deadline.
 `rom.flash-profile` runs an owned command/poll driver and requires default-device
@@ -28,6 +28,20 @@ explicit cartridge entry. `platform.flash-profile` uses bounded local sessions
 to check complete independent saves and both startup paths' capacity rejection.
 These probes qualify the documented nominal model, without physical timing
 calibration. All original source-ROM inputs, assertions and budgets remain.
+
+The Flash DMA group checks 216 full scenes: all three profiles, every operation,
+before/at/after reads, four clock epochs and bulk/partitioned dispatch. Each
+scene checks complete storage at four bus phases, captured read data, guarded
+destination bytes, timer/DMA IRQs and CPU release. Its ten-second deadline
+qualifies integration with the existing bus model.
+
+The six `rom.flash-driver-*` entries add complete ARM/Thumb program, sector,
+bank and chip transactions for both default Flash capacities and the explicit
+64-KiB profile. Each compares the entire final saved image through guest bus
+reads, retains memory guards and requires a wrong-comparison control to fail.
+An external BIOS adds the same six cases at an explicit cartridge entry.
+Each process retains a 120-frame, 50-million-step and ten-second bound; each
+CTest entry has thirty seconds for its positive and negative cases.
 
 The two `gba.gpio-byte-*` groups cover 1,536 complete port frames and 576
 strobe/wait/timer/IRQ cases. The `rom.rtc-calendar-byte-*` groups retain the

@@ -131,11 +131,34 @@ The RTC/STOP group covers 192 scenes across early, coincident and late wake
 edges, clock wrap, both IME states and dispatch partitions. Its short durations
 exercise event ownership and do not measure a physical chip.
 
+The Flash DMA group adds 216 scenes across all three profiles, all operations,
+four clock epochs and bulk/partitioned dispatch. Its read strobe falls one
+clock before, exactly at, or one clock after readiness. It checks the captured
+DMA value through the following write, complete storage images at four bus
+phases, timer/DMA IRQs, destination guards and CPU release. This qualifies the
+save operation's interaction with the existing bus model; broader DMA timing
+qualification remains separate.
+
+The `rom.flash-driver-*` groups execute complete ARM and Thumb polling drivers
+with each supported timing profile. They program full 4-KiB patterns, preserve
+neighboring bytes during sector erase, retain the other bank, erase the entire
+chip, and program a final sector. Every byte operation polls before another
+command begins. Command-valued payloads include `AA` at address `5555`; an
+accepted program command consumes it as data. The observer checks the complete
+64-KiB or 128-KiB saved image copied through the guest bus and both memory guards.
+A deliberately wrong guest comparison must reach its failing terminal.
+
+These groups retain a 120-frame, 50-million-step and ten-second process bound,
+with a thirty-second CTest deadline for the positive and negative cases.
+An external BIOS repeats the driver at an explicit cartridge entry. This
+qualifies the mapped firmware path without claiming to test its boot sequence.
+
 Two additional original Flash cartridge probes compare data immediately after
-programming without waiting for readiness. They pass the instantaneous model
-and fail at that comparison with the pending-operation profile. Their original
-inputs, comparisons and budgets are retained. This difference is unresolved
-source-test qualification, not a passing hardware result. See
+programming without waiting for readiness. They retain their case-2 failure
+with the pending-operation profile. Their original inputs, comparisons and
+budgets remain intact. These software comparisons assume instantaneous array
+data and do not measure a programming interval. Complete polling drivers wait
+for readiness before checking their data or submitting the next command. See
 [issue 62](https://github.com/cupidthecat/cupidgba/issues/62).
 
 A separate original EEPROM software test polls for readiness after each write.
