@@ -339,8 +339,14 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
 
     case REG_KEYCNT:
         value &= 0xC3FF;
+        /* Newly selected buttons have not contributed to a previous AND
+         * request. Keep the unmatched sentinel and the other held history
+         * so enabling a condition can observe buttons already pressed. */
+        if (gba->keysLast < 0x400) {
+            uint16_t newlySelected = value & ~gba->memory.io[REG_KEYCNT >> 1] & 0x3FF;
+            gba->keysLast &= ~newlySelected;
+        }
         gba->memory.io[REG_KEYCNT >> 1] = value;
-        gba->keysLast = gba->keysActive;
         cupid_gba_test_keypad_irq(gba);
         return;  /** already stored */
 

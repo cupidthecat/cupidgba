@@ -12,6 +12,7 @@
 *.dll
 *.exe
 *.sav
+*.rtc
 *.gba
 /bios/*.bin
 __pycache__/

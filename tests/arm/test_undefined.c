@@ -55,7 +55,10 @@ static void prepare(struct CupidGBA* gba, unsigned a, struct Trap trap,
     cupid_arm_set_priv_mode(&gba->cpu, mode);
     for (unsigned r = 0; r < 15; r++) gba->cpu.gprs[r] = (int32_t)(0x11220000u + mode * 256u + r);
     gba->cpu.gprs[ARM_SP] = (int32_t)(GBA_BASE_IWRAM + 0x7000 + mode * 32u);
-    gba->cpu.cpsr.packed = (int32_t)((uint32_t)flags << 28 | 0x05000000u | masks << 6 | mode);
+    /* Repeated Thumb trials must retain T even when the mode helper has no
+     * execution-mode transition to perform. */
+    gba->cpu.cpsr.packed = (int32_t)((uint32_t)flags << 28 | 0x05000000u |
+        masks << 6 | mode | (trap.thumb ? 0x20u : 0u));
     gba->cpu.spsr.packed = 0x6500003F;
     _CupidSetMode(&gba->cpu, trap.thumb ? MODE_THUMB : MODE_ARM);
     gba->cpu.gprs[ARM_PC] = (int32_t)addresses[a];
@@ -225,6 +228,160 @@ static void timer_and_dma_run_in_the_internal_interval(void) {
     CHECK(observations == 12);
 }
 
+/* These encodings belong to a later architecture. The GBA's default host
+ * callback must take the same trap as an unavailable instruction. */
+static struct Trap breakpoint(bool thumb, unsigned immediate) {
+    return (struct Trap){thumb ? 0xBE00u | immediate :
+        0xE1200070u | ((immediate & 0xFFF0u) << 4) | (immediate & 15u), thumb};
+}
+
+static void breakpoint_encodings(void) {
+    struct CupidGBA* gba = machine(0);
+    for (unsigned thumb = 0; thumb < 2; thumb++) {
+        const unsigned count = thumb ? 256 : 65536;
+        for (unsigned immediate = 0; immediate < count; immediate++) {
+            struct Trap trap = breakpoint(thumb != 0, immediate);
+            prepare(gba, 2, trap, MODE_SYS, immediate & 15, 0, 0);
+            uint32_t caller = (uint32_t)gba->cpu.cpsr.packed;
+            cupid_gba_step(gba);
+            CHECK((uint32_t)gba->cpu.cpsr.packed == entry_status(caller));
+            CHECK((uint32_t)gba->cpu.spsr.packed == caller);
+            CHECK((uint32_t)gba->cpu.gprs[ARM_LR] == addresses[2] + (thumb ? 2u : 4u));
+            CHECK(gba->cpu.gprs[ARM_PC] == BASE_UNDEF + 4 && gba->cpu.prefetch[0] == 0xE1B0F00E);
+            cupid_gba_step(gba);
+            CHECK((uint32_t)gba->cpu.cpsr.packed == caller);
+            CHECK(gba->cpu.privilegeMode == MODE_SYS && gba->cpu.executionMode == (thumb ? MODE_THUMB : MODE_ARM));
+            CHECK((uint32_t)gba->cpu.gprs[ARM_PC] == addresses[2] + (thumb ? 4u : 8u));
+            CHECK(gba->cpu.prefetch[0] == (thumb ? 0x275Au : 0xE3A0705Au));
+            observations++;
+        }
+    }
+    CHECK(observations == 65792);
+    destroy(gba);
+}
+
+static void breakpoint_matrix(bool timed) {
+    for (unsigned c = 0; c < sizeof(anchors) / sizeof(*anchors); c++) {
+        struct CupidGBA* gba = machine(anchors[c]);
+        if (!timed) gba->cpu.memory.fetch = NULL;
+        for (unsigned w = 0; w < sizeof(waits) / sizeof(*waits); w++)
+          for (unsigned a = 0; a < sizeof(addresses) / sizeof(*addresses); a++)
+            for (unsigned m = 0; m < sizeof(modes) / sizeof(*modes); m++)
+              for (unsigned flags = 0; flags < 16; flags++)
+                for (unsigned masks = 0; masks < 4; masks++)
+                  for (unsigned thumb = 0; thumb < 2; thumb++) {
+                    struct Trap trap = breakpoint(thumb != 0, (flags * 17u) | (thumb ? 0u : 0xA500u));
+                    prepare(gba, a, trap, modes[m], flags, masks, waits[w]);
+                    uint32_t caller = (uint32_t)gba->cpu.cpsr.packed;
+                    int32_t before[15]; memcpy(before, gba->cpu.gprs, sizeof(before));
+                    const unsigned width = thumb ? 2 : 4;
+                    const unsigned expected = source_cycles(gba, a, thumb != 0) + 3;
+                    uint64_t start = cupid_timing_global_time(&gba->timing);
+                    cupid_gba_step(gba);
+                    CHECK((uint32_t)gba->cpu.cpsr.packed == entry_status(caller));
+                    CHECK((uint32_t)gba->cpu.spsr.packed == caller && gba->cpu.irqDisableLatch);
+                    CHECK((uint32_t)gba->cpu.gprs[ARM_LR] == addresses[a] + width);
+                    CHECK(gba->cpu.gprs[ARM_PC] == BASE_UNDEF + 4 && gba->cpu.prefetch[0] == 0xE1B0F00E);
+                    CHECK(cupid_timing_global_time(&gba->timing) - start == expected);
+                    cupid_gba_step(gba);
+                    CHECK((uint32_t)gba->cpu.cpsr.packed == caller && gba->cpu.privilegeMode == modes[m]);
+                    CHECK(gba->cpu.executionMode == (thumb ? MODE_THUMB : MODE_ARM));
+                    CHECK((uint32_t)gba->cpu.gprs[ARM_PC] == addresses[a] + 2 * width);
+                    CHECK(gba->cpu.prefetch[0] == (thumb ? 0x275Au : 0xE3A0705Au));
+                    for (unsigned r = 0; r < 15; r++) CHECK(gba->cpu.gprs[r] ==
+                        (r == ARM_LR && modes[m] == MODE_UND ? (int32_t)(addresses[a] + width) : before[r]));
+                    observations++;
+                  }
+        destroy(gba);
+    }
+    CHECK(observations == 96768);
+}
+static void breakpoint_timed(void) { breakpoint_matrix(true); }
+static void breakpoint_untimed(void) { breakpoint_matrix(false); }
+
+static unsigned hook_count, hook_immediate;
+static void breakpoint_hook(struct CupidARM* cpu, int immediate) {
+    (void)cpu;
+    hook_count++;
+    hook_immediate = (unsigned)immediate;
+}
+
+static void breakpoint_hooks_and_predicates(void) {
+    for (unsigned timed = 0; timed < 2; timed++) {
+        struct CupidGBA* gba = machine(UINT32_MAX - 8u);
+        if (!timed) gba->cpu.memory.fetch = NULL;
+        gba->cpu.irqh.bkpt16 = gba->cpu.irqh.bkpt32 = breakpoint_hook;
+        for (unsigned thumb = 0; thumb < 2; thumb++) {
+            const unsigned count = thumb ? 256 : 65536;
+            for (unsigned immediate = 0; immediate < count; immediate++) {
+                prepare(gba, 2, breakpoint(thumb != 0, immediate), MODE_SYS, 10, 0, 0);
+                hook_count = 0; hook_immediate = UINT32_MAX;
+                const uint64_t start = cupid_timing_global_time(&gba->timing);
+                cupid_gba_step(gba);
+                CHECK(hook_count == 1 && hook_immediate == immediate);
+                CHECK(gba->cpu.privilegeMode == MODE_SYS && gba->cpu.executionMode == (thumb ? MODE_THUMB : MODE_ARM));
+                CHECK((uint32_t)gba->cpu.gprs[ARM_PC] == addresses[2] + (thumb ? 4u : 8u));
+                /* A handled hook still consumes the ordinary opcode fetch. */
+                CHECK(cupid_timing_global_time(&gba->timing) - start == 1);
+                observations++;
+            }
+        }
+        for (unsigned flags = 0; flags < 16; flags++)
+          for (unsigned condition = 0; condition < 16; condition++) {
+            struct Trap trap = breakpoint(false, 0xA5C3);
+            trap.opcode = (trap.opcode & 0x0FFFFFFFu) | condition << 28;
+            prepare(gba, 2, trap, MODE_SYS, flags, 0, 0);
+            uint32_t caller = (uint32_t)gba->cpu.cpsr.packed;
+            int32_t registers[15]; memcpy(registers, gba->cpu.gprs, sizeof(registers));
+            hook_count = 0;
+            const uint64_t start = cupid_timing_global_time(&gba->timing);
+            cupid_gba_step(gba);
+            CHECK(hook_count == (unsigned)predicate(condition, flags));
+            CHECK((uint32_t)gba->cpu.cpsr.packed == caller && gba->cpu.privilegeMode == MODE_SYS);
+            CHECK(!memcmp(registers, gba->cpu.gprs, sizeof(registers)));
+            CHECK((uint32_t)gba->cpu.gprs[ARM_PC] == addresses[2] + 8);
+            CHECK(cupid_timing_global_time(&gba->timing) - start == 1);
+            observations++;
+          }
+        destroy(gba);
+    }
+    CHECK(observations == 132096);
+}
+
+static void breakpoint_peripheral_events(void) {
+    const unsigned ram[] = {1, 2};
+    for (unsigned c = 0; c < sizeof(anchors) / sizeof(*anchors); c++)
+      for (unsigned a = 0; a < sizeof(ram) / sizeof(*ram); a++)
+        for (unsigned thumb = 0; thumb < 2; thumb++) {
+            struct CupidGBA* gba = machine(anchors[c]);
+            prepare(gba, ram[a], breakpoint(thumb != 0, 0x42), MODE_SYS, 10, 0, 0);
+            cupid_io_write(gba, REG_TM0CNT_L, 0);
+            cupid_io_write(gba, REG_TM0CNT_H, 0x80);
+            cupid_timing_tick(&gba->timing, 2);
+            const uint32_t value = 0xA57B4E91;
+            memcpy(gba->memory.iwram + 0x1000, &value, sizeof(value));
+            cupid_dma_write_sad(gba, 3, GBA_BASE_IWRAM + 0x1000);
+            cupid_dma_write_dad(gba, 3, GBA_BASE_EWRAM + 0x2000);
+            cupid_dma_write_cnt_lo(gba, 3, 1);
+            cupid_dma_write_cnt(gba, 3, 0x8400);
+            const uint64_t start = cupid_timing_global_time(&gba->timing);
+            const uint16_t timer = cupid_timer_read_counter(gba, 0);
+            const uint32_t caller = (uint32_t)gba->cpu.cpsr.packed;
+            struct Sample internal;
+            phase(gba, &internal, start + source_cycles(gba, ram[a], thumb != 0) + 1);
+            cupid_gba_step(gba);
+            CHECK(internal.count == 1 && internal.status == caller && !internal.busy);
+            CHECK((uint32_t)gba->cpu.cpsr.packed == entry_status(caller));
+            CHECK(!gba->memory.dmaRunning && !gba->memory.dma[3].enable);
+            CHECK(!memcmp(gba->memory.ewram + 0x2000, &value, sizeof(value)));
+            CHECK((uint16_t)(cupid_timer_read_counter(gba, 0) - timer) ==
+                (uint16_t)(cupid_timing_global_time(&gba->timing) - start));
+            observations++;
+            destroy(gba);
+        }
+    CHECK(observations == 12);
+}
+
 int main(int argc, char** argv) {
     CHECK(argc == 2);
     if (!strcmp(argv[1], "timed")) RUN(timed);
@@ -233,6 +390,11 @@ int main(int argc, char** argv) {
     else if (!strcmp(argv[1], "conditions")) RUN(false_predicates_do_not_trap_or_charge_internal_cycles);
     else if (!strcmp(argv[1], "phase")) RUN(the_internal_interval_precedes_bank_change_and_vector_fetch);
     else if (!strcmp(argv[1], "dma")) RUN(timer_and_dma_run_in_the_internal_interval);
+    else if (!strcmp(argv[1], "bkpt-encodings")) RUN(breakpoint_encodings);
+    else if (!strcmp(argv[1], "bkpt-timed")) RUN(breakpoint_timed);
+    else if (!strcmp(argv[1], "bkpt-untimed")) RUN(breakpoint_untimed);
+    else if (!strcmp(argv[1], "bkpt-hooks")) RUN(breakpoint_hooks_and_predicates);
+    else if (!strcmp(argv[1], "bkpt-events")) RUN(breakpoint_peripheral_events);
     else CHECK(false);
     printf("Undefined-entry observations: %u\n", observations);
     return 0;

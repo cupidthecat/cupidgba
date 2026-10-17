@@ -2,6 +2,8 @@
 .syntax unified
 
 @ Fixed ARM offsets are covered by tests/bios/verify_hle.py.
+.equ IRQ_ENTRY_OFFSET, 0x128
+.equ IRQ_RETURN_OFFSET, 0x138
 .equ SWI_TABLE_OFFSET, 0x198
 .equ STALL_CALL_OFFSET, 0x3FC
 .equ UTILITY_SOURCE_OFFSET, 0xBA4
@@ -26,6 +28,17 @@ b fiqBase
 .word 0
 .word 0
 .word 0
+
+@ The callback returns to the register restore at the fixed firmware slot.
+.org IRQ_ENTRY_OFFSET
+irqBase:
+stmfd  sp!, {r0-r3, r12, lr}
+mov    r0, #0x04000000
+add    lr, pc, #0
+ldr    pc, [r0, #-4]
+irqReturn:
+ldmfd  sp!, {r0-r3, r12, lr}
+subs   pc, lr, #4
 
 @ The shared SWI return address is also CpuSet's visible R3 clobber.
 .org 0x140
@@ -102,13 +115,8 @@ swiTable:
 .ltorg
 .word 0 @ Padding for back-compat
 
-irqBase:
-stmfd  sp!, {r0-r3, r12, lr}
-mov    r0, #0x04000000
-add    lr, pc, #0
-ldr    pc, [r0, #-4]
-ldmfd  sp!, {r0-r3, r12, lr}
-subs   pc, lr, #4
+@ Fixed service-layout padding; the IRQ wrapper precedes SWI dispatch.
+.space 24, 0
 .word 0
 .word 0xE55EC002
 
@@ -117,21 +125,7 @@ subs   pc, lr, #4
 .word 0
 .word 0x03A0E004
 
-@ Unimplemented
-SoundDriverInit:
-SoundDriverMode:
-SoundDriverMain:
-SoundDriverVsync:
-SoundChannelClear:
-MusicPlayerOpen:
-MusicPlayerStart:
-MusicPlayerStop:
-MusicPlayerContinue:
-MusicPlayerFadeOut:
-MultiBoot:
-SoundDriverVsyncOff:
-SoundDriverVsyncOn:
-
+@ Unused software-service entries return without work.
 NopCall:
 bx lr
 
@@ -241,26 +235,8 @@ tstne  r12, #0x0E000000
 0:
 bx     lr
 
-SoundDriverGetJumpList:
-stmfd  sp!, {r4-r10}
-ldr    r1, =NopCall
-mov    r3, r1
-mov    r4, r1
-mov    r5, r1
-mov    r6, r1
-mov    r7, r1
-mov    r8, r1
-mov    r9, r1
-mov    r10, r1
-stmia  r0!, {r1, r3-r10}
-stmia  r0!, {r1, r3-r10}
-stmia  r0!, {r1, r3-r10}
-stmia  r0!, {r1, r3-r10}
-mov    r1, #0
-ldmfd  sp!, {r4-r10}
-bx     lr
-
 .ltorg
+.org STALL_CALL_OFFSET
 
 StallCall:
 subs r11, #4
@@ -534,6 +510,8 @@ subs pc, lr, #4
 .include "src/gba/bios/checksum.s"
 .include "src/gba/bios/music-frequency.s"
 .include "src/gba/bios/hard-reset.s"
+.include "src/gba/bios/music-jump-table.s"
+.include "src/gba/bios/music-notes.s"
 
 @ The final word records the embedded image's additive identity.
 .org 0x3FFC

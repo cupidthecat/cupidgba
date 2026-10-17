@@ -6,8 +6,10 @@ void cupid_bus_wait(struct CupidARM* cpu) {
     cpu->irqh.processEvents(cpu);
     cupid_dma_kick(gba, cupid_timing_global_time(&gba->timing));
     while (gba->memory.dmaRunning && !gba->memory.busLocked) {
+        gba->timing.waitingForEvent = true;
         cpu->cycles = cpu->nextEvent;
         cpu->irqh.processEvents(cpu);
+        gba->timing.waitingForEvent = false;
     }
 }
 
@@ -45,7 +47,8 @@ void cupid_bus_fetch(struct CupidARM* cpu, uint32_t address, unsigned width, boo
     }
     gba->memory.fetchNonseq = false;
     unsigned cycles = cupid_prefetch_fetch(gba, address, width, wait + 1);
-    cupid_bus_advance(cpu, cycles, true);
+    if (!gba->cartridge.readable || !cupid_cartridge_fetch_bus(gba, address, width, cycles))
+        cupid_bus_advance(cpu, cycles, true);
     cupid_prefetch_finish_fetch(gba);
     /* The caller reads the opcode before releasing ownership of the bus. */
     gba->memory.lastWasDMA = false;

@@ -46,6 +46,7 @@ void cupid_savedata_deinit(struct CupidSavedata* savedata) {
     savedata->type = SAVE_AUTODETECT;
     savedata->size = 0;
     savedata->typeForced = false;
+    savedata->flashProfile = FLASH_PROFILE_DEFAULT;
 }
 
 /**
@@ -192,8 +193,10 @@ static void _flashEraseSector(struct CupidSavedata* savedata, uint16_t sectorSta
 
 uint8_t cupid_savedata_read_flash(struct CupidSavedata* savedata, uint16_t address) {
     uint32_t offset = (uint32_t)savedata->flashBank * 0x10000u + address;
-    if (savedata->programming && offset >= savedata->programOffset &&
-        offset - savedata->programOffset < savedata->programLength) {
+    if (savedata->programming &&
+        (savedata->flashProfile == FLASH_PROFILE_SST39VF512 ||
+         (offset >= savedata->programOffset &&
+          offset - savedata->programOffset < savedata->programLength))) {
         /* DQ7 complements the final data bit; DQ6 toggles on each read.
          * The success-only model keeps the DQ5 error flag clear. */
         uint8_t result = (savedata->erasing ? 0 : (savedata->programData[0] ^ 0x80)) & 0x80;
@@ -204,7 +207,9 @@ uint8_t cupid_savedata_read_flash(struct CupidSavedata* savedata, uint16_t addre
     if (savedata->command == FLASH_COMMAND_ID) {
         if (savedata->type == SAVE_FLASH512) {
             if (address < 2) {
-                return (uint8_t)(FLASH_PANASONIC_512K >> (address * 8));
+                unsigned id = savedata->flashProfile == FLASH_PROFILE_SST39VF512
+                    ? FLASH_SST39VF512 : FLASH_PANASONIC_512K;
+                return (uint8_t)(id >> (address * 8));
             }
         } else if (savedata->type == SAVE_FLASH1M) {
             if (address < 2) {
@@ -222,6 +227,14 @@ uint8_t cupid_savedata_read_flash(struct CupidSavedata* savedata, uint16_t addre
 void cupid_savedata_write_flash(struct CupidSavedata* savedata, uint16_t address, uint8_t value) {
     /* Accepted self-timed operations own the chip until their ready edge. */
     if (savedata->programming) return;
+    /* This device accepts either ID-exit sequence. F0 remains valid payload
+     * after a byte-program command and cannot abort an accepted operation. */
+    if (savedata->flashProfile == FLASH_PROFILE_SST39VF512 &&
+        value == FLASH_COMMAND_TERMINATE && savedata->command != FLASH_COMMAND_PROGRAM) {
+        savedata->command = FLASH_COMMAND_NONE;
+        savedata->flashState = FLASH_STATE_RAW;
+        return;
+    }
     switch (savedata->flashState) {
     case FLASH_STATE_RAW:
         switch (savedata->command) {
@@ -255,6 +268,12 @@ void cupid_savedata_write_flash(struct CupidSavedata* savedata, uint16_t address
 
     case FLASH_STATE_CONTINUE:
         savedata->flashState = FLASH_STATE_RAW;
+        if (savedata->flashProfile == FLASH_PROFILE_SST39VF512 &&
+            savedata->command == FLASH_COMMAND_ERASE && value == FLASH_COMMAND_ERASE_SECTOR) {
+            _flashEraseSector(savedata, address);
+            savedata->command = FLASH_COMMAND_NONE;
+            break;
+        }
         if (address == FLASH_BASE_HI) {
             switch (savedata->command) {
             case FLASH_COMMAND_NONE:
@@ -263,7 +282,9 @@ void cupid_savedata_write_flash(struct CupidSavedata* savedata, uint16_t address
                 case FLASH_COMMAND_ID:
                 case FLASH_COMMAND_PROGRAM:
                 case FLASH_COMMAND_SWITCH_BANK:
-                    savedata->command = value;
+                    if (value != FLASH_COMMAND_SWITCH_BANK ||
+                        savedata->flashProfile != FLASH_PROFILE_SST39VF512)
+                        savedata->command = value;
                     break;
                 default:
                     break;

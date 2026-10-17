@@ -38,10 +38,14 @@ see [testing](../development/testing.md). The CPU's pipeline and exception
 registers are described in the
 [ARM7TDMI technical reference manual](https://support.arm.com/documentation/ddi0210/c/).
 
-The relative priority of an IRQ assertion and an IF acknowledge on exactly
-the same hardware cycle remains unverified. Queued IF changes retain their
-acceptance deadlines and apply assertions and acknowledgements in request
-order. Reassertions after a queued acknowledgement remain pending. See
+Queued IF changes retain their acceptance deadlines and apply assertions and
+acknowledgements in request order. Timed MMIO dispatches a due timer overflow
+before its data write. An IF acknowledgement on that clock therefore clears
+the pending assertion at their shared acceptance deadline. An acknowledgement
+on the preceding clock cannot publish the later assertion early, and a later
+acknowledgement preserves any line transition already in flight. Reassertions
+after a queued acknowledgement remain pending. This is the selected logical
+ordering; the relative electrical phases still have no new hardware capture. See
 [DMA and bus ownership](dma.md) for transfer arbitration and its tested limits.
 Game Pak prefetch interactions and precise STOP wake-up latency need separate
 hardware coverage. STOP now freezes the system clock and accepts enabled

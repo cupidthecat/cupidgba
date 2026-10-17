@@ -5,6 +5,7 @@
 
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
+#include "serial/uart.h"
 
 /**
  * @brief Forward declarations for irqh callbacks.
@@ -82,6 +83,7 @@ void cupid_gba_create(struct CupidGBA* gba) {
     /** Init timing scheduler and wire CPU cycle and next-event counters. */
     cupid_timing_init(&gba->timing, &gba->cpu.cycles, &gba->cpu.nextEvent);
     cupid_savedata_bind_timing(&gba->memory.savedata, &gba->timing);
+    cupid_cartridge_init(gba);
     cupid_serial_init(&gba->serial, gba);
 
 }
@@ -101,7 +103,10 @@ void cupid_gba_reset(struct CupidGBA* gba) {
      * the system scheduler is rebased by console reset. */
     cupid_savedata_bind_timing(&gba->memory.savedata, NULL);
     /** Clear timing event queue first. */
+    cupid_rtc_sync(&gba->cartridge.rtc, cupid_timing_global_time(&gba->timing));
     cupid_timing_clear(&gba->timing);
+    cupid_rtc_rebase(&gba->cartridge.rtc, 0);
+    cupid_cartridge_reset_bus(gba);
 
     /**
      * Reset the CPU into masked ARM Supervisor mode and refill the reset vector.
@@ -157,9 +162,9 @@ static void _cupidGBAReset(struct CupidARM* cpu) {
     gba->idleDetectionFailures = 0;
     cpu->halted = 0;
     gba->stopped = false;
-    gba->intervalOvershoot = 0;
     gba->haltIRQSample = false;
     gba->haltIRQSampleValid = false;
+    gba->intervalOvershoot = 0;
     gba->keysLast = 0x0400;
 
     /**
@@ -233,24 +238,31 @@ void cupid_gba_stop(struct CupidGBA* gba) {
      * peripheral deadlines in place while the system clock is frozen. */
     gba->cpu.nextEvent = gba->cpu.cycles;
     gba->cpu.irqh.processEvents(&gba->cpu);
+    cupid_cartridge_rtc_sync(gba);
     cupid_gba_halt(gba);
     gba->stopped = (stop_sources(gba) & gba->irqf) == 0;
 }
 
 void cupid_gba_wake_stop(struct CupidGBA* gba, enum CupidIRQ sources) {
-    if (gba->stopped && (stop_sources(gba) & sources)) gba->stopped = false;
+    if (gba->stopped && (stop_sources(gba) & sources)) {
+        gba->stopped = false;
+        cupid_serial_uart_resume(&gba->serial);
+    }
 }
 
 uint64_t cupid_gba_advance_stopped_time(struct CupidGBA* gba, uint64_t clocks) {
-    if (!gba->stopped) return 0;
-    cupid_savedata_advance_clock(&gba->memory.savedata, clocks);
-    return clocks;
+    /* RTC output can wake STOP before the supplied interval ends. Self-timed
+     * save operations consume only that same accepted cartridge interval. */
+    const uint64_t elapsed = cupid_cartridge_advance_stopped_time(gba, clocks);
+    cupid_savedata_advance_clock(&gba->memory.savedata, elapsed);
+    return elapsed;
 }
 
 /**
  * @brief Destroy a GBA instance.
  */
 void cupid_gba_destroy(struct CupidGBA* gba) {
+    cupid_cartridge_deinit(gba);
     cupid_video_deinit(&gba->video);
     cupid_memory_deinit(gba);
     cupid_timing_deinit(&gba->timing);
@@ -268,8 +280,9 @@ void cupid_gba_process_events(struct CupidGBA* gba) {
  * @brief Test keypad IRQ after key changes or KEYCNT writes.
  *
  * KEYCNT bit 14 is IRQ enable, bit 15 is AND condition.
- * AND mode fires once when all selected keys become pressed (edge-detect).
- * OR mode fires whenever any selected key is pressed.
+ * AND mode suppresses the same matching held-key state until it changes or
+ * a newly selected button invalidates that history. OR mode requests on
+ * every check with at least one selected button held.
  */
 void cupid_gba_test_keypad_irq(struct CupidGBA* gba) {
     uint16_t keysLast   = gba->keysLast;
@@ -316,10 +329,12 @@ void cupid_gba_step(struct CupidGBA* gba) {
         if (cpu->cycles >= cpu->nextEvent) cpu->irqh.processEvents(cpu);
     }
     if (cpu->halted) {
+        gba->timing.waitingForEvent = true;
         cpu->cycles = cpu->nextEvent;
     } else {
         if (irqLine && !cpu->irqDisableLatch) {
-            cpu->memory.timed = true;
+            /* Static CPU clients use the exception's existing cycle path. */
+            cpu->memory.timed = cpu->memory.fetch != NULL;
             cupid_arm_take_irq(cpu);
             cpu->memory.timed = false;
         }
@@ -328,9 +343,10 @@ void cupid_gba_step(struct CupidGBA* gba) {
         else cupid_arm_step(cpu);
     }
 
-    if (cpu->cycles >= cpu->nextEvent) {
+    if (cpu->cycles >= cpu->nextEvent || gba->timing.synchronize) {
         cpu->irqh.processEvents(cpu);
     }
+    gba->timing.waitingForEvent = false;
 }
 
 /**
@@ -355,8 +371,9 @@ void cupid_gba_run_interval(struct CupidGBA* gba, uint32_t clocks) {
     gba->intervalOvershoot = 0;
     while (remaining) {
         uint64_t elapsed;
-        if (gba->stopped) elapsed = cupid_gba_advance_stopped_time(gba, remaining);
-        else {
+        if (gba->stopped) {
+            elapsed = cupid_gba_advance_stopped_time(gba, remaining);
+        } else {
             const uint64_t before = cupid_timing_global_time(&gba->timing);
             cupid_gba_step(gba);
             elapsed = cupid_timing_global_time(&gba->timing) - before;
@@ -387,7 +404,9 @@ static void _cupidProcessEvents(struct CupidARM* cpu) {
 
     /** Tick the timing scheduler and fire due callbacks (e.g. IRQ). */
     int32_t nextEvent = cpu->nextEvent;
-    while (cpu->cycles >= nextEvent) {
+    bool synchronize = gba->timing.synchronize != NULL;
+    while (cpu->cycles >= nextEvent || synchronize) {
+        synchronize = false;
         cpu->nextEvent = INT32_MAX;
         nextEvent = 0;
         int32_t cycles = cpu->cycles;
@@ -437,12 +456,13 @@ static void _cupidHitStub(struct CupidARM* cpu, uint32_t opcode) {
 }
 
 /**
- * @brief BKPT instruction handler (software breakpoint).
+ * @brief Handle an unsupported breakpoint encoding on the GBA CPU.
  */
 static void _cupidBreakpoint(struct CupidARM* cpu, int immediate) {
-    (void)cpu;
     (void)immediate;
-    /** Debugger hook would go here. */
+    /* ARM7TDMI has no BKPT instruction. An embedding debugger can replace
+     * this callback; ordinary execution takes the Undefined vector. */
+    cupid_arm_raise_undefined(cpu);
 }
 
 /**

@@ -35,6 +35,11 @@ struct CupidPlatformAudio {
     void* outputSinkContext;
 };
 
+struct CupidPlatformAudioMix {
+    struct CupidPlatformAudio sources[4];
+    unsigned count;
+};
+
 /** @name Platform State */
 struct CupidPlatform {
     SDL_Window*   window;
@@ -45,6 +50,8 @@ struct CupidPlatform {
     SDL_GameController* controller;   /**< First attached controller, or NULL */
     int controllerIndex;              /**< SDL joystick instance ID of `controller` */
     uint16_t keyboardKeys;            /**< Held GBA keys from keyboard events */
+    bool rumbleActive, rumbleDriving;
+    uint32_t rumbleRefresh;
 
     struct CupidPlatformAudio platformAudio;
 
@@ -65,10 +72,21 @@ void cupid_platform_render_frame(struct CupidPlatform* plat, const uint32_t* fra
 /** Poll SDL events, update key state. Returns false if quit requested. */
 bool cupid_platform_poll_events(struct CupidPlatform* plat, struct CupidGBA* gba);
 
+void cupid_platform_rumble_changed(void* context, bool active, uint64_t clock);
+void cupid_platform_rumble_refresh(struct CupidPlatform* plat);
+void cupid_platform_rumble_stop(struct CupidPlatform* plat);
+/* One event queue serves a local session. Keyboard focus belongs to one
+ * console; each controller instance is assigned to at most one console. */
+bool cupid_platform_poll_local(struct CupidPlatform* platforms, struct CupidGBA* const cores[],
+                               unsigned count, unsigned* focus, bool* connected);
+
 /** Audio callback */
 void cupid_platform_audio_callback(void* userdata, uint8_t* stream, int len);
 
 /** Init SDL audio device with callback */
 bool cupid_platform_init_audio(struct CupidPlatform* plat, struct CupidGBA* gba);
+bool cupid_platform_init_audio_mix(struct CupidPlatform* plat, struct CupidPlatformAudioMix* mix,
+                                   struct CupidGBA* const cores[], unsigned count);
+void cupid_platform_audio_mix_callback(void* userdata, uint8_t* stream, int len);
 
 #endif /* CUPID_PLATFORM_H */

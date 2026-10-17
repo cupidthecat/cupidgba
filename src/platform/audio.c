@@ -157,3 +157,46 @@ bool cupid_platform_init_audio(struct CupidPlatform* plat, struct CupidGBA* gba)
     SDL_PauseAudioDevice(plat->audioDevice, 0);
     return true;
 }
+
+void cupid_platform_audio_mix_callback(void* userdata, uint8_t* stream, int len) {
+    struct CupidPlatformAudioMix* mix = userdata;
+    if (len <= 0) return;
+    memset(stream, 0, (size_t)len);
+    int16_t* output = (int16_t*)stream;
+    const int samples = len / (int)(2 * sizeof(*output)) * 2;
+    for (int offset = 0; offset < samples;) {
+        int count = samples - offset;
+        if (count > 512) count = 512;
+        int32_t sum[512] = {0};
+        for (unsigned source = 0; source < mix->count; ++source) {
+            int16_t pcm[512];
+            cupid_platform_audio_callback(&mix->sources[source], (uint8_t*)pcm, count * (int)sizeof(*pcm));
+            for (int i = 0; i < count; ++i) sum[i] += pcm[i];
+        }
+        for (int i = 0; i < count; ++i) output[offset + i] = mix->count ? (int16_t)(sum[i] / (int32_t)mix->count) : 0;
+        offset += count;
+    }
+}
+
+bool cupid_platform_init_audio_mix(struct CupidPlatform* plat, struct CupidPlatformAudioMix* mix,
+                                   struct CupidGBA* const cores[], unsigned count) {
+    if (!mix || !cores || count < 2 || count > 4) return false;
+    memset(mix, 0, sizeof(*mix));
+    mix->count = count;
+    SDL_AudioSpec want = {0}, have;
+    want.freq = CUPID_HOST_SAMPLE_RATE;
+    want.format = AUDIO_S16SYS;
+    want.channels = 2;
+    want.samples = 1024;
+    want.callback = cupid_platform_audio_mix_callback;
+    want.userdata = mix;
+    plat->audioDevice = SDL_OpenAudioDevice(NULL, 0, &want, &have, SDL_AUDIO_ALLOW_FREQUENCY_CHANGE);
+    if (!plat->audioDevice) return false;
+    for (unsigned i = 0; i < count; ++i) {
+        mix->sources[i].audio = &cores[i]->audio;
+        mix->sources[i].hostRate = have.freq;
+        mix->sources[i].resampleStep = (double)GBA_CLOCK_FREQ / have.freq;
+    }
+    SDL_PauseAudioDevice(plat->audioDevice, 0);
+    return true;
+}

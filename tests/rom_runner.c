@@ -1,5 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "cupid/gba.h"
+#include "cupid/isa-inlines.h"
+#include "cupid/platform/peripherals.h"
 #include <errno.h>
 #include <inttypes.h>
 
@@ -23,6 +25,15 @@ static bool screenshot(const struct CupidGBA* gba, const char* path) {
 }
 
 struct AudioTrace { FILE* file; bool failed; };
+struct MotorTrace { FILE* file; bool failed; };
+
+static void motor_output(void* context, bool active, uint64_t clock) {
+    struct MotorTrace* trace = context;
+    uint8_t record[12] = {0};
+    for (unsigned i = 0; i < 8; i++) record[i] = (uint8_t)(clock >> (i * 8));
+    record[8] = active;
+    if (fwrite(record, 1, sizeof(record), trace->file) != sizeof(record)) trace->failed = true;
+}
 
 static void audio_sample(void* context, uint64_t clock, int16_t left, int16_t right) {
     struct AudioTrace* trace = context;
@@ -45,19 +56,47 @@ int main(int argc, char** argv) {
     const char* ioOutput = NULL;
     const char* ewramOutput = NULL;
     const char* audioOutput = NULL;
+    const char* motorOutput = NULL;
     struct AudioTrace audioTrace = {0};
+    struct MotorTrace motorTrace = {0};
     uint64_t frames = 120, cycleLimit = UINT64_C(280896) * 120, stepLimit = 50000000;
     uint64_t terminalAddress = 0;
+    uint64_t startAddress = 0;
     int expectedRegister = -1;
+    bool sstFlash = false;
+    struct CupidPlatformPeripherals peripherals = CUPID_PLATFORM_PERIPHERALS_DEFAULT;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--bios") && i + 1 < argc) bios = argv[++i];
+        else if (!strcmp(argv[i], "--flash-profile") && i + 1 < argc) {
+            if (strcmp(argv[++i], "sst39vf512")) return 2;
+            sstFlash = true;
+        }
+        else if ((!strcmp(argv[i], "--solar") || !strcmp(argv[i], "--rumble") ||
+                  !strcmp(argv[i], "--gyro") || !strcmp(argv[i], "--tilt")) && i + 1 < argc) {
+            int* presence = !strcmp(argv[i], "--solar") ? &peripherals.solarPresence :
+                !strcmp(argv[i], "--rumble") ? &peripherals.rumblePresence :
+                !strcmp(argv[i], "--gyro") ? &peripherals.gyroPresence : &peripherals.tiltPresence;
+            if (!cupid_platform_peripheral_mode(argv[++i], presence)) return 2;
+        } else if (!strcmp(argv[i], "--sunlight") && i + 1 < argc) {
+            if (!cupid_platform_solar_level(argv[++i], &peripherals.solarLevel)) return 2;
+        } else if (!strcmp(argv[i], "--gyro-sample") && i + 1 < argc) {
+            if (!cupid_platform_gyro_sample(argv[++i], &peripherals.gyroSample)) return 2;
+        } else if ((!strcmp(argv[i], "--tilt-x") || !strcmp(argv[i], "--tilt-y")) && i + 1 < argc) {
+            uint16_t* axis = !strcmp(argv[i], "--tilt-x") ? &peripherals.tiltX : &peripherals.tiltY;
+            if (!cupid_platform_sample12(argv[++i], axis)) return 2;
+        }
         else if (!strcmp(argv[i], "--screenshot") && i + 1 < argc) output = argv[++i];
         else if (!strcmp(argv[i], "--dump-vram") && i + 1 < argc) vramOutput = argv[++i];
         else if (!strcmp(argv[i], "--dump-io") && i + 1 < argc) ioOutput = argv[++i];
         else if (!strcmp(argv[i], "--dump-ewram") && i + 1 < argc) ewramOutput = argv[++i];
         else if (!strcmp(argv[i], "--dump-audio") && i + 1 < argc) audioOutput = argv[++i];
+        else if (!strcmp(argv[i], "--dump-rumble") && i + 1 < argc) motorOutput = argv[++i];
         else if (!strcmp(argv[i], "--terminal-address") && i + 1 < argc) {
             if (!number(argv[++i], &terminalAddress) || terminalAddress > UINT32_MAX) return 2;
+        }
+        else if (!strcmp(argv[i], "--start-address") && i + 1 < argc) {
+            if (!number(argv[++i], &startAddress) || startAddress < GBA_BASE_ROM0 ||
+                startAddress >= GBA_BASE_SRAM || (startAddress & 3)) return 2;
         }
         else if (!strcmp(argv[i], "--key-event") && i + 2 < argc) {
             uint64_t frame, keys;
@@ -76,7 +115,7 @@ int main(int argc, char** argv) {
             expectedRegister = (int)index;
         } else if (argv[i][0] != '-' && !rom) rom = argv[i];
         else {
-            fprintf(stderr, "Usage: %s ROM [--bios FILE] [--frames N] [--steps N] [--key-event FRAME MASK] [--screenshot FILE.ppm] [--dump-vram FILE] [--dump-io FILE] [--dump-ewram FILE] [--dump-audio FILE] [--expect-loop-register N] [--terminal-address ADDRESS]\n", argv[0]);
+            fprintf(stderr, "Usage: %s ROM [--bios FILE] [--flash-profile sst39vf512] [--frames N] [--steps N] [--key-event FRAME MASK] [--screenshot FILE.ppm] [--dump-vram FILE] [--dump-io FILE] [--dump-ewram FILE] [--dump-audio FILE] [--dump-rumble FILE] [--solar auto|on|off] [--sunlight 0..255] [--rumble auto|on|off] [--gyro auto|on|off] [--gyro-sample 0..4095] [--tilt auto|on|off] [--tilt-x 0..4095] [--tilt-y 0..4095] [--start-address ADDRESS] [--expect-loop-register N] [--terminal-address ADDRESS]\n", argv[0]);
             return 2;
         }
     }
@@ -86,7 +125,26 @@ int main(int argc, char** argv) {
     cupid_gba_create(gba);
     int result = 2;
     if (!cupid_load_rom(gba, rom) || (bios && !cupid_load_bios(gba, bios))) goto cleanup;
+    if (sstFlash) {
+        cupid_savedata_force_type(&gba->memory.savedata, SAVE_FLASH512);
+        if (!cupid_savedata_set_flash_profile(&gba->memory.savedata, FLASH_PROFILE_SST39VF512)) goto cleanup;
+    }
+    cupid_platform_peripherals_configure(gba, &peripherals);
     cupid_gba_reset(gba);
+    /* An explicit probe entry exercises guest code with the selected BIOS
+     * mapped. It does not execute or qualify the BIOS boot sequence. */
+    if (startAddress) {
+        gba->cpu.cpsr.t = 0;
+        _CupidSetMode(&gba->cpu, MODE_ARM);
+        gba->cpu.gprs[ARM_PC] = (int32_t)startAddress;
+        CupidARMWritePC(&gba->cpu);
+    }
+    if (motorOutput) {
+        motorTrace.file = fopen(motorOutput, "wb");
+        if (!motorTrace.file) { perror(motorOutput); goto cleanup; }
+        if (fwrite("CPDRMB01", 1, 8, motorTrace.file) != 8) goto cleanup;
+        cupid_cartridge_set_rumble_output(gba, motor_output, &motorTrace);
+    }
     if (audioOutput) {
         audioTrace.file = fopen(audioOutput, "wb");
         if (!audioTrace.file) { perror(audioOutput); goto cleanup; }
@@ -138,6 +196,8 @@ int main(int argc, char** argv) {
         if (fclose(file) != 0 || !written) result = 2;
     }
 cleanup:
+    cupid_cartridge_set_rumble_output(gba, NULL, NULL);
+    if (motorTrace.file && (fclose(motorTrace.file) != 0 || motorTrace.failed)) result = 2;
     if (audioTrace.file && (fclose(audioTrace.file) != 0 || audioTrace.failed)) result = 2;
     cupid_gba_destroy(gba);
     free(gba);

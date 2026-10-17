@@ -269,7 +269,7 @@ struct CupidVideo {
     union CupidOAM oam;
 
     /** Output */
-    /** Per-frame RGBA8888 output buffer (240 x 160) — inline */
+    /** Working RGBA8888 scanline buffer (240 x 160) — inline */
     uint32_t outputBuffer[GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT];
 
     /** Timing (event-driven) */
@@ -278,6 +278,8 @@ struct CupidVideo {
     struct CupidTimingEvent displayEvent; /**< Display DMA request after the line transition */
     bool displayDmaLatched;
     uint32_t frameCounter;
+    void (*frameCallback)(void* context, const uint32_t* pixels, uint64_t clock);
+    void* frameContext;
 
     /** Scanline compositing buffers (software renderer) */
     uint32_t scanline[GBA_SCREEN_WIDTH];
@@ -297,6 +299,13 @@ void cupid_video_reset(struct CupidVideo* video);
 void cupid_video_skip_bios(struct CupidVideo* video);
 void cupid_video_update_match(struct CupidVideo* video);
 void cupid_video_deinit(struct CupidVideo* video);
+
+/* Observe the existing VBlank frame handoff after register mirrors update.
+ * Pixels are borrowed during the call; copy them to retain a complete image.
+ * The callback must not modify the core or advance time. Host ownership
+ * survives reset. Install and clear while execution is paused. */
+void cupid_video_set_frame_callback(struct CupidVideo* video,
+    void (*callback)(void* context, const uint32_t* pixels, uint64_t clock), void* context);
 
 /** Called when IO registers are written */
 void cupid_video_write_register(struct CupidVideo* video, uint32_t addr, uint16_t val);

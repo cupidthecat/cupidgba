@@ -13,7 +13,18 @@ actual = Path(sys.argv[1]).read_bytes()
 if actual != expected:
     raise SystemExit("HLE assembly output does not match the embedded image")
 assembly = source.with_name("bios").joinpath("hle-bios.s").read_text()
-offsets = dict(re.findall(r"\.equ\s+(SWI_TABLE_OFFSET|STALL_CALL_OFFSET|UTILITY_SOURCE_OFFSET),\s*(0x[0-9A-Fa-f]+)", assembly))
+offsets = dict(re.findall(r"\.equ\s+(IRQ_ENTRY_OFFSET|IRQ_RETURN_OFFSET|SWI_TABLE_OFFSET|STALL_CALL_OFFSET|UTILITY_SOURCE_OFFSET),\s*(0x[0-9A-Fa-f]+)", assembly))
+
+entry = int(offsets["IRQ_ENTRY_OFFSET"], 16)
+irq_return = int(offsets["IRQ_RETURN_OFFSET"], 16)
+vector = struct.unpack_from("<I", actual, 0x18)[0]
+displacement = vector & 0xFFFFFF
+if displacement & 0x800000:
+    displacement -= 0x1000000
+if entry != 0x128 or irq_return != 0x138 or vector >> 24 != 0xEA or 0x20 + displacement * 4 != entry:
+    raise SystemExit("HLE IRQ vector or callback return address is invalid")
+if actual[entry:irq_return + 8] != struct.pack("<6I", 0xE92D500F, 0xE3A00301, 0xE28FE000, 0xE510F004, 0xE8BD500F, 0xE25EF004):
+    raise SystemExit("HLE IRQ frame or exception return is invalid")
 table = int(offsets["SWI_TABLE_OFFSET"], 16)
 stall = int(offsets["STALL_CALL_OFFSET"], 16)
 guard = int(offsets["UTILITY_SOURCE_OFFSET"], 16)
@@ -23,10 +34,10 @@ if len(actual) > 0x4000 or struct.unpack_from("<I", actual, stall)[0] != 0xE25BB
     raise SystemExit("HLE image size or internal stall entry is invalid")
 if len(actual) != 0x4000 or sum(struct.unpack("<4096I", actual)) & 0xFFFFFFFF != 0xBAAE187F:
     raise SystemExit("HLE additive image identity is invalid")
-for call in (0, 1, 2, 3, *range(6, 0x1A), 0x1F, 0x26, 0x27):
+for call in (0, 1, 2, 3, *range(6, 0x27), 0x27, 0x28, 0x29, 0x2A):
     target = struct.unpack_from("<I", actual, table + call * 4)[0]
     aligned = target & ~1
-    valid_mode = target & 1 if call in (1, 0x0A, 0x0B, *range(0x14, 0x1A), 0x1F) else target % 4 == 0
+    valid_mode = target & 1 if call in (1, 0x0A, 0x0B, *range(0x14, 0x26), 0x28, 0x29, 0x2A) else target % 4 == 0
     if target == stall or not valid_mode or not table + 0x2B * 4 <= aligned < len(actual):
         raise SystemExit("HLE timed-service dispatch target is invalid")
 print(f"Verified {len(actual)} HLE bytes")

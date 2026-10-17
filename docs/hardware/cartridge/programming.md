@@ -13,7 +13,7 @@ selection follow [EEPROM address decoding](eeprom.md).
 
 Flash byte programming retains its selected bank and address. Sector erase
 retains a 4-KiB range in the selected bank; chip erase covers the complete
-selected image. Polling the affected range returns complemented final DQ7,
+selected image. With the default profile, polling the affected range returns complemented final DQ7,
 alternating DQ6, and a clear DQ5 error bit. Reads outside that range retain
 their stored bytes. Commands during a pending operation are ignored. The
 model does not simulate programming failure, wear or erase suspension.
@@ -41,6 +41,50 @@ operations. It rejects zero values, deadlines beyond the scheduler's signed
 clock horizon, and changes during an accepted operation. A selected profile
 changes future operations; it cannot move an operation already in flight.
 
+### SST39VF512
+
+`cupid_savedata_set_flash_profile(save, FLASH_PROFILE_SST39VF512)` selects a
+64-KiB device reporting manufacturer/device bytes `BF D4`. Selection requires
+an allocated, idle Flash512 device with no command sequence in progress.
+Rejected selections leave its complete state unchanged. The SDL2 frontend
+selects this device with `-S sst39vf512`; the headless runner accepts
+`--flash-profile sst39vf512`.
+
+| Operation | Nominal typical interval | GBA clocks, rounded up |
+| --- | ---: | ---: |
+| Byte program | 14 microseconds | 235 |
+| 4-KiB sector erase | 18 milliseconds | 301990 |
+| Chip erase | 70 milliseconds | 1174406 |
+
+These values and the `BF D4` identity come from the
+[device data sheet, S71150-14-000](https://ww1.microchip.com/downloads/en/DeviceDoc/S71150.pdf),
+pages 1–3 and 7. They model typical operation durations, without claiming a
+measured delay or the slowest permitted part. They do not calibrate the default
+profile's other chip identifiers.
+
+During an accepted operation, reads throughout the chip return completion DQ7
+and alternating DQ6. Other output bits use a deterministic zero value; they
+are not qualified electrical outputs. Writes, including ID exit, cannot abort
+the operation. An idle ID exit accepts either a single `F0` at any address or
+the three-write unlock/exit sequence. After a byte-program command, `F0` is
+payload data. The device has no bank-switch command. A sector erase accepts
+any address within the selected sector, including `5555`.
+
+Selection fixes the 64-KiB capacity, so an oversized save file fails before
+replacing data or cancelling an operation. Console reset, same-type selection
+and compatible save replacement retain the profile. Changing the save-device
+type restores its default profile. Selecting `FLASH_PROFILE_DEFAULT` restores
+the default Flash identity and durations while retaining the capacity override
+and EEPROM duration. The explicit programming-clock API can still select
+synthetic durations for future operations without changing the device identity.
+
+The data sheet requires an erased target sector before byte programming. Tests
+use valid erased targets; programming an unerased target, physical failures,
+ID aliases and malformed command behavior remain unqualified. The model
+publishes all data at the ready edge. It does not simulate the asynchronous
+output transition or the specified subsequent whole-byte settling interval of
+up to one microsecond.
+
 ## Clock and persistence ownership
 
 Normal CPU and DMA access clocks drive the shared scheduler. Late dispatch
@@ -54,6 +98,8 @@ During STOP, paced execution advances cartridge programming without advancing
 CPU, timer, DMA, video, serial or audio clocks. Completion does not wake the CPU
 or fabricate a frame. The headless runner charges stopped time against its
 existing clock budget and reports that time separately.
+When an RTC interrupt releases STOP before the requested interval ends,
+programming consumes only the elapsed portion accepted by the cartridge.
 
 File writes persist committed bytes. A pending operation does not become
 dirty until it completes. Failed file reads retain the operation and its
@@ -72,6 +118,18 @@ default estimates. Electrical polling aliases, malformed or interrupted wire
 transactions, chip-specific durations and physical power-loss behavior remain
 outside those checks. Complete cartridge accuracy remains open under
 [issue 1](https://github.com/cupidthecat/cupidgba/issues/1).
+
+Additional groups cover profile selection and complete rejection state, both
+ID exits, capacity, nominal ready edges, chip-wide polling, valid sector
+addresses, actual ARM/Thumb command strobes, timer ordering, reset and complete
+file images. An owned guest driver checks the selected identity and polls a
+byte program; default-device and deliberately wrong-ID controls must fail.
+The bounded SDL2 local-session check verifies both complete Flash images,
+single-console battery isolation and oversized-file rejection in both startup
+paths. It does not run the unbounded single-console frontend through gameplay.
+The RTC/STOP group covers 192 scenes across early, coincident and late wake
+edges, clock wrap, both IME states and dispatch partitions. Its short durations
+exercise event ownership and do not measure a physical chip.
 
 Two additional original Flash cartridge probes compare data immediately after
 programming without waiting for readiness. They pass the instantaneous model

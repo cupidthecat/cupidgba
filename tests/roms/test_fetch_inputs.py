@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """Fault-inject transport failures and verify test input integrity enforcement."""
 # SPDX-License-Identifier: GPL-3.0-or-later
+import faulthandler
+
+# Capture a blocked import or test before CTest's existing ten-second limit.
+if __name__ == "__main__":
+    faulthandler.dump_traceback_later(8)
+
 import hashlib
 import http.client
 import io
@@ -61,4 +67,7 @@ class Downloads(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    try:
+        unittest.main()
+    finally:
+        faulthandler.cancel_dump_traceback_later()

@@ -156,6 +156,8 @@ struct CupidDMA {
     bool     transferWord;
     bool     externalSeen;
     uint32_t accessAddress;  /**< Address sampled by the current bus phase */
+    unsigned gpioHalfCycles; /**< Second halfword strobe of a cartridge port word */
+    uint16_t gpioReadLow;
 };
 
 /**
@@ -205,7 +207,13 @@ enum CupidFlashState {
 /* Flash chip identification */
 enum CupidFlashId {
     FLASH_PANASONIC_512K = 0x1B32,
-    FLASH_SANYO_1M       = 0x1362
+    FLASH_SANYO_1M       = 0x1362,
+    FLASH_SST39VF512     = 0xD4BF
+};
+
+enum CupidFlashProfile {
+    FLASH_PROFILE_DEFAULT,
+    FLASH_PROFILE_SST39VF512
 };
 
 /* Well-known flash addresses */
@@ -222,6 +230,7 @@ struct CupidSavedata {
     bool     typeForced; /**< An explicit type override limits file-load expansion */
 
     /** Flash state machine */
+    enum CupidFlashProfile flashProfile;
     enum CupidFlashState flashState;
     enum CupidSavedataCommand command;
     uint8_t* currentBank;         /**< Points into data + (flashBank << 16) */
@@ -253,13 +262,17 @@ extern const char GBA_ROM_WAITSTATES[4];       /**< { 4, 3, 2, 8 } */
 extern const char GBA_ROM_WAITSTATES_SEQ[6];   /**< { 2, 1, 4, 1, 8, 1 } */
 
 /** @name GBA Memory */
+enum CupidPrefetchFetchKind {
+    CUPID_PREFETCH_NONE, CUPID_PREFETCH_CACHED, CUPID_PREFETCH_PENDING, CUPID_PREFETCH_START
+};
+
 struct CupidPrefetch {
     uint64_t epoch;           /**< Last clock accounted for by the fetch unit */
     uint32_t head, tail;      /**< Oldest cached and next in-flight addresses */
     uint32_t address;         /**< Current CPU fetch address */
     unsigned count, width;   /**< Buffered halfwords and current CPU fetch width */
     unsigned duty, remaining; /**< Full and remaining cartridge halfword clocks */
-    unsigned fetchKind;
+    enum CupidPrefetchFetchKind fetchKind;
     bool active, busy;        /**< Engaged stream and occupied Game Pak bus */
     bool disabled;            /**< Pending burst restart after WAITCNT disable */
 };
@@ -395,6 +408,11 @@ void cupid_savedata_advance_clock(struct CupidSavedata* savedata, uint64_t clock
 bool cupid_savedata_set_programming_clocks(struct CupidSavedata* savedata,
                                          uint32_t eeprom, uint32_t byte,
                                          uint32_t sector, uint32_t chip);
+/** Select an idle Flash device's identity, command set and nominal timing.
+ * SST39VF512 requires an allocated 64-KiB Flash device and fixes its capacity.
+ * Selection fails without mutation during programming or a command sequence. */
+bool cupid_savedata_set_flash_profile(struct CupidSavedata* savedata,
+                                     enum CupidFlashProfile profile);
 void cupid_savedata_detect_type(struct CupidSavedata* savedata, const uint8_t* rom, size_t romSize);
 
 /**

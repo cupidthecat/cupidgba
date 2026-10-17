@@ -35,6 +35,35 @@ void cupid_savedata_programming_init(struct CupidSavedata* save) {
     save->flashProgramClocks = 650;
     save->flashSectorEraseClocks = 30000;
     save->flashChipEraseClocks = 30000;
+    save->flashProfile = FLASH_PROFILE_DEFAULT;
+}
+
+static uint32_t microseconds_to_clocks(uint32_t microseconds) {
+    return (uint32_t)((UINT64_C(16777216) * microseconds + 999999) / 1000000);
+}
+
+bool cupid_savedata_set_flash_profile(struct CupidSavedata* save,
+                                     enum CupidFlashProfile profile) {
+    if ((profile != FLASH_PROFILE_DEFAULT && profile != FLASH_PROFILE_SST39VF512) ||
+        (save->type != SAVE_FLASH512 && save->type != SAVE_FLASH1M) ||
+        !save->data || save->programming || save->flashState != FLASH_STATE_RAW ||
+        save->command != FLASH_COMMAND_NONE) return false;
+    if (profile == FLASH_PROFILE_SST39VF512 &&
+        (save->type != SAVE_FLASH512 || save->size != GBA_SIZE_FLASH512 || save->flashBank))
+        return false;
+    save->flashProfile = profile;
+    if (profile == FLASH_PROFILE_SST39VF512) {
+        /* Nominal typical durations, rounded up to whole GBA clocks. */
+        save->flashProgramClocks = microseconds_to_clocks(14);
+        save->flashSectorEraseClocks = microseconds_to_clocks(18000);
+        save->flashChipEraseClocks = microseconds_to_clocks(70000);
+        save->typeForced = true;
+    } else {
+        save->flashProgramClocks = 650;
+        save->flashSectorEraseClocks = 30000;
+        save->flashChipEraseClocks = 30000;
+    }
+    return true;
 }
 
 bool cupid_savedata_set_programming_clocks(struct CupidSavedata* save,
