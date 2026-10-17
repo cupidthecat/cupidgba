@@ -1,0 +1,68 @@
+{
+  "revision": "66f5f1d60cd7030b600606886c76f5c821ecaf9d",
+  "cases": [
+    {
+      "name": "mode-change",
+      "path": "DMA_Mode_Change.gba",
+      "sha256": "c1979211ab126998abe480857ee3896b565fbd7b26831ad8dacdd222920ff4b3",
+      "checkpoint": "0x80001ec",
+      "terminal": "0x8000364"
+    },
+    {
+      "name": "pause-end-1",
+      "path": "DMA_pause_timing_end_1.gba",
+      "sha256": "05a7150c2eb080ce7c351b2cd53465ae29d8d97c2cebb228595ba5100640f94b",
+      "checkpoint": "0x8000230",
+      "terminal": "0x80003a8"
+    },
+    {
+      "name": "pause-end-2",
+      "path": "DMA_pause_timing_end_2.gba",
+      "sha256": "5bd45969d700e8dddaf244072c597c8be3c8821365df17401dfbb52c2df6e44f",
+      "checkpoint": "0x800022c",
+      "terminal": "0x80003a4"
+    },
+    {
+      "name": "pause-end-3",
+      "path": "DMA_pause_timing_end_3.gba",
+      "sha256": "be8166c363cfa9af9c1da728596a6a1429f2b1458fc94cbe7ff9d278f40d9213",
+      "checkpoint": "0x8000230",
+      "terminal": "0x80003a8"
+    },
+    {
+      "name": "pause-end-4",
+      "path": "DMA_pause_timing_end_4.gba",
+      "sha256": "0b527ea4d339eacb72d157274ff57b04734abe9473467171ad525dbb40e72247",
+      "checkpoint": "0x8000230",
+      "terminal": "0x80003a8"
+    },
+    {
+      "name": "pause-mid-1",
+      "path": "DMA_pause_timing_mid_1.gba",
+      "sha256": "8f3aa2237189b390e28af28a96fcd30e48d63e2a02370dceb31e523a57b9c929",
+      "checkpoint": "0x8000268",
+      "terminal": "0x80003e0"
+    },
+    {
+      "name": "pause-mid-2",
+      "path": "DMA_pause_timing_mid_2.gba",
+      "sha256": "49f94c9105912e2ce5cddab12e47b632c4f350a1ed7d866d4c2fbb1d0ded63f2",
+      "checkpoint": "0x8000268",
+      "terminal": "0x80003e0"
+    },
+    {
+      "name": "rom-preemption",
+      "path": "DMA_pause_timing_ROM_to_IWRAM.gba",
+      "sha256": "4ec821851989b53debf1c91162becf462b88281ec2ccf51b98291c948700e6ca",
+      "checkpoint": "0x8000268",
+      "terminal": "0x80003e0"
+    },
+    {
+      "name": "rom-fixed",
+      "path": "DMA_ROM_Fixed.gba",
+      "sha256": "3ed7a17ced8ccecd886ef524e11ce645a87e2e93f80cdaa047b7906dc6aaac41",
+      "checkpoint": "0x80001c4",
+      "terminal": "0x800033c"
+    }
+  ]
+}

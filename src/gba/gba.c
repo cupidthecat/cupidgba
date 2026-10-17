@@ -82,6 +82,9 @@ void cupid_gba_create(struct CupidGBA* gba) {
 
     /** Init timing scheduler and wire CPU cycle and next-event counters. */
     cupid_timing_init(&gba->timing, &gba->cpu.cycles, &gba->cpu.nextEvent);
+    /* Bus helpers are available before power-on reset, so their IRQ clock
+     * owner must already have valid event callbacks. */
+    cupid_irq_init(gba);
     cupid_cartridge_init(gba);
     cupid_serial_init(&gba->serial, gba);
 

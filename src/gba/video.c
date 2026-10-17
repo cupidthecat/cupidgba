@@ -16,6 +16,10 @@
 
 #include "cupid/gba.h"
 
+/* Fast entry starts at the first cartridge issue, on line 126 at clock 841.
+ * It keeps a relative epoch while matching that full-boot display phase. */
+enum { FAST_ENTRY_HDRAW_REMAINING = 166 };
+
 /**
  * @brief Forward declarations for timing callbacks.
  */
@@ -98,7 +102,7 @@ void cupid_video_skip_bios(struct CupidVideo* video) {
     video->vcount = 0x7E;
     cupid_timing_deschedule(&gba->timing, &video->event);
     video->event.callback = _startHblank;
-    cupid_timing_schedule(&gba->timing, &video->event, 117);
+    cupid_timing_schedule(&gba->timing, &video->event, FAST_ENTRY_HDRAW_REMAINING);
 }
 
 void cupid_video_deinit(struct CupidVideo* video) {

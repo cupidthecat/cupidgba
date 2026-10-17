@@ -367,9 +367,11 @@ bool cupid_cartridge_fetch_bus(struct CupidGBA* gba, uint32_t address, unsigned 
         !cupid_cartridge_gpio_address(gba, address)) return false;
     const unsigned highCycles = (unsigned)gba->memory.waitstatesSeq16[address >> GBA_BASE_OFFSET] + 1;
     if (cycles <= highCycles) return false;
-    cupid_bus_advance(&gba->cpu, cycles - highCycles, true);
+    /* GPIO sampling splits board time, not the CPU's ready signal. */
+    cupid_bus_begin_transfer(&gba->cpu, cycles, true);
+    cupid_bus_advance_part(&gba->cpu, cycles - highCycles);
     const uint32_t low = cupid_memory_loadU16(&gba->cpu, address, NULL);
-    cupid_bus_advance(&gba->cpu, highCycles, true);
+    cupid_bus_advance_part(&gba->cpu, highCycles);
     const uint32_t high = cupid_memory_loadU16(&gba->cpu, address + 2, NULL);
     cart->opcodeAddress = address;
     cart->opcodeValue = low | high << 16;
