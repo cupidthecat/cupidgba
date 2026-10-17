@@ -480,6 +480,13 @@ if(BUILD_TESTING)
     add_test(NAME gba.irq COMMAND test_irq)
     set_tests_properties(gba.irq PROPERTIES TIMEOUT 10)
 
+    add_executable(test_keypad tests/gba/test_keypad.c)
+    target_link_libraries(test_keypad PRIVATE cupid_core)
+    foreach(group 0 1 2 3 transitions guest chronology)
+        add_test(NAME gba.keypad-control-${group} COMMAND test_keypad ${group})
+        set_tests_properties(gba.keypad-control-${group} PROPERTIES TIMEOUT 30)
+    endforeach()
+
     add_executable(test_dma tests/gba/test_dma.c)
     target_link_libraries(test_dma PRIVATE cupid_core)
     add_test(NAME gba.dma COMMAND test_dma)
