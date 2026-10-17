@@ -174,6 +174,11 @@ struct CupidContext* cupid_context_create(struct CupidContext* host,
     context->state.uc_link = NULL;
     /* The trampoline has no pointer-sized makecontext arguments. */
     makecontext(&context->state, context_entry, 0);
+#ifdef CUPID_CONTEXT_ASAN
+    /* The fiber interface tracks these stacks. Disable makecontext's generic
+     * stack-clearing marker so swapcontext retains live frame redzones. */
+    context->state.uc_stack.ss_flags = 0;
+#endif
 #endif
 #ifdef CUPID_CONTEXT_TSAN
     context->threadFiber = __tsan_create_fiber(0);

@@ -630,6 +630,22 @@ ctest --test-dir build-thread -R '^platform.audio$' --output-on-failure
 
 ThreadSanitizer and AddressSanitizer require separate build directories.
 
+`platform.context` checks local data across repeated cooperative yields, normal
+completion and cancellation. AddressSanitizer builds also require each live
+local buffer's boundary to remain poisoned after every return to its stack.
+The portable backend uses the sanitizer fiber interface and clears the generic
+stack-cleanup marker installed by `makecontext`; otherwise `swapcontext` can
+erase redzones belonging to suspended frames. CI runs this test with the native
+backend, the portable AddressSanitizer backend and ThreadSanitizer. To check the
+portable backend locally:
+
+```sh
+cmake -S . -B build-context-portable -DCMAKE_C_COMPILER=clang \
+  -DCMAKE_BUILD_TYPE=Debug -DCUPID_SANITIZERS=ON -DCUPID_FAST_CONTEXT=OFF
+cmake --build build-context-portable --target test_context --parallel 2
+ctest --test-dir build-context-portable -R '^platform.context$' --output-on-failure
+```
+
 `gba.save-file` checks complete replacements and reloads at every supported
 capacity, inferred expansion, explicit type choices, invalid inputs, companion
 files and failed writes. Linux uses a temporary file-size resource limit to
