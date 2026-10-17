@@ -386,6 +386,13 @@ if(BUILD_TESTING)
     add_test(NAME gba.audio COMMAND test_audio)
     set_tests_properties(gba.audio PROPERTIES TIMEOUT 10)
 
+    add_executable(test_audio_dac tests/gba/test_audio_dac.c)
+    target_link_libraries(test_audio_dac PRIVATE cupid_core)
+    foreach(group levels routing chronology firmware)
+        add_test(NAME gba.audio-dac-${group} COMMAND test_audio_dac ${group})
+        set_tests_properties(gba.audio-dac-${group} PROPERTIES TIMEOUT 30)
+    endforeach()
+
     add_executable(test_serial tests/gba/serial/test_serial.c)
     target_link_libraries(test_serial PRIVATE cupid_core)
 
@@ -793,6 +800,8 @@ if(BUILD_TESTING)
         set_tests_properties(gba.bios-data-cartridge-external PROPERTIES TIMEOUT 10)
         add_test(NAME gba.bios-bias-external COMMAND test_bios_data_services --bias --external-bios ${CUPID_TEST_BIOS})
         set_tests_properties(gba.bios-bias-external PROPERTIES TIMEOUT 10)
+        add_test(NAME gba.audio-dac-firmware-external COMMAND test_audio_dac firmware ${CUPID_TEST_BIOS})
+        set_tests_properties(gba.audio-dac-firmware-external PROPERTIES TIMEOUT 30)
     endif()
 
     if(CUPID_TEST_ROM_DIR)
