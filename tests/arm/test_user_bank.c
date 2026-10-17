@@ -3,6 +3,8 @@
 #include "cupid/isa-inlines.h"
 #include "../test.h"
 
+void cupid_test_user_bank_gpio(const char* directory, unsigned window);
+
 static const uint32_t codeAddress = GBA_BASE_IWRAM + 0x1000;
 static const uint32_t dataAddress = GBA_BASE_IWRAM + 0x2000;
 static const uint32_t nop = 0xE1A00000;
@@ -270,6 +272,11 @@ void cupid_test_user_bank_observer(void);
 
 int main(int argc, char** argv) {
     if (argc >= 2 && !strcmp(argv[1], "probe")) return cupid_test_user_bank_probe(argc, argv);
+    if (argc >= 2 && !strcmp(argv[1], "gpio")) {
+        CHECK(argc == 4 && argv[3][0] >= '0' && argv[3][0] <= '2' && !argv[3][1]);
+        cupid_test_user_bank_gpio(argv[2], (unsigned)(argv[3][0] - '0'));
+        return 0;
+    }
     CHECK(argc == 2);
     if (!strcmp(argv[1], "registers")) complete_register_matrix();
     else if (!strcmp(argv[1], "arithmetic")) RUN(arithmetic_operands_and_writeback);

@@ -66,6 +66,9 @@ static void begin_gpio_word(struct CupidARM* cpu, uint32_t address, int* cycles)
 static void next_gpio_halfword(struct CupidARM* cpu, uint32_t address) {
     struct CupidGBA* gba = cpu->master;
     cupid_bus_advance_part(cpu, (unsigned)gba->memory.waitstatesSeq16[address >> GBA_BASE_OFFSET] + 1);
+    /* The completed word releases the register read-port conflict before a
+     * following STM word samples its source register. */
+    CupidRegisterDataPhase(cpu);
 }
 
 /* Observe MMIO at the end of its data-bus cycle. The instruction's accumulated
