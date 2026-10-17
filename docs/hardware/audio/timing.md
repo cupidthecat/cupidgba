@@ -42,6 +42,7 @@ timestamps are required. Periodic signal checks allow an unknown initial phase.
 The cartridge results are source qualification, not a new hardware trace.
 FIFO signal checks qualify signed table levels, routing and hold timing; they
 do not prove every DMA or FIFO edge. Coincident timer/mixer phase, the first PWM
-edge after a resolution change, fractional output precision, DC centering and
-the analog output path still require qualification. Complete audio accuracy
+edge after a resolution change, fractional output precision and the analog
+output path still require qualification. The [digital output conversion](digital-output.md)
+documents bias, saturation and fixed-midpoint PCM coverage. Complete audio accuracy
 remains open in [issue 1](https://github.com/cupidthecat/cupidgba/issues/1).
