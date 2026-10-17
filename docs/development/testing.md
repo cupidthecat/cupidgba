@@ -32,6 +32,12 @@ reset and clock wrap. IF and HALT-availability histories keep their original
 system-clock deadlines. A preserved preceding core fails all four groups.
 Each group has a ten-second deadline. The existing music-progress image and
 chronology expectations remain unchanged.
+Three additional `gba.irq-clock-gpio-*` groups compare 11,952 complete paired
+ordinary-ROM/GPIO word-request waveforms and 388,032 clock observations for
+fetches, loads and stores. Both cartridge strobes retain their original
+deadlines, while the CPU synchronizer advances at the complete request's final
+ready edge. Each group keeps a ten-second deadline. See
+[CPU/DMA/IRQ interactions](../hardware/cpu/dma-irq-interactions.md).
 The observer group independently rejects bypassed comparisons, wrong opcodes
 and modes, and missing visits in ARM/Thumb streams with zero result registers.
 Guarded runs match boundary-only observation runs for general and banked
@@ -50,20 +56,62 @@ guest cannot silently skip failure recording. The slow-return case passes;
 the `0xF4` versus `0xF5` comparison remains a failure. The original execution
 guards and 90-second process deadline remain, with 100 seconds in CTest.
 
+The two `gba.gpio-byte-*` groups cover 1,536 complete port frames and 576
+strobe/wait/timer/IRQ cases. The `rom.rtc-calendar-byte-*` groups retain the
+complete calendar matrix, carry trials and negative controls through actual
+ARM/Thumb byte instructions, both store-address lanes and both firmware paths.
+The earlier halfword/word inputs and expectations remain byte-identical.
+Native checks retain ten-second deadlines; guest groups retain thirty-second
+deadlines and their original frame/step/process guards. See
+[cartridge GPIO](../hardware/cartridge/rtc.md) for behavior and limits.
+
+`gba.rtc-active-transactions` checks 1,968 active/inactive calendar frame and
+abort cases plus 3,120 parameter-word overrun/restart cases. Its ten-second
+deadline covers complete output/deadline comparisons across clock wrap.
+These checks cover the selected logical policy and leave physical serial
+propagation and partial-register effects unqualified.
+
+Local-session checks are `gba.cable-*`, `gba.video-cable-*` and `platform.local-*`. They cover
+complete paired guest bytes and words, multiplayer receive slots, bus/event
+coordination, cancellation, STOP, SDL input/video/audio and independent battery
+files. Guest matrix cases have separate CTest entries; each retains its clock
+guard and every payload comparison. See [local sessions](../hardware/serial/local-session.md)
+for the host API and scope. With `CUPID_TEST_BIOS`, the owned word and UART
+guest cases also run with the external firmware. Reconstruct `cable-driver.s`
+at `0x03001000` with the same ARMv4T binary-link flags as the UART driver and
+verify all 512 bytes with `tests/gba/serial/generate_cable_driver.py`.
+
+The two display/session groups compare 768 complete display snapshots and
+29,491,200 pixels at sixteen requested endpoints. HALTed and active CPUs,
+pending EWRAM fetches, two- and four-console sessions, a frozen STOP console,
+mid-line memory writes and clock wrap must match independent clock advances.
+Each group has a ten-second deadline and runs with native and portable context
+switching. Both reject the preceding session clock-completion path.
+
+Eight `gba.object-shape-*` groups check the selected shape-3 decoding through
+complete images and CPU-visible display-bus ownership. They include normal,
+affine, alpha and OBJ-window scenes and retain mode-3 suppression. Each group
+has a thirty-second deadline. See [pixel rendering](../hardware/pixel-pipeline.md)
+for the exact policy, coverage and physical qualification limits.
+
 Hosted Linux qualification uses the explicit Ubuntu 24.04 release for GCC
 Release and Clang Debug with address/undefined-behavior sanitizers. The complete
 Clang profile uses `-O1 -g`, matching local cartridge qualification and
 [AddressSanitizer's build guidance](https://clang.llvm.org/docs/AddressSanitizer.html#usage).
-A second default Debug sanitizer build runs all 248 native ARM, core, GBA,
-platform and runner checks without optimization. The complete profile retains
-all 277 checks, including all twenty-nine cartridge cases, their original frame
-counts and process deadlines. Unoptimized full-cartridge runs timed out on
+A second default Debug sanitizer build runs every configured native ARM, core,
+GBA, platform and runner check without optimization. The complete profile
+retains all available cartridge cases, their original frame counts and process
+deadlines. Unoptimized full-cartridge runs timed out on
 slower hosted workers; those failures remain recorded rather than increasing
 their limits. Both compiler flag sets appear in the job log. The exported
 compiler commands also verify effective optimization for every translation
 unit, including flags inherited through linked targets. This keeps
 an automatic `ubuntu-latest` release migration from changing the compiler,
 sanitizer and firmware-assembler baseline. Windows checks use GCC and SDL2.
+The Windows configure step selects the same Python interpreter used to fetch
+the inputs. This keeps CTest from switching to a separate host installation
+when both provide the same Python version. The input-download regression
+retains its ten-second limit and eight-second diagnostic traceback.
 Both checkout steps pin a verified Node.js 24 action revision. An OS release
 upgrade needs the same complete test, firmware regeneration, Make and live
 ThreadSanitizer qualification as the current workflow.
@@ -75,6 +123,15 @@ captured stages and assertions accepted on the ready edge use separate
 ten-second checks. They retain full data payloads,
 physical clocks and internal-cycle counts. See
 [display waits and CPU IRQ sampling](../hardware/cpu/display-irq.md).
+The ten `gba.uart-*` groups check 12,288 complete format-matrix frames, 124,928
+bit-center samples, FIFO capacity, errors, IRQs, connected peers, DMA/timer
+chronology and lifecycle. Owned ARM/Thumb guests each require 1,024 transferred
+bytes, full RAM output and guards, BIOS HALT wake and their passing terminal.
+Two corrupt-input controls must complete and reject the changed byte.
+`CUPID_TEST_BIOS` adds three external-image groups. Each retains a thirty-second
+deadline and the guest retains its million-step and three-million-clock guards.
+Hosted Clang reconstructs the owned driver. See [UART](../hardware/serial/uart.md)
+for the nominal baud model and remaining physical qualification.
 
 The six `arm.user-bank-*` groups check 840 complete user-bank transfers, operand
 phases, bank ownership, ALU flags, memory and branch behavior, predicates,
@@ -160,6 +217,28 @@ the frontend event poll. They cover bindings, mixed source ownership, strict
 stick boundaries, focus/hotplug and keypad IRQ/STOP interactions. Every group
 has a ten-second deadline. See [input handling](../hardware/input.md) for the
 complete observations and scope.
+
+Cartridge peripheral checks include `gba.solar-*`, `gba.cartridge-rumble`,
+`gba.gyro`, `platform.cartridge-peripherals`, `rom.cartridge-gyro` and
+`rom.cartridge-peripherals`. An external BIOS adds paired bus/interaction and
+generated-cartridge groups. Native groups
+have ten-second deadlines; generated cartridge groups have thirty seconds.
+The headless runner can start a probe at `--start-address` (an aligned ARM
+cartridge address) and record motor edges with `--dump-rumble`. The output
+starts with `CPDRMB01`, followed by twelve-byte records: a little-endian
+64-bit emulated clock, a one-byte active flag and three reserved zero bytes.
+Registration and removal also report the current/stopped output. Explicit
+probe entry does not exercise the BIOS boot sequence. See
+[cartridge peripherals](../hardware/cartridge/peripherals.md) for coverage
+and physical measurement limits.
+
+Cartridge minute-interrupt regressions check held and steady RTC outputs,
+ARM/Thumb control writes, the inverted board edge, IF/IME/HALT sequencing,
+timer/DMA ordering, late dispatch, clock wrap and reset. Calendar tests compare
+bulk advances with every second; battery and frontend tests preserve the output
+latch and avoid replaying IRQs from offline time. These are documented signal
+model checks. Physical pulse timing and the remaining cartridge modes are
+unqualified; see [RTC behavior](../hardware/cartridge/rtc.md).
 
 The native regression executables check event scheduling, clock wrap and reset,
 video event deadlines, CPU dispatch coverage, SWI exception entry, arithmetic
@@ -413,6 +492,10 @@ The three raster cases check 20,592 green-swap pixels, 38,400 affine-step pixels
 and 2,816 sprite/mosaic pixels. `--bios` repeats these raster checks through the
 external path. See [pixel rendering](../hardware/pixel-pipeline.md) for the
 timing derivation and the remaining hardware qualification boundaries.
+The native video group also checks complete frame publication across clock
+and counter wrap, late dispatch, STOP, reset and observer removal. A partially
+drawn next frame is its negative control: every published pixel must retain
+the preceding complete image.
 
 The optional locally built count-up/IRQ suite has a separate observer:
 
@@ -599,6 +682,41 @@ can stop a valid long run when prefetch permits more instructions per frame.
 This changes the observation budget; it does not change emulation timing or
 any hardware test expectation.
 
+Set `CUPID_RTC_STATE_ROM` to add `rom.rtc-state`, an optional original RTC
+state/status corpus observed through a private RAM text transport. Adding
+`CUPID_TEST_BIOS` also registers `rom.rtc-state-external`. The observer requires
+the exact prepared input checksum, a complete EWRAM snapshot, the original
+360-frame interval and the complete passing result digest for all 17 comparisons
+after the presence/write guard. It retains the 150-million-step and 90-second
+process limits. The original wire code, delays and comparisons are unchanged;
+the cartridge and transport inputs are not fetched or distributed. These cases
+cover basic state/status protocol behavior, not calendar or interrupt timing.
+
+`gba.rtc-outputs` checks the documented alarm and selected-frequency model:
+all 16 divider clocks, mixed masks across the complete divider phase, output
+priority, both hour formats, held alarm output, daily carries and long waits.
+`gba.rtc-irq`, `gba.rtc-battery` and `platform.rtc-config` cover parameter stores,
+interrupt visibility, repeated edges across timer/DMA work, late dispatch,
+clock wrap, reset, battery formats and offline state. These tests preserve
+the model's specified behavior; physical cartridge edge/phase timing still
+needs qualification. See [RTC behavior and limits](../hardware/cartridge/rtc.md).
+
+`gba.rtc-minute` checks acknowledgement and disable/enable on both sides of
+the retained 10 ms carry signal, both minute modes, mode priority, power flags,
+clock partitioning and fresh-zero versus actual-carry state. GPIO/IRQ groups
+complete ARM/Thumb control bytes at the original strobe deadline during late
+dispatch and clock wrap. Battery tests cover version 3 carry retention and
+validation, legacy files and offline load without past requests.
+
+`gba.rtc-stop` checks explicit battery time during STOP, frozen system
+peripherals, release-edge wake eligibility, resumed IRQ stages, calendar and
+clock wrap, SWI return in ARM/Thumb mode and paced-interval equivalence.
+Supplying `CUPID_TEST_BIOS` adds the external-firmware path. `rom.rtc-stop`
+generates a CupidGBA cartridge that configures the RTC over GPIO, enters STOP
+and checks a frozen timer after wake. It uses the replacement BIOS. The runner
+reports elapsed battery clocks separately and includes them in its existing
+observation budget. These checks do not measure physical oscillator recovery.
+
 Optional standalone serial and HALT probes use their original cartridge bytes
 and comparisons. Set `CUPID_SERIAL_PROBE_DIR` for the nine serial IRQ, data and
 start-bit probes. Set `CUPID_HALT_PROBE_DIR` and `CUPID_TEST_BIOS` for four HALT
@@ -641,6 +759,41 @@ Passing these checks establishes the listed cases. They do not cover every CPU
 encoding, every bus or arbitration edge, every timer/IRQ interaction, raster
 effects, audio fidelity, cartridge peripherals, save persistence, or link
 behavior. Those require further regressions and hardware-backed evidence.
+
+`gba.tilt` checks complete X/Y samples, command and input ownership, ARM/Thumb
+access widths, save isolation, EEPROM transfers, board metadata and command
+strobe timing across scheduler wrap. `rom.cartridge-tilt` requires eight
+generated drivers to finish all 32 paired observations each, plus disabled
+device and invalid input controls. `CUPID_TEST_BIOS` adds
+`rom.cartridge-tilt-external`. These use explicit guest entry and initialize
+CPU modes and stacks before invoking firmware; they do not qualify BIOS boot.
+Platform checks exercise manual tilt input. See the
+[sensor model and unqualified timing](../hardware/cartridge/tilt.md).
+
+The four `rom.rtc-calendar-*` groups require complete ARM/Thumb calendar drivers
+through both GPIO access widths and all three ROM windows. Independent expected
+records cover all one hundred years, month ends, both hour formats, weekday and
+minute/second fields. Each of 3,072 records requires all eighteen returned bytes,
+complete table/output pointers and a passing terminal. Missing-device and
+wrong-expectation controls must finish with their exact expected failure counts.
+Separate guest trials poll through a complete RTC second and check the full
+year and weekday carry, coupling wire encoding to calendar advancement.
+`CUPID_TEST_BIOS` repeats all four groups. Their thirty-second CTest deadlines,
+twenty-second process limits and five-million-step/120-frame guards are fixed.
+These are explicit-entry drivers; they do not boot firmware or qualify partial
+or active-output date writes. See [RTC limits](../hardware/cartridge/rtc.md).
+
+`gba.rtc-parameters-component` observes every sixteen-bit parameter payload
+through both command directions, including each partial word, repeated levels,
+released input and chip-select abort. `gba.rtc-parameters-bus` checks ARM/Thumb
+halfword/word stores in all three GPIO windows, frequency-release IRQ deadlines,
+late dispatch, wrap and DMA strobes alongside a timer. Bulk and single-clock
+dispatch must agree. `rom.rtc-parameters` runs six owned guest drivers and
+requires all 32 IRQ observations per driver, plus all 512 serial-bit comparisons
+for each nominal-read driver. `CUPID_TEST_BIOS` adds the external-firmware path.
+Missing-device controls fail the positive observations. These inputs use
+explicit guest entry and do not qualify BIOS boot. See the
+[parameter model and physical limits](../hardware/cartridge/rtc.md).
 
 The `gba.bios-irq-arm`, `gba.bios-irq-thumb` and `gba.bios-irq-events` groups
 exercise the installed firmware's fixed IRQ entry/return, complete stack and

@@ -53,3 +53,18 @@ Pixel fetches, bus contention, register effects and forced-blank transitions
 are described in [the pixel pipeline](pixel-pipeline.md), including its remaining
 qualification limits. The status and request results alone do not establish
 complete PPU accuracy.
+
+## Completed display images
+
+`cupid_video_set_frame_callback` observes the existing line-160 frame handoff
+after register mirrors update. It supplies borrowed RGBA pixels and the
+console-clock deadline, including during late event dispatch. A caller copies
+the pixels to retain the completed image. The callback runs on the emulation
+thread and must not change the core or advance time. Install or clear it while
+paused; its host ownership survives console reset.
+
+The frontend retains that complete image while the next frame draws and
+during STOP. Frame pacing and the RTC interval still consume their existing
+clocks. Publication changes no scanline, IRQ, DMA or audio deadline. Native
+checks cover every pixel, a partially drawn next-frame control, counter and
+clock wrap, STOP, late dispatch, reset and observer removal.

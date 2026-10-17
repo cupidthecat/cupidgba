@@ -269,7 +269,7 @@ static inline void cupid_arm_step_inline(struct CupidARM* cpu) {
 	cpu->prefetch[0] = cpu->prefetch[1];
 	cpu->gprs[ARM_PC] += WORD_SIZE_ARM;
 	if (cpu->memory.timed) cpu->memory.fetch(cpu, (uint32_t)cpu->gprs[ARM_PC], WORD_SIZE_ARM, true);
-	LOAD_32(cpu->prefetch[1], cpu->gprs[ARM_PC] & cpu->memory.activeMask, cpu->memory.activeRegion);
+	cpu->prefetch[1] = CupidReadOpcode(cpu, (uint32_t)cpu->gprs[ARM_PC], WORD_SIZE_ARM);
 	if (cpu->memory.timed) cpu->memory.finish(cpu);
 	cpu->memory.dataSequential = false;
 
@@ -303,7 +303,7 @@ static inline void cupid_thumb_step_inline(struct CupidARM* cpu) {
 	cpu->prefetch[0] = cpu->prefetch[1];
 	cpu->gprs[ARM_PC] += WORD_SIZE_THUMB;
 	if (cpu->memory.timed) cpu->memory.fetch(cpu, (uint32_t)cpu->gprs[ARM_PC], WORD_SIZE_THUMB, true);
-	LOAD_16(cpu->prefetch[1], cpu->gprs[ARM_PC] & cpu->memory.activeMask, cpu->memory.activeRegion);
+	cpu->prefetch[1] = CupidReadOpcode(cpu, (uint32_t)cpu->gprs[ARM_PC], WORD_SIZE_THUMB);
 	if (cpu->memory.timed) cpu->memory.finish(cpu);
 	cpu->memory.dataSequential = false;
 	CupidThumbInstruction instruction = cupid_thumb_table[opcode >> 6];

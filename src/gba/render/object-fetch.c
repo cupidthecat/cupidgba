@@ -40,7 +40,7 @@ static void fetch_attributes(struct CupidVideo* v, uint64_t time) {
         unsigned a = read_oam(v, f->index * 8, time);
         unsigned b = read_oam(v, f->index * 8 + 2, time);
         unsigned shape = OBJ_ATTR0_SHAPE(a), size = OBJ_ATTR1_SIZE(b);
-        if ((!OBJ_ATTR0_TRANSFORMED(a) && OBJ_ATTR0_DISABLE(a)) || shape == 3 || OBJ_ATTR0_MODE(a) == OBJ_MODE_HIDDEN) {
+        if ((!OBJ_ATTR0_TRANSFORMED(a) && OBJ_ATTR0_DISABLE(a)) || OBJ_ATTR0_MODE(a) == OBJ_MODE_HIDDEN) {
             ++f->index;
             return;
         }

@@ -49,6 +49,13 @@ HBlank-free mode shortens the OBJ fetch budget; the vertical mosaic counter
 still advances at the line boundary and resets at the existing frame edge.
 Changing the budget does not restart the mosaic group or extend memory fetches.
 
+CupidGBA decodes OBJ shape 3 as an 8-by-8 texture for all four size fields.
+This selected logical policy uses the ordinary attribute, matrix and texture
+fetch stages, including their bus ownership and fetch budget. Affine double
+size enlarges the bounding box around that texture. OBJ mode 3 remains
+suppressed before matrix or texture fetching. These choices have software
+regressions; physical behavior for the prohibited encodings remains unmeasured.
+
 Display control passes through three line latches sampled at clock 40. BG
 fetching requires both the current and latched enable. Forced blank remains
 active while either the current or latched blank bit is set. Affine reference
@@ -84,8 +91,18 @@ size-change wrap and frame reset, require OAM/VRAM fetches to stop at the shorte
 budget, and compare changing budgets under bulk and single-clock dispatch at
 three clock epochs. All four groups fail against the preceding implementation:
 its shortened fetch loop also stopped vertical mosaic progression. These checks
-qualify this fetch-budget interaction; they do not add physical counter-edge
-captures or establish the remaining reset and prohibited-OBJ behavior.
+qualify this fetch-budget interaction; physical counter edges and reset phases
+remain outside those checks.
+
+Eight object-shape groups check 768 paired ordinary/shape-3 scenes, every
+pixel in 1,536 complete screens and 946,176 paired bus clocks. They cover all
+size fields, both color depths and mapping modes, both fetch budgets, normal
+flips, identity-affine and double-size bounds, semi-transparency, OBJ windows,
+mode-3 suppression and clock wrap. Both members of every pair satisfy the
+analytic image, including transparent texels and the complete backdrop.
+Six groups reject the preceding shape-skip path; the two mode-3 groups retain
+its existing suppression. These checks qualify the selected decoding and
+its fetch timing without claiming physical measurements of those encodings.
 
 The unchanged VRAM-mirror ROM passes all ten original register and CRC
 expectations with either BIOS path. Ten selections of the unchanged access
@@ -135,8 +152,8 @@ endpoints, coefficient saturation and red/blue symmetry. Scanout tests retain
 the extra green bit through direct bitmap, background palette, backdrop and
 semi-transparent OBJ inputs. These qualify the implemented numerical model;
 direct hardware captures for fractional rounding and bit 15 remain open.
-Prohibited OBJ shapes/modes, precise mosaic changes at counter boundaries, and reset or
-BIOS-skipped phases also remain open. The ten selections do not qualify every
+Precise mosaic changes at counter boundaries and reset or BIOS-skipped phases
+also remain open. The ten selections do not qualify every
 scroll phase, layer combination, OBJ mode or contention pattern. These limits remain under
 [issue 16](https://github.com/cupidthecat/cupidgba/issues/16) and the complete
 PPU audit under [issue 1](https://github.com/cupidthecat/cupidgba/issues/1).

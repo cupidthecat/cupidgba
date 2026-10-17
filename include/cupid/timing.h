@@ -40,6 +40,15 @@ struct CupidTiming {
     void (*syncClock)(void* context, uint64_t time); /**< Clocked devices observe the completed tick */
     int32_t* relativeCycles;             /**< → cpu->cycles (elapsed since last tick) */
     int32_t* nextEvent;                  /**< → cpu->nextEvent (next deadline) */
+
+    /* Optional host clock coordinator. It consumes the requested elapsed
+     * clocks, dispatches events and finishes each advanced clock before
+     * returning the next local deadline. A request may remain suspended while
+     * its host returns to the caller at an earlier clock boundary.
+     * Install only while the CPU is idle; clear before destroying its host. */
+    int32_t (*synchronize)(void* context, struct CupidTiming* timing, int32_t cycles);
+    void* synchronizeContext;
+    bool waitingForEvent;                /**< HALT or DMA wait may end at a newly arrived event */
 };
 
 /** @name API */
@@ -86,6 +95,16 @@ bool cupid_timing_is_scheduled(const struct CupidTiming* timing,
  * Returns the next CPU breakpoint relative to masterCycles (or INT_MAX).
  */
 int32_t cupid_timing_tick(struct CupidTiming* timing, int32_t cycles);
+
+/* Coordinator primitives: advance clocks without callbacks, dispatch all due
+ * events, then finish each advanced clock before releasing a CPU or returning
+ * to the host. Finishing updates clocked devices even when a CPU's bus request
+ * remains suspended. Event dispatch must finish first so a late write cannot
+ * arrive after the display has already rendered past its deadline. */
+void cupid_timing_advance_clock(struct CupidTiming* timing, uint32_t cycles);
+bool cupid_timing_dispatch_next(struct CupidTiming* timing);
+void cupid_timing_finish_tick(struct CupidTiming* timing);
+const struct CupidTimingEvent* cupid_timing_first_event(const struct CupidTiming* timing);
 
 /** Master time including CPU elapsed cycles, or the active callback deadline. */
 int32_t cupid_timing_current_time(const struct CupidTiming* timing);

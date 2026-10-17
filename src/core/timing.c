@@ -24,9 +24,11 @@ static void refresh_deadline(struct CupidTiming* timing) {
 void cupid_timing_init(struct CupidTiming* timing, int32_t* relativeCycles,
                        int32_t* nextEvent) {
     timing->relativeCycles = relativeCycles;
-    timing->nextEvent = nextEvent;
     timing->clockContext = NULL;
     timing->syncClock = NULL;
+    timing->nextEvent = nextEvent;
+    timing->synchronize = NULL;
+    timing->synchronizeContext = NULL;
     cupid_timing_clear(timing);
 }
 
@@ -41,6 +43,7 @@ void cupid_timing_clear(struct CupidTiming* timing) {
     timing->masterCycles = 0;
     timing->inCallback = false;
     timing->callbackCycles = 0;
+    timing->waitingForEvent = false;
     *timing->relativeCycles = 0;
     *timing->nextEvent = INT32_MAX;
 }
@@ -100,28 +103,45 @@ bool cupid_timing_is_scheduled(const struct CupidTiming* timing,
     return false;
 }
 
-int32_t cupid_timing_tick(struct CupidTiming* timing, int32_t cycles) {
-    timing->masterCycles += (uint32_t)cycles;
-    timing->globalCycles += (uint32_t)cycles;
-    for (;;) {
-        if (!timing->root) {
-            timing->root = timing->reroot;
-            timing->reroot = NULL;
-        }
-        struct CupidTimingEvent* next = timing->root;
-        if (!next || distance(next->when, timing->masterCycles) > 0) break;
-        timing->root = next->next;
-        next->next = NULL;
-        uint32_t late = timing->masterCycles - next->when;
-        bool wasInCallback = timing->inCallback;
-        uint64_t previousCallback = timing->callbackCycles;
-        timing->inCallback = true;
-        timing->callbackCycles = timing->globalCycles - late;
-        next->callback(timing, next->context, late);
-        timing->inCallback = wasInCallback;
-        timing->callbackCycles = previousCallback;
+const struct CupidTimingEvent* cupid_timing_first_event(const struct CupidTiming* timing) {
+    return first_event(timing);
+}
+
+void cupid_timing_advance_clock(struct CupidTiming* timing, uint32_t cycles) {
+    timing->masterCycles += cycles;
+    timing->globalCycles += cycles;
+}
+
+bool cupid_timing_dispatch_next(struct CupidTiming* timing) {
+    if (!timing->root) {
+        timing->root = timing->reroot;
+        timing->reroot = NULL;
     }
+    struct CupidTimingEvent* next = timing->root;
+    if (!next || distance(next->when, timing->masterCycles) > 0) return false;
+    timing->root = next->next;
+    next->next = NULL;
+    uint32_t late = timing->masterCycles - next->when;
+    bool wasInCallback = timing->inCallback;
+    uint64_t previousCallback = timing->callbackCycles;
+    timing->inCallback = true;
+    timing->callbackCycles = timing->globalCycles - late;
+    next->callback(timing, next->context, late);
+    timing->inCallback = wasInCallback;
+    timing->callbackCycles = previousCallback;
+    return true;
+}
+
+void cupid_timing_finish_tick(struct CupidTiming* timing) {
     if (timing->syncClock) timing->syncClock(timing->clockContext, timing->globalCycles);
+}
+
+int32_t cupid_timing_tick(struct CupidTiming* timing, int32_t cycles) {
+    if (timing->synchronize)
+        return timing->synchronize(timing->synchronizeContext, timing, cycles);
+    cupid_timing_advance_clock(timing, (uint32_t)cycles);
+    while (cupid_timing_dispatch_next(timing)) {}
+    cupid_timing_finish_tick(timing);
     /* The CPU compares its relative accumulator against this breakpoint. */
     *timing->nextEvent = deadline(timing);
     return *timing->nextEvent;

@@ -161,7 +161,94 @@ static void late_dispatch_matches_clock_steps_across_wrap(void) {
     }
 }
 
+struct FrameCapture {
+    struct CupidGBA* gba;
+    uint64_t nextClock;
+    unsigned calls;
+    uint32_t pixels[GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT];
+};
+
+static void capture_image(void* context, const uint32_t* pixels, uint64_t clock) {
+    struct FrameCapture* frame = context;
+    CHECK(clock == frame->nextClock && clock == cupid_timing_global_time(&frame->gba->timing));
+    CHECK(frame->gba->video.vcount == VIDEO_VDRAW_LINES && frame->gba->frameReady);
+    CHECK(frame->gba->memory.io[REG_VCOUNT >> 1] == VIDEO_VDRAW_LINES);
+    CHECK(frame->gba->memory.io[REG_DISPSTAT >> 1] & 1);
+    frame->nextClock += VIDEO_TOTAL_LENGTH;
+    ++frame->calls;
+    memcpy(frame->pixels, pixels, sizeof(frame->pixels));
+}
+
+static void image_is(const uint32_t* pixels, uint16_t color) {
+    for (unsigned i = 0; i < GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT; ++i)
+        CHECK(pixels[i] == color16_to_rgba(color));
+}
+
+static void completed_images_survive_drawing_stop_late_dispatch_and_reset(void) {
+    const uint64_t epochs[] = {0, UINT32_MAX - UINT64_C(512)};
+    for (unsigned epoch = 0; epoch < sizeof(epochs) / sizeof(*epochs); ++epoch) {
+        struct CupidGBA* gba = machine(epochs[epoch], 225);
+        struct FrameCapture* frame = calloc(1, sizeof(*frame)); CHECK(frame);
+        frame->gba = gba;
+        cupid_io_write(gba, REG_DISPCNT, 0x0403);
+        for (unsigned i = 0; i < GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT; ++i) gba->video.vram[i] = 0x001F;
+        /* Settle all three display latches during VBlank before asserting a
+         * uniform completed image. No visible line or frame handoff is skipped. */
+        tick(gba, 3 * VIDEO_HORIZONTAL_LENGTH);
+        CHECK(gba->video.vcount == 0);
+        frame->nextClock = cupid_timing_global_time(&gba->timing) + VIDEO_VDRAW_LINES * VIDEO_HORIZONTAL_LENGTH;
+        cupid_video_set_frame_callback(&gba->video, capture_image, frame);
+        gba->video.frameCounter = UINT32_MAX;
+        tick(gba, VIDEO_TOTAL_LENGTH);
+        CHECK(frame->calls == 1 && gba->video.frameCounter == 0);
+        image_is(frame->pixels, 0x001F);
+        for (unsigned i = 0; i < GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT; ++i) gba->video.vram[i] = 0x03E0;
+        tick(gba, VIDEO_HORIZONTAL_LENGTH * 80);
+        CHECK(frame->calls == 1);
+        /* The next visible frame is a live-buffer negative control. Its top
+         * has changed, while the published complete image remains intact. */
+        CHECK(gba->video.outputBuffer[0] == color16_to_rgba(0x03E0));
+        CHECK(gba->video.outputBuffer[(GBA_SCREEN_HEIGHT - 1) * GBA_SCREEN_WIDTH] == color16_to_rgba(0x001F));
+        image_is(frame->pixels, 0x001F);
+        cupid_gba_stop(gba); CHECK(gba->stopped);
+        const uint64_t stoppedClock = cupid_timing_global_time(&gba->timing);
+        cupid_gba_run_interval(gba, VIDEO_TOTAL_LENGTH);
+        CHECK(gba->stopped && cupid_timing_global_time(&gba->timing) == stoppedClock && frame->calls == 1);
+        image_is(frame->pixels, 0x001F);
+        gba->stopped = false;
+        tick(gba, VIDEO_TOTAL_LENGTH);
+        CHECK(frame->calls == 2);
+        image_is(frame->pixels, 0x03E0);
+        tick(gba, VIDEO_TOTAL_LENGTH * 2);
+        CHECK(frame->calls == 4 && gba->video.frameCounter == 3);
+        image_is(frame->pixels, 0x03E0);
+        cupid_gba_reset(gba);
+        CHECK(gba->video.frameCallback == capture_image && gba->video.frameContext == frame);
+        cupid_timing_clear(&gba->timing);
+        gba->timing.globalCycles = epochs[epoch];
+        gba->timing.masterCycles = (uint32_t)epochs[epoch];
+        cupid_video_reset(&gba->video);
+        gba->video.vcount = 225;
+        gba->memory.io[REG_VCOUNT >> 1] = 225;
+        frame->nextClock = epochs[epoch] + (3 + VIDEO_VDRAW_LINES) * VIDEO_HORIZONTAL_LENGTH;
+        cupid_io_write(gba, REG_DISPCNT, 0x0403);
+        for (unsigned i = 0; i < GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT; ++i) gba->video.vram[i] = 0x001F;
+        tick(gba, 3 * VIDEO_HORIZONTAL_LENGTH);
+        CHECK(gba->video.vcount == 0 && frame->calls == 4);
+        tick(gba, VIDEO_TOTAL_LENGTH);
+        CHECK(frame->calls == 5);
+        image_is(frame->pixels, 0x001F);
+        cupid_video_set_frame_callback(&gba->video, NULL, NULL);
+        for (unsigned i = 0; i < GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT; ++i) gba->video.vram[i] = 0x03E0;
+        tick(gba, VIDEO_TOTAL_LENGTH);
+        CHECK(frame->calls == 5);
+        image_is(frame->pixels, 0x001F);
+        destroy(gba); free(frame);
+    }
+}
+
 int main(void) {
+    RUN(completed_images_survive_drawing_stop_late_dispatch_and_reset);
     RUN(flags_and_irqs_have_separate_deadlines);
     RUN(match_writes_masks_and_frame_edges);
     RUN(display_dma_latches_before_the_next_frame_window);

@@ -44,7 +44,8 @@ source observations. Multiplayer receive registers are read-only; normal
 untouched fields and do not restart a busy transfer. JOY control status bits
 use write-one acknowledgement. Connected multiplayer word transfers are
 described in [multiboot](../bios/multiboot.md); complete JOY command peers are
-described in [JOY commands](joybus.md). UART transactions remain incomplete.
+described in [JOY commands](joybus.md). UART framing and flow control are
+described in [UART](uart.md), including its remaining physical timing limits.
 
 The CPU samples the IRQ line before HALT's wake clock. If the line becomes
 asserted during that clock, the resumed instruction completes before IRQ entry.

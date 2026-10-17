@@ -778,8 +778,8 @@ DEFINE_INSTRUCTION_ARM(MSR,
 		cpu->prefetch[1] &= 0xFFFF;
 		CupidWriteRegister(cpu, ARM_PC, CupidReadRegister(cpu, ARM_PC) + (WORD_SIZE_THUMB));
 	} else {
-		LOAD_32(cpu->prefetch[0], (CupidReadRegister(cpu, ARM_PC) - WORD_SIZE_ARM) & cpu->memory.activeMask, cpu->memory.activeRegion);
-		LOAD_32(cpu->prefetch[1], CupidReadRegister(cpu, ARM_PC) & cpu->memory.activeMask, cpu->memory.activeRegion);
+		cpu->prefetch[0] = CupidReadOpcode(cpu, (uint32_t)CupidReadRegister(cpu, ARM_PC) - WORD_SIZE_ARM, WORD_SIZE_ARM);
+		cpu->prefetch[1] = CupidReadOpcode(cpu, (uint32_t)CupidReadRegister(cpu, ARM_PC), WORD_SIZE_ARM);
 	})
 
 DEFINE_INSTRUCTION_ARM(MSRR,
@@ -815,8 +815,8 @@ DEFINE_INSTRUCTION_ARM(MSRI,
 		cpu->prefetch[1] &= 0xFFFF;
 		CupidWriteRegister(cpu, ARM_PC, CupidReadRegister(cpu, ARM_PC) + (WORD_SIZE_THUMB));
 	} else {
-		LOAD_32(cpu->prefetch[0], (CupidReadRegister(cpu, ARM_PC) - WORD_SIZE_ARM) & cpu->memory.activeMask, cpu->memory.activeRegion);
-		LOAD_32(cpu->prefetch[1], CupidReadRegister(cpu, ARM_PC) & cpu->memory.activeMask, cpu->memory.activeRegion);
+		cpu->prefetch[0] = CupidReadOpcode(cpu, (uint32_t)CupidReadRegister(cpu, ARM_PC) - WORD_SIZE_ARM, WORD_SIZE_ARM);
+		cpu->prefetch[1] = CupidReadOpcode(cpu, (uint32_t)CupidReadRegister(cpu, ARM_PC), WORD_SIZE_ARM);
 	})
 
 DEFINE_INSTRUCTION_ARM(MSRRI,

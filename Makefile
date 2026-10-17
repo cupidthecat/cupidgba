@@ -7,18 +7,32 @@ LDFLAGS = $(shell pkg-config --libs sdl2) -lm
 SDLCFLAGS = $(shell pkg-config --cflags sdl2)
 CFLAGS += $(SDLCFLAGS)
 CFLAGS += $(CFLAGS_EXTRA)
+CFLAGS += $(CPPFLAGS)
+LDFLAGS += $(LDFLAGS_EXTRA)
+CONTEXT_LIBRARY = $(shell $(CC) -print-file-name=libboost_context.so)
+CONTEXT_VERSION = $(shell $(CC) $(CPPFLAGS) -dM -E -include boost/version.hpp -x c /dev/null 2>/dev/null | sed -n 's/^#define BOOST_VERSION //p')
+ifneq ($(wildcard $(CONTEXT_LIBRARY)),)
+ifneq ($(shell test "$(CONTEXT_VERSION)" -ge 106100 2>/dev/null && echo yes),)
+CFLAGS += -DCUPID_USE_FCONTEXT=1
+LDFLAGS += -lboost_context
+endif
+endif
 
 # Source files
 SRC_ARM      = src/arm/arm.c src/arm/isa-arm.c src/arm/isa-thumb.c
 SRC_GBA      = src/gba/gba.c src/gba/memory.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c \
                src/gba/audio.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c \
                src/gba/hle-bios.c src/gba/bios/file.c src/gba/savedata.c src/gba/save/file.c \
-               src/gba/serial/serial.c src/gba/serial/joybus.c
-SRC_CORE     = src/core/timing.c
+               src/gba/serial/serial.c src/gba/serial/joybus.c src/gba/serial/uart.c \
+               src/gba/cartridge/rtc.c src/gba/cartridge/gpio.c src/gba/cartridge/battery.c src/gba/cartridge/solar.c \
+               src/gba/cartridge/gyro.c src/gba/cartridge/tilt.c
+SRC_CORE     = src/core/timing.c src/core/file.c
 SRC_RENDER   = src/gba/render/fetch.c src/gba/render/scanout.c src/gba/render/object-fetch.c
-SRC_PLATFORM = src/platform/main.c src/platform/audio.c src/platform/input.c
+SRC_PLATFORM = src/platform/main.c src/platform/local.c src/platform/window.c src/platform/audio.c src/platform/input.c src/platform/context.c \
+               src/platform/rtc.c src/platform/peripherals.c src/platform/rumble.c
+SRC_LINK     = src/link/cable.c
 
-SRCS = $(SRC_ARM) $(SRC_GBA) $(SRC_CORE) $(SRC_RENDER) $(SRC_PLATFORM)
+SRCS = $(SRC_ARM) $(SRC_GBA) $(SRC_CORE) $(SRC_RENDER) $(SRC_PLATFORM) $(SRC_LINK)
 OBJS = $(SRCS:.c=.o)
 DEPS = $(OBJS:.o=.d)
 
