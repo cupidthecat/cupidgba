@@ -28,6 +28,7 @@ set(CUPID_FIRMWARE_IRQ_PROBE_DIR "" CACHE PATH "Directory containing checksum-ve
 set(CUPID_AUDIO_TEST_ROM "" CACHE FILEPATH "Locally built audio signal cartridge ROM")
 set(CUPID_FIFO_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified FIFO DMA cartridges")
 set(CUPID_FIFO_SOURCE_ROM "" CACHE FILEPATH "Checksum-verified FIFO base cartridge rebuilt from its pinned source")
+set(CUPID_EEPROM_PROBE_ROM "" CACHE FILEPATH "Checksum-verified local EEPROM polling software probe")
 set(CUPID_TEST_BIOS "" CACHE FILEPATH "External BIOS for local hardware suite checks")
 
 add_library(cupid_build_options INTERFACE)
@@ -54,6 +55,7 @@ add_library(cupid_core STATIC
     src/gba/gba.c src/gba/memory.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
     src/gba/audio.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c
     src/gba/hle-bios.c src/gba/bios/file.c src/gba/savedata.c src/gba/save/file.c
+    src/gba/save/programming.c
     src/gba/serial/serial.c src/gba/serial/joybus.c src/gba/serial/uart.c
     src/gba/cartridge/rtc.c src/gba/cartridge/gpio.c src/gba/cartridge/battery.c src/gba/cartridge/solar.c
     src/gba/cartridge/gyro.c
@@ -104,6 +106,30 @@ target_link_libraries(cupidgba-headless PRIVATE cupid_core)
 include(CTest)
 if(BUILD_TESTING)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME rom.flash-profile COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_flash_profile.py --runner $<TARGET_FILE:cupidgba-headless>)
+    set_tests_properties(rom.flash-profile PROPERTIES TIMEOUT 15)
+    foreach(profile flash512 flash1m sst39vf512)
+        foreach(mode arm thumb)
+            add_test(NAME rom.flash-driver-${profile}-${mode} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_flash_driver.py
+                --runner $<TARGET_FILE:cupidgba-headless> --profile ${profile} --mode ${mode})
+            set_tests_properties(rom.flash-driver-${profile}-${mode} PROPERTIES TIMEOUT 30)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.flash-driver-${profile}-${mode}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_flash_driver.py
+                    --runner $<TARGET_FILE:cupidgba-headless> --profile ${profile} --mode ${mode}
+                    --bios ${CUPID_TEST_BIOS})
+                set_tests_properties(rom.flash-driver-${profile}-${mode}-external PROPERTIES TIMEOUT 30)
+            endif()
+        endforeach()
+    endforeach()
+    if(CUPID_TEST_BIOS)
+        add_test(NAME rom.flash-profile-external COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_flash_profile.py --runner $<TARGET_FILE:cupidgba-headless>
+            --bios ${CUPID_TEST_BIOS})
+        set_tests_properties(rom.flash-profile-external PROPERTIES TIMEOUT 15)
+    endif()
     add_test(NAME rom.cartridge-peripherals COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_peripherals.py --runner $<TARGET_FILE:cupidgba-headless>)
     set_tests_properties(rom.cartridge-peripherals PROPERTIES TIMEOUT 30)
@@ -180,6 +206,9 @@ if(BUILD_TESTING)
         set_tests_properties(rom.cartridge-peripherals-external PROPERTIES TIMEOUT 30)
     endif()
     if(CUPID_BUILD_FRONTEND)
+        add_test(NAME platform.flash-profile COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_flash_profile.py --frontend $<TARGET_FILE:cupidgba>)
+        set_tests_properties(platform.flash-profile PROPERTIES TIMEOUT 30)
         add_executable(test_peripherals tests/platform/test_peripherals.c
             src/platform/peripherals.c src/platform/rumble.c src/platform/input.c)
         target_link_libraries(test_peripherals PRIVATE cupid_core SDL2::SDL2)
@@ -412,6 +441,29 @@ if(BUILD_TESTING)
     endforeach()
     add_test(NAME gba.eeprom-persistence COMMAND test_eeprom persistence ${CMAKE_CURRENT_BINARY_DIR})
     set_tests_properties(gba.eeprom-persistence PROPERTIES TIMEOUT 10)
+
+    add_executable(test_save_programming tests/gba/save/test_programming.c)
+    target_link_libraries(test_save_programming PRIVATE cupid_core)
+    foreach(group eeprom flash chronology power cpu configuration guest reboot)
+        add_test(NAME gba.save-programming-${group} COMMAND test_save_programming ${group})
+        set_tests_properties(gba.save-programming-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+    add_test(NAME gba.save-programming-persistence COMMAND test_save_programming persistence ${CMAKE_CURRENT_BINARY_DIR})
+    set_tests_properties(gba.save-programming-persistence PROPERTIES TIMEOUT 10)
+
+    add_executable(test_save_programming_rtc tests/gba/save/test_programming_rtc.c)
+    target_link_libraries(test_save_programming_rtc PRIVATE cupid_core)
+    add_test(NAME gba.save-programming-rtc-stop COMMAND test_save_programming_rtc)
+    set_tests_properties(gba.save-programming-rtc-stop PROPERTIES TIMEOUT 10)
+
+    add_executable(test_flash_profile tests/gba/save/test_flash_profile.c)
+    target_link_libraries(test_flash_profile PRIVATE cupid_core)
+    foreach(group selection edges cpu dma)
+        add_test(NAME gba.flash-profile-${group} COMMAND test_flash_profile ${group})
+        set_tests_properties(gba.flash-profile-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+    add_test(NAME gba.flash-profile-lifecycle COMMAND test_flash_profile lifecycle ${CMAKE_CURRENT_BINARY_DIR})
+    set_tests_properties(gba.flash-profile-lifecycle PROPERTIES TIMEOUT 10)
 
     add_executable(test_audio tests/gba/test_audio.c)
     target_link_libraries(test_audio PRIVATE cupid_core)
@@ -1015,6 +1067,21 @@ if(BUILD_TESTING)
                 set_tests_properties(rom.ppu-${case}-external PROPERTIES TIMEOUT 130)
             endif()
         endforeach()
+    endif()
+
+    if(CUPID_EEPROM_PROBE_ROM)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        add_test(NAME rom.eeprom-polling COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_eeprom_probe.py
+            --rom ${CUPID_EEPROM_PROBE_ROM} --runner $<TARGET_FILE:cupidgba-headless>)
+        set_tests_properties(rom.eeprom-polling PROPERTIES TIMEOUT 100)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME rom.eeprom-polling-external COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_eeprom_probe.py
+                --rom ${CUPID_EEPROM_PROBE_ROM} --runner $<TARGET_FILE:cupidgba-headless>
+                --bios ${CUPID_TEST_BIOS})
+            set_tests_properties(rom.eeprom-polling-external PROPERTIES TIMEOUT 100)
+        endif()
     endif()
 
     if(CUPID_BUS_SUITE_ROM)

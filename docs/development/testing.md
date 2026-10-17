@@ -117,6 +117,49 @@ guest cannot silently skip failure recording. The slow-return case passes;
 the `0xF4` versus `0xF5` comparison remains a failure. The original execution
 guards and 90-second process deadline remain, with 100 seconds in CTest.
 
+`CUPID_EEPROM_PROBE_ROM` adds a checksum-verified local EEPROM software corpus.
+Its ready-polling and 1,023-block stress loop must reach the original terminal
+and complete passing result pixels. `CUPID_TEST_BIOS` adds the same check after
+firmware boot. The observer uses a fixed 1,200-frame, 150-million-step and
+90-second process budget; CTest retains a 100-second deadline. This separately
+qualified software input is not distributed and does not calibrate chip
+timings. See [save programming](../hardware/cartridge/programming.md).
+
+The original nine `gba.save-programming-*` groups cover accepted operations, ready
+deadlines, polling, bus strobes, timer/DMA/IRQ chronology, clock wrap, STOP,
+reset, profile validation and complete save-file images through failures and
+replacement. A 32-case reboot group retains every captured operation and its
+original deadline through ARM/Thumb HardReset at four clock epochs, including
+signed/unsigned wrap. An owned ARM driver also polls through the default byte-program
+interval from IWRAM and ROM. Synthetic operation durations separate scheduler correctness
+from chip calibration. Each group retains a ten-second deadline; see
+[save programming](../hardware/cartridge/programming.md).
+
+`gba.save-programming-rtc-stop` adds 192 complete interactions between save
+programming and an RTC wake during STOP. The five `gba.flash-profile-*` groups
+cover explicit chip selection, nominal ready edges, complete images, actual
+ARM/Thumb strobes and lifecycle; each has a ten-second deadline.
+`rom.flash-profile` runs an owned command/poll driver and requires default-device
+and wrong-ID controls to fail. An external BIOS adds the same probe at an
+explicit cartridge entry. `platform.flash-profile` uses bounded local sessions
+to check complete independent saves and both startup paths' capacity rejection.
+These probes qualify the documented nominal model, without physical timing
+calibration. All original source-ROM inputs, assertions and budgets remain.
+
+The Flash DMA group checks 216 full scenes: all three profiles, every operation,
+before/at/after reads, four clock epochs and bulk/partitioned dispatch. Each
+scene checks complete storage at four bus phases, captured read data, guarded
+destination bytes, timer/DMA IRQs and CPU release. Its ten-second deadline
+qualifies integration with the existing bus model.
+
+The six `rom.flash-driver-*` entries add complete ARM/Thumb program, sector,
+bank and chip transactions for both default Flash capacities and the explicit
+64-KiB profile. Each compares the entire final saved image through guest bus
+reads, retains memory guards and requires a wrong-comparison control to fail.
+An external BIOS adds the same six cases at an explicit cartridge entry.
+Each process retains a 120-frame, 50-million-step and ten-second bound; each
+CTest entry has thirty seconds for its positive and negative cases.
+
 The two `gba.gpio-byte-*` groups cover 1,536 complete port frames and 576
 strobe/wait/timer/IRQ cases. The `rom.rtc-calendar-byte-*` groups retain the
 complete calendar matrix, carry trials and negative controls through actual

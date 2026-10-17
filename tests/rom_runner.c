@@ -109,9 +109,14 @@ int main(int argc, char** argv) {
     uint64_t checkpointAddress = 0;
     uint64_t startAddress = 0;
     int expectedRegister = -1;
+    bool sstFlash = false;
     struct CupidPlatformPeripherals peripherals = CUPID_PLATFORM_PERIPHERALS_DEFAULT;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--bios") && i + 1 < argc) bios = argv[++i];
+        else if (!strcmp(argv[i], "--flash-profile") && i + 1 < argc) {
+            if (strcmp(argv[++i], "sst39vf512")) return 2;
+            sstFlash = true;
+        }
         else if ((!strcmp(argv[i], "--solar") || !strcmp(argv[i], "--rumble") ||
                   !strcmp(argv[i], "--gyro") || !strcmp(argv[i], "--tilt")) && i + 1 < argc) {
             int* presence = !strcmp(argv[i], "--solar") ? &peripherals.solarPresence :
@@ -180,7 +185,7 @@ int main(int argc, char** argv) {
             expectedRegister = (int)index;
         } else if (argv[i][0] != '-' && !rom) rom = argv[i];
         else {
-            fprintf(stderr, "Usage: %s ROM [--bios FILE] [--frames N] [--steps N] [--key-event FRAME MASK] [--screenshot FILE.ppm] [--dump-vram FILE] [--dump-io FILE] [--dump-ewram FILE] [--dump-audio FILE] [--dump-rumble FILE] [--solar auto|on|off] [--sunlight 0..255] [--rumble auto|on|off] [--gyro auto|on|off] [--gyro-sample 0..4095] [--tilt auto|on|off] [--tilt-x 0..4095] [--tilt-y 0..4095] [--start-address ADDRESS] [--expect-loop-register N] [--terminal-address ADDRESS] [--checkpoint-address ADDRESS] [--expect-register-at ADDRESS REGISTER VALUE] [--expect-register-pair-at ADDRESS REGISTER VALUE REGISTER VALUE]\n", argv[0]);
+            fprintf(stderr, "Usage: %s ROM [--bios FILE] [--flash-profile sst39vf512] [--frames N] [--steps N] [--key-event FRAME MASK] [--screenshot FILE.ppm] [--dump-vram FILE] [--dump-io FILE] [--dump-ewram FILE] [--dump-audio FILE] [--dump-rumble FILE] [--solar auto|on|off] [--sunlight 0..255] [--rumble auto|on|off] [--gyro auto|on|off] [--gyro-sample 0..4095] [--tilt auto|on|off] [--tilt-x 0..4095] [--tilt-y 0..4095] [--start-address ADDRESS] [--expect-loop-register N] [--terminal-address ADDRESS] [--checkpoint-address ADDRESS] [--expect-register-at ADDRESS REGISTER VALUE] [--expect-register-pair-at ADDRESS REGISTER VALUE REGISTER VALUE]\n", argv[0]);
             return 2;
         }
     }
@@ -191,6 +196,10 @@ int main(int argc, char** argv) {
     cupid_gba_create(gba);
     int result = 2;
     if (!cupid_load_rom(gba, rom) || (bios && !cupid_load_bios(gba, bios))) goto cleanup;
+    if (sstFlash) {
+        cupid_savedata_force_type(&gba->memory.savedata, SAVE_FLASH512);
+        if (!cupid_savedata_set_flash_profile(&gba->memory.savedata, FLASH_PROFILE_SST39VF512)) goto cleanup;
+    }
     cupid_platform_peripherals_configure(gba, &peripherals);
     cupid_gba_reset(gba);
     if (observations.count) {
