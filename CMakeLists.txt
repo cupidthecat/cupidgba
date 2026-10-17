@@ -591,6 +591,13 @@ if(BUILD_TESTING)
         set_tests_properties(gba.prefetch-boundary-${group} PROPERTIES TIMEOUT 30)
     endforeach()
 
+    add_executable(test_fast_boot tests/gba/test_fast_boot.c)
+    target_link_libraries(test_fast_boot PRIVATE cupid_core)
+    foreach(group RANGE 0 3)
+        add_test(NAME gba.fast-boot-phase-${group} COMMAND test_fast_boot ${group})
+        set_tests_properties(gba.fast-boot-phase-${group} PROPERTIES TIMEOUT 30)
+    endforeach()
+
     add_executable(test_video tests/gba/test_video.c)
     target_link_libraries(test_video PRIVATE cupid_core)
     add_test(NAME gba.video COMMAND test_video)
