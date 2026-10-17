@@ -334,7 +334,10 @@ static void marker_bounds_and_physical_rom_windows(void) {
     CHECK(!cupid_cartridge_gpio_address(gba, 0x020000C4));
     CHECK(!cupid_cartridge_gpio_address(gba, 0x0E0000C4));
     cupid_memory_store8(&gba->cpu, 0x080000C6, 0, NULL);
+    CHECK(gba->cartridge.direction == 0);
     cupid_memory_store8(&gba->cpu, 0x080000C7, 0, NULL);
+    CHECK(gba->cartridge.direction == 0);
+    cupid_memory_store8(&gba->cpu, 0x080000C7, (int8_t)0xFF, NULL);
     CHECK(gba->cartridge.direction == 15);
     destroy(gba);
 }

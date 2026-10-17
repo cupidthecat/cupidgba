@@ -40,8 +40,12 @@ static void port_directions_repeated_writes_and_read_control(void) {
                 CHECK(trace.active[trace.count - 1] == gba->cartridge.rumbleActive);
                 const unsigned previous = trace.count;
                 cupid_memory_store16(&gba->cpu, 0x080000C4, (int16_t)output, NULL);
-                cupid_memory_store8(&gba->cpu, 0x080000C4, 0, NULL);
                 CHECK(trace.count == previous);
+                const bool wasActive = gba->cartridge.rumbleActive;
+                cupid_memory_store8(&gba->cpu, 0x080000C4, 0, NULL);
+                CHECK(trace.count == previous + (wasActive ? 1u : 0u));
+                CHECK(!gba->cartridge.rumbleActive && !trace.active[trace.count - 1]);
+                if (wasActive) CHECK(trace.clock[trace.count - 1] == cupid_timing_global_time(&gba->timing));
             }
         }
     }

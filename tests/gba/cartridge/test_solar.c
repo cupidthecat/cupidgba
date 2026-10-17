@@ -110,9 +110,10 @@ static void instruction_driver_and_physical_windows(void) {
                     cupid_memory_update_waitstates(gba, (uint16_t)(prefetch << 14));
                     access_port(gba, thumb, 2, port + 4, 1, false);
                     access_port(gba, thumb, 2, port + 2, 3, false);
-                    /* Byte writes cannot clock or clear the cartridge port. */
+                    /* The byte strobe drives clock and active clear together. */
                     access_port(gba, thumb, 1, port, 3, false);
-                    CHECK(!gba->cartridge.output && gba->cartridge.direction == 3);
+                    CHECK(gba->cartridge.output == 3 && gba->cartridge.direction == 3);
+                    CHECK(gba->cartridge.solar.counter == 0);
                     for (unsigned l = 0; l < sizeof(levels); l++) {
                         cupid_cartridge_set_solar_level(gba, levels[l]);
                         access_port(gba, thumb, width, port, 2 | (width == 4 ? 3u << 16 : 0), false);

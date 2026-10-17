@@ -22,8 +22,10 @@ between them. DMA uses the cartridge burst counter to select the physical
 port. Byte stores repeat the byte on both lanes of one aligned halfword
 strobe, including odd byte addresses, and retain the ordinary cartridge wait.
 Byte reads select the addressed lane; GPIO data is in the low byte. This is
-the selected bus model. Its electrical lane behavior and the alias decoder
-remain unmeasured.
+the selected bus model. The GPIO register notes also leave byte writes
+uncertain between host modes. Its electrical lane behavior and the alias
+decoder remain unmeasured; the logical bus policy is explicit rather than
+treated as a physical capture.
 
 The RTC accepts control, date, time and interrupt-parameter transactions over clock, serial-data
 and chip-select pins. Command and payload bits are sampled on rising clock
@@ -292,6 +294,12 @@ prefetch enablement, timer/IRQ progress and clock wrap. Events immediately
 before and at the data deadline see the old output; the next clock sees the
 new output. The preceding core fails both native controls and the complete
 byte-driven calendar transfers.
+Three earlier native assertions assumed that byte writes were ignored. They
+now require exact direction updates, solar clock/clear levels and motor-off
+transition counts/timestamps under this selected model. The repeated-write
+checks and complete sensor loops remain enabled. Matching before/current
+controls distinguish this policy; original external cartridge inputs and
+comparisons remain unchanged.
 
 Native tests cover calendar correction and rollover, wire commands, complete
 responses, directions, ARM/Thumb instruction accesses, ROM preservation,
