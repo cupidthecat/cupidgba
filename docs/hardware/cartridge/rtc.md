@@ -321,8 +321,11 @@ system oscillator's stabilization delay remain unqualified.
 Local sessions also advance each stopped cartridge's oscillator independently.
 Four-console tests require distinct wake deadlines, disabled-source retention,
 unchanged frozen system clocks and identical bulk/single-clock behavior across
-clock wrap. Numbered RTC batteries and per-slot options retain complete files
-for repeated cartridge paths and reject invalid later slots before execution.
+clock wrap. Eight complete UART frames and eight GPIO wakes also check both
+player orders: wake-caused pins cannot precede the peer clock or consume a
+peer's earlier stopped interval. Numbered RTC batteries and per-slot options
+retain complete files for repeated cartridge paths and reject invalid later
+slots before execution.
 Minute rearming tests cover both sides of the nominal 10 ms boundary, both
 minute modes, disable/enable, fresh-zero versus real-carry state, mode priority,
 power flags and bulk/chunked/offline clock input. ARM/Thumb GPIO completion

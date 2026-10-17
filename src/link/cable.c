@@ -263,17 +263,27 @@ bool cupid_cable_run(struct CupidCable* cable, uint32_t clocks) {
             if (until >= 0 && (uint32_t)until < next - cable->now) next = cable->now + (uint32_t)until;
         }
         uint32_t elapsed = (uint32_t)(next - cable->now);
+        unsigned stopped = 0;
         for (unsigned i = 0; i < cable->count; ++i) {
             struct CableNode* node = &cable->nodes[i];
             if (!node->gba->stopped) cupid_timing_advance_clock(&node->gba->timing, elapsed);
             else {
-                /* The selected endpoint cannot pass a battery transition,
-                 * so an eligible wake occurs at this interval's endpoint. */
-                cupid_gba_advance_stopped_time(node->gba, elapsed);
+                stopped |= 1u << i;
                 if (!node->idle) node->target += elapsed;
             }
         }
         cable->now = next;
+        if (stopped) {
+            /* Every system clock reaches the endpoint before a battery wake
+             * can start UART output. Defer peer pins until every stopped RTC
+             * consumes its interval: a GPIO wake at this endpoint must not
+             * turn that peer's preceding STOP interval into system clocks. */
+            cable->propagating = true;
+            for (unsigned i = 0; i < cable->count; ++i)
+                if (stopped & (1u << i)) cupid_gba_advance_stopped_time(cable->nodes[i].gba, elapsed);
+            cable->propagating = false;
+            if (cable->dirty) propagate(cable);
+        }
     }
     cable->running = false;
     return true;

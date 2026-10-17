@@ -91,6 +91,10 @@ participates in the session's deadline selection, and an eligible Game Pak
 request can wake that console at the selected endpoint. The other consoles
 keep running; no frozen CPU or system-peripheral interval consumes battery
 clocks. A disabled wake source can retain a pending request during STOP.
+All running clocks reach that endpoint first. The session completes every
+stopped battery interval before publishing wake-caused pin changes. A UART
+start therefore reaches its peer at the endpoint, and a GPIO-woken peer
+retains its preceding frozen system interval.
 
 The coordinator adds no fitted delay or game-specific rule. It preserves the
 core's existing bit, completion, timer, IRQ and bus durations. Same-clock
