@@ -63,12 +63,14 @@ def main():
             if path.read_bytes()[16:23] != bytes((26, 2, 3, 2, 8 if i == 1 else 4, 5, 6)):
                 raise SystemExit('A local RTC seed or battery leaked between slots')
         paths[3].write_bytes(b'invalid local clock')
-        before = {path: path.read_bytes() for path in root.iterdir()}
+        # All files share this directory. Use names because Windows directory
+        # enumeration can retain different separators in cached Path hashes.
+        before = {path.name: path.read_bytes() for path in root.iterdir()}
         run('--rtc', 'on', good=False)
-        if {path: path.read_bytes() for path in root.iterdir()} != before:
+        if {path.name: path.read_bytes() for path in root.iterdir()} != before:
             raise SystemExit('Failed RTC startup changed a cartridge or battery')
         run('--rtc', 'off')
-        if any(path.read_bytes() != before[path] for path in paths):
+        if any(path.read_bytes() != before[path.name] for path in paths):
             raise SystemExit('Disabling RTC changed an existing battery')
         paths[3].write_bytes(states[3])
         run('--rtc', 'on', '--rtc-offline', 'wall', '--rtc-time', '2026-02-03T04:05:06')
