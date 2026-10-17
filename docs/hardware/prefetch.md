@@ -158,7 +158,7 @@ The programmed DMA source retains its mode; an access ending at a programmed
 page boundary requests nonsequential timing for the following ROM strobe.
 The independent fixed-source cartridge also passes its original low-byte
 timer comparison on both BIOS paths. See [DMA page timing](dma.md) for the
-native transactions and the remaining built-in pause/preemption failures.
+native transactions and the remaining CPU/DMA/IRQ interaction boundaries.
 
 The firmware timing cases execute the built-in math and copy routines through
 the timed CPU. See [BIOS execution](bios.md) for their coverage. Both complete

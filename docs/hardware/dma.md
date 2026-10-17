@@ -89,13 +89,17 @@ HBlank requests run on visible lines and VBlank requests run on entry to line
 
 `CUPID_DMA_PROBE_DIR` registers nine unchanged local DMA cartridges and repeats
 them with `CUPID_TEST_BIOS`. Each run requires its original pre-display and
-terminal results. All nine pass with the external BIOS. The built-in path
-passes the enabled-mode-change and fixed-ROM page cases; seven pause/preemption
-observations still fail. Their inputs, comparisons and guards remain intact.
+terminal results. All nine pass with both firmware paths, including the seven
+built-in pause/preemption cases repaired by the startup display phase. Their
+inputs, comparisons and guards remain intact.
 The fixed-ROM case retains its original low-byte timer comparison of `0x30`.
 The independent CPU/DMA page cartridge now passes all eighteen original rows
 with either BIOS, including both decrement rows requiring 70 clocks. These
-source results do not qualify the remaining built-in firmware/CPU/DMA phases.
+source results cover their recorded DMA cases. The separate ordinary HALT/DMA
+interaction still reads `0x88` instead of `0x87` with both firmware paths. The
+CPU/bus stack also retains the HALT/OAM boundary described in
+[CPU/DMA/IRQ interactions](cpu/dma-irq-interactions.md). Passing the direct DMA
+probes does not establish those remaining interaction phases.
 
 Four checksum-pinned hardware ROMs pass ten assertions with both BIOS paths:
 immediate timer sampling at 20 clocks, the two 88-clock burst-restart cases,
