@@ -207,7 +207,13 @@ enum CupidFlashState {
 /* Flash chip identification */
 enum CupidFlashId {
     FLASH_PANASONIC_512K = 0x1B32,
-    FLASH_SANYO_1M       = 0x1362
+    FLASH_SANYO_1M       = 0x1362,
+    FLASH_SST39VF512     = 0xD4BF
+};
+
+enum CupidFlashProfile {
+    FLASH_PROFILE_DEFAULT,
+    FLASH_PROFILE_SST39VF512
 };
 
 /* Well-known flash addresses */
@@ -224,17 +230,27 @@ struct CupidSavedata {
     bool     typeForced; /**< An explicit type override limits file-load expansion */
 
     /** Flash state machine */
+    enum CupidFlashProfile flashProfile;
     enum CupidFlashState flashState;
     enum CupidSavedataCommand command;
     uint8_t* currentBank;         /**< Points into data + (flashBank << 16) */
     int      flashBank;
-    unsigned settling;            /**< Sector index being erased (data# polling) */
-    bool     settling_active;     /**< True while erase/program in progress */
 
     /** EEPROM serial protocol */
     int8_t   readBitsRemaining;
     uint32_t readAddress;
     uint32_t writeAddress;
+
+    /** Self-timed programming, independent of the serial command decoder. */
+    struct CupidTiming* timing;
+    struct CupidTimingEvent readyEvent;
+    uint64_t localClock, readyClock;
+    uint32_t programOffset, programLength;
+    uint32_t eepromProgramClocks, flashProgramClocks;
+    uint32_t flashSectorEraseClocks, flashChipEraseClocks;
+    uint8_t programData[8], eepromData[8];
+    unsigned eepromWriteBits;
+    bool programming, erasing, pollToggle;
 };
 
 /**
@@ -382,6 +398,21 @@ uint8_t  cupid_savedata_read_flash(struct CupidSavedata* savedata, uint16_t addr
 void     cupid_savedata_write_flash(struct CupidSavedata* savedata, uint16_t address, uint8_t value);
 uint16_t cupid_savedata_read_eeprom(struct CupidSavedata* savedata);
 void     cupid_savedata_write_eeprom(struct CupidSavedata* savedata, uint16_t value, uint32_t writeSize);
+
+void cupid_savedata_programming_init(struct CupidSavedata* savedata);
+void cupid_savedata_bind_timing(struct CupidSavedata* savedata, struct CupidTiming* timing);
+void cupid_savedata_cancel_programming(struct CupidSavedata* savedata);
+void cupid_savedata_begin_programming(struct CupidSavedata* savedata, uint32_t offset,
+                                     uint32_t length, const uint8_t* data, uint32_t clocks);
+void cupid_savedata_advance_clock(struct CupidSavedata* savedata, uint64_t clocks);
+bool cupid_savedata_set_programming_clocks(struct CupidSavedata* savedata,
+                                         uint32_t eeprom, uint32_t byte,
+                                         uint32_t sector, uint32_t chip);
+/** Select an idle Flash device's identity, command set and nominal timing.
+ * SST39VF512 requires an allocated 64-KiB Flash device and fixes its capacity.
+ * Selection fails without mutation during programming or a command sequence. */
+bool cupid_savedata_set_flash_profile(struct CupidSavedata* savedata,
+                                     enum CupidFlashProfile profile);
 void cupid_savedata_detect_type(struct CupidSavedata* savedata, const uint8_t* rom, size_t romSize);
 
 /**

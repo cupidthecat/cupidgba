@@ -107,6 +107,11 @@ bool cupid_savedata_load_file(struct CupidSavedata* save, const char* path) {
     }
     if (fclose(file) && !error) error = errno ? errno : EIO;
     if (error) { free(loaded); errno = error; return false; }
+    cupid_savedata_cancel_programming(save);
+    save->command = FLASH_COMMAND_NONE;
+    save->flashState = FLASH_STATE_RAW;
+    save->readBitsRemaining = 0;
+    save->eepromWriteBits = 0;
     free(save->data);
     save->data = loaded;
     save->size = capacity;
