@@ -92,6 +92,7 @@ int main(int argc, char** argv) {
     const char* vramOutput = NULL;
     const char* ioOutput = NULL;
     const char* ewramOutput = NULL;
+    const char* saveOutput = NULL;
     const char* audioOutput = NULL;
     const char* motorOutput = NULL;
     struct AudioTrace audioTrace = {0};
@@ -122,6 +123,7 @@ int main(int argc, char** argv) {
         else if (!strcmp(argv[i], "--dump-vram") && i + 1 < argc) vramOutput = argv[++i];
         else if (!strcmp(argv[i], "--dump-io") && i + 1 < argc) ioOutput = argv[++i];
         else if (!strcmp(argv[i], "--dump-ewram") && i + 1 < argc) ewramOutput = argv[++i];
+        else if (!strcmp(argv[i], "--dump-save") && i + 1 < argc) saveOutput = argv[++i];
         else if (!strcmp(argv[i], "--dump-audio") && i + 1 < argc) audioOutput = argv[++i];
         else if (!strcmp(argv[i], "--dump-rumble") && i + 1 < argc) motorOutput = argv[++i];
         else if (!strcmp(argv[i], "--terminal-address") && i + 1 < argc) {
@@ -160,7 +162,7 @@ int main(int argc, char** argv) {
             expectedRegister = (int)index;
         } else if (argv[i][0] != '-' && !rom) rom = argv[i];
         else {
-            fprintf(stderr, "Usage: %s ROM [--bios FILE] [--frames N] [--steps N] [--key-event FRAME MASK] [--screenshot FILE.ppm] [--dump-vram FILE] [--dump-io FILE] [--dump-ewram FILE] [--dump-audio FILE] [--dump-rumble FILE] [--solar auto|on|off] [--sunlight 0..255] [--rumble auto|on|off] [--gyro auto|on|off] [--gyro-sample 0..4095] [--tilt auto|on|off] [--tilt-x 0..4095] [--tilt-y 0..4095] [--start-address ADDRESS] [--expect-loop-register N] [--terminal-address ADDRESS] [--checkpoint-address ADDRESS] [--expect-register-at ADDRESS REGISTER VALUE]\n", argv[0]);
+            fprintf(stderr, "Usage: %s ROM [--bios FILE] [--frames N] [--steps N] [--key-event FRAME MASK] [--screenshot FILE.ppm] [--dump-vram FILE] [--dump-io FILE] [--dump-ewram FILE] [--dump-save FILE] [--dump-audio FILE] [--dump-rumble FILE] [--solar auto|on|off] [--sunlight 0..255] [--rumble auto|on|off] [--gyro auto|on|off] [--gyro-sample 0..4095] [--tilt auto|on|off] [--tilt-x 0..4095] [--tilt-y 0..4095] [--start-address ADDRESS] [--expect-loop-register N] [--terminal-address ADDRESS] [--checkpoint-address ADDRESS] [--expect-register-at ADDRESS REGISTER VALUE]\n", argv[0]);
             return 2;
         }
     }
@@ -247,11 +249,12 @@ int main(int argc, char** argv) {
         if (failed || observations.next != observations.count) result = 1;
     }
     if (output && !screenshot(gba, output)) { perror(output); result = 2; }
-    const char* dumpPaths[] = {vramOutput, ioOutput, ewramOutput};
-    const void* dumpData[] = {gba->video.vram, gba->memory.io, gba->memory.ewram};
-    const size_t dumpSizes[] = {GBA_SIZE_VRAM, sizeof(gba->memory.io), GBA_SIZE_EWRAM};
-    for (unsigned i = 0; i < 3; i++) {
+    const char* dumpPaths[] = {vramOutput, ioOutput, ewramOutput, saveOutput};
+    const void* dumpData[] = {gba->video.vram, gba->memory.io, gba->memory.ewram, gba->memory.savedata.data};
+    const size_t dumpSizes[] = {GBA_SIZE_VRAM, sizeof(gba->memory.io), GBA_SIZE_EWRAM, gba->memory.savedata.size};
+    for (unsigned i = 0; i < 4; i++) {
         if (!dumpPaths[i]) continue;
+        if (!dumpData[i] || !dumpSizes[i]) { fprintf(stderr, "No data for requested snapshot\n"); result = 2; continue; }
         FILE* file = fopen(dumpPaths[i], "wb");
         if (!file) { perror(dumpPaths[i]); result = 2; continue; }
         bool written = fwrite(dumpData[i], 1, dumpSizes[i], file) == dumpSizes[i];

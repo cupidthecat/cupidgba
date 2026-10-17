@@ -35,6 +35,27 @@ void cupid_bus_advance(struct CupidARM* cpu, unsigned cycles, bool occupied) {
     cupid_bus_advance_part(cpu, cycles);
 }
 
+/* A PPU bridge beat can finish while the CPU word request remains held.
+ * Only the final free beat clocks the CPU IRQ stages. The ready event runs
+ * before same-edge MMIO acceptance, matching ordinary stretched transfers. */
+static bool display_ready(struct CupidGBA* gba) {
+    if (cupid_video_memory_busy(&gba->video, gba->memory.displayAddress)) return false;
+    gba->memory.displayBeatReady = true;
+    return gba->memory.displayFinal;
+}
+
+void cupid_bus_display_beat(struct CupidARM* cpu, uint32_t address, bool final) {
+    struct CupidGBA* gba = cpu->master;
+    gba->memory.displayAddress = address;
+    gba->memory.displayBeatReady = false;
+    gba->memory.displayFinal = final;
+    if (!gba->irq.cpuClockPaused) cupid_irq_hold_cpu_until(gba, display_ready);
+    else if (gba->irq.cpuReady != display_ready) abort();
+    do {
+        cupid_bus_advance(cpu, 1, true);
+    } while (!gba->memory.displayBeatReady);
+}
+
 void cupid_bus_release(struct CupidARM* cpu) {
     struct CupidGBA* gba = cpu->master;
     gba->memory.busBusy = false;
@@ -67,9 +88,16 @@ void cupid_bus_fetch(struct CupidARM* cpu, uint32_t address, unsigned width, boo
     }
     gba->memory.fetchNonseq = false;
     unsigned cycles = cupid_prefetch_fetch(gba, address, width, wait + 1, refill);
-    if (!gba->cartridge.readable || !cupid_cartridge_fetch_bus(gba, address, width, cycles))
+    if (region >= GBA_REGION_PALETTE && region <= GBA_REGION_OAM) {
+        unsigned beats = width == 4 && region != GBA_REGION_OAM ? 2 : 1;
+        for (unsigned i = 0; i < beats; i++) {
+            cupid_bus_display_beat(cpu, address + i * 2, i + 1 == beats);
+        }
+    } else if (!gba->cartridge.readable || !cupid_cartridge_fetch_bus(gba, address, width, cycles)) {
         cupid_bus_advance(cpu, cycles, true);
+    }
     cupid_prefetch_finish_fetch(gba);
+    if (region == GBA_REGION_VRAM) cupid_memory_refresh_vram_fetch(cpu, address);
     /* The caller reads the opcode before releasing ownership of the bus. */
     gba->memory.lastWasDMA = false;
 }

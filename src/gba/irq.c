@@ -217,6 +217,11 @@ static void resume_cpu_clock(struct CupidTiming* timing, void* context, uint32_t
     struct CupidGBA* gba = context;
     /* Priority zero samples an already accepted input before a register
      * update on this same edge. A captured final stage publishes now. */
+    if (gba->irq.cpuReady && !gba->irq.cpuReady(gba)) {
+        schedule_at(gba, &gba->irq.cpuClockResumeEvent, timing->globalCycles - late + 1);
+        return;
+    }
+    gba->irq.cpuReady = NULL;
     resume_cpu(gba, timing->globalCycles - late, 1);
 }
 
@@ -227,4 +232,13 @@ void cupid_irq_hold_cpu(struct CupidGBA* gba, unsigned cycles) {
      * Observer, timer, DMA and audio dispatch partitions stay unchanged. */
     schedule_at(gba, &gba->irq.cpuClockResumeEvent,
                 cupid_timing_global_time(&gba->timing) + cycles);
+}
+
+void cupid_irq_hold_cpu_until(struct CupidGBA* gba, bool (*ready)(struct CupidGBA*)) {
+    cupid_irq_pause_cpu(gba);
+    gba->irq.cpuReady = ready;
+    /* The bridge retains the wait across unavailable clocks and partial word
+     * beats. Its predicate completes exactly one CPU-ready edge. */
+    schedule_at(gba, &gba->irq.cpuClockResumeEvent,
+                cupid_timing_global_time(&gba->timing) + 1);
 }

@@ -163,8 +163,6 @@ enum CupidVideoLayer {
 #define WINCTRL_OBJ_ENABLE(v)   (((v) >> 4) & 1)
 #define WINCTRL_BLEND_ENABLE(v) (((v) >> 5) & 1)
 
-/** Pixel compositing flags are defined in render.h */
-
 /** @name OAM Structures */
 
 /**
@@ -203,22 +201,13 @@ union CupidOAM {
 /** Indexed by [shape * 4 + size], returns { width, height } */
 extern const int CupidObjSizes[16][2];
 
-/** @name Renderer Sprite */
-struct CupidRendererSprite {
-    struct CupidOBJ obj;
-    int16_t y;       /**< Effective Y (sign-extended, etc.) */
-    int16_t endY;    /**< Last visible scanline + 1 */
-    int16_t cycles;  /**< Rendering cost (for H-blank free check) */
-    int8_t  index;   /**< Original OAM index (0-127) */
-};
-
 /** @name Background */
 struct CupidBackground {
     uint16_t cnt;      /**< BGxCNT register */
     int16_t  hofs;     /**< Horizontal scroll */
     int16_t  vofs;     /**< Vertical scroll */
     /** Affine parameters (BG2/BG3 only) */
-    int32_t  refx;     /**< Reference point X (28.4 fixed point, latched) */
+    int32_t  refx;     /**< Signed 28-bit reference point X, eight fractional bits */
     int32_t  refy;     /**< Reference point Y */
     int16_t  pa, pb, pc, pd;  /**< Affine matrix elements */
     int32_t  sx, sy;   /**< Running affine coordinates (internal, updated per scanline) */
@@ -242,6 +231,61 @@ struct CupidWindow {
     uint8_t v[2][2];  /**< WINxV: [win#][top, bottom] */
     uint16_t winin;
     uint16_t winout;
+};
+
+/* Fetched pixels retain palette indices until the merge unit reads PRAM. */
+struct CupidTextFetch {
+    uint32_t address;
+    uint16_t data;
+    uint8_t palette;
+    int remaining, fetches;
+    bool flip;
+};
+
+struct CupidObjectPixel {
+    uint8_t index, priority;
+    bool semi, window, mosaic;
+};
+
+struct CupidObjectDraw {
+    int width, height, mode, x, remaining;
+    int32_t tx, ty;
+    int16_t matrix[4];
+    unsigned tile, palette, priority;
+    bool affine, mosaic, fullPalette, flip;
+};
+
+struct CupidObjectFetch {
+    uint64_t start;
+    unsigned cycle, limit, line, index, step, read, write, buffer;
+    int wait, pendingWait, localX, localY, mosaicY;
+    unsigned matrixAddress;
+    bool active, drawing, deferWait;
+    struct CupidObjectDraw draw[2];
+    struct CupidObjectPixel pixels[2][GBA_SCREEN_WIDTH];
+};
+
+struct CupidPixelPipeline {
+    uint64_t start;
+    unsigned cycle, initialCycle;
+    uint16_t displayLatch[3], vramLatch;
+    uint64_t paletteAccess, backgroundAccess, objectAccess, oamAccess;
+    struct CupidTextFetch text[4];
+    struct {
+        int32_t x, y;
+        uint32_t address;
+        bool outside, writtenX, writtenY;
+    } affine[2];
+    uint32_t backgrounds[4][GBA_SCREEN_WIDTH];
+    bool windowH[2], windowV[2];
+    uint8_t windows[GBA_SCREEN_WIDTH];
+    unsigned bgMosaicX, objMosaicX, bgMosaicY, objMosaicY;
+    unsigned layer[2];
+    uint32_t color[2];
+    uint16_t left;
+    bool blank, semi;
+    struct CupidObjectPixel objectLatch;
+    struct CupidObjectFetch objects;
 };
 
 /** @name Video State */
@@ -276,21 +320,15 @@ struct CupidVideo {
     struct CupidTimingEvent event;  /**< Single event; callback alternates _startHdraw/_startHblank */
     struct CupidTimingEvent matchEvent; /**< VCOUNT match updates one clock after line start */
     struct CupidTimingEvent displayEvent; /**< Display DMA request after the line transition */
+    struct CupidTimingEvent latchEvent; /**< Display and OBJ line latches */
+    struct CupidPixelPipeline pipeline;
     bool displayDmaLatched;
     uint32_t frameCounter;
     void (*frameCallback)(void* context, const uint32_t* pixels, uint64_t clock);
     void* frameContext;
 
-    /** Scanline compositing buffers (software renderer) */
+    /** Final 15-bit colors before adjacent-pair green swapping. */
     uint32_t scanline[GBA_SCREEN_WIDTH];
-    uint32_t objBuffer[GBA_SCREEN_WIDTH];
-    uint32_t objPrio[GBA_SCREEN_WIDTH];
-
-    /** Sorted sprite list for current frame */
-    struct CupidRendererSprite sprites[128];
-    int spriteCount;
-    bool oamDirty;
-    int32_t spriteCyclesRemaining;
 };
 
 /** @name API */
@@ -298,6 +336,9 @@ void cupid_video_init(struct CupidVideo* video, struct CupidGBA* gba);
 void cupid_video_reset(struct CupidVideo* video);
 void cupid_video_skip_bios(struct CupidVideo* video);
 void cupid_video_update_match(struct CupidVideo* video);
+void cupid_video_sync(struct CupidVideo* video);
+void cupid_video_sync_to(struct CupidVideo* video, uint64_t time);
+bool cupid_video_memory_busy(struct CupidVideo* video, uint32_t address);
 void cupid_video_deinit(struct CupidVideo* video);
 
 /* Observe the existing VBlank frame handoff after register mirrors update.
@@ -307,16 +348,9 @@ void cupid_video_deinit(struct CupidVideo* video);
 void cupid_video_set_frame_callback(struct CupidVideo* video,
     void (*callback)(void* context, const uint32_t* pixels, uint64_t clock), void* context);
 
-/** Called when IO registers are written */
-void cupid_video_write_register(struct CupidVideo* video, uint32_t addr, uint16_t val);
-uint16_t cupid_video_read_register(struct CupidVideo* video, uint32_t addr);
-
-/** Palette / VRAM / OAM writes (for dirty tracking if needed) */
+/** Synchronize and write a halfword at the specified halfword offset. */
 void cupid_video_write_palette(struct CupidVideo* video, uint32_t offset, uint16_t val);
 void cupid_video_write_vram(struct CupidVideo* video, uint32_t offset, uint16_t val);
 void cupid_video_write_oam(struct CupidVideo* video, uint32_t offset, uint16_t val);
-
-/** OAM sorting for renderer */
-int cupid_video_clean_oam(struct CupidOBJ* oam, struct CupidRendererSprite* sprites, int offsetY);
 
 #endif /* CUPID_VIDEO_H */

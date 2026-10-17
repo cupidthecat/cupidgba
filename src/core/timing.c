@@ -24,6 +24,8 @@ static void refresh_deadline(struct CupidTiming* timing) {
 void cupid_timing_init(struct CupidTiming* timing, int32_t* relativeCycles,
                        int32_t* nextEvent) {
     timing->relativeCycles = relativeCycles;
+    timing->clockContext = NULL;
+    timing->syncClock = NULL;
     timing->nextEvent = nextEvent;
     timing->synchronize = NULL;
     timing->synchronizeContext = NULL;
@@ -130,11 +132,16 @@ bool cupid_timing_dispatch_next(struct CupidTiming* timing) {
     return true;
 }
 
+void cupid_timing_finish_tick(struct CupidTiming* timing) {
+    if (timing->syncClock) timing->syncClock(timing->clockContext, timing->globalCycles);
+}
+
 int32_t cupid_timing_tick(struct CupidTiming* timing, int32_t cycles) {
     if (timing->synchronize)
         return timing->synchronize(timing->synchronizeContext, timing, cycles);
     cupid_timing_advance_clock(timing, (uint32_t)cycles);
     while (cupid_timing_dispatch_next(timing)) {}
+    cupid_timing_finish_tick(timing);
     /* The CPU compares its relative accumulator against this breakpoint. */
     *timing->nextEvent = deadline(timing);
     return *timing->nextEvent;

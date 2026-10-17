@@ -77,7 +77,8 @@ IRQ return addresses. The selected [fast entry](bios/reset-entry.md) now
 aligns the initial display phase with full firmware boot, correcting the
 formerly built-in-only interaction failures. The HALT/DMA timer comparison
 remains open; the OAM variant depends on the selected display-memory arbiter.
-See [CPU/DMA/IRQ interactions](cpu/dma-irq-interactions.md).
+See [CPU/DMA/IRQ interactions](cpu/dma-irq-interactions.md) and
+[display bus waits](cpu/display-irq.md).
 
 The additional observer group rejects skipped comparisons, wrong opcodes or
 modes and missing visits in owned ARM/Thumb streams that still report zero.

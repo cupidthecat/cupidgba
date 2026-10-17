@@ -61,6 +61,8 @@ jobs:
           python3 tests/roms/check_rom.py --fetch --directory .local-research/test-roms
           python3 tests/roms/check_console.py --fetch --directory .local-research/test-roms
           python3 tests/roms/check_ppu.py --fetch --directory .local-research/test-roms
+          python3 tests/roms/check_ppu_access.py --fetch --directory .local-research/test-roms
+          python3 tests/roms/check_raster.py --fetch --directory .local-research/test-roms
       - name: Configure
         run: |
           sanitizer_flags=()
@@ -69,10 +71,14 @@ jobs:
           fi
           cmake -S . -B build -DCMAKE_C_COMPILER=${{ matrix.compiler }} \
             -DCMAKE_BUILD_TYPE=${{ matrix.mode }} -DCUPID_SANITIZERS=${{ matrix.sanitizers }} \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             "${sanitizer_flags[@]}" \
             -DCUPID_TEST_ROM_DIR=${{ github.workspace }}/.local-research/test-roms
       - name: Build
         run: cmake --build build --parallel 2
+      - name: Verify sanitized compiler optimization
+        if: matrix.compiler == 'clang'
+        run: python3 tests/platform/check_build_flags.py --compile-commands build/compile_commands.json --optimization O1
       - name: Test
         run: ctest --test-dir build --output-on-failure
       - name: Check unoptimized native core
@@ -83,9 +89,11 @@ jobs:
           cat build/CMakeFiles/cupid_core.dir/flags.make
           cmake -S . -B build-debug -DCMAKE_C_COMPILER=clang \
             -DCMAKE_BUILD_TYPE=Debug -DCUPID_SANITIZERS=ON \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -DCUPID_TEST_ROM_DIR=${{ github.workspace }}/.local-research/test-roms
           cmake --build build-debug --parallel 2
           cat build-debug/CMakeFiles/cupid_core.dir/flags.make
+          python3 tests/platform/check_build_flags.py --compile-commands build-debug/compile_commands.json --optimization none
           ctest --test-dir build-debug -R '^(arm|core|gba|platform|runner)\.' --output-on-failure
       - name: Check live audio threading
         if: matrix.compiler == 'clang'
@@ -99,9 +107,9 @@ jobs:
         run: |
           cmake -S . -B build-context-portable -DCMAKE_C_COMPILER=clang \
             -DCMAKE_BUILD_TYPE=Debug -DCUPID_SANITIZERS=ON -DCUPID_FAST_CONTEXT=OFF
-          cmake --build build-context-portable --target test_cable test_local test_context --parallel 2
+          cmake --build build-context-portable --target test_cable test_local test_video_cable test_context --parallel 2
           ctest --test-dir build-context-portable --output-on-failure \
-            -R '^gba[.]cable-(normal|uart|multiplayer|chronology|lifecycle|stopped-phase|controls|guest-dma|guest-controls|guest-2-1-3|guest-3-0-3|word-1-8)$|^platform[.](local-publication|context)$'
+            -R '^gba[.]cable-(normal|uart|multiplayer|chronology|lifecycle|stopped-phase|controls|guest-dma|guest-controls|guest-2-1-3|guest-3-0-3|word-1-8)$|^gba[.]video-cable-(halt|active)$|^platform[.](local-publication|context)$'
       - name: Verify Makefile build
         if: matrix.compiler == 'gcc'
         run: make --jobs=2
@@ -129,6 +137,8 @@ jobs:
           python tests/roms/check_rom.py --fetch --directory .local-research/test-roms
           python tests/roms/check_console.py --fetch --directory .local-research/test-roms
           python tests/roms/check_ppu.py --fetch --directory .local-research/test-roms
+          python tests/roms/check_ppu_access.py --fetch --directory .local-research/test-roms
+          python tests/roms/check_raster.py --fetch --directory .local-research/test-roms
       - name: Configure
         # Keep input fetching and CTest on the same installed interpreter.
         run: >-

@@ -56,10 +56,7 @@ add_library(cupid_core STATIC
     src/gba/cartridge/rtc.c src/gba/cartridge/gpio.c src/gba/cartridge/battery.c src/gba/cartridge/solar.c
     src/gba/cartridge/gyro.c
     src/gba/cartridge/tilt.c
-    src/gba/render/software.c src/gba/render/composite.c
-    src/gba/render/mode0.c src/gba/render/mode2.c
-    src/gba/render/mode3.c src/gba/render/mode4.c
-    src/gba/render/mode5.c src/gba/render/obj.c)
+    src/gba/render/fetch.c src/gba/render/scanout.c src/gba/render/object-fetch.c)
 target_include_directories(cupid_core PUBLIC include)
 target_link_libraries(cupid_core PUBLIC cupid_build_options)
 if(NOT WIN32)
@@ -508,6 +505,13 @@ if(BUILD_TESTING)
     add_test(NAME gba.irq-pulses COMMAND test_irq_pulses)
     set_tests_properties(gba.irq-pulses PROPERTIES TIMEOUT 10)
 
+    add_executable(test_display_irq tests/gba/test_display_irq.c)
+    target_link_libraries(test_display_irq PRIVATE cupid_core)
+    foreach(group pulse level captured edge)
+        add_test(NAME gba.display-irq-${group} COMMAND test_display_irq ${group})
+        set_tests_properties(gba.display-irq-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
     add_executable(test_irq_clock tests/gba/test_irq_clock.c tests/arm/irq_probe.c)
     target_link_libraries(test_irq_clock PRIVATE cupid_core)
     foreach(group waits pulses dma reset observer ordering)
@@ -602,6 +606,46 @@ if(BUILD_TESTING)
     target_link_libraries(test_video PRIVATE cupid_core)
     add_test(NAME gba.video COMMAND test_video)
     set_tests_properties(gba.video PROPERTIES TIMEOUT 10)
+
+    add_executable(test_video_cable tests/gba/test_video_cable.c)
+    target_link_libraries(test_video_cable PRIVATE cupid_link)
+    foreach(group halt active)
+        add_test(NAME gba.video-cable-${group} COMMAND test_video_cable ${group})
+        set_tests_properties(gba.video-cable-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
+    add_executable(test_render tests/gba/test_render.c)
+    target_link_libraries(test_render PRIVATE cupid_core)
+    add_test(NAME gba.render COMMAND test_render)
+    set_tests_properties(gba.render PROPERTIES TIMEOUT 10)
+
+    add_executable(test_raster tests/gba/test_raster.c)
+    target_link_libraries(test_raster PRIVATE cupid_core)
+    foreach(group RANGE 0 7)
+        add_test(NAME gba.raster-frame-${group} COMMAND test_raster ${group})
+        set_tests_properties(gba.raster-frame-${group} PROPERTIES TIMEOUT 30)
+    endforeach()
+
+    add_executable(test_object_shape tests/gba/test_object_shape.c)
+    target_link_libraries(test_object_shape PRIVATE cupid_core)
+    foreach(mode normal alpha window hidden)
+        foreach(transform normal affine)
+            add_test(NAME gba.object-shape-${mode}-${transform} COMMAND test_object_shape ${mode} ${transform})
+            set_tests_properties(gba.object-shape-${mode}-${transform} PROPERTIES TIMEOUT 30)
+        endforeach()
+    endforeach()
+
+    add_executable(test_object_mosaic tests/gba/test_object_mosaic.c)
+    target_link_libraries(test_object_mosaic PRIVATE cupid_core)
+    foreach(group normal affine phase clock)
+        add_test(NAME gba.object-mosaic-${group} COMMAND test_object_mosaic ${group})
+        set_tests_properties(gba.object-mosaic-${group} PROPERTIES TIMEOUT 30)
+    endforeach()
+
+    add_executable(test_color tests/gba/test_color.c)
+    target_link_libraries(test_color PRIVATE cupid_core)
+    add_test(NAME gba.color COMMAND test_color)
+    set_tests_properties(gba.color PROPERTIES TIMEOUT 10)
 
     add_executable(test_cpu tests/arm/test_cpu.c)
     target_link_libraries(test_cpu PRIVATE cupid_core)
@@ -929,13 +973,13 @@ if(BUILD_TESTING)
             set_tests_properties(rom.${case} PROPERTIES TIMEOUT 50)
         endforeach()
         foreach(case timer-reload timer-start-stop timer-tick-before-reload
-                     dma-start-delay dma-nonseq dma-latch dma-burst)
+                     dma-start-delay dma-nonseq dma-latch dma-burst vram-mirror)
             add_test(NAME rom.${case} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_console.py
                 --directory ${CUPID_TEST_ROM_DIR}
                 --runner $<TARGET_FILE:cupidgba-headless> --test ${case})
             set_tests_properties(rom.${case} PROPERTIES TIMEOUT 50)
-            if(CUPID_TEST_BIOS AND case MATCHES "^dma-")
+            if(CUPID_TEST_BIOS AND (case MATCHES "^dma-" OR case STREQUAL "vram-mirror"))
                 add_test(NAME rom.${case}-external COMMAND ${Python3_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_console.py
                     --directory ${CUPID_TEST_ROM_DIR} --bios ${CUPID_TEST_BIOS}
@@ -955,6 +999,26 @@ if(BUILD_TESTING)
                     --directory ${CUPID_TEST_ROM_DIR} --runner $<TARGET_FILE:cupidgba-headless>
                     --bios ${CUPID_TEST_BIOS} --test ${case})
                 set_tests_properties(rom.ppu-${case}-external PROPERTIES TIMEOUT 130)
+            endif()
+        endforeach()
+        foreach(case bitmap text-4 text-8 affine-2 affine-both palette-single
+                     palette-direct palette-alpha object-oam object-vram)
+            add_test(NAME rom.ppu-access-${case} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_ppu_access.py
+                --directory ${CUPID_TEST_ROM_DIR} --runner $<TARGET_FILE:cupidgba-headless> --test ${case})
+            set_tests_properties(rom.ppu-access-${case} PROPERTIES TIMEOUT 130)
+        endforeach()
+        foreach(case green-swap affine-line-step sprite-mosaic)
+            add_test(NAME rom.raster-${case} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_raster.py
+                --directory ${CUPID_TEST_ROM_DIR} --runner $<TARGET_FILE:cupidgba-headless> --test ${case})
+            set_tests_properties(rom.raster-${case} PROPERTIES TIMEOUT 50)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.raster-${case}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_raster.py
+                    --directory ${CUPID_TEST_ROM_DIR} --runner $<TARGET_FILE:cupidgba-headless>
+                    --bios ${CUPID_TEST_BIOS} --test ${case})
+                set_tests_properties(rom.raster-${case}-external PROPERTIES TIMEOUT 50)
             endif()
         endforeach()
     endif()
