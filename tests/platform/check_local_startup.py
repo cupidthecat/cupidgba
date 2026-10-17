@@ -30,6 +30,11 @@ def main():
         for i, rom in enumerate(roms):
             rom.write_bytes(cartridge(0x40 + i))
             rom.with_suffix('.sav').write_bytes(bytes([0xD0 + i]) * 32768)
+        for text in ('', '0', '-1', ' -2', '+1', '1x', '4294967296'):
+            result = subprocess.run([str(frontend), str(roms[0]), '--link', str(roms[1]), '--frames', text],
+                                    env=env, capture_output=True, text=True, timeout=3)
+            if result.returncode != 1 or 'Invalid frame count' not in result.stderr or 'CupidGBA started' in result.stdout:
+                raise SystemExit(f'Invalid frame count was accepted: {text!r}')
         for count in range(2, 5):
             command = [str(frontend), str(roms[0])]
             for rom in roms[1:count]:

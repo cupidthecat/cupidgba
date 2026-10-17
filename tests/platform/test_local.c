@@ -94,18 +94,19 @@ static void video(void) {
     struct CupidPlatform platform = {0};
     platform.window = SDL_CreateWindow("CupidGBA local video", 0, 0, 480, 320, 0); CHECK(platform.window);
     platform.renderer = SDL_CreateRenderer(platform.window, -1, SDL_RENDERER_SOFTWARE); CHECK(platform.renderer);
-    struct CupidGBA* cores[4]; SDL_Texture* textures[4];
+    struct CupidGBA* cores[4]; SDL_Texture* textures[4]; const uint32_t* frames[4];
     const uint32_t colors[] = {0xFF0000FF, 0xFF00FF00, 0xFFFF0000, 0xFF556677};
     for (unsigned i = 0; i < 4; ++i) {
         cores[i] = calloc(1, sizeof(*cores[i])); CHECK(cores[i]);
         cupid_gba_create(cores[i]);
         for (unsigned p = 0; p < GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT; ++p) cores[i]->video.outputBuffer[p] = colors[i];
+        frames[i] = cores[i]->video.outputBuffer;
         textures[i] = SDL_CreateTexture(platform.renderer, SDL_PIXELFORMAT_ABGR8888,
                          SDL_TEXTUREACCESS_STREAMING, 240, 160); CHECK(textures[i]);
     }
     uint32_t* pixels = malloc(480 * 320 * sizeof(*pixels)); CHECK(pixels);
     for (unsigned count = 2; count <= 4; ++count) {
-        CHECK(cupid_platform_render_local(&platform, textures, cores, count, count - 1));
+        CHECK(cupid_platform_render_local(&platform, textures, frames, count, count - 1));
         CHECK(SDL_RenderReadPixels(platform.renderer, NULL, SDL_PIXELFORMAT_ABGR8888, pixels, 480 * 4) == 0);
         for (unsigned i = 0; i < count; ++i) {
             unsigned x = (i % 2) * 240 + 120, y = count == 2 ? 160 : (i / 2) * 160 + 80;
@@ -210,6 +211,61 @@ static void paths(void) {
     }
 }
 
+struct Publication {
+    struct CupidGBA* cores[2];
+    struct CupidCable* cable;
+    struct CupidLocalFrames frames;
+    unsigned count[2];
+    uint64_t last[2];
+};
+
+static void publish(void* context, unsigned player, const uint32_t* pixels, uint64_t clock) {
+    struct Publication* publication = context;
+    CHECK(player < 2 && publication->cores[player]->video.vcount == 160);
+    CHECK(clock > publication->last[player] && clock == cupid_cable_time(publication->cable));
+    publication->last[player] = clock;
+    ++publication->count[player];
+    cupid_platform_capture_local_frame(&publication->frames, player, pixels, clock);
+}
+
+static void publication(void) {
+    struct Publication p = {0};
+    const uint16_t colors[] = {0x001F, 0x03E0};
+    for (unsigned i = 0; i < 2; ++i) {
+        p.cores[i] = calloc(1, sizeof(*p.cores[i])); CHECK(p.cores[i]);
+        p.frames.pixels[i] = calloc(240 * 160, sizeof(uint32_t)); CHECK(p.frames.pixels[i]);
+        cupid_gba_create(p.cores[i]); cupid_gba_reset(p.cores[i]); p.cores[i]->cpu.halted = true;
+        cupid_io_write(p.cores[i], REG_DISPCNT, 0x0403);
+        for (unsigned pixel = 0; pixel < 240 * 160; ++pixel) p.cores[i]->video.vram[pixel] = colors[i];
+    }
+    p.cores[0]->video.frameCounter = UINT32_MAX;
+    p.cable = cupid_cable_create(p.cores, 2); CHECK(p.cable);
+    cupid_cable_set_frame_callback(p.cable, publish, &p);
+    CHECK(cupid_cable_run(p.cable, VIDEO_TOTAL_LENGTH * 2));
+    CHECK(p.count[0] == 2 && p.count[1] == 2 && p.cores[0]->video.frameCounter == 1);
+    for (unsigned i = 0; i < 2; ++i) {
+        for (unsigned pixel = 0; pixel < 240 * 160; ++pixel) {
+            CHECK(p.frames.pixels[i][pixel] == color16_to_rgba(colors[i]));
+            p.cores[i]->video.outputBuffer[pixel] = 0xFF765432;
+        }
+        /* A live scanline buffer is the negative control: its new contents
+         * must not replace the image handed to the frontend at VBlank. */
+        CHECK(memcmp(p.frames.pixels[i], p.cores[i]->video.outputBuffer, 240 * 160 * 4) != 0);
+    }
+    p.cores[1]->stopped = true;
+    CHECK(cupid_cable_run(p.cable, VIDEO_TOTAL_LENGTH));
+    CHECK(p.count[0] == 3 && p.count[1] == 2);
+    for (unsigned pixel = 0; pixel < 240 * 160; ++pixel)
+        CHECK(p.frames.pixels[1][pixel] == color16_to_rgba(colors[1]));
+    p.cores[1]->stopped = false;
+    CHECK(cupid_cable_run(p.cable, VIDEO_TOTAL_LENGTH));
+    CHECK(p.count[0] == 4 && p.count[1] == 3);
+    cupid_cable_destroy(p.cable);
+    for (unsigned i = 0; i < 2; ++i) {
+        cupid_gba_destroy(p.cores[i]); free(p.cores[i]); free(p.frames.pixels[i]);
+    }
+}
+
 int main(int argc, char** argv) {
     SDL_SetMainReady(); CHECK(argc == 2);
     if (!strcmp(argv[1], "input")) RUN(input);
@@ -217,6 +273,7 @@ int main(int argc, char** argv) {
     else if (!strcmp(argv[1], "audio")) RUN(audio);
     else if (!strcmp(argv[1], "live-audio")) RUN(live_audio);
     else if (!strcmp(argv[1], "paths")) RUN(paths);
+    else if (!strcmp(argv[1], "publication")) RUN(publication);
     else CHECK(false);
     return 0;
 }

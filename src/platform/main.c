@@ -69,7 +69,7 @@ int main(int argc, char* argv[]) {
             errno = 0;
             const char* text = argv[++i];
             unsigned long value = strtoul(text, &end, 10);
-            if (!text[0] || text[0] == '-' || *end || errno || !value || value > UINT_MAX) {
+            if (text[0] < '0' || text[0] > '9' || *end || errno || !value || value > UINT_MAX) {
                 fprintf(stderr, "Error: Invalid frame count: %s\n", text); return 1;
             }
             frames = (unsigned)value;

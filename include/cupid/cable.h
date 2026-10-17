@@ -28,4 +28,12 @@ uint64_t cupid_cable_time(const struct CupidCable* cable);
  * connection, not the physical multiplayer cable's one-way normal wiring. */
 void cupid_cable_connect(struct CupidCable* cable, bool connected);
 bool cupid_cable_connected(const struct CupidCable* cable);
+
+/* Observe a complete image at the core's existing VBlank handoff, even while
+ * its CPU is halted or inside an instruction. Pixels are borrowed for this
+ * callback; copy them to retain a frame. Timestamp is session time. Install
+ * while paused, before running. The callback must not modify cores/session or
+ * advance emulated time. STOP retains the last completed image. */
+void cupid_cable_set_frame_callback(struct CupidCable* cable,
+    void (*callback)(void* context, unsigned player, const uint32_t* pixels, uint64_t timestamp), void* context);
 #endif

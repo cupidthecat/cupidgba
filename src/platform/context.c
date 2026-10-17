@@ -7,6 +7,13 @@
 #include <stdlib.h>
 #ifdef _WIN32
 #include <windows.h>
+#elif defined(CUPID_USE_FCONTEXT)
+/* Native context entry points use the platform C calling convention. The
+ * transfer returns the suspended caller and the pointer it supplied. */
+struct CupidContextTransfer { void* continuation; void* argument; };
+extern struct CupidContextTransfer jump_fcontext(void* destination, void* argument);
+extern void* make_fcontext(void* stackTop, size_t stackSize,
+                          void (*entry)(struct CupidContextTransfer));
 #else
 #include <ucontext.h>
 #endif
@@ -49,6 +56,8 @@ struct CupidContext {
 #ifdef _WIN32
     void* fiber;
     bool converted;
+#elif defined(CUPID_USE_FCONTEXT)
+    void* continuation;
 #else
     ucontext_t state;
 #endif
@@ -70,6 +79,7 @@ static void finish_switch(struct CupidContext* current, struct CupidContext* pre
 }
 
 static void switch_context(struct CupidContext* from, struct CupidContext* to, bool final) {
+    struct CupidContext* previous = to;
 #ifdef CUPID_CONTEXT_TSAN
     __tsan_switch_to_fiber(to->threadFiber, 0);
 #endif
@@ -80,10 +90,14 @@ static void switch_context(struct CupidContext* from, struct CupidContext* to, b
 #endif
 #ifdef _WIN32
     SwitchToFiber(to->fiber);
+#elif defined(CUPID_USE_FCONTEXT)
+    struct CupidContextTransfer transfer = jump_fcontext(to->continuation, from);
+    previous = transfer.argument;
+    previous->continuation = transfer.continuation;
 #else
     if (swapcontext(&from->state, &to->state) != 0) abort();
 #endif
-    finish_switch(from, to);
+    finish_switch(from, previous);
 }
 
 static void finish_context(struct CupidContext* context) {
@@ -95,11 +109,20 @@ static void finish_context(struct CupidContext* context) {
 #ifdef _WIN32
 static void WINAPI context_entry(void* argument) {
     struct CupidContext* context = argument;
+#elif defined(CUPID_USE_FCONTEXT)
+static void context_entry(struct CupidContextTransfer transfer) {
+    struct CupidContext* context = initialContext;
+    struct CupidContext* previous = transfer.argument;
+    previous->continuation = transfer.continuation;
 #else
 static void context_entry(void) {
     struct CupidContext* context = initialContext;
 #endif
+#if defined(CUPID_USE_FCONTEXT) && !defined(_WIN32)
+    finish_switch(context, previous);
+#else
     finish_switch(context, context->host);
+#endif
     context->entry(context->argument);
     finish_context(context);
 }
@@ -124,8 +147,8 @@ struct CupidContext* cupid_context_host_create(void) {
 struct CupidContext* cupid_context_create(struct CupidContext* host,
                                          void (*entry)(void*), void* argument) {
     if (!host || host != activeHost || !entry) return NULL;
-    /* getcontext is a returns-twice checkpoint until makecontext replaces it.
-     * Keep the allocation handle in memory across that checkpoint. */
+    /* The portable backend's getcontext is a returns-twice checkpoint until
+     * makecontext replaces it. Keep its allocation handle in memory. */
     struct CupidContext* volatile context = calloc(1, sizeof(*context));
     if (!context) return NULL;
     context->host = host;
@@ -134,6 +157,12 @@ struct CupidContext* cupid_context_create(struct CupidContext* host,
 #ifdef _WIN32
     context->fiber = CreateFiberEx(64 * 1024, STACK_SIZE, FIBER_FLAG_FLOAT_SWITCH, context_entry, context);
     if (!context->fiber) { free(context); return NULL; }
+#elif defined(CUPID_USE_FCONTEXT)
+    context->stack = malloc(STACK_SIZE);
+    context->stackSize = STACK_SIZE;
+    if (!context->stack) { free(context); return NULL; }
+    context->continuation = make_fcontext((char*)context->stack + STACK_SIZE, STACK_SIZE, context_entry);
+    if (!context->continuation) { free(context->stack); free(context); return NULL; }
 #else
     context->stack = malloc(STACK_SIZE);
     context->stackSize = STACK_SIZE;

@@ -4,7 +4,9 @@ Start two consoles with `cupidgba first.gba --link second.gba`. Repeat
 `--link` for a third and fourth console in multiplayer mode. Each console has
 its own CPU, clock, memory, display, audio queue and battery. C11 and SDL2
 remain the core and frontend interfaces. Windows uses cooperative fibers;
-Linux uses cooperative `ucontext` stacks. All emulation stays on the creating
+Linux uses native context entry points when Boost.Context is available, with
+cooperative `ucontext` stacks as the portable fallback. All application and
+core code stays C11. All emulation stays on the creating
 thread. The SDL playback callback consumes the mixed audio separately.
 
 The window shows two columns, with a second row for three or four consoles.
@@ -13,6 +15,9 @@ releases that console's held keyboard keys. Controllers belong to separate
 consoles in attachment order, with each instance assigned once. F9 disconnects
 or reconnects the local connection. Escape or closing the window exits and
 flushes every battery. The title identifies keyboard focus and connection.
+Each viewport retains the last image completed at its console's existing
+VBlank handoff. Drawing the next scanline cannot change that published image.
+A stopped console keeps its last complete image while the others continue.
 
 Local batteries use `.p1.sav` through `.p4.sav` alongside each slot's ROM.
 For example, the first slot using `game.gba` owns `game.p1.sav`. Opening the
@@ -105,7 +110,13 @@ SDL tests check input ownership, tiled pixels, mixed PCM, live playback and
 complete independent battery images. Source reconstruction verifies every
 byte of the owned guest drivers. Sanitizer builds use fiber switch hooks;
 AddressSanitizer still prints its standard `makecontext/swapcontext` support
-warning on Linux.
+warning when using the portable Linux backend.
+
+On Ubuntu, install `libboost-context-dev` (version 1.61 or later) for native
+stack switching. This avoids the portable backend's per-switch signal-mask
+work; it changes no
+emulated clock. `-DCUPID_FAST_CONTEXT=OFF` explicitly selects the portable
+backend. Both paths use the same clock coordinator and sanitizer hooks.
 
 These tests qualify the logical session and the recorded guest exchanges.
 They do not establish electrical timing or complete game link compatibility.

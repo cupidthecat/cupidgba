@@ -9,6 +9,7 @@ struct CableNode {
     struct CupidContext* context;
     uint64_t target;
     unsigned id;
+    uint32_t frameCounter;
     bool idle;
 };
 
@@ -18,6 +19,8 @@ struct CupidCable {
     unsigned count;
     uint64_t now;
     bool connected, propagating, dirty, running, cancelling;
+    void (*frameReady)(void*, unsigned, const uint32_t*, uint64_t);
+    void* frameContext;
 };
 
 static void dispatch_events(struct CupidCable* cable);
@@ -145,6 +148,7 @@ struct CupidCable* cupid_cable_create(struct CupidGBA* const cores[], unsigned c
     for (unsigned i = 0; i < count; ++i) {
         struct CableNode* node = &cable->nodes[i];
         node->cable = cable; node->gba = cores[i]; node->id = i;
+        node->frameCounter = cores[i]->video.frameCounter;
         node->context = cupid_context_create(cable->host, run_core, node);
         if (!node->context) {
             for (unsigned j = 0; j < i; ++j) cupid_context_destroy(cable->nodes[j].context);
@@ -218,6 +222,12 @@ static void dispatch_events(struct CupidCable* cable) {
             node->target = cable->now;
         }
         cupid_timing_dispatch_next(selected);
+        struct CableNode* node = selected->synchronizeContext;
+        if (node->gba->video.frameCounter != node->frameCounter) {
+            node->frameCounter = node->gba->video.frameCounter;
+            if (cable->frameReady)
+                cable->frameReady(cable->frameContext, node->id, node->gba->video.outputBuffer, cable->now);
+        }
     }
 }
 
@@ -259,3 +269,10 @@ bool cupid_cable_run(struct CupidCable* cable, uint32_t clocks) {
 
 uint64_t cupid_cable_time(const struct CupidCable* cable) { return cable->now; }
 bool cupid_cable_connected(const struct CupidCable* cable) { return cable->connected; }
+
+void cupid_cable_set_frame_callback(struct CupidCable* cable,
+    void (*callback)(void*, unsigned, const uint32_t*, uint64_t), void* context) {
+    if (!cable || cable->running) return;
+    cable->frameReady = callback;
+    cable->frameContext = context;
+}
