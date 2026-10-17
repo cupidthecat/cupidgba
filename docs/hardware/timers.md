@@ -12,6 +12,12 @@ enabling a stopped timer reloads it and delays the first counting edge. A
 stopped counter at FFFF can overflow before that reload, producing both an
 interrupt and a cascade tick.
 
+The selected enable model retains that FFFF counter when control acceptance
+coincides with the shared prescaler boundary. Its next divided tick overflows
+and loads the reload latch. At other phases, enabling loads the latch and
+delays the counting epoch by one clock. The same policy applies at /1, /64,
+/256 and /1024; changing an already enabled timer still preserves its counter.
+
 Events use timestamps since power-on. Late dispatch replays each overflow
 and its side effects instead of reducing the counter modulo its period.
 FIFO refill requests retain their first pending deadline and transfer four
@@ -30,9 +36,16 @@ passes the same assertions; see the result protocols in the testing guide.
 
 MMIO accesses synchronize peripheral events at the end of the data-bus cycle.
 [Interrupt timing](interrupts.md) describes register acceptance and CPU sampling.
-The pre-reload overflow with divided clocks, simultaneous IRQ acknowledge and
-assertion, and DMA bus arbitration still need broader hardware validation.
-The current DMA engine transfers a burst
-atomically and approximates its bus cost. Host tests establish deterministic
-behavior for the tested interactions; they do not establish physical timing
-for those remaining cases.
+Sixteen `gba.timer-edges` groups check every phase of every prescaler on all
+four channels, byte/halfword/word writes, cascades and four clock epochs.
+They check 64,560 enable scenes and 576 IRQ acknowledgement scenes, with
+1,036,032 sampled counter, control, cascade, IF, availability and line states.
+The acknowledgement scenes distinguish the preceding clock, an overflow's own
+clock and the following clock. They also retain a line pulse already in flight
+after IF is cleared. Wrap checks require the actual scheduler boundary crossing.
+
+The divided-clock policy and request ordering are source-selected behavior.
+These checks establish that logical model and preserve the original hardware
+ROM expectations; they do not add a physical capture of the disputed edges.
+DMA competes at individual transfer phases and retains overflow timestamps;
+see [DMA and bus ownership](dma.md) for arbitration and remaining limits.

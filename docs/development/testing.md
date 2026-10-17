@@ -354,6 +354,20 @@ These results establish the tested wait and timer interactions and do not
 establish complete BIOS parity.
 See [BIOS execution](../hardware/bios.md) for the wait-loop behavior and limits.
 
+The owned timer edge matrix needs no external input:
+
+```sh
+cmake --build build --target test_timer_edges --parallel 2
+ctest --test-dir build -R '^gba[.]timer-edges-' --output-on-failure
+```
+
+Its sixteen channel/prescaler groups retain a 30-second deadline each. They
+check all prescaler phases and access widths, stopped-FFFF enable behavior,
+cascade observations, IRQ acknowledgement before/at/after overflow and actual
+clock-boundary crossings. The expected states use overflow deadlines and
+observed register sequences; the fixture never assigns a timer's counter.
+See [timers](../hardware/timers.md) for the selected timing and coverage limits.
+
 The optional local DMA transfer suite has its own observer:
 
 ```sh
