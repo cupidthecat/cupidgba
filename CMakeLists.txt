@@ -570,6 +570,13 @@ if(BUILD_TESTING)
     add_test(NAME gba.prefetch COMMAND test_prefetch)
     set_tests_properties(gba.prefetch PROPERTIES TIMEOUT 10)
 
+    add_executable(test_prefetch_boundary tests/gba/test_prefetch_boundary.c)
+    target_link_libraries(test_prefetch_boundary PRIVATE cupid_core)
+    foreach(group RANGE 0 3)
+        add_test(NAME gba.prefetch-boundary-${group} COMMAND test_prefetch_boundary ${group})
+        set_tests_properties(gba.prefetch-boundary-${group} PROPERTIES TIMEOUT 30)
+    endforeach()
+
     add_executable(test_video tests/gba/test_video.c)
     target_link_libraries(test_video PRIVATE cupid_core)
     add_test(NAME gba.video COMMAND test_video)

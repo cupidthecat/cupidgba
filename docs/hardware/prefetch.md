@@ -25,8 +25,10 @@ separate cycle estimate. See [DMA and bus ownership](dma.md).
 CPU fetch callbacks carry the logical fetch address, including branch pipeline
 refills and the discarded IRQ fetch. A matching FIFO entry survives an ARM/Thumb
 width change, including an exception return from BIOS or RAM. An unrelated
-target starts a new stream. An uncached fetch at a 128 KiB ROM
-boundary uses nonsequential timing. WAITCNT changes update access costs and
+target starts a new stream. A fetch at a physical 128 KiB ROM
+boundary uses nonsequential timing, including a cached or pending FIFO hit.
+It takes the ordinary stream-stop path, retaining the existing completing
+halfword's cancellation clock. WAITCNT changes update access costs and
 track a pending burst restart when prefetch is disabled.
 
 ARM opcode words are read at aligned physical addresses even when interworking
@@ -56,7 +58,7 @@ fetch bandwidth, complete full-queue draining and nonsequential restart,
 reset, RAM fill clocks, external-data cancellation,
 halfword arbitration, partially buffered words, both instruction-width changes,
 BIOS/RAM exception returns, disable/restart behavior, configured
-wait states, idle-bus engagement, oldest-entry branch joining, uncached page
+wait states, idle-bus engagement, oldest-entry branch joining, buffered page
 boundaries and DMA/timer/IRQ equivalence between
 late dispatch and advancing one clock at a time.
 
@@ -120,20 +122,32 @@ No instruction bytes, expected values or timing constants change.
 
 Both live WAITCNT groups pass on each BIOS path with their original 0xBD
 timer comparison. These are specific enable/disabled sequences, not a complete
-mid-stream write matrix. The binary-only boundary group reads 0x21 instead
-of its encoded 0x29 comparison. Its digest, comparison, pre-display result
-and terminal are retained; missing assembly limits source qualification.
-The expanded prefetch profile passes 38 of 40 runs. Covered boundary examples
-do not establish all page phases.
+mid-stream write matrix. The binary-only boundary group now reads its encoded
+0x29 comparison, repairing the preceding value of 0x21. Its digest, comparison,
+pre-display result and terminal are retained; missing assembly limits source
+qualification. All forty runs pass, requiring all 84 original observations
+per BIOS path. Covered cartridge examples do not establish all page phases.
 
 Two private page-stop experiments, stopping before or after the boundary
 halfword, each passed only 34 of the 40 unchanged runs. Both regressed the
 first and third boundary cartridges on both BIOS paths and still failed the
-legacy comparison. Neither model is retained. Passive fetch/finish tracing
-preserves complete issued instruction/register/clock and final RAM
-fingerprints with logging disabled and enabled on both BIOS paths. It shows
-the current FIFO continuing across the buffered page edge; it does not
-establish the hardware's stop or restart phase.
+legacy comparison. Neither model is retained. Stopping background filling
+at the edge also loses the completing halfword's ordinary cancellation clock.
+Instead, the boundary demand bypasses both FIFO hit paths and uses the
+nonsequential access already selected by the bus. This changes no timing
+constant. Background filling and all in-page hits retain their existing rules.
+
+Four `gba.prefetch-boundary-*` groups require 37,632 boundary/miss/cache
+scene triples. They cover all six ROM windows, every nonsequential/sequential
+wait setting, every FIFO occupancy and in-flight phase, full and
+long-paused queues, Thumb sequential/refill requests, both ARM request types,
+logical ARM A1 and four clock epochs. Each boundary must match an unrelated
+ordinary miss and the configured N transfer plus any existing cancellation
+clock. In-page controls retain their cached or pending timing. Owned mapped
+opcode data, logical PC, final FIFO state and actual signed/unsigned clock
+crossings are checked. Every group rejects the preceding core with its
+matching library; each retains its thirty-second deadline. These checks
+qualify the selected software ordering without claiming physical capture.
 
 `CUPID_BUS_PAGE_PROBE_ROM` enables a separate fixed CPU/DMA page-boundary
 cartridge. The observer requires all eighteen original console results. The
@@ -157,8 +171,8 @@ corpus retains an unresolved flag comparison; see
 [CPU/DMA/IRQ interactions](cpu/dma-irq-interactions.md).
 
 The full-queue pause/drain/restart and nearby Thumb branch cases above now
-have source-cartridge and native coverage. Other refill phases, broader WAITCNT changes and
-prefetched page-boundary edges need further qualification. The current
+have source-cartridge and native coverage. Other refill phases, broader WAITCNT
+changes and physical page-edge signal timing need further qualification. The current
 disable/drain behavior has native regression coverage but is not fully
 qualified on hardware. PPU bus
 contention, cartridge peripheral reads used as instructions, and remaining
