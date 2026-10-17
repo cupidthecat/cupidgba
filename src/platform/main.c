@@ -55,7 +55,7 @@ static bool derive_save_path(const char* romPath, char* out, size_t outSize) {
 static void printUsage(const char* progname) {
     fprintf(stderr, "Usage: %s rom.gba [-b bios.bin] [-s scale] [-S savetype]\n", progname);
     fprintf(stderr, "       %s rom.gba --link peer.gba [--link third.gba] [--link fourth.gba] [--frames count]\n", progname);
-    fprintf(stderr, "\nSave types (GBA): sram, sram512, flash512, flash1m, eeprom, eeprom512, none\n");
+    fprintf(stderr, "\nSave types (GBA): sram, sram512, flash512, flash1m, sst39vf512, eeprom, eeprom512, none\n");
     fprintf(stderr, "\nRTC: --rtc auto|on|off  --rtc-time YYYY-MM-DDTHH:MM:SS\n");
     fprintf(stderr, "     --rtc-offline pause|wall (default: pause; wall includes powered-off time)\n");
     fprintf(stderr, "\nPeripherals: --solar auto|on|off  --sunlight 0..255 (default: 128)\n");
@@ -197,7 +197,8 @@ int main(int argc, char* argv[]) {
         enum CupidSaveType stype = SAVE_AUTODETECT;
         if (strcmp(saveTypeStr, "sram") == 0)          stype = SAVE_SRAM;
         else if (strcmp(saveTypeStr, "sram512") == 0)   stype = SAVE_SRAM512;
-        else if (strcmp(saveTypeStr, "flash512") == 0)  stype = SAVE_FLASH512;
+        else if (strcmp(saveTypeStr, "flash512") == 0 ||
+                 strcmp(saveTypeStr, "sst39vf512") == 0) stype = SAVE_FLASH512;
         else if (strcmp(saveTypeStr, "flash1m") == 0)   stype = SAVE_FLASH1M;
         else if (strcmp(saveTypeStr, "eeprom") == 0)    stype = SAVE_EEPROM;
         else if (strcmp(saveTypeStr, "eeprom512") == 0) stype = SAVE_EEPROM512;
@@ -207,6 +208,12 @@ int main(int argc, char* argv[]) {
         }
         if (stype != SAVE_AUTODETECT) {
             cupid_savedata_force_type(&gba.memory.savedata, stype);
+            if (!strcmp(saveTypeStr, "sst39vf512") &&
+                !cupid_savedata_set_flash_profile(&gba.memory.savedata, FLASH_PROFILE_SST39VF512)) {
+                fprintf(stderr, "Error: Cannot select Flash device '%s'\n", saveTypeStr);
+                cupid_gba_destroy(&gba);
+                return 1;
+            }
             printf("Save type forced: %s\n", saveTypeStr);
         }
     }

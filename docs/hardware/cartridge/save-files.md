@@ -43,10 +43,13 @@ Native regressions cover all capacities, two complete replacements and reloads,
 capacity expansion, explicit overrides, invalid input, companion-file collisions,
 protected files, open readers and recovery after a real delayed write error.
 Frontend checks verify invalid-save rejection and filename handling. These tests
-qualify file persistence. EEPROM/Flash programming delays, disputed bus accesses,
+qualify file persistence. Chip-specific EEPROM/Flash durations, disputed bus accesses,
 peripheral metadata and complete cartridge accuracy remain in
 [issue 1](https://github.com/cupidthecat/cupidgba/issues/1). Power-loss behavior
 beyond the host's file and replacement guarantees remains unqualified.
 
 [EEPROM address decoding](eeprom.md) describes command-width capacity inference
 and block selection before data reaches the saved image.
+
+[Save programming](programming.md) describes pending operations, ready polling
+and the committed bytes available to file persistence.

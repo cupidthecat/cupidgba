@@ -198,10 +198,7 @@ void cupid_memory_deinit(struct CupidGBA* gba) {
     free(mem->iwram);  mem->iwram = NULL;
     free(mem->rom);    mem->rom = NULL;
     free(mem->bios);   mem->bios = NULL;
-    if (mem->savedata.data) {
-        free(mem->savedata.data);
-        mem->savedata.data = NULL;
-    }
+    cupid_savedata_deinit(&mem->savedata);
 }
 
 /* A reset or invalid jump has no mapped CPU region to refresh yet. */

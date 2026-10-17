@@ -101,6 +101,8 @@ static void dma_commands_only_reach_the_decoded_port(void) {
             }
             uint32_t port = large ? 0x0DFFFF00 : 0x0D001000;
             dma(gba, GBA_BASE_EWRAM + 0x100, port, n);
+            /* A complete write is followed by the chip's self-timed interval. */
+            cupid_timing_tick(&gba->timing, (int32_t)gba->memory.savedata.eepromProgramClocks);
             CHECK(gba->memory.savedata.dirty);
             CHECK(!memcmp(gba->memory.savedata.data + address * 8, payload, 8));
             n = request(wire, bits, address, false);
