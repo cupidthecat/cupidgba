@@ -28,6 +28,20 @@ stage on the next CPU-ready edge. A scheduled ready-edge event preserves this
 ownership without splitting peripheral dispatch batches. Timer, DMA, audio and
 existing bus-progress observations retain their previous dispatch partitions.
 
+The CPU-line slots track scheduled and held ownership. A bus hold always sets
+the held-clock state, including when no line publication needs moving. Empty
+domains avoid the queue walk; a new input accepted during the hold still keeps
+its remaining CPU stages. Resume releases the clock and queues each retained
+publication at its original remaining deadline. Register acceptance and HALT
+availability keep their independent system-clock events.
+
+One CPU request owns the ready event. Dispatch removes it before invoking its
+callback, so its next insertion can use `cupid_timing_queue_absolute` without a
+cancellation search. This API requires the event to be absent from both pending
+lists. General scheduling still removes a possibly queued event before moving
+it; absolute scheduling uses the supplied modular timestamp directly. The
+priority order, late-callback clock and deferred queue rules apply to both paths.
+
 IME and the CPSR IRQ mask control exception entry; HALT can wake
 from an enabled request while both masks prevent entry.
 

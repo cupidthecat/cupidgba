@@ -366,6 +366,8 @@ void cupid_dma_run_vblank(struct CupidGBA* gba, int32_t cycles);
 void cupid_dma_transfer(struct CupidGBA* gba, int ch);
 void cupid_dma_request_fifo(struct CupidGBA* gba, int ch, uint64_t timestamp);
 void cupid_dma_kick(struct CupidGBA* gba, uint64_t timestamp);
+/* Service live bus requests at the current CPU or callback clock. */
+void cupid_dma_poll(struct CupidGBA* gba);
 void cupid_dma_run_display(struct CupidGBA* gba);
 void cupid_bus_fetch(struct CupidARM* cpu, uint32_t address, unsigned width, bool sequential);
 void cupid_bus_finish(struct CupidARM* cpu);

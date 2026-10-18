@@ -69,10 +69,9 @@ void cupid_timing_deschedule(struct CupidTiming* timing, struct CupidTimingEvent
     }
 }
 
-void cupid_timing_schedule(struct CupidTiming* timing, struct CupidTimingEvent* event,
-                           int32_t when) {
-    cupid_timing_deschedule(timing, event);
-    event->when = (uint32_t)cupid_timing_current_time(timing) + (uint32_t)when;
+void cupid_timing_queue_absolute(struct CupidTiming* timing, struct CupidTimingEvent* event,
+                                 int32_t when) {
+    event->when = (uint32_t)when;
     struct CupidTimingEvent** link = timing->reroot ? &timing->reroot : &timing->root;
     while (*link) {
         int32_t delta = distance((*link)->when, event->when);
@@ -84,10 +83,19 @@ void cupid_timing_schedule(struct CupidTiming* timing, struct CupidTimingEvent* 
     refresh_deadline(timing);
 }
 
+void cupid_timing_schedule(struct CupidTiming* timing, struct CupidTimingEvent* event,
+                           int32_t when) {
+    cupid_timing_deschedule(timing, event);
+    cupid_timing_queue_absolute(timing, event,
+        (int32_t)((uint32_t)cupid_timing_current_time(timing) + (uint32_t)when));
+}
+
 void cupid_timing_schedule_absolute(struct CupidTiming* timing, struct CupidTimingEvent* event,
                                     int32_t when) {
-    uint32_t now = (uint32_t)cupid_timing_current_time(timing);
-    cupid_timing_schedule(timing, event, distance((uint32_t)when, now));
+    /* The timestamp is already absolute. Moving the event retains cancellation
+     * and deadline refresh without converting through the current CPU clock. */
+    cupid_timing_deschedule(timing, event);
+    cupid_timing_queue_absolute(timing, event, when);
 }
 
 bool cupid_timing_is_scheduled(const struct CupidTiming* timing,

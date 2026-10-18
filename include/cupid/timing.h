@@ -76,6 +76,13 @@ void cupid_timing_schedule_absolute(struct CupidTiming* timing,
                                     struct CupidTimingEvent* event,
                                     int32_t when);
 
+/** Queue an owned event known to be absent from both scheduler lists.
+ * Use schedule_absolute to move an event that may already be queued.
+ * Dispatch removes an event before its callback, permitting owned requeue. */
+void cupid_timing_queue_absolute(struct CupidTiming* timing,
+                                 struct CupidTimingEvent* event,
+                                 int32_t when);
+
 /** Remove an event from the queue (safe if not scheduled). */
 void cupid_timing_deschedule(struct CupidTiming* timing,
                              struct CupidTimingEvent* event);

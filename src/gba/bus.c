@@ -4,7 +4,7 @@
 void cupid_bus_wait(struct CupidARM* cpu) {
     struct CupidGBA* gba = cpu->master;
     cpu->irqh.processEvents(cpu);
-    cupid_dma_kick(gba, cupid_timing_global_time(&gba->timing));
+    cupid_dma_poll(gba);
     bool waiting = gba->memory.dmaRunning && !gba->memory.busLocked;
     /* The CPU waits for bus ownership; DMA's peripheral clocks still run. */
     if (waiting) cupid_irq_pause_cpu(gba);
@@ -38,7 +38,7 @@ void cupid_bus_advance(struct CupidARM* cpu, unsigned cycles, bool occupied) {
 void cupid_bus_release(struct CupidARM* cpu) {
     struct CupidGBA* gba = cpu->master;
     gba->memory.busBusy = false;
-    cupid_dma_kick(gba, cupid_timing_global_time(&gba->timing));
+    cupid_dma_poll(gba);
 }
 
 void cupid_bus_fetch(struct CupidARM* cpu, uint32_t address, unsigned width, bool sequential) {
@@ -79,7 +79,7 @@ void cupid_bus_finish(struct CupidARM* cpu) {
     cupid_bus_release(cpu);
     cpu->irqh.processEvents(cpu);
     cupid_prefetch_update(gba, cupid_timing_global_time(&gba->timing));
-    cupid_dma_kick(gba, cupid_timing_global_time(&gba->timing));
+    cupid_dma_poll(gba);
 }
 
 void cupid_bus_lock(struct CupidARM* cpu, bool locked) {
