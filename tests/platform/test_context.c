@@ -37,6 +37,9 @@ static void local_stack(void* argument) {
 
 int main(void) {
     struct CupidContext* host = cupid_context_host_create(); CHECK(host);
+    struct CupidContext* shared = cupid_context_host_create(); CHECK(shared == host);
+    cupid_context_destroy(host); /* The second owner keeps the host alive. */
+    host = shared;
     const unsigned lengths[] = {8, 17, 65};
     for (unsigned i = 0; i < 3; ++i) {
         struct Probe p = {.length = lengths[i]};

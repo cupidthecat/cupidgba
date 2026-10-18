@@ -455,14 +455,11 @@ void cupid_io_write8(struct CupidGBA* gba, uint32_t addr, uint8_t value) {
         if (value & 0x80) {
             cupid_gba_stop(gba);
         } else {
-            cupid_gba_halt(gba);
             if (gba->cpu.memory.timed) {
-                /* HALT accepts one internal clock after the register strobe.
-                 * Retain the IRQ sample from before that acceptance clock. */
-                gba->haltIRQSample = gba->irq.line;
-                gba->haltIRQSampleValid = true;
-                cupid_bus_advance(&gba->cpu, 1, false);
-            }
+                /* The next CPU fetch can complete before HALT freezes the
+                 * following bus request, including a branch's target refill. */
+                cupid_gba_request_halt(gba);
+            } else cupid_gba_halt(gba);
         }
         return;
     }

@@ -49,7 +49,7 @@ endif()
 
 add_library(cupid_core STATIC
     src/arm/arm.c src/arm/isa-arm.c src/arm/isa-thumb.c
-    src/core/timing.c src/core/file.c
+    src/core/timing.c src/core/file.c src/platform/context.c
     src/gba/gba.c src/gba/memory.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
     src/gba/audio.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c
     src/gba/hle-bios.c src/gba/bios/file.c src/gba/savedata.c src/gba/save/file.c
@@ -65,7 +65,7 @@ if(NOT WIN32)
     target_link_libraries(cupid_core PUBLIC m)
 endif()
 
-add_library(cupid_link STATIC src/link/cable.c src/platform/context.c)
+add_library(cupid_link STATIC src/link/cable.c)
 target_link_libraries(cupid_link PUBLIC cupid_core)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CUPID_FAST_CONTEXT)
     find_library(CUPID_CONTEXT_LIBRARY NAMES boost_context)
@@ -77,8 +77,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CUPID_FAST_CONTEXT)
         string(REGEX REPLACE ".*BOOST_VERSION ([0-9]+).*" "\\1" cupid_context_version "${cupid_context_version_line}")
     endif()
     if(CUPID_CONTEXT_LIBRARY AND cupid_context_version GREATER_EQUAL 106100)
-        target_compile_definitions(cupid_link PRIVATE CUPID_USE_FCONTEXT=1)
-        target_link_libraries(cupid_link PRIVATE ${CUPID_CONTEXT_LIBRARY})
+        target_compile_definitions(cupid_core PRIVATE CUPID_USE_FCONTEXT=1)
+        target_link_libraries(cupid_core PRIVATE ${CUPID_CONTEXT_LIBRARY})
         message(STATUS "Local contexts: native C ABI (${cupid_context_version})")
     else()
         message(STATUS "Local contexts: portable backend; native support needs Boost.Context 1.61 or later")
@@ -342,6 +342,13 @@ if(BUILD_TESTING)
     add_executable(test_system tests/gba/test_system.c)
     target_link_libraries(test_system PRIVATE cupid_core)
     add_test(NAME gba.system COMMAND test_system)
+
+    add_executable(test_execution tests/gba/test_execution.c)
+    target_link_libraries(test_execution PRIVATE cupid_link)
+    foreach(group frames interval wake lifetime cable ready-wake)
+        add_test(NAME gba.execution-${group} COMMAND test_execution ${group})
+        set_tests_properties(gba.execution-${group} PROPERTIES TIMEOUT 5)
+    endforeach()
     set_tests_properties(gba.system PROPERTIES TIMEOUT 10)
 
     add_executable(test_reset_entry tests/arm/test_reset_entry.c)

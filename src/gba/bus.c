@@ -4,6 +4,7 @@
 void cupid_bus_wait(struct CupidARM* cpu) {
     struct CupidGBA* gba = cpu->master;
     cpu->irqh.processEvents(cpu);
+    if (cpu->halted && gba->cpuInstructionPending) cupid_gba_wait_halt(gba);
     cupid_dma_poll(gba);
     bool waiting = gba->memory.dmaRunning && !gba->memory.busLocked;
     /* The CPU waits for bus ownership; DMA's peripheral clocks still run. */

@@ -47,6 +47,7 @@ struct CupidContext {
     void* stack;
     size_t stackSize;
     bool started, ending, finished;
+    unsigned references, children;
 #ifdef CUPID_CONTEXT_ASAN
     void* fakeStack;
 #endif
@@ -65,6 +66,7 @@ struct CupidContext {
 
 static _Thread_local struct CupidContext* initialContext;
 static _Thread_local struct CupidContext* activeHost;
+static _Thread_local struct CupidContext* runningContext;
 
 static void finish_switch(struct CupidContext* current, struct CupidContext* previous) {
 #ifdef CUPID_CONTEXT_ASAN
@@ -80,6 +82,8 @@ static void finish_switch(struct CupidContext* current, struct CupidContext* pre
 
 static void switch_context(struct CupidContext* from, struct CupidContext* to, bool final) {
     struct CupidContext* previous = to;
+    if (runningContext != from) abort();
+    runningContext = to;
 #ifdef CUPID_CONTEXT_TSAN
     __tsan_switch_to_fiber(to->threadFiber, 0);
 #endif
@@ -128,7 +132,13 @@ static void context_entry(void) {
 }
 
 struct CupidContext* cupid_context_host_create(void) {
-    if (activeHost) return NULL;
+    /* Independent cores and a local cable may own stacks on the same thread.
+     * Their host remains valid until its last owner and child are released. */
+    if (activeHost) {
+        if (runningContext != activeHost) return NULL;
+        ++activeHost->references;
+        return activeHost;
+    }
     struct CupidContext* host = calloc(1, sizeof(*host));
     if (!host) return NULL;
 #ifdef _WIN32
@@ -138,6 +148,8 @@ struct CupidContext* cupid_context_host_create(void) {
     if (!host->fiber) { free(host); return NULL; }
 #endif
     activeHost = host;
+    runningContext = host;
+    host->references = 1;
 #ifdef CUPID_CONTEXT_TSAN
     host->threadFiber = __tsan_get_current_fiber();
 #endif
@@ -146,7 +158,7 @@ struct CupidContext* cupid_context_host_create(void) {
 
 struct CupidContext* cupid_context_create(struct CupidContext* host,
                                          void (*entry)(void*), void* argument) {
-    if (!host || host != activeHost || !entry) return NULL;
+    if (!host || host != activeHost || runningContext != host || !entry) return NULL;
     /* The portable backend's getcontext is a returns-twice checkpoint until
      * makecontext replaces it. Keep its allocation handle in memory. */
     struct CupidContext* volatile context = calloc(1, sizeof(*context));
@@ -183,17 +195,19 @@ struct CupidContext* cupid_context_create(struct CupidContext* host,
 #ifdef CUPID_CONTEXT_TSAN
     context->threadFiber = __tsan_create_fiber(0);
 #endif
+    ++host->children;
     return context;
 }
 
 void cupid_context_resume(struct CupidContext* context) {
-    if (context->finished) abort();
+    if (context->finished || runningContext != context->host) abort();
     initialContext = context;
     context->started = true;
     switch_context(context->host, context, false);
 }
 
 void cupid_context_yield(struct CupidContext* context) {
+    if (runningContext != context) abort();
     switch_context(context, context->host, false);
     if (context->ending) finish_context(context);
 }
@@ -213,11 +227,16 @@ void cupid_context_destroy(struct CupidContext* context) {
 #ifdef CUPID_CONTEXT_TSAN
         __tsan_destroy_fiber(context->threadFiber);
 #endif
+        --context->host->children;
     } else {
+        if (context != activeHost || runningContext != context || !context->references) abort();
+        if (--context->references) return;
+        if (context->children) abort();
 #ifdef _WIN32
         if (context->converted && !ConvertFiberToThread()) abort();
 #endif
         activeHost = NULL;
+        runningContext = NULL;
     }
     free(context);
 }

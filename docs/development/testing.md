@@ -695,8 +695,8 @@ ctest --test-dir build-thread -R '^platform.audio$' --output-on-failure
 
 ThreadSanitizer and AddressSanitizer require separate build directories.
 
-`platform.context` checks local data across repeated cooperative yields, normal
-completion and cancellation. AddressSanitizer builds also require each live
+`platform.context` checks shared host ownership and local data across repeated
+cooperative yields, normal completion and cancellation. AddressSanitizer builds also require each live
 local buffer's boundary to remain poisoned after every return to its stack.
 The portable backend uses the sanitizer fiber interface and clears the generic
 stack-cleanup marker installed by `makecontext`; otherwise `swapcontext` can
@@ -707,9 +707,20 @@ portable backend locally:
 ```sh
 cmake -S . -B build-context-portable -DCMAKE_C_COMPILER=clang \
   -DCMAKE_BUILD_TYPE=Debug -DCUPID_SANITIZERS=ON -DCUPID_FAST_CONTEXT=OFF
-cmake --build build-context-portable --target test_context --parallel 2
-ctest --test-dir build-context-portable -R '^platform.context$' --output-on-failure
+cmake --build build-context-portable --target test_context test_execution --parallel 2
+ctest --test-dir build-context-portable -R '^platform.context$|^gba.execution-' --output-on-failure
 ```
+
+Six `gba.execution-*` groups cover frames with no eligible wake, paced interval
+accounting, one-time instruction issue and stores after wake, reset and stack
+cancellation, shared standalone/cable ownership, and an already eligible wake.
+ARM and Thumb cases include scheduler wrap. Each group keeps a five-second
+deadline. The IRQ acceptance regression checks the write at clock two, the
+following CPU phase at clock three, and the original handler registers and
+return addresses at clocks eight or nine. Its former single-step observation
+combined the write with an empty internal clock; the retained fetch now occupies
+that clock. The cartridge operands, terminal observations and execution limits
+are unchanged.
 
 `gba.save-file` checks complete replacements and reloads at every supported
 capacity, inferred expansion, explicit type choices, invalid inputs, companion

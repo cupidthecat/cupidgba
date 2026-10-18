@@ -134,7 +134,7 @@ static void multiplayer_cancelled(void* opaque) {
 struct CupidCable* cupid_cable_create(struct CupidGBA* const cores[], unsigned count) {
     if (!cores || count < 2 || count > 4) return NULL;
     for (unsigned i = 0; i < count; ++i) {
-        if (!cores[i] || cores[i]->timing.synchronize || cores[i]->serial.outputChanged ||
+        if (!cores[i] || cores[i]->cpuInstructionPending || cores[i]->timing.synchronize || cores[i]->serial.outputChanged ||
             cores[i]->serial.multiplayerExchange || cores[i]->serial.multiplayerReady ||
             cores[i]->serial.multiplayerCancelled || cores[i]->timing.inCallback || cores[i]->cpu.cycles) return NULL;
         if (cores[i]->serial.active || cores[i]->serial.uart.transmitting || cores[i]->serial.uart.receiving) return NULL;
@@ -161,6 +161,7 @@ struct CupidCable* cupid_cable_create(struct CupidGBA* const cores[], unsigned c
         struct CableNode* node = &cable->nodes[i];
         cores[i]->timing.synchronize = synchronize;
         cores[i]->timing.synchronizeContext = node;
+        cores[i]->externalExecution = true;
         cupid_serial_set_output_callback(&cores[i]->serial, output_changed, node);
         cores[i]->serial.multiplayerReady = multiplayer_ready;
         cores[i]->serial.multiplayerCancelled = multiplayer_cancelled;
@@ -192,6 +193,7 @@ void cupid_cable_destroy(struct CupidCable* cable) {
         if (node->gba) {
             node->gba->timing.synchronize = NULL;
             node->gba->timing.synchronizeContext = NULL;
+            node->gba->externalExecution = false;
             node->gba->serial.multiplayerReady = NULL;
             node->gba->serial.multiplayerCancelled = NULL;
             node->gba->serial.multiplayerContext = NULL;

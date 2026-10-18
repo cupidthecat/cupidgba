@@ -53,13 +53,22 @@ instruction fetch, saves CPSR and the return address, enters ARM IRQ mode,
 and refills the exception vector. `subs pc, lr, #4` restores the saved state
 and resumes the interrupted ARM or Thumb instruction.
 
-HALT accepts a timed control write one internal clock after its data strobe.
-An immediate wake retains the IRQ line sampled before that acceptance
-clock; a later wake samples the line before the wake clock. A line that becomes
-asserted during these clocks is accepted after the resumed instruction. An
-already asserted line can enter immediately, subject to the sampled CPSR mask.
-These clocks advance peripheral events. Untimed observer accesses keep their
-existing clock position, and console reset clears the retained HALT sample.
+HALT accepts a timed control write one clock after its data strobe. The
+following fetch can finish before the CPU sleeps. A branch can therefore retain
+its first target fetch, and an IRQ already accepted at the preceding instruction
+boundary can retain its vector refill. HALT holds that bus request without
+repeating its instruction or changing DMA's transfer duration. A timed wake
+consumes two clocks before continuing the retained phase. Peripheral events run
+throughout the wait. The untimed HALT helper keeps its existing one-clock wake
+and samples the IRQ line before that clock.
+
+Standalone execution retains the CPU stack on the same thread. Frame and paced
+interval calls can return while a fetch remains halted, including when no wake
+request is enabled. A step call can return at a halted peripheral boundary;
+resuming it does not issue the instruction observer again. Reset and destruction
+cancel the retained stack before clearing or freeing its state. Independent cores
+share a host with separate stack ownership. A local session supplies its own
+execution stacks and requires each standalone step to finish before attachment.
 
 Timed MMIO reads and writes dispatch due peripheral events after the data-bus
 cycle. Loads retain their final internal cycle. Untimed observer accesses do
@@ -90,7 +99,8 @@ external-firmware load, branch and store cartridges now reach their encoded
 IRQ return addresses. The selected [fast entry](bios/reset-entry.md) now
 aligns the initial display phase with full firmware boot, correcting the
 formerly built-in-only interaction failures. The HALT/DMA timer comparison
-remains open; the OAM variant depends on the selected display-memory arbiter.
+requires retaining the following fetch across sleep; the OAM variant also
+depends on the selected display-memory arbiter.
 See [CPU/DMA/IRQ interactions](cpu/dma-irq-interactions.md) and
 [display bus waits](cpu/display-irq.md).
 
