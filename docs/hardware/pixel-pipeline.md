@@ -12,6 +12,12 @@ Affine backgrounds fetch a map byte followed by a texel. Bitmap backgrounds
 fetch a pixel every four clocks. These fetches hold indices or direct colors;
 palette reads occur during layer selection or blending.
 
+Affine map fetches use a 16-bit byte address. A map that extends beyond the
+end of background VRAM wraps before the map byte is read, and the wrapped
+fetch occupies its ordinary bus slot. This selected affine-address policy
+is separate from text-map and tile addresses: their out-of-range reads keep
+the existing background bus latch and do not occupy a fetch slot.
+
 The merge unit selects the nearest two visible layers. Lower BG numbers win
 equal BG priorities; OBJ wins a tie with BG. An intervening opaque layer blocks
 alpha blending with a deeper target. Semi-transparent OBJ can force alpha
@@ -77,6 +83,13 @@ The upper mirror still maps to `0x06014000`; the normal lower bitmap bank remain
 accessible. Opcode fetches refresh their VRAM mapping when crossing these banks.
 
 ## Qualification
+
+The affine-map address group checks 132 scenes across both affine backgrounds,
+both overflow-bit settings, all four map sizes and three clock epochs. Fixed
+map-byte locations cover both sides of the 64-KiB carry. Each scene requires
+the map/texel CPU stall, retained texel and access timestamp, and all 240 pixels
+of the complete output line. It qualifies the selected address policy;
+physical behavior at these map boundaries remains unmeasured.
 
 Native regressions cover modes 0 through 5, frame selection, clipping, text
 scroll/flip/palette banks, affine coordinate and reference latches, normal and

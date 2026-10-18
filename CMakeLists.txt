@@ -698,6 +698,8 @@ if(BUILD_TESTING)
     target_link_libraries(test_render PRIVATE cupid_core)
     add_test(NAME gba.render COMMAND test_render)
     set_tests_properties(gba.render PROPERTIES TIMEOUT 10)
+    add_test(NAME gba.affine-map-address COMMAND test_render --affine-map)
+    set_tests_properties(gba.affine-map-address PROPERTIES TIMEOUT 10)
 
     add_executable(test_blank_scanout tests/gba/test_blank_scanout.c)
     target_link_libraries(test_blank_scanout PRIVATE cupid_core)

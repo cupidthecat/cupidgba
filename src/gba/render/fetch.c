@@ -77,8 +77,10 @@ static void fetch_affine(struct CupidVideo* v, unsigned id, unsigned cycle, uint
             x &= size - 1;
             y &= size - 1;
         } else p->affine[id].outside = x < 0 || x >= size || y < 0 || y >= size;
-        uint32_t address = BGCNT_SCREENBASE(b->cnt) * 0x800
-            + ((uint32_t)(y >> 3) << (4 + log)) + (uint32_t)(x >> 3);
+        /* The affine map generator emits a 16-bit byte address. This wrap
+         * precedes the shared VRAM read and its bus-ownership decision. */
+        uint16_t address = (uint16_t)(BGCNT_SCREENBASE(b->cnt) * 0x800
+            + ((uint32_t)(y >> 3) << (4 + log)) + (uint32_t)(x >> 3));
         unsigned tile = read_byte(v, address, time);
         p->affine[id].address = BGCNT_CHARBASE(b->cnt) * 0x4000 + tile * 64
             + ((unsigned)y & 7) * 8 + ((unsigned)x & 7);

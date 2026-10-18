@@ -498,7 +498,87 @@ static void affine_sprites_fetch_matrices_and_object_windows_mask_layers(void) {
     destroy(gba);
 }
 
-int main(void) {
+static void affine_map_wrap_retains_pixels_and_cpu_bus_slots(void) {
+    /* Fixed map-byte locations straddle the carry at the end of BG VRAM.
+     * The fixtures use different map/tile/latch values so a retained latch
+     * cannot accidentally produce the selected wrapped-map pixel. */
+    static const struct {
+        uint16_t size, base, x, y, map;
+    } scenes[] = {
+        {0, 31, 127, 127, 0xF8FF}, {1, 31, 255, 255, 0xFBFF},
+        {2, 31, 504, 248, 0xFFFF}, {2, 31,   0, 256, 0x0000},
+        {2, 31,   8, 256, 0x0001}, {2, 31, 504, 504, 0x07FF},
+        {3, 24, 1016, 1016, 0xFFFF}, {3, 25, 1016, 1016, 0x07FF},
+        {3, 31, 1016, 1016, 0x37FF}, {3, 31, 0, 128, 0x0000},
+        {3, 31, 8, 128, 0x0001}
+    };
+    const uint64_t epochs[] = {0, UINT32_MAX - UINT64_C(3) * 1232 - 33,
+        UINT64_C(0x300000000)};
+    unsigned completed = 0;
+    for (unsigned id = 2; id <= 3; ++id) for (unsigned wrap = 0; wrap < 2; ++wrap)
+    for (unsigned e = 0; e < sizeof(epochs) / sizeof(epochs[0]); ++e)
+    for (unsigned s = 0; s < sizeof(scenes) / sizeof(scenes[0]); ++s) {
+        struct CupidGBA* gba = machine();
+        cupid_timing_clear(&gba->timing);
+        gba->timing.globalCycles = epochs[e];
+        gba->timing.masterCycles = (uint32_t)epochs[e];
+        cupid_video_reset(&gba->video);
+        cupid_audio_reset(&gba->audio);
+        gba->audio.sampleOrigin = gba->audio.lastSample = epochs[e];
+        gba->audio.nextSample = epochs[e] + 512;
+        uint8_t* vram = (uint8_t*)gba->video.vram;
+        memset(vram, 8, GBA_SIZE_VRAM);
+        memset(vram + 41 * 64, 9, 64);
+        memset(vram + 8 * 64, 3, 64);
+        vram[scenes[s].map] = 41;
+        gba->video.palette[9] = 0x03E0;
+        gba->video.palette[3] = 0x001F;
+        uint32_t cnt = id == 2 ? REG_BG2CNT : REG_BG3CNT;
+        uint32_t matrix = id == 2 ? REG_BG2PA : REG_BG3PA;
+        uint32_t reference = id == 2 ? REG_BG2X_LO : REG_BG3X_LO;
+        cupid_io_write(gba, cnt, (uint16_t)((scenes[s].size << 14) |
+            (wrap << 13) | (scenes[s].base << 8) | 0x80));
+        for (unsigned i = 0; i < 4; ++i) cupid_io_write(gba, matrix + i * 2, 0);
+        cupid_io_write(gba, reference, (uint16_t)(scenes[s].x << 8));
+        cupid_io_write(gba, reference + 2, scenes[s].x >> 8);
+        cupid_io_write(gba, reference + 4, (uint16_t)(scenes[s].y << 8));
+        cupid_io_write(gba, reference + 6, scenes[s].y >> 8);
+        cupid_io_write(gba, REG_DISPCNT, (uint16_t)((1u << (8 + id)) | 2));
+        unsigned mapClock = id == 2 ? 34 : 32;
+        cupid_timing_tick(&gba->timing, 3 * 1232);
+        gba->video.pipeline.vramLatch = 0x0808;
+        cupid_timing_tick(&gba->timing, (int32_t)mapClock - 1);
+        gba->cpu.memory.timed = true;
+        int32_t cycles = 0;
+        uint64_t start = cupid_timing_global_time(&gba->timing);
+        uint16_t value = (uint16_t)cupid_memory_load16(&gba->cpu,
+            GBA_BASE_VRAM + 0x4000, &cycles);
+        uint64_t elapsed = cupid_timing_global_time(&gba->timing) - start;
+        if (elapsed != 3 || gba->video.pipeline.backgrounds[id][0] != 9)
+            fprintf(stderr, "affine map id=%u wrap=%u epoch=%u scene=%u elapsed=%" PRIu64
+                " index=%u\n", id, wrap, e, s, elapsed, gba->video.pipeline.backgrounds[id][0]);
+        /* The map and texel occupy consecutive BG-bus clocks. The timed
+         * CPU read then completes on the next available clock. */
+        CHECK(elapsed == 3 && value == 0x0808);
+        CHECK(!gba->memory.busBusy);
+        CHECK(gba->video.pipeline.backgrounds[id][0] == 9);
+        CHECK(gba->video.pipeline.vramLatch == 0x0909);
+        CHECK(gba->video.pipeline.backgroundAccess == start + 2);
+        cupid_timing_tick(&gba->timing, (int32_t)(1007 - mapClock - 2));
+        for (unsigned x = 0; x < GBA_SCREEN_WIDTH; ++x)
+            CHECK(gba->video.outputBuffer[3 * GBA_SCREEN_WIDTH + x] == color16_to_rgba(0x03E0));
+        destroy(gba);
+        ++completed;
+    }
+    CHECK(completed == 132);
+}
+
+int main(int argc, char** argv) {
+    if (argc == 2 && !strcmp(argv[1], "--affine-map")) {
+        RUN(affine_map_wrap_retains_pixels_and_cpu_bus_slots);
+        return 0;
+    }
+    if (argc != 1) return 2;
     RUN(green_swap_exchanges_only_adjacent_green_components);
     RUN(register_changes_affect_only_later_scanout);
     RUN(fetches_and_palette_reads_retain_their_values);
