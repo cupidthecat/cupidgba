@@ -70,6 +70,14 @@ cancel the retained stack before clearing or freeing its state. Independent core
 share a host with separate stack ownership. A local session supplies its own
 execution stacks and requires each standalone step to finish before attachment.
 
+`cupid_gba_run_steps` retains the same stack across a bounded sequence of step
+returns. Its optional callback sees count zero and every subsequent boundary,
+including HALT acceptance and peripheral waits within an unfinished fetch.
+Returning false stops there; STOP also returns without advancing the board.
+This keeps instruction and input observations between the same steps while
+avoiding a host-stack switch after each one. The callback cannot run, reset or
+destroy cores or advance emulated time.
+
 Timed MMIO reads and writes dispatch due peripheral events after the data-bus
 cycle. Loads retain their final internal cycle. Untimed observer accesses do
 not advance the CPU. Timer interrupts keep their original overflow timestamps

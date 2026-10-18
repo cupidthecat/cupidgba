@@ -162,6 +162,16 @@ void cupid_gba_run_interval(struct CupidGBA* gba, uint32_t clocks);
  * thread that first runs this core, until reset releases its stack. */
 void cupid_gba_step(struct CupidGBA* gba);
 
+/* Run at most limit equivalent step boundaries without returning to the host
+ * stack after each one. This counts HALT/peripheral returns as ordinary step
+ * calls do, and stops when STOP freezes the clock. The optional callback runs
+ * at count zero and after each step, including the final one; false stops.
+ * It may inspect state and update input between steps, but must not reset,
+ * destroy or run cores, or otherwise advance emulated time. A zero limit
+ * calls neither the callback nor the CPU. The returned count excludes zero. */
+uint64_t cupid_gba_run_steps(struct CupidGBA* gba, uint64_t limit,
+    bool (*boundary)(struct CupidGBA*, uint64_t steps, void*), void* context);
+
 /** Process events (video, audio, timers, DMA, IRQ) after CPU steps */
 void cupid_gba_process_events(struct CupidGBA* gba);
 

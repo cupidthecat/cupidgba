@@ -8,12 +8,15 @@
 #include "serial/uart.h"
 #include "../platform/context.h"
 
-enum ExecutionRequest { EXECUTE_STEP, EXECUTE_FRAME, EXECUTE_INTERVAL };
+enum ExecutionRequest { EXECUTE_STEP, EXECUTE_FRAME, EXECUTE_INTERVAL, EXECUTE_STEPS };
 struct CupidExecution {
     struct CupidContext* host;
     struct CupidContext* context;
     enum ExecutionRequest request;
     uint64_t start, clocks, stoppedClocks;
+    uint64_t steps, stepLimit;
+    bool (*boundary)(struct CupidGBA*, uint64_t, void*);
+    void* boundaryContext;
     bool inside;
 };
 
@@ -24,10 +27,17 @@ static uint64_t execution_progress(const struct CupidGBA* gba) {
     return cupid_timing_global_time(&gba->timing) - execution->start + execution->stoppedClocks;
 }
 
-static bool execution_ready(const struct CupidGBA* gba) {
-    const struct CupidExecution* execution = gba->execution;
+static bool execution_ready(struct CupidGBA* gba) {
+    struct CupidExecution* execution = gba->execution;
     if (execution->request == EXECUTE_STEP) return true;
     if (execution->request == EXECUTE_FRAME) return gba->frameReady || gba->stopped;
+    if (execution->request == EXECUTE_STEPS) {
+        /* Each visit is the return boundary of one ordinary step, including
+         * a HALT acceptance or peripheral wait inside an unfinished fetch. */
+        ++execution->steps;
+        bool proceed = !execution->boundary || execution->boundary(gba, execution->steps, execution->boundaryContext);
+        return !proceed || gba->stopped || execution->steps == execution->stepLimit;
+    }
     return execution_progress(gba) >= execution->clocks;
 }
 
@@ -72,7 +82,7 @@ static void release_execution(struct CupidGBA* gba) {
     gba->cpuInstructionPending = false;
 }
 
-static void run_execution(struct CupidGBA* gba, enum ExecutionRequest request, uint64_t clocks) {
+static struct CupidExecution* prepare_execution(struct CupidGBA* gba) {
     if (!gba->execution) {
         struct CupidExecution* execution = calloc(1, sizeof(*execution));
         if (!execution) abort();
@@ -84,6 +94,11 @@ static void run_execution(struct CupidGBA* gba, enum ExecutionRequest request, u
     }
     struct CupidExecution* execution = gba->execution;
     if (execution->inside) abort();
+    return execution;
+}
+
+static void run_execution(struct CupidGBA* gba, enum ExecutionRequest request, uint64_t clocks) {
+    struct CupidExecution* execution = prepare_execution(gba);
     execution->request = request;
     execution->start = cupid_timing_global_time(&gba->timing);
     execution->clocks = clocks;
@@ -494,6 +509,32 @@ void cupid_gba_step(struct CupidGBA* gba) {
     } else {
         run_execution(gba, EXECUTE_STEP, 0);
     }
+}
+
+uint64_t cupid_gba_run_steps(struct CupidGBA* gba, uint64_t limit,
+    bool (*boundary)(struct CupidGBA*, uint64_t, void*), void* context) {
+    if (!limit || (boundary && !boundary(gba, 0, context)) || gba->stopped) return 0;
+    if (gba->externalExecution) {
+        uint64_t steps = 0;
+        do {
+            cupid_gba_step(gba);
+            ++steps;
+            bool proceed = !boundary || boundary(gba, steps, context);
+            if (!proceed || gba->stopped || steps == limit) break;
+        } while (true);
+        return steps;
+    }
+    struct CupidExecution* execution = prepare_execution(gba);
+    execution->steps = 0;
+    execution->stepLimit = limit;
+    execution->boundary = boundary;
+    execution->boundaryContext = context;
+    run_execution(gba, EXECUTE_STEPS, 0);
+    /* The callback can belong to a caller's stack. Retain only CPU work after
+     * returning, never the caller's observation/input context. */
+    execution->boundary = NULL;
+    execution->boundaryContext = NULL;
+    return execution->steps;
 }
 
 /**

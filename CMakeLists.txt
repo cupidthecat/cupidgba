@@ -345,7 +345,7 @@ if(BUILD_TESTING)
 
     add_executable(test_execution tests/gba/test_execution.c)
     target_link_libraries(test_execution PRIVATE cupid_link)
-    foreach(group frames interval wake lifetime cable ready-wake)
+    foreach(group frames interval wake lifetime cable ready-wake batch)
         add_test(NAME gba.execution-${group} COMMAND test_execution ${group})
         set_tests_properties(gba.execution-${group} PROPERTIES TIMEOUT 5)
     endforeach()

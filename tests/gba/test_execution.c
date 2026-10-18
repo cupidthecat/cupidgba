@@ -25,6 +25,11 @@ static struct CupidGBA* machine(unsigned thumb, unsigned wrap) {
     gba->timing.masterCycles = (uint32_t)epoch;
     cupid_video_reset(&gba->video);
     cupid_audio_reset(&gba->audio);
+    /* Console reset normally runs at time zero. Move this synthetic epoch's
+     * audio divider with the scheduler, rather than replaying samples from
+     * zero up to the wrap anchor at the first frame-sequencer callback. */
+    gba->audio.sampleOrigin = gba->audio.lastSample = epoch;
+    gba->audio.nextSample = epoch + 512;
     cupid_irq_init(gba);
     if (thumb) {
         const uint16_t branch[] = {0xE01E, 0x46C0}; /* b target; nop */
@@ -200,6 +205,115 @@ static void cable(void) {
     destroy(cores[0]); destroy(cores[1]);
 }
 
+struct BoundaryRecord {
+    int32_t registers[16], cycles, nextEvent;
+    uint32_t cpsr, spsr, prefetch[2], bus, frame, samples;
+    uint64_t clock;
+    uint16_t keys, ie, irqf;
+    bool halted, pending, available, line, frameReady, waiting, timed;
+};
+struct Boundaries {
+    struct BoundaryRecord* records;
+    uint64_t count, stopAt;
+    unsigned frames;
+};
+
+static bool boundary(struct CupidGBA* gba, uint64_t step, void* argument) {
+    struct Boundaries* p = argument;
+    CHECK(step == p->count && step <= p->stopAt);
+    struct BoundaryRecord* r = &p->records[p->count++];
+    memcpy(r->registers, gba->cpu.gprs, sizeof(r->registers));
+    memcpy(r->prefetch, gba->cpu.prefetch, sizeof(r->prefetch));
+    r->cycles = gba->cpu.cycles; r->nextEvent = gba->cpu.nextEvent;
+    r->cpsr = gba->cpu.cpsr.packed; r->spsr = gba->cpu.spsr.packed;
+    r->bus = gba->bus; r->clock = cupid_timing_global_time(&gba->timing);
+    r->frame = gba->video.frameCounter; r->samples = gba->audio.sampleWritePos;
+    r->keys = gba->keysActive; r->ie = gba->ie; r->irqf = gba->irqf;
+    r->halted = gba->cpu.halted; r->pending = gba->cpuInstructionPending;
+    r->available = gba->irq.available; r->line = gba->irq.line;
+    r->waiting = gba->timing.waitingForEvent; r->timed = gba->cpu.memory.timed;
+    r->frameReady = gba->frameReady;
+    if (gba->frameReady) { ++p->frames; gba->frameReady = false; }
+    if (step == 1000) {
+        gba->keysActive = 3;
+        cupid_io_write(gba, REG_IE, IRQ_KEYPAD);
+        cupid_raise_irq(gba, IRQ_KEYPAD, 0);
+    }
+    return step < p->stopAt;
+}
+
+static void same_queue(const struct CupidTimingEvent* a, const struct CupidTimingEvent* b) {
+    while (a && b) {
+        CHECK(a->when == b->when && a->priority == b->priority && a->callback == b->callback);
+        CHECK((a->name == NULL) == (b->name == NULL));
+        if (a->name) CHECK(!strcmp(a->name, b->name));
+        a = a->next; b = b->next;
+    }
+    CHECK(!a && !b);
+}
+
+static void batch(void) {
+    unsigned scenes = 0;
+    for (unsigned wrap = 0; wrap < 2; ++wrap) for (unsigned thumb = 0; thumb < 2; ++thumb)
+    for (unsigned halt = 0; halt < 2; ++halt) for (unsigned early = 0; early < 2; ++early) {
+        struct CupidGBA* cores[] = {machine(thumb, wrap), machine(thumb, wrap)};
+        const uint64_t limit = 1200, stopAt = early ? 17 : limit;
+        struct Boundaries p[2] = {{.stopAt = stopAt}, {.stopAt = stopAt}};
+        struct Observations seen[2] = {{0}, {0}};
+        for (unsigned i = 0; i < 2; ++i) {
+            p[i].records = calloc(stopAt + 1, sizeof(*p[i].records)); CHECK(p[i].records);
+            cores[i]->cpu.instructionObserver = observe;
+            cores[i]->cpu.instructionObserverContext = &seen[i];
+            if (halt) request_halt(cores[i]);
+        }
+        CHECK(boundary(cores[0], 0, &p[0]));
+        uint64_t steps;
+        for (steps = 1; steps <= limit; ++steps) {
+            cupid_gba_step(cores[0]);
+            if (!boundary(cores[0], steps, &p[0])) break;
+        }
+        CHECK(steps == stopAt);
+        CHECK(cupid_gba_run_steps(cores[1], limit, boundary, &p[1]) == steps);
+        CHECK(p[0].count == p[1].count && p[0].frames == p[1].frames);
+        CHECK(!memcmp(p[0].records, p[1].records, p[0].count * sizeof(*p[0].records)));
+        CHECK(!memcmp(&seen[0], &seen[1], sizeof(seen[0])));
+        CHECK(!memcmp(cores[0]->memory.ewram, cores[1]->memory.ewram, GBA_SIZE_EWRAM));
+        CHECK(!memcmp(cores[0]->memory.iwram, cores[1]->memory.iwram, GBA_SIZE_IWRAM));
+        CHECK(!memcmp(cores[0]->memory.io, cores[1]->memory.io, sizeof(cores[0]->memory.io)));
+        CHECK(!memcmp(cores[0]->video.vram, cores[1]->video.vram, GBA_SIZE_VRAM));
+        CHECK(!memcmp(cores[0]->video.outputBuffer, cores[1]->video.outputBuffer, 240 * 160 * sizeof(uint32_t)));
+        same_queue(cores[0]->timing.root, cores[1]->timing.root);
+        same_queue(cores[0]->timing.reroot, cores[1]->timing.reroot);
+        if (halt && !early) CHECK(p[0].frames && seen[0].branch == 1 && seen[0].add == 1 && seen[0].store == 1);
+        for (unsigned i = 0; i < 2; ++i) { free(p[i].records); destroy(cores[i]); }
+        ++scenes;
+    }
+    CHECK(scenes == 16);
+    struct CupidGBA* gba = machine(0, 0);
+    struct BoundaryRecord records[2];
+    memset(records, 0, sizeof(records));
+    struct Boundaries p = {.records = records, .stopAt = 1};
+    uint64_t before = cupid_timing_global_time(&gba->timing);
+    CHECK(cupid_gba_run_steps(gba, 0, boundary, &p) == 0);
+    CHECK(!p.count && !gba->execution && cupid_timing_global_time(&gba->timing) == before);
+    request_halt(gba);
+    CHECK(cupid_gba_run_steps(gba, 1, boundary, &p) == 1);
+    CHECK(gba->cpuInstructionPending && gba->cpu.halted);
+    /* The returned callback storage may die while the CPU fetch remains live.
+     * A different request resumes that fetch without reusing its callback. */
+    cupid_gba_run_frame(gba);
+    CHECK(p.count == 2 && gba->cpu.halted && gba->frameReady);
+    CHECK(cupid_gba_run_steps(gba, 3, NULL, NULL) == 3);
+    CHECK(p.count == 2 && gba->cpuInstructionPending);
+    cupid_gba_reset(gba);
+    cupid_gba_stop(gba);
+    before = cupid_timing_global_time(&gba->timing);
+    CHECK(cupid_gba_run_steps(gba, 10, NULL, NULL) == 0);
+    CHECK(gba->stopped && cupid_timing_global_time(&gba->timing) == before);
+    destroy(gba);
+    printf("Verified %u batched/repeated step boundary sequences, early stops, frame/input/wake publication, queues and cancellation\n", scenes);
+}
+
 int main(int argc, char** argv) {
     CHECK(argc == 2);
     if (!strcmp(argv[1], "frames")) frames();
@@ -207,6 +321,7 @@ int main(int argc, char** argv) {
     else if (!strcmp(argv[1], "wake")) wake();
     else if (!strcmp(argv[1], "lifetime")) lifetime();
     else if (!strcmp(argv[1], "ready-wake")) ready_wake();
+    else if (!strcmp(argv[1], "batch")) batch();
     else if (!strcmp(argv[1], "cable")) cable();
     else return 2;
     printf("PASS suspended execution %s\n", argv[1]);
