@@ -15,12 +15,12 @@ static void observe(const struct CupidARM* cpu, void* argument) {
     if (pc == TARGET + width) ++seen->store;
 }
 
-static struct CupidGBA* machine(unsigned thumb, unsigned wrap) {
+static struct CupidGBA* machine_at(unsigned thumb, unsigned wrap, uint32_t peripheralClocks) {
     struct CupidGBA* gba = calloc(1, sizeof(*gba)); CHECK(gba);
     cupid_gba_create(gba);
     cupid_gba_reset(gba);
     cupid_timing_clear(&gba->timing);
-    const uint64_t epoch = wrap ? UINT32_MAX - UINT64_C(3) : 0;
+    const uint64_t epoch = wrap ? UINT32_MAX - UINT64_C(3) - peripheralClocks : 0;
     gba->timing.globalCycles = epoch;
     gba->timing.masterCycles = (uint32_t)epoch;
     cupid_video_reset(&gba->video);
@@ -31,6 +31,9 @@ static struct CupidGBA* machine(unsigned thumb, unsigned wrap) {
     gba->audio.sampleOrigin = gba->audio.lastSample = epoch;
     gba->audio.nextSample = epoch + 512;
     cupid_irq_init(gba);
+    if (peripheralClocks) cupid_timing_tick(&gba->timing, (int32_t)peripheralClocks);
+    CHECK(gba->timing.globalCycles == epoch + peripheralClocks);
+    CHECK(!gba->frameReady && !gba->video.frameCounter);
     if (thumb) {
         const uint16_t branch[] = {0xE01E, 0x46C0}; /* b target; nop */
         const uint16_t target[] = {0x3701, 0x6037, 0xE7FE}; /* add; str; b . */
@@ -52,6 +55,10 @@ static struct CupidGBA* machine(unsigned thumb, unsigned wrap) {
     gba->cpu.cpsr.i = 1;
     gba->cpu.irqDisableLatch = true;
     return gba;
+}
+
+static struct CupidGBA* machine(unsigned thumb, unsigned wrap) {
+    return machine_at(thumb, wrap, 0);
 }
 
 static void request_halt(struct CupidGBA* gba) {
@@ -216,6 +223,7 @@ struct Boundaries {
     struct BoundaryRecord* records;
     uint64_t count, stopAt;
     unsigned frames;
+    bool frameBeforeWake;
 };
 
 static bool boundary(struct CupidGBA* gba, uint64_t step, void* argument) {
@@ -235,6 +243,7 @@ static bool boundary(struct CupidGBA* gba, uint64_t step, void* argument) {
     r->frameReady = gba->frameReady;
     if (gba->frameReady) { ++p->frames; gba->frameReady = false; }
     if (step == 1000) {
+        if (p->frameBeforeWake) CHECK(p->frames);
         gba->keysActive = 3;
         cupid_io_write(gba, REG_IE, IRQ_KEYPAD);
         cupid_raise_irq(gba, IRQ_KEYPAD, 0);
@@ -256,9 +265,16 @@ static void batch(void) {
     unsigned scenes = 0;
     for (unsigned wrap = 0; wrap < 2; ++wrap) for (unsigned thumb = 0; thumb < 2; ++thumb)
     for (unsigned halt = 0; halt < 2; ++halt) for (unsigned early = 0; early < 2; ++early) {
-        struct CupidGBA* cores[] = {machine(thumb, wrap), machine(thumb, wrap)};
+        /* Start after eight peripheral scanlines so frame publication fits
+         * before the wake input within the fixed step budget. The initial
+         * epoch moves back by that pre-roll, keeping the observed sequence
+         * at the same 32-bit wrap anchor. No CPU instruction runs here. */
+        const uint32_t peripheralClocks = 8 * VIDEO_HORIZONTAL_LENGTH;
+        struct CupidGBA* cores[] = {machine_at(thumb, wrap, peripheralClocks),
+            machine_at(thumb, wrap, peripheralClocks)};
         const uint64_t limit = 1200, stopAt = early ? 17 : limit;
-        struct Boundaries p[2] = {{.stopAt = stopAt}, {.stopAt = stopAt}};
+        struct Boundaries p[2] = {{.stopAt = stopAt, .frameBeforeWake = halt && !early},
+            {.stopAt = stopAt, .frameBeforeWake = halt && !early}};
         struct Observations seen[2] = {{0}, {0}};
         for (unsigned i = 0; i < 2; ++i) {
             p[i].records = calloc(stopAt + 1, sizeof(*p[i].records)); CHECK(p[i].records);
