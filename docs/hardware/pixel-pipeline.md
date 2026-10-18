@@ -166,11 +166,44 @@ endpoints, coefficient saturation and red/blue symmetry. Scanout tests retain
 the extra green bit through direct bitmap, background palette, backdrop and
 semi-transparent OBJ inputs. These qualify the implemented numerical model;
 direct hardware captures for fractional rounding and bit 15 remain open.
-Precise mosaic changes at counter boundaries and reset or BIOS-skipped phases
-also remain open. The ten selections do not qualify every
+Physical mosaic sampling edges, vertical size changes, and reset or BIOS-skipped
+phases also remain open. Horizontal size writes have the logical qualification
+described below. The ten selections do not qualify every
 scroll phase, layer combination, OBJ mode or contention pattern. These limits remain under
 [issue 16](https://github.com/cupidthecat/cupidgba/issues/16) and the complete
 PPU audit under [issue 1](https://github.com/cupidthecat/cupidgba/issues/1).
+
+## Horizontal mosaic writes
+
+A MOSAIC write changes the selected horizontal width without clearing the
+elapsed background or OBJ group counter. Each output pixel increments its
+counter; equality with the selected width starts the next group. If a write
+shortens the width past the current count, that terminal count has already
+passed. The group continues through the remaining line. Both horizontal
+counters reset at the next line start. Vertical mosaic retains its separate
+four-bit line counters and fetch latches.
+
+Layer selection, palette reads, transparency and OBJ priority retain their
+ordinary phases. Keeping a group does not freeze the whole renderer or defer
+register and memory writes. This is the selected logical counter policy;
+these software observations do not supply a physical capture of a mid-line
+register strobe.
+
+Thirty-two `gba.mosaic-horizontal-*` groups cover all sixteen starting and
+replacement widths at twenty-three clock positions for backgrounds and opaque
+sprites. The 11,776 scenes use an owned asymmetric one-hot texture. Fixed
+expected geometry checks every pixel of the written line and the following
+line, with both bulk and one-clock dispatch: 47,104 complete scanlines and
+11,304,960 pixel comparisons per profile. Counter observations also distinguish
+a retained group from an artificial wrap at sixteen. The following line must
+match the stable replacement width after both counters reset.
+
+The initial Windows controls compile the same fixture against the preceding
+core with its matching headers. Both width-one groups pass; all thirty groups
+that can shorten an active period reject the preceding retained-counter state.
+Existing raster, color, window, object, blanking and bus checks remain required.
+The geometry corpus does not qualify LCD color response, vertical mosaic
+changes, every sprite-priority interaction, or physical reset phase.
 
 ## Host work between observable clocks
 
@@ -201,8 +234,11 @@ and framebuffer state in 2,976 scenes. It covers every mosaic width and phase,
 shortened periods, window boundaries, retained latches, clipped intervals,
 later layer activation and clock-wrap fallbacks. Another 1,280 scenes compare
 ordinary observed clocks with eligible quiet clocks, including partial word
-visibility and the final CPU-ready edge. Both groups also retain equal complete
-results against a freshly compiled preceding implementation with its matching
-headers. These checks establish state equivalence for the covered cases.
+visibility and the final CPU-ready edge. The earlier `fb55cab` checkpoint also
+compared both groups with freshly compiled preceding cores and matching
+headers. Those archived comparisons apply to their recorded horizontal-counter
+policy. Current blank-scanout checks compare complete bulk and one-clock state
+under the retained-counter policy; the fixed mosaic geometry above supplies
+its separate before/current qualification.
 The original unoptimized save-reboot deadline remains a qualification failure;
 the broader PPU acceptance limits above remain open.

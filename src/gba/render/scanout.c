@@ -88,8 +88,13 @@ static void publish_pixel(struct CupidVideo* v, unsigned x, uint32_t color) {
     uint16_t mosaic = v->mosaic;
     if (bgPhase == (unsigned)MOSAIC_BG_H(mosaic) + 1) bgPhase = 0;
     if (objPhase == (unsigned)MOSAIC_OBJ_H(mosaic) + 1) objPhase = 0;
-    p->bgMosaicX = bgPhase & 15;
-    p->objMosaicX = objPhase & 15;
+    /* A horizontal size write retains the elapsed group counter. If the
+     * new terminal count has already passed, that group continues through
+     * the rest of this line; line start resets the counter. Layer selection,
+     * palette reads and OBJ priority still run at their ordinary phases.
+     * Vertical mosaic uses its separate four-bit line counter. */
+    p->bgMosaicX = bgPhase;
+    p->objMosaicX = objPhase;
 }
 
 void cupid_pixel_merge(struct CupidVideo* v, unsigned cycle, uint64_t time) {
@@ -278,14 +283,9 @@ static void sync_blank_objects(struct CupidVideo* v, unsigned first, unsigned en
 }
 
 static unsigned advance_mosaic(unsigned phase, unsigned width, unsigned count) {
-    /* A register write can leave the phase above its new width. It first
-     * wraps in the four-bit counter, then resumes the selected period. */
-    if (phase >= width) {
-        unsigned untilWrap = 16 - phase;
-        if (count < untilWrap) return (phase + count) & 15;
-        count -= untilWrap;
-        phase = 0;
-    }
+    /* Only equality ends a horizontal group. A shortened width must not
+     * invent another match by wrapping a retained elapsed counter. */
+    if (phase >= width) return phase + count;
     return (phase + count) % width;
 }
 
