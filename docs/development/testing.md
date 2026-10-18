@@ -87,6 +87,10 @@ replacement. A 32-case reboot group retains every captured operation and its
 original deadline through ARM/Thumb HardReset at four clock epochs, including
 signed/unsigned wrap. Entry is observed after each step return inside a batch,
 with the original 500,000-step cap per scene. Count zero cannot complete a reboot.
+`-DCUPID_TEST_JOBS=2` runs its independent ARM and Thumb scenes in two isolated
+processes. The worker checker requires every ordered case and both completed
+worker summaries. The default uses the full serial group. CI selects two workers
+for the unoptimized native build; the whole group retains its ten-second limit.
 An owned ARM driver also polls through the default byte-program
 interval from IWRAM and ROM. Synthetic operation durations separate scheduler correctness
 from chip calibration. Each group retains a ten-second deadline; see

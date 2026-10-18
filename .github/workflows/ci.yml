@@ -90,6 +90,7 @@ jobs:
           cmake -S . -B build-debug -DCMAKE_C_COMPILER=clang \
             -DCMAKE_BUILD_TYPE=Debug -DCUPID_SANITIZERS=ON \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DCUPID_TEST_JOBS=2 \
             -DCUPID_TEST_ROM_DIR=${{ github.workspace }}/.local-research/test-roms
           cmake --build build-debug --parallel 2
           cat build-debug/CMakeFiles/cupid_core.dir/flags.make
