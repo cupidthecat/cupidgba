@@ -102,6 +102,11 @@ struct CupidGBA {
     bool stopped;        /**< System clock is frozen until an eligible external IRQ */
     bool haltIRQSample;  /**< IRQ line before the HALT acceptance clock */
     bool haltIRQSampleValid;
+    bool haltTimed;
+    struct CupidTimingEvent haltEvent;
+    struct CupidExecution* execution; /**< Same-thread suspended CPU stack */
+    bool cpuInstructionPending; /**< A bus phase remains inside an unfinished step */
+    bool externalExecution; /**< A cable owns the CPU's cooperative stack */
     uint64_t intervalOvershoot; /**< Completed-step clocks charged to the next paced interval */
     uint32_t biosStall;  /**< Extra stall cycles added by BIOS reads */
     uint32_t dmaPC;      /**< PC snapshot when DMA started */
@@ -132,6 +137,9 @@ void cupid_gba_reset(struct CupidGBA* gba);
 void cupid_gba_destroy(struct CupidGBA* gba);
 void cupid_gba_skip_bios(struct CupidGBA* gba);
 void cupid_gba_halt(struct CupidGBA* gba);
+/* Timed HALTCNT acceptance is deferred to the next completed CPU clock. */
+void cupid_gba_request_halt(struct CupidGBA* gba);
+void cupid_gba_wait_halt(struct CupidGBA* gba);
 void cupid_gba_stop(struct CupidGBA* gba);
 void cupid_gba_wake_stop(struct CupidGBA* gba, enum CupidIRQ sources);
 /* Consume explicit elapsed clocks in STOP, returning early at an eligible wake.
@@ -141,14 +149,28 @@ uint64_t cupid_gba_advance_stopped_time(struct CupidGBA* gba, uint64_t clocks);
 /** Test and fire keypad IRQ based on KEYCNT (call after key state changes) */
 void cupid_gba_test_keypad_irq(struct CupidGBA* gba);
 
-/** Run to the next frame, or return while the system clock is stopped. */
+/* Run to the next frame, or return while the system clock is stopped. HALT can
+ * retain an unfinished CPU fetch across this call and subsequent run calls. */
 void cupid_gba_run_frame(struct CupidGBA* gba);
 /* Run a paced interval including RTC time in STOP. A CPU step can finish beyond
  * its endpoint; the next interval consumes that overshoot before running again. */
 void cupid_gba_run_interval(struct CupidGBA* gba, uint32_t clocks);
 
-/** Run a single CPU step + process events */
+/* Complete one CPU step, or return at a halted CPU's next peripheral boundary.
+ * Resuming retains an unfinished instruction; its observer and side effects
+ * are not repeated. Run calls and subsequent reset/destruction stay on the
+ * thread that first runs this core, until reset releases its stack. */
 void cupid_gba_step(struct CupidGBA* gba);
+
+/* Run at most limit equivalent step boundaries without returning to the host
+ * stack after each one. This counts HALT/peripheral returns as ordinary step
+ * calls do, and stops when STOP freezes the clock. The optional callback runs
+ * at count zero and after each step, including the final one; false stops.
+ * It may inspect state and update input between steps, but must not reset,
+ * destroy or run cores, or otherwise advance emulated time. A zero limit
+ * calls neither the callback nor the CPU. The returned count excludes zero. */
+uint64_t cupid_gba_run_steps(struct CupidGBA* gba, uint64_t limit,
+    bool (*boundary)(struct CupidGBA*, uint64_t steps, void*), void* context);
 
 /** Process events (video, audio, timers, DMA, IRQ) after CPU steps */
 void cupid_gba_process_events(struct CupidGBA* gba);

@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "cupid/gba.h"
+#include "cupid/isa-inlines.h"
 #include "../test.h"
 
 static struct CupidGBA* machine(uint64_t clock) {
@@ -108,23 +109,29 @@ static void queue_capacity_is_bounded_and_reset_clears_pending_state(void) {
         struct CupidPrefetch* unit = &gba->memory.prefetchUnit;
         fetch(gba, GBA_BASE_ROM0 + 0x100, width, false);
         idle(gba, 1000000);
-        CHECK(unit->count == 8 && unit->remaining == 0);
+        CHECK(unit->count == 8 && unit->remaining == 0 && unit->paused);
         CHECK(unit->tail - unit->head == 16);
         uint32_t first = unit->head;
         idle(gba, 1000000);
         CHECK(unit->count == 8 && unit->head == first);
         CHECK(fetch(gba, first, width, true) == 1);
         CHECK(unit->count == 8 - width / 2);
-        CHECK(unit->remaining == unit->duty - 1);
-        /* A full buffer cannot supply an unlimited stream at one clock per
-         * opcode: newly fetched opcodes still use the cartridge bandwidth. */
-        for (unsigned i = 1; i < 32; i++) {
-            uint64_t clocks = fetch(gba, first + i * width, width, true);
-            CHECK(unit->count <= 8);
-            if (i >= 16) CHECK(clocks == unit->duty * width / 2);
+        CHECK(unit->remaining == 0 && unit->paused);
+        /* Capacity stops the burst until every cached halfword drains. An
+         * idle interval after consuming one opcode must not refill that slot. */
+        idle(gba, 1000000);
+        CHECK(unit->count == 8 - width / 2 && unit->remaining == 0 && unit->paused);
+        for (unsigned offset = width; offset < 16; offset += width) {
+            CHECK(fetch(gba, first + offset, width, true) == 1);
+            CHECK(unit->remaining == 0 && unit->paused);
         }
+        CHECK(!unit->count);
+        CHECK(fetch(gba, first + 16, width, true) == (width == 4 ? 8 : 5));
+        CHECK(!unit->paused && !unit->count && unit->remaining == 3);
+        for (unsigned i = 1; i < 32; i++)
+            CHECK(fetch(gba, first + 16 + i * width, width, true) == unit->duty * width / 2);
         cupid_gba_reset(gba);
-        CHECK(!unit->active && !unit->busy && !unit->disabled && unit->count == 0);
+        CHECK(!unit->active && !unit->busy && !unit->disabled && !unit->paused && !unit->engaged && unit->count == 0);
         CHECK(!gba->memory.prefetch);
         destroy(gba);
     }
@@ -191,7 +198,7 @@ static void partial_words_and_mixed_instruction_widths(void) {
             gba = machine(clocks[c]);
             CHECK(fetch(gba, GBA_BASE_ROM0 + 0x100, 4, false) == 8);
             idle(gba, elapsed);
-            CHECK(fetch(gba, GBA_BASE_ROM0 + 0x104, 2, false) == (elapsed < 3 ? 3 - elapsed : 1));
+            CHECK(fetch(gba, GBA_BASE_ROM0 + 0x104, 2, false) == (!elapsed ? 5 : (elapsed < 3 ? 3 - elapsed : 1)));
             CHECK(fetch(gba, GBA_BASE_ROM0 + 0x106, 2, true) == second_halfword[elapsed]);
             CHECK(gba->memory.prefetchUnit.head == GBA_BASE_ROM0 + 0x108);
             destroy(gba);
@@ -302,7 +309,8 @@ static void dma_clock_accounting_matches_late_and_punctual_dispatch(void) {
             const struct CupidPrefetch* a = &late->memory.prefetchUnit;
             const struct CupidPrefetch* b = &punctual->memory.prefetchUnit;
             CHECK(a->count == b->count && a->head == b->head && a->tail == b->tail);
-            CHECK(a->remaining == b->remaining && a->active == b->active && a->busy == b->busy);
+            CHECK(a->remaining == b->remaining && a->active == b->active && a->busy == b->busy &&
+                  a->paused == b->paused && a->engaged == b->engaged);
             CHECK(a->epoch == b->epoch);
             CHECK(late->memory.dma[3].busyUntil == punctual->memory.dma[3].busyUntil);
             CHECK(late->irqf == punctual->irqf && late->irq.line == punctual->irq.line);
@@ -336,10 +344,43 @@ static void dma_external_write_waits_for_completing_prefetch_halfword(void) {
     destroy(gba);
 }
 
+#include "prefetch-full-kernel.inc"
+
+static void only_started_oldest_reads_can_serve_refills(void) {
+    const uint64_t origins[] = {0, UINT32_MAX - 10u, UINT64_C(0x300000000)};
+    const uint32_t banks[] = {GBA_BASE_ROM0, GBA_BASE_ROM1, GBA_BASE_ROM2};
+    const unsigned sequential[] = {3, 5, 9};
+    for (unsigned clock = 0; clock < 3; clock++) for (unsigned bank = 0; bank < 3; bank++) {
+        struct CupidGBA* gba = machine(origins[clock]);
+        struct CupidPrefetch* unit = &gba->memory.prefetchUnit;
+        const uint32_t base = banks[bank] + 0x100;
+        CHECK(fetch(gba, base, 2, false) == 5 && !unit->engaged);
+        CHECK(fetch(gba, base + 2, 2, true) == sequential[bank] && !unit->engaged);
+        /* A sequential CPU request can continue the burst without an idle
+         * interval. A branch cannot join a background read that never began. */
+        uint64_t refillClocks = fetch(gba, base + 4, 2, false);
+        if (refillClocks != 5)
+            fprintf(stderr, "Unstarted refill clocks: observed %u, expected 5\n", (unsigned)refillClocks);
+        CHECK(refillClocks == 5 && !unit->engaged);
+        idle(gba, 1);
+        CHECK(unit->engaged && !unit->count);
+        CHECK(fetch(gba, base + 6, 2, false) == sequential[bank] - 1);
+        idle(gba, 4 * sequential[bank]);
+        CHECK(unit->count == 4);
+        uint32_t tail = unit->tail;
+        /* Skipping older FIFO entries starts a new access even when the new
+         * target happens to be the word currently being fetched. */
+        CHECK(fetch(gba, tail, 2, false) == 5 && !unit->engaged && !unit->count);
+        destroy(gba);
+    }
+}
+
 int main(void) {
     RUN(wait_controls_before_fetch_and_after_invalid_jump);
     RUN(initial_fetch_pending_completion_and_cache_consumption);
     RUN(queue_capacity_is_bounded_and_reset_clears_pending_state);
+    RUN(full_queue_rom_data_flush_kernel);
+    RUN(only_started_oldest_reads_can_serve_refills);
     RUN(cpu_ram_data_fills_and_gamepak_data_cancels);
     RUN(completing_halfword_arbitration_and_branch_width_changes);
     RUN(partial_words_and_mixed_instruction_widths);

@@ -55,12 +55,20 @@ static void begin_gpio_word(struct CupidARM* cpu, uint32_t address, int* cycles)
     const unsigned wait = sequential ? memory->waitstatesSeq16[region] : memory->waitstatesNonseq16[region];
     memory->fetchNonseq = true;
     const unsigned penalty = cupid_prefetch_before_data(gba, address);
-    cupid_bus_advance(cpu, wait + 1 + penalty, true);
+    const unsigned low = wait + 1 + penalty;
+    const unsigned high = (unsigned)memory->waitstatesSeq16[region] + 1;
+    /* Two cartridge strobes complete one CPU word request. Keep the IRQ
+     * synchronizer held through the low strobe and sample only at the end. */
+    cupid_bus_begin_transfer(cpu, low + high, true);
+    cupid_bus_advance_part(cpu, low);
 }
 
 static void next_gpio_halfword(struct CupidARM* cpu, uint32_t address) {
     struct CupidGBA* gba = cpu->master;
-    cupid_bus_advance(cpu, (unsigned)gba->memory.waitstatesSeq16[address >> GBA_BASE_OFFSET] + 1, true);
+    cupid_bus_advance_part(cpu, (unsigned)gba->memory.waitstatesSeq16[address >> GBA_BASE_OFFSET] + 1);
+    /* The completed word releases the register read-port conflict before a
+     * following STM word samples its source register. */
+    CupidRegisterDataPhase(cpu);
 }
 
 /* Observe MMIO at the end of its data-bus cycle. The instruction's accumulated
@@ -1181,9 +1189,10 @@ uint32_t cupid_memory_store_multiple(struct CupidARM* cpu, uint32_t address,
 }
 
 /**
- * @brief Apply memory stall adjustment for wait cycles.
+ * @brief Retain internal clocks and mark the following opcode request.
  *
- * Currently pass-through; prefetch-buffer effects are not yet modeled here.
+ * Timed internal cycles request a nonsequential fetch. The prefetch unit
+ * separately supplies matching buffered or in-flight cartridge halfwords.
  */
 int32_t cupid_memory_stall(struct CupidARM* cpu, int32_t wait) {
     if (cpu->memory.timed && wait > 0) {

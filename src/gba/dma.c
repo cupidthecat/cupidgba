@@ -11,9 +11,13 @@ static uint32_t transfer_count(const struct CupidDMA* dma) {
 }
 
 static int next_channel(const struct CupidMemory* memory) {
-    for (int ch = 0; ch < GBA_DMA_COUNT; ch++) {
-        if (memory->dma[ch].enable && memory->dma[ch].ready) return ch;
-    }
+    _Static_assert(GBA_DMA_COUNT == 4, "DMA arbitration requires four channels");
+    /* Hardware priority is fixed. Read the live channel flags directly so
+     * arbitration needs neither an idle-channel loop nor cached readiness. */
+    if (memory->dma[0].enable && memory->dma[0].ready) return 0;
+    if (memory->dma[1].enable && memory->dma[1].ready) return 1;
+    if (memory->dma[2].enable && memory->dma[2].ready) return 2;
+    if (memory->dma[3].enable && memory->dma[3].ready) return 3;
     return -1;
 }
 
@@ -36,10 +40,13 @@ static unsigned access_cycles(struct CupidMemory* memory, struct CupidDMA* dma,
         dma->externalSeen = true;
     }
     if (region >= GBA_REGION_ROM0 && region <= GBA_REGION_ROM2_EX) {
-        /* Sequential strobes advance the cartridge counter even on writes.
-         * A source/destination crossover continues that same bus burst. */
+        /* The programmed address predicts the next access's page restart.
+         * Fixed and decrementing pointers retain that delayed boundary edge.
+         * Nonsequential strobes latch an address; sequential reads and writes
+         * advance the shared counter, including source/destination crossovers. */
+        if (memory->dmaROMBoundary) sequential = false;
+        memory->dmaROMBoundary = !((address + (dma->transferWord ? 4 : 2)) & 0x1FFFF);
         if (!sequential) memory->dmaROMAddress = address & 0x01FFFFFF;
-        if (!(memory->dmaROMAddress & 0x1FFFF)) sequential = false;
         bool eeprom = cupid_memory_is_eeprom_address(memory, address) &&
             (memory->savedata.type == SAVE_EEPROM || memory->savedata.type == SAVE_EEPROM512);
         if (!eeprom) dma->accessAddress = (address & 0xFE000000) | memory->dmaROMAddress;
@@ -71,10 +78,9 @@ static void read_next(struct CupidGBA* gba, uint64_t when) {
     dma->transferWord = dma->wordTransfer || dma->fifo;
     int width = dma->transferWord ? 4 : 2;
     static const int offsets[] = {1, -1, 0, 0};
+    /* The DMA pointer keeps its programmed step. Sequential ROM strobes
+     * use the separate cartridge counter in access_cycles(). */
     dma->sourceOffset = offsets[dma->srcControl] * width;
-    if (dma->nextSource >= GBA_BASE_ROM0 && dma->nextSource < GBA_BASE_SRAM) {
-        dma->sourceOffset = width;
-    }
     dma->destOffset = dma->fifo ? 0 : (dma->destControl == 3 ? width
         : offsets[dma->destControl] * width);
     dma->nextSource &= ~(uint32_t)(width - 1);
@@ -82,16 +88,30 @@ static void read_next(struct CupidGBA* gba, uint64_t when) {
     phase_at(gba, DMA_READ, when + access_cycles(memory, dma, dma->nextSource, true));
 }
 
-void cupid_dma_kick(struct CupidGBA* gba, uint64_t timestamp) {
+static void begin_transfer(struct CupidGBA* gba, uint64_t timestamp) {
     struct CupidMemory* memory = &gba->memory;
-    if (memory->dmaRunning || memory->busBusy || memory->busLocked ||
-        next_channel(memory) < 0) return;
     memory->dmaRunning = true;
     memory->activeDMA = -1;
     memory->fetchNonseq = true;
     gba->cpuBlocked = true;
     gba->dmaPC = gba->cpu.gprs[ARM_PC];
     phase_at(gba, DMA_HEAD, timestamp + 1);
+}
+
+void cupid_dma_kick(struct CupidGBA* gba, uint64_t timestamp) {
+    const struct CupidMemory* memory = &gba->memory;
+    if (memory->dmaRunning || memory->busBusy || memory->busLocked ||
+        next_channel(memory) < 0) return;
+    begin_transfer(gba, timestamp);
+}
+
+void cupid_dma_poll(struct CupidGBA* gba) {
+    const struct CupidMemory* memory = &gba->memory;
+    if (memory->dmaRunning || memory->busBusy || memory->busLocked ||
+        next_channel(memory) < 0) return;
+    /* The clock getter has no side effects. Idle CPU strobes need neither a
+     * timestamp nor a queued event; accepted transfers keep the same clock. */
+    begin_transfer(gba, cupid_timing_global_time(&gba->timing));
 }
 
 static void activation_callback(struct CupidTiming* timing, void* context, uint32_t late) {
@@ -243,6 +263,7 @@ void cupid_dma_reset(struct CupidGBA* gba) {
     gba->memory.dmaRunning = false;
     gba->memory.dmaBus = 0;
     gba->memory.dmaROMAddress = 0;
+    gba->memory.dmaROMBoundary = false;
     gba->memory.lastWasDMA = false;
     gba->cpuBlocked = false;
 }
@@ -285,9 +306,6 @@ void cupid_dma_write_cnt(struct CupidGBA* gba, int ch, uint16_t value) {
         dma->nextCount = dma->fifo ? 4 : (int32_t)transfer_count(dma);
         static const int offsets[] = {1, -1, 0, 0};
         dma->sourceOffset = offsets[dma->srcControl] * (int)width;
-        if (dma->source >= GBA_BASE_ROM0 && dma->source < GBA_BASE_SRAM) {
-            dma->sourceOffset = (int)width;
-        }
         dma->destOffset = dma->fifo ? 0 : (dma->destControl == 3 ? (int)width
             : offsets[dma->destControl] * (int)width);
         if (dma->timing == DMA_TIMING_NOW) cupid_dma_transfer(gba, ch);

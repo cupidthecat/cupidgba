@@ -1,6 +1,6 @@
 # Building
 
-Local console sessions can use `libboost-context-dev` on Linux for native
+CPU execution and local console sessions can use `libboost-context-dev` on Linux for native
 stack switching. CMake detects it without adding C++ source to the project.
 Without it, or with `CUPID_FAST_CONTEXT=OFF`, the portable backend remains
 available. Windows uses its native fiber API. See [local sessions](../hardware/serial/local-session.md).

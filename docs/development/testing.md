@@ -1,5 +1,77 @@
 # Testing
 
+The `runner.observations` and three `arm.observer-*` groups require actual
+instruction-issue observations rather than a zero terminal alone. They use
+owned ARM/Thumb streams with deliberately skipped failure writes, ordered
+and repeated observations, malformed inputs, IRQ/HALT/STOP boundaries and
+clock wrap. Each retains a ten-second deadline. All twenty prefetch groups
+pin their 84 original timing comparison instruction addresses, bytes, modes
+and complete register values on each BIOS path. Source inputs, comparisons
+and run limits remain unchanged. See
+[prefetch qualification](../hardware/prefetch.md).
+The bank group observes a user-bank load and both following operand phases,
+checks the original bank values and results, and compares observed execution
+with execution without the hook across clock wrap. Observation runs before
+operand selection and must preserve the pending phase.
+
+Four `gba.prefetch-boundary-*` groups compare 37,632 boundary/miss/cache scene
+triples across every ROM window and wait setting, FIFO occupancy and in-flight
+phase, full/paused queues, ARM/Thumb request types and four clock epochs.
+Owned mapped opcode values, logical ARM A1, exact transfer clocks and final
+FIFO state are required. All four reject the preceding implementation; each
+keeps a thirty-second deadline. Original cartridge inputs and comparisons
+remain unchanged.
+
+Three `arm.user-bank-gpio-*` groups require 15,360 paired RAM/cartridge-port
+scenes after actual `LDM^` and `STM` instructions. They cover every adjacent
+banked-register pair in the five privileged modes, all block addressing modes
+and writeback choices, each cartridge window, wait controls, prefetch and
+clock wrap. The first stored word retains the register read-port conflict;
+the next uses the current bank after the word's two strobes complete. Every
+group has a thirty-second deadline and rejects the preceding implementation.
+
+`CUPID_CPU_INTERACTION_PROBE_DIR` adds sixteen original CPU/DMA/IRQ cartridges
+from a local input root. `CUPID_TEST_BIOS` repeats them with the external image.
+Every run checks the cartridge digest, its original encoded comparison values
+in issue order, the pre-display R12 result and the original terminal. The
+twenty comparison instructions also retain their CPU mode and opcode checks.
+The 360-frame, 150-million-step and 90-second process guards are unchanged;
+CTest allows 100 seconds. These cases expose unresolved IRQ return-address,
+HALT/timer and initial display-phase behavior. They remain enabled when the
+input root is supplied. See [CPU/DMA/IRQ interactions](../hardware/cpu/dma-irq-interactions.md).
+
+Four `gba.irq-clock-*` timing groups require 2,056 complete waveform clocks through
+stretched memory requests and real DMA. They check both fetch widths, all
+cartridge wait windows, RAM wait controls, CPU load/store data, repeated input
+pulses between ready edges, retained captured stages, internal multiply cycles,
+reset and clock wrap. IF and HALT-availability histories keep their original
+system-clock deadlines. A preserved preceding core fails all four groups.
+Each group has a ten-second deadline. The existing music-progress image and
+chronology expectations remain unchanged.
+Three additional `gba.irq-clock-gpio-*` groups compare 11,952 complete paired
+ordinary-ROM/GPIO word-request waveforms and 388,032 clock observations for
+fetches, loads and stores. Both cartridge strobes retain their original
+deadlines, while the CPU synchronizer advances at the complete request's final
+ready edge. Each group keeps a ten-second deadline. See
+[CPU/DMA/IRQ interactions](../hardware/cpu/dma-irq-interactions.md).
+The observer group independently rejects bypassed comparisons, wrong opcodes
+and modes, and missing visits in ARM/Thumb streams with zero result registers.
+Guarded runs match boundary-only observation runs for general and banked
+registers, CPSR, the instruction pipeline, EWRAM, IWRAM, I/O and elapsed clocks.
+Both paths use the issue hook; this checks those fields rather than full-state
+equivalence with execution without a hook.
+
+With `CUPID_HALT_PROBE_DIR` and `CUPID_TEST_BIOS`, twelve additional
+`rom.irq-probe-*-external` cases require their 46 original comparison outcomes,
+CPU modes, opcodes, pre-display results and actually issued terminals. Original
+source and cartridge bytes are pinned; a byte-identical local rebuild locates
+the observations without changing the code. One input has a wide conditional
+guard encoding that is not a conditional branch on ARM7TDMI. Its observer
+checks the preceding comparison's Z flag at the actual issued halfword, so the
+guest cannot silently skip failure recording. The slow-return case passes;
+the `0xF4` versus `0xF5` comparison remains a failure. The original execution
+guards and 90-second process deadline remain, with 100 seconds in CTest.
+
 `CUPID_EEPROM_PROBE_ROM` adds a checksum-verified local EEPROM software corpus.
 Its ready-polling and 1,023-block stress loop must reach the original terminal
 and complete passing result pixels. `CUPID_TEST_BIOS` adds the same check after
@@ -13,7 +85,13 @@ deadlines, polling, bus strobes, timer/DMA/IRQ chronology, clock wrap, STOP,
 reset, profile validation and complete save-file images through failures and
 replacement. A 32-case reboot group retains every captured operation and its
 original deadline through ARM/Thumb HardReset at four clock epochs, including
-signed/unsigned wrap. An owned ARM driver also polls through the default byte-program
+signed/unsigned wrap. Entry is observed after each step return inside a batch,
+with the original 500,000-step cap per scene. Count zero cannot complete a reboot.
+`-DCUPID_TEST_JOBS=2` runs its independent ARM and Thumb scenes in two isolated
+processes. The worker checker requires every ordered case and both completed
+worker summaries. The default uses the full serial group. CI selects two workers
+for the unoptimized native build; the whole group retains its ten-second limit.
+An owned ARM driver also polls through the default byte-program
 interval from IWRAM and ROM. Synthetic operation durations separate scheduler correctness
 from chip calibration. Each group retains a ten-second deadline; see
 [save programming](../hardware/cartridge/programming.md).
@@ -69,7 +147,15 @@ at `0x03001000` with the same ARMv4T binary-link flags as the UART driver and
 verify all 512 bytes with `tests/gba/serial/generate_cable_driver.py`.
 
 Hosted Linux qualification uses the explicit Ubuntu 24.04 release for GCC
-Release and Clang Debug with address/undefined-behavior sanitizers. This keeps
+Release and Clang Debug with address/undefined-behavior sanitizers. The complete
+Clang profile uses `-O1 -g`, matching local cartridge qualification and
+[AddressSanitizer's build guidance](https://clang.llvm.org/docs/AddressSanitizer.html#usage).
+A second default Debug sanitizer build runs every configured native ARM, core,
+GBA, platform and runner check without optimization. The complete profile
+retains all available cartridge cases, their original frame counts and process
+deadlines. Unoptimized full-cartridge runs timed out on
+slower hosted workers; those failures remain recorded rather than increasing
+their limits. Both compiler flag sets appear in the job log. This keeps
 an automatic `ubuntu-latest` release migration from changing the compiler,
 sanitizer and firmware-assembler baseline. Windows checks use GCC and SDL2.
 The Windows configure step selects the same Python interpreter used to fetch
@@ -93,7 +179,8 @@ for the nominal baud model and remaining physical qualification.
 The six `arm.user-bank-*` groups check 840 complete user-bank transfers, operand
 phases, bank ownership, ALU flags, memory and branch behavior, predicates,
 reset/IRQ entry and real DMA/timer progress across clock wrap. All retain
-ten-second deadlines. `CUPID_USER_BANK_PROBE_DIR` adds eight original local
+ten-second deadlines. `CUPID_USER_BANK_PROBE_DIR` names the local input root
+containing the `LDM` directory and adds eight original local
 cartridges, and `CUPID_TEST_BIOS` repeats them with the external image. The
 observer requires all 35 original failure guards, the FIQ pre-display result
 and the issued R0 terminal. Owned negative controls reject bypassed failure
@@ -107,6 +194,24 @@ rounds and two failing-input controls per BIOS path; `CUPID_TEST_BIOS` adds the
 external-image run. All retain ten-second deadlines. Hosted Clang also rebuilds
 the owned assembly fixture. See [JOY commands](../hardware/serial/joybus.md)
 for the peer synchronization contract and unmeasured electrical behavior.
+
+The `gba.dma-pages-halfword` and `gba.dma-pages-word` groups require 480 complete
+DMA page transactions across source modes, wait banks/profiles, clock wrap
+and dispatch granularity. Each keeps a ten-second deadline. The optional
+`CUPID_DMA_PROBE_DIR` points to the nine pinned original DMA cartridges.
+`CUPID_TEST_BIOS` repeats them with the external image. Both original result
+boundaries must pass. All nine external-image runs pass; seven built-in
+pause/preemption runs remain failing and registered. The independent
+`CUPID_BUS_PAGE_PROBE_ROM` passes all eighteen original CPU/DMA rows on each
+BIOS path. See [DMA timing](../hardware/dma.md) for qualification limits.
+
+At preceding head `55058c0d1f2a73bf0210a8377de23c49276d11e8`, the complete
+locally configured profile reports 463 passes and 11 failures out
+of 474 on Windows GCC and Linux Clang 18 Debug with address/undefined-behavior
+sanitizers. It retains all 454 preceding checks and adds two native groups and
+eighteen original DMA runs. The eleven failures are the seven built-in DMA
+cases above plus the Thumb-to-ARM and binary-only legacy prefetch cartridges
+on both BIOS paths. All remain enabled with their original inputs and guards.
 
 The sixteen `gba.bios-hard-reset-*` native groups require 1,512 observations of
 reset-prefix state, complete built-in startup, timer/DMA/IRQ chronology,
@@ -198,13 +303,28 @@ CPU regressions check block-transfer bus costs and the final load internal cycle
 DMA regressions check read/write phase boundaries, priority and preemption,
 CPU bus stalls, internal-cycle overlap, swap locking, masks, maximum counts,
 address stepping, repeat reloads, cancellation, FIFO requests, timed I/O and
-clock wrap. They compare late dispatch with advancing one clock at a time.
+clock wrap. Thirty-two additional cases check fixed ROM source pointers with
+sequential cartridge data, decrementing ROM-to-OAM transfers, exact completion
+clocks, both transfer widths, all three ROM banks and four clock anchors.
+They compare late dispatch with advancing one clock at a time.
 Prefetch regressions check pending/cached fetches, queue capacity and sustained
-bandwidth, fill/cancellation clocks, disable/restart behavior, partially buffered
+bandwidth, full-queue drain/nonsequential restart, an owned timed ROM-data
+flush kernel, fill/cancellation clocks, disable/restart behavior, partially buffered
 words, both instruction-width changes and BIOS/RAM exception returns,
 uncached page boundaries and DMA/timer/IRQ interactions across clock wrap.
 They also write wait controls before the first fetch, after a firmware reset
 and after an invalid jump, then require the configured costs on a valid fetch.
+`CUPID_PREFETCH_PROBE_DIR` points to the root containing the `prefetcher` and
+`timing` input subdirectories and enables all twenty unchanged cartridge groups;
+`CUPID_TEST_BIOS` adds their external-firmware comparisons. Each requires the
+original result before its display routine and at its terminal, a verified
+input digest and unchanged frame/instruction bounds. Nineteen groups have
+matching source; the additional legacy boundary cartridge has binary evidence
+only. The Thumb-to-ARM and legacy boundary failures remain registered.
+`CUPID_BUS_PAGE_PROBE_ROM` adds the eighteen-result CPU/DMA page-boundary
+cartridge and repeats it when `CUPID_TEST_BIOS` is set. Missing or failing
+console rows fail the check; current DMA decrement mismatches remain visible.
+See [prefetch](../hardware/prefetch.md).
 Music-frequency fixtures cover caller banks,
 fractional interpolation, upper-key clamps, source alignment/waits and live
 timer/DMA/IRQ progress, including late callbacks and clock wrap. A local
@@ -514,8 +634,8 @@ ctest --test-dir build-thread -R '^platform.audio$' --output-on-failure
 
 ThreadSanitizer and AddressSanitizer require separate build directories.
 
-`platform.context` checks local data across repeated cooperative yields, normal
-completion and cancellation. AddressSanitizer builds also require each live
+`platform.context` checks shared host ownership and local data across repeated
+cooperative yields, normal completion and cancellation. AddressSanitizer builds also require each live
 local buffer's boundary to remain poisoned after every return to its stack.
 The portable backend uses the sanitizer fiber interface and clears the generic
 stack-cleanup marker installed by `makecontext`; otherwise `swapcontext` can
@@ -526,9 +646,30 @@ portable backend locally:
 ```sh
 cmake -S . -B build-context-portable -DCMAKE_C_COMPILER=clang \
   -DCMAKE_BUILD_TYPE=Debug -DCUPID_SANITIZERS=ON -DCUPID_FAST_CONTEXT=OFF
-cmake --build build-context-portable --target test_context --parallel 2
-ctest --test-dir build-context-portable -R '^platform.context$' --output-on-failure
+cmake --build build-context-portable --target test_context test_execution --parallel 2
+ctest --test-dir build-context-portable -R '^platform.context$|^gba.execution-' --output-on-failure
 ```
+
+Seven `gba.execution-*` groups cover frames with no eligible wake, paced interval
+accounting, one-time instruction issue and stores after wake, reset and stack
+cancellation, shared standalone/cable ownership, and an already eligible wake.
+ARM and Thumb cases include scheduler wrap. Each group keeps a five-second
+deadline. The IRQ acceptance regression checks the write at clock two, the
+following CPU phase at clock three, and the original handler registers and
+return addresses at clocks eight or nine. Its former single-step observation
+combined the write with an empty internal clock; the retained fetch now occupies
+that clock. The cartridge operands, terminal observations and execution limits
+are unchanged.
+
+The batch group compares sixteen batched and repeated-step sequences in both
+CPU modes and across scheduler wrap. It checks every observed boundary, input
+and wake publication, complete registers, frame/audio counters, event queues
+and final memory/images. It also checks early return, zero work, STOP and
+resuming a different request after the callback has returned. The headless
+runner uses these boundaries to retain its original checkpoint, terminal,
+frame, step-count and elapsed-clock guards without switching host stacks
+after every ordinary step. Its instruction observer and all process deadlines
+remain unchanged.
 
 `gba.save-file` checks complete replacements and reloads at every supported
 capacity, inferred expansion, explicit type choices, invalid inputs, companion
@@ -572,6 +713,10 @@ native 240x160 framebuffer, written as a binary PPM file. Step and emulated-cycl
 budgets bound execution; `--expect-loop-register` reports the result register
 at an ARM branch to itself. `--terminal-address` restricts that observation to
 a specific instruction address.
+`--checkpoint-address ADDRESS` additionally records the selected register at
+the first ARM visit to that address. Success requires both the checkpoint and
+terminal values to be zero. An unvisited checkpoint fails, even if later guest
+code reports zero. `runner.checkpoint` exercises this with owned instructions.
 `--key-event FRAME MASK` changes the pressed-button mask at a completed frame
 boundary. Repeat it in frame order to provide a deterministic input sequence;
 a zero mask releases all buttons. This uses the same key state and keypad IRQ
@@ -630,6 +775,14 @@ It retains the 360-frame, 150-million-step and 90-second observation budgets.
 Native IRQ tests cover the acceptance and wake samples in ARM/Thumb mode,
 their saved return addresses and clock wrap.
 
+`gba.irq-pulses` requires queued enabled-request values to survive a later
+register update on the same publication clock. It checks complete signal
+histories through queue reuse and scheduler wrap, bulk versus single-clock
+dispatch, HALT resume in both CPU modes with either mask state, DMA
+acknowledgements, STOP and console reset. It keeps the existing IRQ stage
+delays and does not replace the original CPU/bus cartridge checks. See
+[interrupt ownership and remaining sampling limits](../hardware/interrupts.md).
+
 Set `CUPID_SAVED_STATUS_PROBE_DIR` to the private source directory containing
 `psr/psr.gba` to register the saved-status cartridge. `CUPID_TEST_BIOS` adds its
 external BIOS path. The checker verifies the pinned 2052-byte input, all five
@@ -678,6 +831,15 @@ year and weekday carry, coupling wire encoding to calendar advancement.
 twenty-second process limits and five-million-step/120-frame guards are fixed.
 These are explicit-entry drivers; they do not boot firmware or qualify partial
 or active-output date writes. See [RTC limits](../hardware/cartridge/rtc.md).
+
+`-DCUPID_TEST_JOBS=2` runs each calendar group's eight independent cartridge
+cases with at most two isolated processes. Each case has its own input, output
+and working directory. Completed records are reported in the original case
+order. Every calendar byte, header, terminal and negative-control result is
+checked. The whole group retains thirty seconds, and each process retains its
+twenty-second, five-million-step and 120-frame guards. The checker also accepts
+`--jobs 2` directly; its default remains serial. Clang's full sanitizer job uses
+two processes, while GCC and Windows keep the default serial coverage.
 
 `gba.rtc-parameters-component` observes every sixteen-bit parameter payload
 through both command directions, including each partial word, repeated levels,

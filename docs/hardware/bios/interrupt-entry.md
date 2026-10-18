@@ -34,19 +34,22 @@ original issued comparison plus both zero-result boundaries. Its observer's
 twenty owned executions reject changed input, missing comparisons, wrong
 opcodes and wrong instruction modes while retaining sampled state and clocks.
 
-The current Windows candidate passes six of eight original cartridge
-runs. The built-in fast second-return case fails its first comparison, and
-the external slow second-return case does not reach its comparisons within
-the existing guard. These failures remain enabled and also occur on the
-preceding core. Matching-header/library controls show that the address change
-repairs three original built-in cartridge runs; the preceding built-in image
-fails all four. The native matrix alone does not establish complete IRQ or
-startup accuracy.
+The selected fast display phase satisfies all eight original cartridge runs
+on Windows. The external slow second-return case retains all three original
+comparisons and both zero-result boundaries with the CPU timing model. The
+previous built-in fast second-return mismatch (`0xDC` versus `0xDE`) came from
+an early initial display phase: it resumed one extra Thumb instruction after
+the handler. Aligning that phase repairs the original comparison without
+changing the firmware wrapper or its instruction clocks. The delivered base
+firmware-layout fix remains separately qualified for its recorded scope.
+Matching-header/library controls show that moving the wrapper repairs three
+original built-in cartridge runs; the preceding built-in image fails all four.
+The native matrix alone does not establish complete IRQ or startup accuracy.
 
 A private control retains the external boot and substitutes the owned image
 at the first cartridge instruction. The relocated wrapper then passes all
 three original fast second-return comparisons and both result boundaries;
-the preceding owned image fails. Keeping the built-in initial state while
-using external firmware still fails the first comparison. This distinguishes
-the layout repair from the remaining initial-state/phase gap. These firmware
+the preceding owned image fails. With the earlier built-in initial display phase,
+using external firmware still failed the first comparison. This distinguished
+the layout repair from the former display-phase gap. These firmware
 substitutions are diagnostic controls, not normal startup qualification.

@@ -144,6 +144,55 @@ static void clear_resets_deadlines(void) {
     CHECK(cupid_timing_global_time(&f.timing) == 0);
 }
 
+struct QueuedContext {
+    struct Fixture* fixture;
+    struct CupidTimingEvent* event;
+    bool requeued;
+};
+
+static void queued_callback(struct CupidTiming* timing, void* opaque, uint32_t late) {
+    struct QueuedContext* context = opaque;
+    struct Fixture* fixture = context->fixture;
+    CHECK(fixture->count < 16);
+    fixture->order[fixture->count] = 0;
+    fixture->late[fixture->count] = late;
+    fixture->time[fixture->count++] = cupid_timing_global_time(timing);
+    CHECK(!cupid_timing_is_scheduled(timing, context->event));
+    if (!context->requeued) {
+        context->requeued = true;
+        /* The dispatched event owns its next insertion even when another
+         * callback queue is deferred and both deadlines are already late. */
+        cupid_timing_interrupt(timing);
+        cupid_timing_queue_absolute(timing, context->event,
+            (int32_t)(uint32_t)(cupid_timing_global_time(timing) + 2));
+    }
+}
+
+static void queue_absolute_ownership(void) {
+    const uint64_t epochs[] = {0, (uint32_t)INT32_MAX - 1,
+                               (uint64_t)UINT32_MAX - 1, UINT64_MAX - 1};
+    for (unsigned i = 0; i < sizeof(epochs) / sizeof(epochs[0]); ++i) {
+        struct Fixture f;
+        init(&f);
+        f.timing.masterCycles = (uint32_t)epochs[i];
+        f.timing.globalCycles = epochs[i];
+        struct QueuedContext queued = {&f, NULL, false};
+        struct CupidTimingEvent first = {.context = &queued, .callback = queued_callback};
+        queued.event = &first;
+        struct Context ordinary = {&f, 1, NULL, false};
+        struct CupidTimingEvent second = event(&ordinary, 1);
+        cupid_timing_schedule(&f.timing, &second, 2);
+        cupid_timing_queue_absolute(&f.timing, &first, (int32_t)(uint32_t)(epochs[i] + 2));
+        CHECK(f.next == 2);
+        CHECK(cupid_timing_tick(&f.timing, 5) == INT32_MAX);
+        CHECK(f.count == 3 && f.order[0] == 0 && f.order[1] == 1 && f.order[2] == 0);
+        CHECK(f.time[0] == epochs[i] + 2 && f.time[1] == epochs[i] + 2 && f.time[2] == epochs[i] + 4);
+        CHECK(f.late[0] == 3 && f.late[1] == 3 && f.late[2] == 1);
+        CHECK(f.timing.root == NULL && f.timing.reroot == NULL && !f.timing.inCallback);
+        CHECK(cupid_timing_global_time(&f.timing) == epochs[i] + 5);
+    }
+}
+
 int main(void) {
     RUN(priority_and_lateness);
     RUN(reschedule_and_cancel);
@@ -151,5 +200,6 @@ int main(void) {
     RUN(relative_and_absolute_time);
     RUN(clock_wrap);
     RUN(clear_resets_deadlines);
+    RUN(queue_absolute_ownership);
     return 0;
 }

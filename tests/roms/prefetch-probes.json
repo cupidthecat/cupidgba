@@ -1,0 +1,773 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "name": "boundary-1",
+      "path": "prefetcher/prefetcher_boundary_1.gba",
+      "sha256": "51c429612314c45fa846f4c68dd8633d574d130ca3799d331a5593786e3f25f8",
+      "checkpoint": "0x8020024",
+      "terminal": "0x802019c",
+      "observations": [
+        {
+          "address": "0x8020010",
+          "mode": "thumb",
+          "instruction": "0x00004288",
+          "register": 0,
+          "value": "0x52"
+        }
+      ]
+    },
+    {
+      "name": "boundary-2",
+      "path": "prefetcher/prefetcher_boundary_2.gba",
+      "sha256": "bdd2e87a8662dbdceb376552bcadd46429d619c2a62efa32a14d28c01b46322d",
+      "checkpoint": "0x8020024",
+      "terminal": "0x802019c",
+      "observations": [
+        {
+          "address": "0x8020010",
+          "mode": "thumb",
+          "instruction": "0x00004288",
+          "register": 0,
+          "value": "0x52"
+        }
+      ]
+    },
+    {
+      "name": "boundary-3",
+      "path": "prefetcher/prefetcher_boundary_3.gba",
+      "sha256": "1e6439d4e78aaa60f27a4cc62c58296a7cb79f130d1de2d97af949f9653c0087",
+      "checkpoint": "0x8020024",
+      "terminal": "0x802019c",
+      "observations": [
+        {
+          "address": "0x8020010",
+          "mode": "thumb",
+          "instruction": "0x00004288",
+          "register": 0,
+          "value": "0x54"
+        }
+      ]
+    },
+    {
+      "name": "boundary-4",
+      "path": "prefetcher/prefetcher_boundary_4.gba",
+      "sha256": "f83b9bff616af246640abb0d1b3bf4571cc315b9c210fbf693fbf8db6b8d680b",
+      "checkpoint": "0x8020024",
+      "terminal": "0x802019c",
+      "observations": [
+        {
+          "address": "0x8020010",
+          "mode": "thumb",
+          "instruction": "0x00004288",
+          "register": 0,
+          "value": "0x54"
+        }
+      ]
+    },
+    {
+      "name": "branch-thumb",
+      "path": "prefetcher/prefetcher_branch_thumb.gba",
+      "sha256": "025e1075d63e07b9bf59fb24daca21f3c9cf5e2fa462eff0c2394bb16a3aae23",
+      "checkpoint": "0x80002a8",
+      "terminal": "0x8000420",
+      "observations": [
+        {
+          "address": "0x800015e",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x29"
+        },
+        {
+          "address": "0x800017e",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x27"
+        },
+        {
+          "address": "0x800019e",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x1f"
+        },
+        {
+          "address": "0x80001d2",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x27"
+        },
+        {
+          "address": "0x80001f0",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x25"
+        },
+        {
+          "address": "0x800020e",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x1e"
+        },
+        {
+          "address": "0x8000246",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x2b"
+        },
+        {
+          "address": "0x8000268",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x29"
+        },
+        {
+          "address": "0x800028a",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x20"
+        }
+      ]
+    },
+    {
+      "name": "branch-thumb-2",
+      "path": "prefetcher/prefetcher_branch_thumb_2.gba",
+      "sha256": "7bf3d276d346b7336c9a719e01ca4dbe0e73a1f9755d53448f705fa942236477",
+      "checkpoint": "0x80004f8",
+      "terminal": "0x8000670",
+      "observations": [
+        {
+          "address": "0x800015a",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x19"
+        },
+        {
+          "address": "0x8000176",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x17"
+        },
+        {
+          "address": "0x8000192",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x15"
+        },
+        {
+          "address": "0x80001c2",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x17"
+        },
+        {
+          "address": "0x80001dc",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x15"
+        },
+        {
+          "address": "0x80001f6",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x13"
+        },
+        {
+          "address": "0x8000228",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x19"
+        },
+        {
+          "address": "0x8000244",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x17"
+        },
+        {
+          "address": "0x8000260",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x15"
+        },
+        {
+          "address": "0x800029e",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x23"
+        },
+        {
+          "address": "0x80002c8",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x24"
+        },
+        {
+          "address": "0x80002f4",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x25"
+        },
+        {
+          "address": "0x8000322",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x26"
+        },
+        {
+          "address": "0x8000352",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x27"
+        },
+        {
+          "address": "0x8000384",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x29"
+        },
+        {
+          "address": "0x80003d6",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x24"
+        },
+        {
+          "address": "0x8000402",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x25"
+        },
+        {
+          "address": "0x8000430",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x26"
+        },
+        {
+          "address": "0x8000460",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x27"
+        },
+        {
+          "address": "0x8000492",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x29"
+        },
+        {
+          "address": "0x80004c6",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x2b"
+        }
+      ]
+    },
+    {
+      "name": "branch-thumb-3",
+      "path": "prefetcher/prefetcher_branch_thumb_3.gba",
+      "sha256": "23ffeab0324e3252cdd6f05ebd40d927f996aca4e60bd024f578dbd9d88a6022",
+      "checkpoint": "0x8000390",
+      "terminal": "0x8000508",
+      "observations": [
+        {
+          "address": "0x8000168",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x21"
+        },
+        {
+          "address": "0x8000196",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x25"
+        },
+        {
+          "address": "0x80001c6",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x27"
+        },
+        {
+          "address": "0x8000208",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x2f"
+        },
+        {
+          "address": "0x8000238",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x33"
+        },
+        {
+          "address": "0x800026a",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x35"
+        },
+        {
+          "address": "0x80002a8",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x23"
+        },
+        {
+          "address": "0x80002d4",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x25"
+        },
+        {
+          "address": "0x8000302",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x27"
+        },
+        {
+          "address": "0x8000332",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x27"
+        },
+        {
+          "address": "0x8000364",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x29"
+        }
+      ]
+    },
+    {
+      "name": "branch-thumb-4",
+      "path": "prefetcher/prefetcher_branch_thumb_4.gba",
+      "sha256": "2da51a340efe63c299649f4afe77a3db3f06393c0aab09c0c778724df714b8e5",
+      "checkpoint": "0x80002a4",
+      "terminal": "0x800041c",
+      "observations": [
+        {
+          "address": "0x8000160",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x19"
+        },
+        {
+          "address": "0x8000184",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x1b"
+        },
+        {
+          "address": "0x80001aa",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x1d"
+        },
+        {
+          "address": "0x80001d0",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x1d"
+        },
+        {
+          "address": "0x800021c",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x27"
+        },
+        {
+          "address": "0x800024c",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x27"
+        },
+        {
+          "address": "0x8000290",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x41"
+        }
+      ]
+    },
+    {
+      "name": "branch-thumb-5",
+      "path": "prefetcher/prefetcher_branch_thumb_5.gba",
+      "sha256": "d8b34a2346b2c51a91eb8e6eb2c381331d67c7888a9a184722c714218fc3bf53",
+      "checkpoint": "0x8000210",
+      "terminal": "0x8000388",
+      "observations": [
+        {
+          "address": "0x8000178",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x31"
+        },
+        {
+          "address": "0x80001b4",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x33"
+        },
+        {
+          "address": "0x80001f2",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x35"
+        }
+      ]
+    },
+    {
+      "name": "branch-thumb-6",
+      "path": "prefetcher/prefetcher_branch_thumb_6.gba",
+      "sha256": "96656ff0b2be857aaf2c0fcf5affd5168d369a3be886c8bc5039dfa47c93a599",
+      "checkpoint": "0x800018c",
+      "terminal": "0x8000304",
+      "observations": [
+        {
+          "address": "0x8000178",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0xc1"
+        }
+      ]
+    },
+    {
+      "name": "branch-thumb-arm",
+      "path": "prefetcher/prefetcher_branch_thumb_arm.gba",
+      "sha256": "ad09cb1d3d48d876e7d789c3b3f294021372d93c6236dae2fc02290acbf3039e",
+      "checkpoint": "0x80001dc",
+      "terminal": "0x8000354",
+      "observations": [
+        {
+          "address": "0x80001b0",
+          "mode": "arm",
+          "instruction": "0xe1560005",
+          "register": 6,
+          "value": "0x34"
+        },
+        {
+          "address": "0x80001bc",
+          "mode": "arm",
+          "instruction": "0xe1500005",
+          "register": 0,
+          "value": "0x2d"
+        }
+      ]
+    },
+    {
+      "name": "branch-thumb-arm-3",
+      "path": "prefetcher/prefetcher_branch_thumb_arm_3.gba",
+      "sha256": "c378b2e326133552cb2d78619d8218a1019e10bac26072bf6fca4c2f375ded2b",
+      "checkpoint": "0x80001c4",
+      "terminal": "0x800033c",
+      "observations": [
+        {
+          "address": "0x0800018c",
+          "mode": "arm",
+          "instruction": "0xe350004c",
+          "register": 0,
+          "value": "0x4c"
+        },
+        {
+          "address": "0x080001aa",
+          "mode": "thumb",
+          "instruction": "0x0000286a",
+          "register": 0,
+          "value": "0x6a"
+        }
+      ]
+    },
+    {
+      "name": "branch-thumb-arm-4",
+      "path": "prefetcher/prefetcher_branch_thumb_arm_4.gba",
+      "sha256": "e7fb5455564506566d3e11b96f8eff3ebdf65acafef3dfab6713f1d77c984049",
+      "checkpoint": "0x800017c",
+      "terminal": "0x80002f4",
+      "observations": [
+        {
+          "address": "0x0800016e",
+          "mode": "thumb",
+          "instruction": "0x00002828",
+          "register": 0,
+          "value": "0x28"
+        }
+      ]
+    },
+    {
+      "name": "dma",
+      "path": "prefetcher/prefetcher_dma.gba",
+      "sha256": "922e93ceac0c78399d17ac6be6b4f3f97cc99655542cffbf62a5b3f87db8f008",
+      "checkpoint": "0x8000238",
+      "terminal": "0x80003b0",
+      "observations": [
+        {
+          "address": "0x8000194",
+          "mode": "arm",
+          "instruction": "0xe3500032",
+          "register": 0,
+          "value": "0x32"
+        },
+        {
+          "address": "0x80001fc",
+          "mode": "arm",
+          "instruction": "0xe3500038",
+          "register": 0,
+          "value": "0x38"
+        }
+      ]
+    },
+    {
+      "name": "full-arm",
+      "path": "prefetcher/prefetcher_full_arm.gba",
+      "sha256": "604f9c8e70bdefa552810736c549e304ec9a9bbd44ec8700377fb3149b2b5e2b",
+      "checkpoint": "0x8000528",
+      "terminal": "0x80006a0",
+      "observations": [
+        {
+          "address": "0x8000174",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x80003f"
+        },
+        {
+          "address": "0x80001c4",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x80003b"
+        },
+        {
+          "address": "0x8000214",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x80002b"
+        },
+        {
+          "address": "0x800027c",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x800021"
+        },
+        {
+          "address": "0x80002cc",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x80002a"
+        },
+        {
+          "address": "0x8000324",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x800038"
+        },
+        {
+          "address": "0x8000384",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x800047"
+        },
+        {
+          "address": "0x800041c",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x800039"
+        },
+        {
+          "address": "0x8000474",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x80003f"
+        },
+        {
+          "address": "0x80004d0",
+          "mode": "arm",
+          "instruction": "0xe1500001",
+          "register": 0,
+          "value": "0x800040"
+        }
+      ]
+    },
+    {
+      "name": "full-arm-2",
+      "path": "prefetcher/prefetcher_full_arm_2.gba",
+      "sha256": "3aefceca21fd61510a3c0f1a46218235e1d18b3b79d06ab9a76b0495fa7ef245",
+      "checkpoint": "0x8000194",
+      "terminal": "0x800030c",
+      "observations": [
+        {
+          "address": "0x800017c",
+          "mode": "arm",
+          "instruction": "0xe350006e",
+          "register": 0,
+          "value": "0x6e"
+        }
+      ]
+    },
+    {
+      "name": "full-thumb",
+      "path": "prefetcher/prefetcher_full_thumb.gba",
+      "sha256": "f2b7d064143b99203eaef451d42408df4c35c99b64f6ad5b1209f5021d6bd86f",
+      "checkpoint": "0x8000268",
+      "terminal": "0x80003e0",
+      "observations": [
+        {
+          "address": "0x8000160",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x30"
+        },
+        {
+          "address": "0x8000182",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x2e"
+        },
+        {
+          "address": "0x80001a4",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x27"
+        },
+        {
+          "address": "0x80001d4",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x1d"
+        },
+        {
+          "address": "0x80001f4",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x26"
+        },
+        {
+          "address": "0x8000218",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x2f"
+        },
+        {
+          "address": "0x8000240",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x38"
+        }
+      ]
+    },
+    {
+      "name": "wait-enable",
+      "path": "timing/prefetch_enable.gba",
+      "sha256": "6381fe1f567f452439b8625501a389bb69e816000f76bf8dc0cf81fd85f8f9d5",
+      "checkpoint": "0x8000174",
+      "terminal": "0x80002ec",
+      "observations": [
+        {
+          "address": "0x8000150",
+          "mode": "arm",
+          "instruction": "0xe35000bd",
+          "register": 0,
+          "value": "0xbd"
+        }
+      ]
+    },
+    {
+      "name": "wait-disabled",
+      "path": "timing/prefetch_enable_2.gba",
+      "sha256": "e8a3fb303d9f56580beed31a4f54155e4c4ab8643eb5af6040c5a7a06a5476a5",
+      "checkpoint": "0x8000174",
+      "terminal": "0x80002ec",
+      "observations": [
+        {
+          "address": "0x8000150",
+          "mode": "arm",
+          "instruction": "0xe35000bd",
+          "register": 0,
+          "value": "0xbd"
+        }
+      ]
+    },
+    {
+      "name": "boundary-legacy",
+      "path": "prefetcher/bounday_test_1.gba",
+      "sha256": "dbe894739715261bd3c482c3577ebd99007b9d3ad140957716814bf67a349f14",
+      "checkpoint": "0x802001c",
+      "terminal": "0x8020194",
+      "observations": [
+        {
+          "address": "0x0802000a",
+          "mode": "thumb",
+          "instruction": "0x000042a8",
+          "register": 0,
+          "value": "0x29"
+        }
+      ]
+    }
+  ]
+}

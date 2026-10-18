@@ -7,7 +7,8 @@ struct CupidCable;
 
 /* A session borrows two to four initialized cores and owns their execution on
  * the calling thread. Each core's current clock becomes its session epoch.
- * Serial callbacks and clock coordinators must be unassigned. Do not run,
+ * Serial callbacks and clock coordinators must be unassigned, and a standalone
+ * core must have finished its current step before joining. Do not run,
  * reset or destroy a borrowed core outside the session. Calls return with
  * CPUs suspended at clock requests; memory, video and input remain accessible.
  * Destroying the session abandons those in-flight instructions: reset a core

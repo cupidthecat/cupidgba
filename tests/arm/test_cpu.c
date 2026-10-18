@@ -117,9 +117,14 @@ static void arm_pc_alignment(void) {
     CHECK(gba != NULL);
     cupid_gba_create(gba);
     cupid_gba_reset(gba);
-    gba->cpu.gprs[ARM_PC] = GBA_BASE_IWRAM + 2;
-    CupidARMWritePC(&gba->cpu);
-    CHECK((uint32_t)gba->cpu.gprs[ARM_PC] == GBA_BASE_IWRAM + 4);
+    const uint32_t words[] = {0xE3A00017, 0xE3A01029};
+    memcpy(gba->memory.iwram, words, sizeof(words));
+    for (unsigned low = 0; low < 4; ++low) {
+        gba->cpu.gprs[ARM_PC] = GBA_BASE_IWRAM + low;
+        CupidARMWritePC(&gba->cpu);
+        CHECK((uint32_t)gba->cpu.gprs[ARM_PC] == GBA_BASE_IWRAM + (low & 2u) + 4);
+        CHECK(gba->cpu.prefetch[0] == words[0] && gba->cpu.prefetch[1] == words[1]);
+    }
     cupid_gba_destroy(gba);
     free(gba);
 }
