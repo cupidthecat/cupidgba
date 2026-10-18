@@ -240,5 +240,6 @@ headers. Those archived comparisons apply to their recorded horizontal-counter
 policy. Current blank-scanout checks compare complete bulk and one-clock state
 under the retained-counter policy; the fixed mosaic geometry above supplies
 its separate before/current qualification.
-The original unoptimized save-reboot deadline remains a qualification failure;
-the broader PPU acceptance limits above remain open.
+At the `da40d4c` checkpoint, the local unoptimized save-reboot check reached its
+original deadline. That receipt remains preserved. The broader PPU acceptance
+limits above remain open.
