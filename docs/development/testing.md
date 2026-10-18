@@ -644,7 +644,7 @@ cmake --build build-context-portable --target test_context test_execution --para
 ctest --test-dir build-context-portable -R '^platform.context$|^gba.execution-' --output-on-failure
 ```
 
-Six `gba.execution-*` groups cover frames with no eligible wake, paced interval
+Seven `gba.execution-*` groups cover frames with no eligible wake, paced interval
 accounting, one-time instruction issue and stores after wake, reset and stack
 cancellation, shared standalone/cable ownership, and an already eligible wake.
 ARM and Thumb cases include scheduler wrap. Each group keeps a five-second
@@ -654,6 +654,16 @@ return addresses at clocks eight or nine. Its former single-step observation
 combined the write with an empty internal clock; the retained fetch now occupies
 that clock. The cartridge operands, terminal observations and execution limits
 are unchanged.
+
+The batch group compares sixteen batched and repeated-step sequences in both
+CPU modes and across scheduler wrap. It checks every observed boundary, input
+and wake publication, complete registers, frame/audio counters, event queues
+and final memory/images. It also checks early return, zero work, STOP and
+resuming a different request after the callback has returned. The headless
+runner uses these boundaries to retain its original checkpoint, terminal,
+frame, step-count and elapsed-clock guards without switching host stacks
+after every ordinary step. Its instruction observer and all process deadlines
+remain unchanged.
 
 `gba.save-file` checks complete replacements and reloads at every supported
 capacity, inferred expansion, explicit type choices, invalid inputs, companion

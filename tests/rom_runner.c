@@ -26,6 +26,49 @@ static bool screenshot(const struct CupidGBA* gba, const char* path) {
 
 struct AudioTrace { FILE* file; bool failed; };
 struct MotorTrace { FILE* file; bool failed; };
+struct KeyEvent { uint64_t frame; uint16_t keys; };
+
+struct RunState {
+    uint64_t frames, cycleLimit, stepLimit, terminalAddress, checkpointAddress;
+    uint64_t completed, steps, stoppedClocks;
+    int expectedRegister;
+    bool terminal, checkpoint, done;
+    uint32_t checkpointValue;
+    const struct KeyEvent* keyEvents;
+    unsigned keyEventCount, nextKeyEvent;
+};
+
+static bool run_boundary(struct CupidGBA* gba, uint64_t completedSteps, void* context) {
+    struct RunState* run = context;
+    if (completedSteps) {
+        ++run->steps;
+        if (gba->frameReady) { ++run->completed; gba->frameReady = false; }
+    }
+    /* These are the original loop guards and observation order. A halted
+     * peripheral return counts exactly as an individual step call does. */
+    if (run->completed >= run->frames || run->steps >= run->stepLimit ||
+        cupid_timing_global_time(&gba->timing) + run->stoppedClocks >= run->cycleLimit) {
+        run->done = true;
+        return false;
+    }
+    if (run->checkpointAddress && !run->checkpoint && gba->cpu.executionMode == MODE_ARM &&
+        cupid_arm_instruction_address(&gba->cpu) == run->checkpointAddress) {
+        run->checkpoint = true;
+        run->checkpointValue = (uint32_t)gba->cpu.gprs[run->expectedRegister];
+    }
+    if (run->expectedRegister >= 0 && gba->cpu.executionMode == MODE_ARM &&
+        (uint32_t)gba->cpu.gprs[ARM_PC] >= GBA_BASE_ROM0 &&
+        (!run->terminalAddress || cupid_arm_instruction_address(&gba->cpu) == run->terminalAddress) &&
+        gba->cpu.prefetch[0] == UINT32_C(0xEAFFFFFE)) {
+        run->terminal = run->done = true;
+        return false;
+    }
+    while (run->nextKeyEvent < run->keyEventCount && run->keyEvents[run->nextKeyEvent].frame <= run->completed) {
+        gba->keysActive = run->keyEvents[run->nextKeyEvent++].keys;
+        cupid_gba_test_keypad_irq(gba);
+    }
+    return !gba->stopped;
+}
 
 static void motor_output(void* context, bool active, uint64_t clock) {
     struct MotorTrace* trace = context;
@@ -83,8 +126,8 @@ static void audio_sample(void* context, uint64_t clock, int16_t left, int16_t ri
 }
 
 int main(int argc, char** argv) {
-    struct KeyEvent { uint64_t frame; uint16_t keys; } keyEvents[64];
-    unsigned keyEventCount = 0, nextKeyEvent = 0;
+    struct KeyEvent keyEvents[64];
+    unsigned keyEventCount = 0;
     struct RegisterObservations observations = {0};
     const char* rom = NULL;
     const char* bios = NULL;
@@ -207,36 +250,28 @@ int main(int argc, char** argv) {
         gba->audio.sampleSink = audio_sample;
         gba->audio.sampleSinkContext = &audioTrace;
     }
-    uint64_t completed = 0, steps = 0, stoppedClocks = 0;
-    bool terminal = false;
-    bool checkpoint = false;
-    uint32_t checkpointValue = 0;
-    while (completed < frames && steps < stepLimit &&
-           cupid_timing_global_time(&gba->timing) + stoppedClocks < cycleLimit) {
-        if (checkpointAddress && !checkpoint && gba->cpu.executionMode == MODE_ARM &&
-            cupid_arm_instruction_address(&gba->cpu) == checkpointAddress) {
-            checkpoint = true;
-            checkpointValue = (uint32_t)gba->cpu.gprs[expectedRegister];
+    struct RunState run = {.frames = frames, .cycleLimit = cycleLimit, .stepLimit = stepLimit,
+        .terminalAddress = terminalAddress, .checkpointAddress = checkpointAddress,
+        .expectedRegister = expectedRegister, .keyEvents = keyEvents, .keyEventCount = keyEventCount};
+    while (!run.done) {
+        if (run_boundary(gba, 0, &run)) {
+            cupid_gba_run_steps(gba, stepLimit - run.steps, run_boundary, &run);
+            continue;
         }
-        if (expectedRegister >= 0 && gba->cpu.executionMode == MODE_ARM &&
-            (uint32_t)gba->cpu.gprs[ARM_PC] >= GBA_BASE_ROM0 &&
-            (!terminalAddress || cupid_arm_instruction_address(&gba->cpu) == terminalAddress) &&
-            gba->cpu.prefetch[0] == UINT32_C(0xEAFFFFFE)) {
-            terminal = true;
-            break;
-        }
-        while (nextKeyEvent < keyEventCount && keyEvents[nextKeyEvent].frame <= completed) {
-            gba->keysActive = keyEvents[nextKeyEvent++].keys;
-            cupid_gba_test_keypad_irq(gba);
-        }
+        if (run.done) break;
+        /* STOP retains the original explicit cartridge-clock interval and
+         * one loop iteration; batching never advances frozen board clocks. */
         if (gba->stopped) {
-            uint64_t clocks = cycleLimit - cupid_timing_global_time(&gba->timing) - stoppedClocks;
+            uint64_t clocks = cycleLimit - cupid_timing_global_time(&gba->timing) - run.stoppedClocks;
             if (clocks > VIDEO_TOTAL_LENGTH) clocks = VIDEO_TOTAL_LENGTH;
-            stoppedClocks += cupid_gba_advance_stopped_time(gba, clocks);
-        } else cupid_gba_step(gba);
-        steps++;
-        if (gba->frameReady) { completed++; gba->frameReady = false; }
+            run.stoppedClocks += cupid_gba_advance_stopped_time(gba, clocks);
+        }
+        ++run.steps;
+        if (gba->frameReady) { ++run.completed; gba->frameReady = false; }
     }
+    const uint64_t completed = run.completed, steps = run.steps, stoppedClocks = run.stoppedClocks;
+    const bool terminal = run.terminal, checkpoint = run.checkpoint;
+    const uint32_t checkpointValue = run.checkpointValue;
     printf("frames=%" PRIu64 " cycles=%" PRIu64 " steps=%" PRIu64 " pc=%08" PRIx32 "\n",
            completed, cupid_timing_global_time(&gba->timing), steps, (uint32_t)gba->cpu.gprs[ARM_PC]);
     if (stoppedClocks) printf("stopped_cycles=%" PRIu64 "\n", stoppedClocks);
