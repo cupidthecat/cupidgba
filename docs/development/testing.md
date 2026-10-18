@@ -899,6 +899,15 @@ twenty-second process limits and five-million-step/120-frame guards are fixed.
 These are explicit-entry drivers; they do not boot firmware or qualify partial
 or active-output date writes. See [RTC limits](../hardware/cartridge/rtc.md).
 
+`-DCUPID_TEST_JOBS=2` runs each calendar group's eight independent cartridge
+cases with at most two isolated processes. Each case has its own input, output
+and working directory. Completed records are reported in the original case
+order. Every calendar byte, header, terminal and negative-control result is
+checked. The whole group retains thirty seconds, and each process retains its
+twenty-second, five-million-step and 120-frame guards. The checker also accepts
+`--jobs 2` directly; its default remains serial. Clang's full sanitizer job uses
+two processes, while GCC and Windows keep the default serial coverage.
+
 `gba.rtc-parameters-component` observes every sixteen-bit parameter payload
 through both command directions, including each partial word, repeated levels,
 released input and chip-select abort. `gba.rtc-parameters-bus` checks ARM/Thumb

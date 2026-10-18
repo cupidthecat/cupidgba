@@ -67,7 +67,7 @@ jobs:
         run: |
           sanitizer_flags=()
           if [ "${{ matrix.compiler }}" = clang ]; then
-            sanitizer_flags+=('-DCMAKE_C_FLAGS_DEBUG=-O1 -g')
+            sanitizer_flags+=('-DCMAKE_C_FLAGS_DEBUG=-O1 -g' '-DCUPID_TEST_JOBS=2')
           fi
           cmake -S . -B build -DCMAKE_C_COMPILER=${{ matrix.compiler }} \
             -DCMAKE_BUILD_TYPE=${{ matrix.mode }} -DCUPID_SANITIZERS=${{ matrix.sanitizers }} \

@@ -8,7 +8,7 @@ option(CUPID_BUILD_FRONTEND "Build the SDL2 frontend" ON)
 option(CUPID_SANITIZERS "Enable address and undefined behavior sanitizers" OFF)
 option(CUPID_THREAD_SANITIZER "Enable the thread sanitizer" OFF)
 option(CUPID_FAST_CONTEXT "Use native context switching when available on Linux" ON)
-set(CUPID_TEST_JOBS "1" CACHE STRING "Processes for independent native test scenes (1 or 2)")
+set(CUPID_TEST_JOBS "1" CACHE STRING "Processes for independent test scenes (1 or 2)")
 if(NOT CUPID_TEST_JOBS MATCHES "^[12]$")
     message(FATAL_ERROR "CUPID_TEST_JOBS must be 1 or 2")
 endif()
@@ -141,26 +141,30 @@ if(BUILD_TESTING)
     add_test(NAME rom.rtc-parameters COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_parameters.py --runner $<TARGET_FILE:cupidgba-headless>)
     set_tests_properties(rom.rtc-parameters PROPERTIES TIMEOUT 30)
+    set(calendar_jobs)
+    if(CUPID_TEST_JOBS STREQUAL "2")
+        set(calendar_jobs --jobs 2)
+    endif()
     foreach(mode arm thumb)
         foreach(width 2 4)
             add_test(NAME rom.rtc-calendar-${mode}-${width} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_calendar.py
-                --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width ${width})
+                --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width ${width} ${calendar_jobs})
             set_tests_properties(rom.rtc-calendar-${mode}-${width} PROPERTIES TIMEOUT 30)
             add_test(NAME rom.rtc-calendar-continued-${mode}-${width} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_calendar.py
-                --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width ${width} --continued)
+                --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width ${width} --continued ${calendar_jobs})
             set_tests_properties(rom.rtc-calendar-continued-${mode}-${width} PROPERTIES TIMEOUT 30)
             if(CUPID_TEST_BIOS)
                 add_test(NAME rom.rtc-calendar-${mode}-${width}-external COMMAND ${Python3_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_calendar.py
                     --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width ${width}
-                    --bios ${CUPID_TEST_BIOS})
+                    --bios ${CUPID_TEST_BIOS} ${calendar_jobs})
                 set_tests_properties(rom.rtc-calendar-${mode}-${width}-external PROPERTIES TIMEOUT 30)
                 add_test(NAME rom.rtc-calendar-continued-${mode}-${width}-external COMMAND ${Python3_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_calendar.py
                     --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width ${width}
-                    --bios ${CUPID_TEST_BIOS} --continued)
+                    --bios ${CUPID_TEST_BIOS} --continued ${calendar_jobs})
                 set_tests_properties(rom.rtc-calendar-continued-${mode}-${width}-external PROPERTIES TIMEOUT 30)
             endif()
         endforeach()
@@ -174,13 +178,13 @@ if(BUILD_TESTING)
                 endif()
                 add_test(NAME rom.rtc-calendar-${stream}-${mode}-${lane} COMMAND ${Python3_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_calendar.py
-                    --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width 1 --lane ${lane} ${stream_option})
+                    --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width 1 --lane ${lane} ${stream_option} ${calendar_jobs})
                 set_tests_properties(rom.rtc-calendar-${stream}-${mode}-${lane} PROPERTIES TIMEOUT 30)
                 if(CUPID_TEST_BIOS)
                     add_test(NAME rom.rtc-calendar-${stream}-${mode}-${lane}-external COMMAND ${Python3_EXECUTABLE}
                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_calendar.py
                         --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width 1 --lane ${lane}
-                        --bios ${CUPID_TEST_BIOS} ${stream_option})
+                        --bios ${CUPID_TEST_BIOS} ${stream_option} ${calendar_jobs})
                     set_tests_properties(rom.rtc-calendar-${stream}-${mode}-${lane}-external PROPERTIES TIMEOUT 30)
                 endif()
             endforeach()
