@@ -170,6 +170,119 @@ static void clock_observer_runs_after_due_callbacks_without_a_deadline(void) {
     CHECK(f.syncTime == 3 && f.syncCount == 3);
 }
 
+struct QueuedContext {
+    struct Fixture* fixture;
+    struct CupidTimingEvent* event;
+    bool requeued;
+};
+
+static void queued_callback(struct CupidTiming* timing, void* opaque, uint32_t late) {
+    struct QueuedContext* context = opaque;
+    struct Fixture* fixture = context->fixture;
+    CHECK(fixture->count < 16);
+    fixture->order[fixture->count] = 0;
+    fixture->late[fixture->count] = late;
+    fixture->time[fixture->count++] = cupid_timing_global_time(timing);
+    CHECK(!cupid_timing_is_scheduled(timing, context->event));
+    if (!context->requeued) {
+        context->requeued = true;
+        /* The dispatched event owns its next insertion even when another
+         * callback queue is deferred and both deadlines are already late. */
+        cupid_timing_interrupt(timing);
+        cupid_timing_queue_absolute(timing, context->event,
+            (int32_t)(uint32_t)(cupid_timing_global_time(timing) + 2));
+    }
+}
+
+static void queue_absolute_ownership(void) {
+    const uint64_t epochs[] = {0, (uint32_t)INT32_MAX - 1,
+                               (uint64_t)UINT32_MAX - 1, UINT64_MAX - 1};
+    for (unsigned i = 0; i < sizeof(epochs) / sizeof(epochs[0]); ++i) {
+        struct Fixture f;
+        init(&f);
+        f.timing.masterCycles = (uint32_t)epochs[i];
+        f.timing.globalCycles = epochs[i];
+        struct QueuedContext queued = {&f, NULL, false};
+        struct CupidTimingEvent first = {.context = &queued, .callback = queued_callback};
+        queued.event = &first;
+        struct Context ordinary = {&f, 1, NULL, false};
+        struct CupidTimingEvent second = event(&ordinary, 1);
+        cupid_timing_schedule(&f.timing, &second, 2);
+        cupid_timing_queue_absolute(&f.timing, &first, (int32_t)(uint32_t)(epochs[i] + 2));
+        CHECK(f.next == 2);
+        CHECK(cupid_timing_tick(&f.timing, 5) == INT32_MAX);
+        CHECK(f.count == 3 && f.order[0] == 0 && f.order[1] == 1 && f.order[2] == 0);
+        CHECK(f.time[0] == epochs[i] + 2 && f.time[1] == epochs[i] + 2 && f.time[2] == epochs[i] + 4);
+        CHECK(f.late[0] == 3 && f.late[1] == 3 && f.late[2] == 1);
+        CHECK(f.timing.root == NULL && f.timing.reroot == NULL && !f.timing.inCallback);
+        CHECK(cupid_timing_global_time(&f.timing) == epochs[i] + 5);
+    }
+}
+
+struct ObserverQueue {
+    struct Fixture* fixture;
+    struct CupidTimingEvent* first;
+    struct CupidTimingEvent* second;
+    unsigned calls;
+};
+
+static void observer_changes_queue(void* opaque, uint64_t time) {
+    struct ObserverQueue* observer = opaque;
+    struct Fixture* f = observer->fixture;
+    CHECK(time == f->timing.globalCycles && !f->timing.inCallback);
+    CHECK(f->timing.reroot == NULL);
+    switch (observer->calls++) {
+    case 0:
+        CHECK(f->count == 0 && f->timing.root == observer->first);
+        cupid_timing_deschedule(&f->timing, observer->first);
+        cupid_timing_schedule(&f->timing, observer->second, 4);
+        cupid_timing_interrupt(&f->timing);
+        break;
+    case 1:
+        CHECK(f->count == 0 && f->timing.root == observer->second);
+        cupid_timing_deschedule(&f->timing, observer->second);
+        cupid_timing_schedule(&f->timing, observer->first, 0);
+        cupid_timing_interrupt(&f->timing);
+        break;
+    case 2:
+        CHECK(f->count == 1 && f->timing.root == NULL);
+        cupid_timing_schedule(&f->timing, observer->second, 2);
+        break;
+    default:
+        CHECK(false);
+    }
+}
+
+static void clock_observer_changes_update_next_deadline(void) {
+    const uint64_t epochs[] = {0, (uint32_t)INT32_MAX - 1,
+                               (uint64_t)UINT32_MAX - 1, UINT64_MAX - 1};
+    for (unsigned i = 0; i < sizeof(epochs) / sizeof(epochs[0]); ++i) {
+        struct Fixture f;
+        init(&f);
+        f.timing.masterCycles = (uint32_t)epochs[i];
+        f.timing.globalCycles = epochs[i];
+        struct Context contexts[] = {{&f, 0, NULL, false}, {&f, 1, NULL, false}};
+        struct CupidTimingEvent first = event(&contexts[0], 0), second = event(&contexts[1], 0);
+        cupid_timing_schedule(&f.timing, &first, 10);
+        cupid_timing_interrupt(&f.timing);
+        CHECK(cupid_timing_tick(&f.timing, 2) == 8);
+        CHECK(f.count == 0 && f.timing.root == &first && f.timing.reroot == NULL);
+        struct ObserverQueue observer = {&f, &first, &second, 0};
+        f.timing.clockContext = &observer;
+        f.timing.syncClock = observer_changes_queue;
+        CHECK(cupid_timing_tick(&f.timing, 1) == 4 && f.next == 4);
+        CHECK(f.count == 0 && f.timing.root == NULL && f.timing.reroot == &second);
+        CHECK(cupid_timing_tick(&f.timing, 1) == 0 && f.next == 0);
+        CHECK(f.count == 0 && f.timing.root == NULL && f.timing.reroot == &first);
+        CHECK(cupid_timing_tick(&f.timing, 0) == 2 && f.next == 2);
+        CHECK(f.count == 1 && f.time[0] == epochs[i] + 4 && f.late[0] == 0);
+        f.timing.syncClock = NULL;
+        CHECK(cupid_timing_tick(&f.timing, 2) == INT32_MAX && f.next == INT32_MAX);
+        CHECK(f.count == 2 && f.order[1] == 1 && f.time[1] == epochs[i] + 6 && f.late[1] == 0);
+        CHECK(observer.calls == 3 && f.timing.root == NULL && f.timing.reroot == NULL);
+    }
+}
+
 int main(void) {
     RUN(priority_and_lateness);
     RUN(reschedule_and_cancel);
@@ -178,5 +291,7 @@ int main(void) {
     RUN(clock_wrap);
     RUN(clear_resets_deadlines);
     RUN(clock_observer_runs_after_due_callbacks_without_a_deadline);
+    RUN(queue_absolute_ownership);
+    RUN(clock_observer_changes_update_next_deadline);
     return 0;
 }

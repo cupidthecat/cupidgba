@@ -18,6 +18,13 @@ burst at that boundary; the suspended channel retains its addresses, remaining
 count and data latch. Chained channels share the handover/release interval.
 A resumed Game Pak burst starts with a nonsequential access.
 
+CPU bus boundaries poll the live enabled/ready flags in fixed channel order.
+`cupid_dma_poll` captures the current CPU or callback clock only when bus
+ownership permits a pending transfer to start. Timestamped peripheral requests
+use `cupid_dma_kick` with their captured clock. Both paths share the same head
+phase and retain arbitration at each completed pair. Polling reads the channel
+flags directly; a separate runnable-state cache is unnecessary.
+
 ## Transfer clocks and cartridge accesses
 
 Each phase uses the configured wait states for its width and region. Default

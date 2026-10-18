@@ -11,9 +11,13 @@ static uint32_t transfer_count(const struct CupidDMA* dma) {
 }
 
 static int next_channel(const struct CupidMemory* memory) {
-    for (int ch = 0; ch < GBA_DMA_COUNT; ch++) {
-        if (memory->dma[ch].enable && memory->dma[ch].ready) return ch;
-    }
+    _Static_assert(GBA_DMA_COUNT == 4, "DMA arbitration requires four channels");
+    /* Hardware priority is fixed. Read the live channel flags directly so
+     * arbitration needs neither an idle-channel loop nor cached readiness. */
+    if (memory->dma[0].enable && memory->dma[0].ready) return 0;
+    if (memory->dma[1].enable && memory->dma[1].ready) return 1;
+    if (memory->dma[2].enable && memory->dma[2].ready) return 2;
+    if (memory->dma[3].enable && memory->dma[3].ready) return 3;
     return -1;
 }
 
@@ -86,16 +90,30 @@ static void read_next(struct CupidGBA* gba, uint64_t when) {
     phase_at(gba, DMA_READ, when + access_cycles(memory, dma, dma->nextSource, true));
 }
 
-void cupid_dma_kick(struct CupidGBA* gba, uint64_t timestamp) {
+static void begin_transfer(struct CupidGBA* gba, uint64_t timestamp) {
     struct CupidMemory* memory = &gba->memory;
-    if (memory->dmaRunning || memory->busBusy || memory->busLocked ||
-        next_channel(memory) < 0) return;
     memory->dmaRunning = true;
     memory->activeDMA = -1;
     memory->fetchNonseq = true;
     gba->cpuBlocked = true;
     gba->dmaPC = gba->cpu.gprs[ARM_PC];
     phase_at(gba, DMA_HEAD, timestamp + 1);
+}
+
+void cupid_dma_kick(struct CupidGBA* gba, uint64_t timestamp) {
+    const struct CupidMemory* memory = &gba->memory;
+    if (memory->dmaRunning || memory->busBusy || memory->busLocked ||
+        next_channel(memory) < 0) return;
+    begin_transfer(gba, timestamp);
+}
+
+void cupid_dma_poll(struct CupidGBA* gba) {
+    const struct CupidMemory* memory = &gba->memory;
+    if (memory->dmaRunning || memory->busBusy || memory->busLocked ||
+        next_channel(memory) < 0) return;
+    /* The clock getter has no side effects. Idle CPU strobes need neither a
+     * timestamp nor a queued event; accepted transfers keep the same clock. */
+    begin_transfer(gba, cupid_timing_global_time(&gba->timing));
 }
 
 static void activation_callback(struct CupidTiming* timing, void* context, uint32_t late) {

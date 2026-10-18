@@ -171,3 +171,38 @@ also remain open. The ten selections do not qualify every
 scroll phase, layer combination, OBJ mode or contention pattern. These limits remain under
 [issue 16](https://github.com/cupidthecat/cupidgba/issues/16) and the complete
 PPU audit under [issue 1](https://github.com/cupidthecat/cupidgba/issues/1).
+
+## Host work between observable clocks
+
+Display-memory accesses still advance each physical beat and synchronize the
+renderer before its data strobe. A palette or VRAM word publishes its low
+halfword before its high halfword. The shared store helper preserves the
+address decoder, write restrictions and separate strobes.
+
+When a non-final beat has no pending CPU-line stage, peripheral deadline or
+clock observer in either of the next two clocks, the bridge tests its first
+ready predicate directly after the ordinary one-clock tick. Its owned ready
+event remains queued for the second clock. An occupied display port continues
+through ordinary per-clock polling. Callbacks, deferred event queues, linked
+clock coordinators and host clock observers retain the general path.
+
+An already blank pixel with background fetches and OBJ disabled can advance
+through an interval without repeating layer selection. Short intervals visit
+the original union of comparator, output, OBJ-marker and line-boundary stages.
+Longer intervals fill identical white pairs between window boundaries while
+retaining horizontal latches, vertical and horizontal mosaic counters, OBJ
+elapsed markers and affine line stepping. A register write synchronizes the
+preceding interval before changing these conditions. Unsupported wrapping
+intervals retain the general path. White output uses the existing five-bit
+channel conversion, including its maximum channel value of 248.
+
+The blank-scanout regression compares complete pipeline, background, scanline
+and framebuffer state in 2,976 scenes. It covers every mosaic width and phase,
+shortened periods, window boundaries, retained latches, clipped intervals,
+later layer activation and clock-wrap fallbacks. Another 1,280 scenes compare
+ordinary observed clocks with eligible quiet clocks, including partial word
+visibility and the final CPU-ready edge. Both groups also retain equal complete
+results against a freshly compiled preceding implementation with its matching
+headers. These checks establish state equivalence for the covered cases.
+The original unoptimized save-reboot deadline remains a qualification failure;
+the broader PPU acceptance limits above remain open.

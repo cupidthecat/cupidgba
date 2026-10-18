@@ -28,6 +28,20 @@ stage on the next CPU-ready edge. A scheduled ready-edge event preserves this
 ownership without splitting peripheral dispatch batches. Timer, DMA, audio and
 existing bus-progress observations retain their previous dispatch partitions.
 
+The CPU-line slots track scheduled and held ownership. A bus hold always sets
+the held-clock state, including when no line publication needs moving. Empty
+domains avoid the queue walk; a new input accepted during the hold still keeps
+its remaining CPU stages. Resume releases the clock and queues each retained
+publication at its original remaining deadline. Register acceptance and HALT
+availability keep their independent system-clock events.
+
+One CPU request owns the ready event. Dispatch removes it before invoking its
+callback, so its next insertion can use `cupid_timing_queue_absolute` without a
+cancellation search. This API requires the event to be absent from both pending
+lists. General scheduling still removes a possibly queued event before moving
+it; absolute scheduling uses the supplied modular timestamp directly. The
+priority order, late-callback clock and deferred queue rules apply to both paths.
+
 IME and the CPSR IRQ mask control exception entry; HALT can wake
 from an enabled request while both masks prevent entry.
 
@@ -103,3 +117,18 @@ Game Pak prefetch interactions and precise STOP wake-up latency need separate
 hardware coverage. STOP now freezes the system clock and accepts enabled
 external wake sources; see [serial and GPIO](serial/normal-and-gpio.md).
 Both BIOS paths pass the listed count-up and IRQ suite on the pinned local input.
+
+## Event dispatch and host clock observers
+
+The ordinary timing loop reads the next event deadline before entering its
+dispatcher. Due callbacks retain the existing priority order, lateness and
+unlink-before-callback ownership. A deferred future queue is restored before
+the tick returns or calls a host clock observer. An observer can cancel, add
+or defer an event, so the loop computes the returned CPU deadline again after
+that observer. An event newly made due by the observer waits until the next
+tick, including a tick that advances zero clocks. Linked clock coordinators
+retain their own synchronization path.
+
+The nine scheduler checks include observer queue changes, deferred callbacks,
+owned rescheduling and signed, 32-bit and 64-bit clock-wrap boundaries. The
+same complete check output is retained against a matching preceding core.

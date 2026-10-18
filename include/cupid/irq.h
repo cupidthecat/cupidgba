@@ -29,6 +29,8 @@ struct CupidIRQState {
     bool line, logicalLine;
     /* Peripheral registers and HALT availability keep the system clock. */
     bool cpuClockPaused;
+    /* Owned CPU-line slots; register and HALT domains remain independent. */
+    uint8_t scheduledLineMask, pausedLineMask;
     /* Optional bus-owner predicate, polled before same-edge input updates. */
     bool (*cpuReady)(struct CupidGBA* gba);
     struct CupidTimingEvent cpuClockResumeEvent;

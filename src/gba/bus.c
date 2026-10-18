@@ -4,7 +4,7 @@
 void cupid_bus_wait(struct CupidARM* cpu) {
     struct CupidGBA* gba = cpu->master;
     cpu->irqh.processEvents(cpu);
-    cupid_dma_kick(gba, cupid_timing_global_time(&gba->timing));
+    cupid_dma_poll(gba);
     bool waiting = gba->memory.dmaRunning && !gba->memory.busLocked;
     /* The CPU waits for bus ownership; DMA's peripheral clocks still run. */
     if (waiting) cupid_irq_pause_cpu(gba);
@@ -44,12 +44,38 @@ static bool display_ready(struct CupidGBA* gba) {
     return gba->memory.displayFinal;
 }
 
+static bool isolated_first_beat(struct CupidGBA* gba) {
+    const struct CupidTiming* timing = &gba->timing;
+    const struct CupidARM* cpu = &gba->cpu;
+    /* Keep callbacks, clock coordinators, deferred queues and pending CPU
+     * line stages on the ordinary event path. Neither peripheral callbacks
+     * nor a host clock observer may inspect this first beat. */
+    if (gba->irq.cpuClockPaused || gba->irq.scheduledLineMask || gba->irq.pausedLineMask
+        || timing->inCallback || timing->reroot || timing->synchronize || timing->syncClock
+        || cpu->cycles < 0 || cpu->cycles > INT32_MAX - 2 || cpu->cycles >= cpu->nextEvent)
+        return false;
+    return cupid_timing_next_event(&gba->timing) > 2;
+}
+
 void cupid_bus_display_beat(struct CupidARM* cpu, uint32_t address, bool final) {
     struct CupidGBA* gba = cpu->master;
     gba->memory.displayAddress = address;
     gba->memory.displayBeatReady = false;
     gba->memory.displayFinal = final;
-    if (!gba->irq.cpuClockPaused) cupid_irq_hold_cpu_until(gba, display_ready);
+    if (!final && isolated_first_beat(gba)) {
+        /* A partial beat cannot release the CPU clock. With both following
+         * clocks free of peripheral events, retain its ready event at clock
+         * two and test the first beat directly after the ordinary clock-one
+         * tick. The renderer still visits that beat and a low halfword can
+         * publish before the high half. An unavailable port keeps waiting
+         * through the same owned event and the same per-clock predicates. */
+        gba->irq.cpuReady = display_ready;
+        cupid_irq_hold_cpu(gba, 2);
+        cpu->nextEvent = cpu->cycles + 1;
+        cupid_bus_advance(cpu, 1, true);
+        display_ready(gba);
+        if (gba->memory.displayBeatReady) return;
+    } else if (!gba->irq.cpuClockPaused) cupid_irq_hold_cpu_until(gba, display_ready);
     else if (gba->irq.cpuReady != display_ready) abort();
     do {
         cupid_bus_advance(cpu, 1, true);
@@ -59,7 +85,7 @@ void cupid_bus_display_beat(struct CupidARM* cpu, uint32_t address, bool final) 
 void cupid_bus_release(struct CupidARM* cpu) {
     struct CupidGBA* gba = cpu->master;
     gba->memory.busBusy = false;
-    cupid_dma_kick(gba, cupid_timing_global_time(&gba->timing));
+    cupid_dma_poll(gba);
 }
 
 void cupid_bus_fetch(struct CupidARM* cpu, uint32_t address, unsigned width, bool sequential) {
@@ -107,7 +133,7 @@ void cupid_bus_finish(struct CupidARM* cpu) {
     cupid_bus_release(cpu);
     cpu->irqh.processEvents(cpu);
     cupid_prefetch_update(gba, cupid_timing_global_time(&gba->timing));
-    cupid_dma_kick(gba, cupid_timing_global_time(&gba->timing));
+    cupid_dma_poll(gba);
 }
 
 void cupid_bus_lock(struct CupidARM* cpu, bool locked) {

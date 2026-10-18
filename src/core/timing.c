@@ -71,10 +71,9 @@ void cupid_timing_deschedule(struct CupidTiming* timing, struct CupidTimingEvent
     }
 }
 
-void cupid_timing_schedule(struct CupidTiming* timing, struct CupidTimingEvent* event,
-                           int32_t when) {
-    cupid_timing_deschedule(timing, event);
-    event->when = (uint32_t)cupid_timing_current_time(timing) + (uint32_t)when;
+void cupid_timing_queue_absolute(struct CupidTiming* timing, struct CupidTimingEvent* event,
+                                 int32_t when) {
+    event->when = (uint32_t)when;
     struct CupidTimingEvent** link = timing->reroot ? &timing->reroot : &timing->root;
     while (*link) {
         int32_t delta = distance((*link)->when, event->when);
@@ -86,10 +85,19 @@ void cupid_timing_schedule(struct CupidTiming* timing, struct CupidTimingEvent* 
     refresh_deadline(timing);
 }
 
+void cupid_timing_schedule(struct CupidTiming* timing, struct CupidTimingEvent* event,
+                           int32_t when) {
+    cupid_timing_deschedule(timing, event);
+    cupid_timing_queue_absolute(timing, event,
+        (int32_t)((uint32_t)cupid_timing_current_time(timing) + (uint32_t)when));
+}
+
 void cupid_timing_schedule_absolute(struct CupidTiming* timing, struct CupidTimingEvent* event,
                                     int32_t when) {
-    uint32_t now = (uint32_t)cupid_timing_current_time(timing);
-    cupid_timing_schedule(timing, event, distance((uint32_t)when, now));
+    /* The timestamp is already absolute. Moving the event retains cancellation
+     * and deadline refresh without converting through the current CPU clock. */
+    cupid_timing_deschedule(timing, event);
+    cupid_timing_queue_absolute(timing, event, when);
 }
 
 bool cupid_timing_is_scheduled(const struct CupidTiming* timing,
@@ -140,11 +148,28 @@ int32_t cupid_timing_tick(struct CupidTiming* timing, int32_t cycles) {
     if (timing->synchronize)
         return timing->synchronize(timing->synchronizeContext, timing, cycles);
     cupid_timing_advance_clock(timing, (uint32_t)cycles);
-    while (cupid_timing_dispatch_next(timing)) {}
-    cupid_timing_finish_tick(timing);
+    int32_t next;
+    for (;;) {
+        const struct CupidTimingEvent* first = timing->root ? timing->root : timing->reroot;
+        next = first ? (int32_t)(first->when - timing->masterCycles) : INT32_MAX;
+        if (next > 0) break;
+        cupid_timing_dispatch_next(timing);
+    }
+    /* The last ordinary dispatch attempt restores a deferred future queue
+     * even when no event is due. Keep that state before clock observers. */
+    if (!timing->root) {
+        timing->root = timing->reroot;
+        timing->reroot = NULL;
+    }
+    if (timing->syncClock) {
+        cupid_timing_finish_tick(timing);
+        /* A clock observer can add, cancel or defer a deadline. Its newly
+         * due events remain for the next tick, as on the ordinary path. */
+        next = deadline(timing);
+    }
     /* The CPU compares its relative accumulator against this breakpoint. */
-    *timing->nextEvent = deadline(timing);
-    return *timing->nextEvent;
+    *timing->nextEvent = next;
+    return next;
 }
 
 int32_t cupid_timing_current_time(const struct CupidTiming* timing) {
