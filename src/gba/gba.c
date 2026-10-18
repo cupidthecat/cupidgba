@@ -6,6 +6,92 @@
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
 #include "serial/uart.h"
+#include "../platform/context.h"
+
+enum ExecutionRequest { EXECUTE_STEP, EXECUTE_FRAME, EXECUTE_INTERVAL };
+struct CupidExecution {
+    struct CupidContext* host;
+    struct CupidContext* context;
+    enum ExecutionRequest request;
+    uint64_t start, clocks, stoppedClocks;
+    bool inside;
+};
+
+static void step_cpu(struct CupidGBA* gba);
+
+static uint64_t execution_progress(const struct CupidGBA* gba) {
+    const struct CupidExecution* execution = gba->execution;
+    return cupid_timing_global_time(&gba->timing) - execution->start + execution->stoppedClocks;
+}
+
+static bool execution_ready(const struct CupidGBA* gba) {
+    const struct CupidExecution* execution = gba->execution;
+    if (execution->request == EXECUTE_STEP) return true;
+    if (execution->request == EXECUTE_FRAME) return gba->frameReady || gba->stopped;
+    return execution_progress(gba) >= execution->clocks;
+}
+
+static void yield_execution(struct CupidGBA* gba) {
+    struct CupidExecution* execution = gba->execution;
+    if (execution && execution->inside && execution_ready(gba))
+        cupid_context_yield(execution->context);
+}
+
+static void advance_stopped_execution(struct CupidGBA* gba) {
+    struct CupidExecution* execution = gba->execution;
+    const uint64_t remaining = execution->clocks - execution_progress(gba);
+    execution->stoppedClocks += cupid_gba_advance_stopped_time(gba, remaining);
+}
+
+static void execute_cpu(void* argument) {
+    struct CupidGBA* gba = argument;
+    for (;;) {
+        if (gba->stopped) {
+            if (gba->execution->request == EXECUTE_INTERVAL) advance_stopped_execution(gba);
+        } else {
+            gba->cpuInstructionPending = true;
+            step_cpu(gba);
+            gba->cpuInstructionPending = false;
+        }
+        yield_execution(gba);
+    }
+}
+
+static void release_execution(struct CupidGBA* gba) {
+    struct CupidExecution* execution = gba->execution;
+    if (!execution) {
+        gba->cpuInstructionPending = false;
+        return;
+    }
+    /* Cancellation retires the stack at its yield. No unfinished fetch, MMIO
+     * side effect or peripheral callback runs against reset/freed memory. */
+    cupid_context_destroy(execution->context);
+    cupid_context_destroy(execution->host);
+    free(execution);
+    gba->execution = NULL;
+    gba->cpuInstructionPending = false;
+}
+
+static void run_execution(struct CupidGBA* gba, enum ExecutionRequest request, uint64_t clocks) {
+    if (!gba->execution) {
+        struct CupidExecution* execution = calloc(1, sizeof(*execution));
+        if (!execution) abort();
+        execution->host = cupid_context_host_create();
+        if (!execution->host) abort();
+        execution->context = cupid_context_create(execution->host, execute_cpu, gba);
+        if (!execution->context) abort();
+        gba->execution = execution;
+    }
+    struct CupidExecution* execution = gba->execution;
+    if (execution->inside) abort();
+    execution->request = request;
+    execution->start = cupid_timing_global_time(&gba->timing);
+    execution->clocks = clocks;
+    execution->stoppedClocks = 0;
+    execution->inside = true;
+    cupid_context_resume(execution->context);
+    execution->inside = false;
+}
 
 /**
  * @brief Forward declarations for irqh callbacks.
@@ -99,6 +185,7 @@ void cupid_gba_create(struct CupidGBA* gba) {
  * supplies either reset-vector control or the built-in post-boot state.
  */
 void cupid_gba_reset(struct CupidGBA* gba) {
+    release_execution(gba);
     /** Ensure master pointer is valid. */
     gba->cpu.master = gba;
 
@@ -167,6 +254,8 @@ static void _cupidGBAReset(struct CupidARM* cpu) {
     gba->stopped = false;
     gba->haltIRQSample = false;
     gba->haltIRQSampleValid = false;
+    gba->haltTimed = false;
+    gba->haltEvent = (struct CupidTimingEvent){0};
     gba->intervalOvershoot = 0;
     gba->keysLast = 0x0400;
 
@@ -222,12 +311,55 @@ void cupid_gba_skip_bios(struct CupidGBA* gba) {
 }
 
 /**
- * @brief Halt the CPU until the next event.
+ * @brief Halt the CPU until an enabled interrupt request can wake it.
  */
 void cupid_gba_halt(struct CupidGBA* gba) {
     gba->haltIRQSampleValid = false;
     gba->cpu.nextEvent = gba->cpu.cycles;
     gba->cpu.halted = 1;
+}
+
+static void accept_halt(struct CupidTiming* timing, void* context, uint32_t late) {
+    (void)timing;
+    (void)late;
+    struct CupidGBA* gba = context;
+    cupid_gba_halt(gba);
+    gba->haltTimed = true;
+}
+
+void cupid_gba_request_halt(struct CupidGBA* gba) {
+    gba->haltEvent.callback = accept_halt;
+    gba->haltEvent.context = gba;
+    gba->haltEvent.name = "HALTCNT acceptance";
+    gba->haltEvent.priority = 3;
+    cupid_timing_schedule(&gba->timing, &gba->haltEvent, 1);
+}
+
+void cupid_gba_wait_halt(struct CupidGBA* gba) {
+    struct CupidARM* cpu = &gba->cpu;
+    /* Retain this bus request while peripheral events run. Standalone calls
+     * can return a frame/interval without completing or replaying the fetch.
+     * A cable already owns a suspended CPU stack and yields in its clock
+     * coordinator, so it does not enter a second execution context. */
+    for (;;) {
+        yield_execution(gba);
+        if (!cpu->halted || gba->irq.available) break;
+        if (gba->stopped && gba->execution && gba->execution->inside) {
+            advance_stopped_execution(gba);
+            continue;
+        }
+        gba->timing.waitingForEvent = true;
+        cpu->cycles = cpu->nextEvent;
+        cpu->irqh.processEvents(cpu);
+    }
+    if (cpu->halted) {
+        cpu->halted = 0;
+        cpu->cycles += gba->haltTimed ? 2 : 1;
+        gba->haltTimed = false;
+        gba->haltIRQSampleValid = false;
+        if (cpu->cycles >= cpu->nextEvent) cpu->irqh.processEvents(cpu);
+    }
+    gba->timing.waitingForEvent = false;
 }
 
 static unsigned stop_sources(struct CupidGBA* gba) {
@@ -265,6 +397,7 @@ uint64_t cupid_gba_advance_stopped_time(struct CupidGBA* gba, uint64_t clocks) {
  * @brief Destroy a GBA instance.
  */
 void cupid_gba_destroy(struct CupidGBA* gba) {
+    release_execution(gba);
     cupid_cartridge_deinit(gba);
     cupid_video_deinit(&gba->video);
     cupid_memory_deinit(gba);
@@ -317,7 +450,7 @@ void cupid_gba_test_keypad_irq(struct CupidGBA* gba) {
 /**
  * @brief Run a single CPU step.
  */
-void cupid_gba_step(struct CupidGBA* gba) {
+static void step_cpu(struct CupidGBA* gba) {
     struct CupidARM* cpu = &gba->cpu;
 
     if (gba->stopped) return;
@@ -328,7 +461,8 @@ void cupid_gba_step(struct CupidGBA* gba) {
     gba->haltIRQSampleValid = false;
     if (cpu->halted && gba->irq.available) {
         cpu->halted = 0;
-        cpu->cycles++; /* Wake-up consumes one clock before the next fetch. */
+        cpu->cycles += gba->haltTimed ? 2 : 1;
+        gba->haltTimed = false;
         if (cpu->cycles >= cpu->nextEvent) cpu->irqh.processEvents(cpu);
     }
     if (cpu->halted) {
@@ -352,12 +486,26 @@ void cupid_gba_step(struct CupidGBA* gba) {
     gba->timing.waitingForEvent = false;
 }
 
+void cupid_gba_step(struct CupidGBA* gba) {
+    if (gba->stopped) return;
+    if (gba->externalExecution) {
+        gba->cpuInstructionPending = true;
+        step_cpu(gba);
+        gba->cpuInstructionPending = false;
+    } else {
+        run_execution(gba, EXECUTE_STEP, 0);
+    }
+}
+
 /**
  * @brief Run the emulator until a frame is ready.
  */
 void cupid_gba_run_frame(struct CupidGBA* gba) {
     gba->frameReady = false;
-
+    if (!gba->externalExecution) {
+        if (!gba->stopped) run_execution(gba, EXECUTE_FRAME, 0);
+        return;
+    }
     while (!gba->frameReady && !gba->stopped) {
         cupid_gba_step(gba);
     }
@@ -372,6 +520,11 @@ void cupid_gba_run_interval(struct CupidGBA* gba, uint32_t clocks) {
     }
     remaining -= gba->intervalOvershoot;
     gba->intervalOvershoot = 0;
+    if (!gba->externalExecution) {
+        run_execution(gba, EXECUTE_INTERVAL, remaining);
+        gba->intervalOvershoot = execution_progress(gba) - remaining;
+        return;
+    }
     while (remaining) {
         uint64_t elapsed;
         if (gba->stopped) {

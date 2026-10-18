@@ -92,16 +92,16 @@ jobs:
         run: |
           cmake -S . -B build-thread -DCMAKE_C_COMPILER=clang \
             -DCMAKE_BUILD_TYPE=Debug -DCUPID_THREAD_SANITIZER=ON
-          cmake --build build-thread --target test_audio_output test_local test_context --parallel 2
-          ctest --test-dir build-thread -R '^platform[.](audio|local-live-audio|context)$' --output-on-failure
+          cmake --build build-thread --target test_audio_output test_local test_context test_execution --parallel 2
+          ctest --test-dir build-thread -R '^platform[.](audio|local-live-audio|context)$|^gba[.]execution-' --output-on-failure
       - name: Check portable context fallback
         if: matrix.compiler == 'clang'
         run: |
           cmake -S . -B build-context-portable -DCMAKE_C_COMPILER=clang \
             -DCMAKE_BUILD_TYPE=Debug -DCUPID_SANITIZERS=ON -DCUPID_FAST_CONTEXT=OFF
-          cmake --build build-context-portable --target test_cable test_local test_context --parallel 2
+          cmake --build build-context-portable --target test_cable test_local test_context test_execution --parallel 2
           ctest --test-dir build-context-portable --output-on-failure \
-            -R '^gba[.]cable-(normal|uart|multiplayer|chronology|lifecycle|stopped-phase|controls|guest-dma|guest-controls|guest-2-1-3|guest-3-0-3|word-1-8)$|^platform[.](local-publication|context)$'
+            -R '^gba[.]cable-(normal|uart|multiplayer|chronology|lifecycle|stopped-phase|controls|guest-dma|guest-controls|guest-2-1-3|guest-3-0-3|word-1-8)$|^platform[.](local-publication|context)$|^gba[.]execution-'
       - name: Verify Makefile build
         if: matrix.compiler == 'gcc'
         run: make --jobs=2

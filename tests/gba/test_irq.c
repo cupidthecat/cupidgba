@@ -165,7 +165,7 @@ static void halt_samples_the_irq_line_before_its_wake_clock(void) {
         }
 }
 
-static void halt_control_acceptance_retains_the_earlier_irq_sample(void) {
+static void halt_control_acceptance_retains_the_following_cpu_phase(void) {
     const uint64_t clocks[] = {10, UINT32_MAX - UINT64_C(2)};
     for (unsigned wrap = 0; wrap < 2; wrap++) for (unsigned thumb = 0; thumb < 2; thumb++)
         for (unsigned asserted = 0; asserted < 2; asserted++) {
@@ -191,16 +191,27 @@ static void halt_control_acceptance_retains_the_earlier_irq_sample(void) {
             cupid_io_write(gba, REG_IME, 1);
             cupid_raise_irq_at(gba, IRQ_TIMER0, clocks[wrap] - asserted);
             cupid_gba_step(gba);
+            /* STRB finishes its fetch and data clocks. HALT is accepted on
+             * the following fetch, rather than an empty internal clock. */
+            CHECK(cupid_timing_global_time(&gba->timing) == clocks[wrap] + 2);
+            CHECK(!gba->cpu.halted && !gba->cpuInstructionPending);
+            CHECK(gba->irq.available && gba->irq.line == (asserted != 0));
+            CHECK(cupid_timing_is_scheduled(&gba->timing, &gba->haltEvent));
+            cupid_gba_step(gba);
             CHECK(cupid_timing_global_time(&gba->timing) == clocks[wrap] + 3);
             CHECK(gba->cpu.halted && gba->irq.available && gba->irq.line);
-            CHECK(gba->haltIRQSampleValid && gba->haltIRQSample == (asserted != 0));
+            CHECK(!gba->haltIRQSampleValid);
+            CHECK(gba->cpu.gprs[5] == (asserted ? 0 : 1));
+            /* An earlier IRQ retains its partial vector refill. Otherwise
+             * the following ADD has completed before HALT holds the CPU. */
+            CHECK(gba->cpuInstructionPending == (asserted != 0));
+            CHECK(gba->cpu.gprs[ARM_PC] == (asserted ? BASE_IRQ : 0x80 + (thumb ? 6 : 12)));
+            CHECK(gba->cpu.privilegeMode == (asserted ? MODE_IRQ : MODE_SYS));
             cupid_gba_step(gba);
             CHECK(!gba->cpu.halted && !gba->haltIRQSampleValid);
             CHECK(gba->cpu.gprs[5] == (asserted ? 0 : 1));
-            if (!asserted) {
-                CHECK(gba->cpu.privilegeMode == MODE_SYS);
-                cupid_gba_step(gba);
-            }
+            CHECK(!gba->cpuInstructionPending);
+            CHECK(cupid_timing_global_time(&gba->timing) == clocks[wrap] + (asserted ? 8 : 9));
             CHECK(gba->cpu.privilegeMode == MODE_IRQ && gba->cpu.gprs[3] == 99);
             CHECK(gba->cpu.gprs[ARM_LR] == 0x80 + 4 + (thumb ? 2 : 4) * (asserted ? 1 : 2));
             CHECK(gba->cpu.spsr.t == (thumb != 0));
@@ -381,7 +392,7 @@ int main(void) {
     RUN(consecutive_line_changes_keep_their_deadlines);
     RUN(halt_wakes_with_ime_clear_and_cpsr_masked);
     RUN(halt_samples_the_irq_line_before_its_wake_clock);
-    RUN(halt_control_acceptance_retains_the_earlier_irq_sample);
+    RUN(halt_control_acceptance_retains_the_following_cpu_phase);
     RUN(cpsr_unmask_waits_for_the_sampled_instruction);
     RUN(thumb_irq_saves_state_and_returns_to_the_interrupted_instruction);
     RUN(mmio_reads_sample_after_the_data_bus_cycle);
