@@ -366,6 +366,15 @@ static void guest_polling_uses_the_default_byte_program_profile(void) {
     puts("PASS owned IWRAM/ROM ARM driver polling with default programming duration");
 }
 
+/* Observe cartridge entry after each ordinary step return. Count zero is
+ * before execution, so it cannot satisfy the reboot's entry observation. */
+static bool reboot_entry(struct CupidGBA* gba, uint64_t steps, void* context) {
+    if (!steps) return true;
+    bool* entered = context;
+    *entered = gba->cpu.executionMode == MODE_ARM && gba->cpu.gprs[ARM_PC] == GBA_BASE_ROM0 + 4;
+    return !*entered;
+}
+
 static void firmware_reboot_preserves_accepted_operations(void) {
     unsigned observations = 0;
     for (unsigned c = 0; c < 4; c++) for (unsigned operation = 0; operation < 4; operation++)
@@ -411,11 +420,12 @@ static void firmware_reboot_preserves_accepted_operations(void) {
             _CupidSetMode(&gba->cpu, thumb ? MODE_THUMB : MODE_ARM);
             gba->cpu.gprs[ARM_PC] = GBA_BASE_IWRAM + 0x100;
             if (thumb) CupidThumbWritePC(&gba->cpu); else CupidARMWritePC(&gba->cpu);
-            unsigned steps;
-            for (steps = 0; steps < 500000; steps++) {
-                cupid_gba_step(gba);
-                if (gba->cpu.executionMode == MODE_ARM && gba->cpu.gprs[ARM_PC] == GBA_BASE_ROM0 + 4) break;
-            }
+            bool entered = false;
+            const uint64_t completed = cupid_gba_run_steps(gba, 500000, reboot_entry, &entered);
+            CHECK(completed && completed <= 500000 && entered);
+            /* The bounded API counts completed returns; this loop index keeps
+             * the same final-step acceptance and original 500,000-step guard. */
+            const unsigned steps = (unsigned)(completed - 1);
             CHECK(steps < 500000 && save->programming && !save->dirty);
             CHECK(save->data == storage && save->readyClock == deadline);
             CHECK(save->programOffset == offset && save->programLength == length);
