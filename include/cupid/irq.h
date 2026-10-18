@@ -47,6 +47,11 @@ void cupid_irq_write8(struct CupidGBA* gba, uint32_t address, uint8_t value);
 /* CPU bus ownership: a stretched transfer completes one CPU clock at its
  * deadline. DMA waits resume without completing a CPU clock themselves. */
 void cupid_irq_hold_cpu(struct CupidGBA* gba, unsigned cycles);
+/* Atomic occupied transfers only: the caller must immediately advance all
+ * supplied clocks without an intermediate strobe. A quiet default release
+ * needs only its final breakpoint and retained event bookkeeping. The owned
+ * renderer still observes that tick; foreign observers use the event path. */
+bool cupid_irq_prepare_quiet_transfer(struct CupidGBA* gba, unsigned cycles);
 void cupid_irq_pause_cpu(struct CupidGBA* gba);
 /* A dynamic bus owner decides readiness before same-edge register writes. */
 void cupid_irq_hold_cpu_until(struct CupidGBA* gba, bool (*ready)(struct CupidGBA*));

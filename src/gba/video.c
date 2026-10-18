@@ -29,7 +29,7 @@ static void _startHdraw(struct CupidTiming* timing, void* context, uint32_t cycl
 static void _updateMatch(struct CupidTiming* timing, void* context, uint32_t cyclesLate);
 static void _requestDisplay(struct CupidTiming* timing, void* context, uint32_t cyclesLate);
 static void _latchDisplay(struct CupidTiming* timing, void* context, uint32_t cyclesLate);
-static void _syncClock(void* context, uint64_t time) {
+void cupid_video_clock(void* context, uint64_t time) {
     cupid_video_sync_to(context, time);
 }
 
@@ -73,7 +73,7 @@ void cupid_video_reset(struct CupidVideo* video) {
     cupid_timing_deschedule(&gba->timing, &video->displayEvent);
     cupid_timing_deschedule(&gba->timing, &video->latchEvent);
     gba->timing.clockContext = video;
-    gba->timing.syncClock = _syncClock;
+    gba->timing.syncClock = cupid_video_clock;
 
     video->dispcnt = 0;
     video->dispstat = 0;

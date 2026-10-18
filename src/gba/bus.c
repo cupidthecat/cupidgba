@@ -31,6 +31,16 @@ void cupid_bus_advance_part(struct CupidARM* cpu, unsigned cycles) {
 }
 
 void cupid_bus_advance(struct CupidARM* cpu, unsigned cycles, bool occupied) {
+    /* This call consumes the whole interval. Split display/GPIO requests
+     * retain begin-transfer/advance-part ownership across their strobes. */
+    if (occupied && cycles > 1) {
+        struct CupidGBA* gba = cpu->master;
+        if (cpu == &gba->cpu && cupid_irq_prepare_quiet_transfer(gba, cycles)) {
+            gba->memory.busBusy = true;
+            cupid_bus_advance_part(cpu, cycles);
+            return;
+        }
+    }
     cupid_bus_begin_transfer(cpu, cycles, occupied);
     cupid_bus_advance_part(cpu, cycles);
 }

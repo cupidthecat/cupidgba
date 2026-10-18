@@ -28,7 +28,7 @@ stage on the next CPU-ready edge. A scheduled ready-edge event preserves this
 ownership without splitting peripheral dispatch batches. Timer, DMA, audio and
 existing bus-progress observations retain their previous dispatch partitions.
 
-The CPU-line slots track scheduled and held ownership. A bus hold always sets
+The CPU-line slots track scheduled and held ownership. A general bus hold sets
 the held-clock state, including when no line publication needs moving. Empty
 domains avoid the queue walk; a new input accepted during the hold still keeps
 its remaining CPU stages. Resume releases the clock and queues each retained
@@ -132,3 +132,28 @@ retain their own synchronization path.
 The nine scheduler checks include observer queue changes, deferred callbacks,
 owned rescheduling and signed, 32-bit and 64-bit clock-wrap boundaries. The
 same complete check output is retained against a matching preceding core.
+
+## Atomic waits with an empty CPU-line pipeline
+
+An occupied request consumed in one call can retain its final ready state
+directly when no CPU-line stage is pending and no peripheral event is due
+before or at that ready edge. The CPU handler, release callback, context and
+release priority must have their owned identities. Deferred queues, active
+callbacks, linked clock coordinators, foreign observers, intermediate data
+strobes and dynamic readiness predicates retain the ordinary event path.
+
+The final board tick consumes the full original wait and advances the owned
+renderer at its ordinary completed clock. The release event retains its
+dequeued timestamp and empty link. A custom CPU handler observes the held
+clock before release; it also receives ordinary bus-entry, completion and
+partial-advance calls even when no board clock is due. These calls publish
+ARM or Thumb open bus and clear the early-exit flag.
+
+The `gba.irq-clock-quiet-atomic` group compares 2,880 scenes across six wait
+lengths, three relative CPU positions, five clock epochs, eight event/IRQ
+conditions, two clock-observer configurations and two reference handlers.
+It checks complete renderer buffers, latches and memory, IRQ state and both
+event queues at the ready edge and after following clocks. Forwarding clock
+observers and CPU handlers provide the ordinary-path controls. These are
+host-dispatch equivalence checks; the original reboot deadline, cartridge
+comparisons and full platform profiles remain separate requirements.

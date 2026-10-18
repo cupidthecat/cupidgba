@@ -109,8 +109,14 @@ void cupid_dma_kick(struct CupidGBA* gba, uint64_t timestamp) {
 
 void cupid_dma_poll(struct CupidGBA* gba) {
     const struct CupidMemory* memory = &gba->memory;
-    if (memory->dmaRunning || memory->busBusy || memory->busLocked ||
-        next_channel(memory) < 0) return;
+    if (memory->dmaRunning || memory->busBusy || memory->busLocked) return;
+    /* Polling only needs to know whether a request exists. Keep these live
+     * flags here so an idle bus strobe does not call the priority selector.
+     * read_next() still selects the winning channel at the handover edge. */
+    if (!(memory->dma[0].enable && memory->dma[0].ready) &&
+        !(memory->dma[1].enable && memory->dma[1].ready) &&
+        !(memory->dma[2].enable && memory->dma[2].ready) &&
+        !(memory->dma[3].enable && memory->dma[3].ready)) return;
     /* The clock getter has no side effects. Idle CPU strobes need neither a
      * timestamp nor a queued event; accepted transfers keep the same clock. */
     begin_transfer(gba, cupid_timing_global_time(&gba->timing));

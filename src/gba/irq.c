@@ -250,6 +250,36 @@ static void resume_cpu_clock(struct CupidTiming* timing, void* context, uint32_t
     resume_cpu(gba, timing->globalCycles - late, 1);
 }
 
+bool cupid_irq_prepare_quiet_transfer(struct CupidGBA* gba, unsigned cycles) {
+    struct CupidARM* cpu = &gba->cpu;
+    struct CupidTiming* timing = &gba->timing;
+    struct CupidIRQState* irq = &gba->irq;
+    struct CupidTimingEvent* ready = &irq->cpuClockResumeEvent;
+    if (cycles < 2 || cycles > INT32_MAX || cpu->cycles < 0
+        || (uint32_t)cpu->cycles > (uint32_t)INT32_MAX - cycles
+        || cpu->cycles >= cpu->nextEvent || cpu->irqh.processEvents != cupid_gba_process_cpu_events
+        || irq->cpuClockPaused || irq->cpuReady
+        || irq->scheduledLineMask || irq->pausedLineMask
+        || ready->callback != resume_cpu_clock || ready->context != gba
+        || ready->priority != IRQ_SAMPLE_PHASE
+        || timing->inCallback || timing->reroot || timing->synchronize
+        || (timing->syncClock && (timing->syncClock != cupid_video_clock
+            || timing->clockContext != &gba->video))
+        || timing->relativeCycles != &cpu->cycles || timing->nextEvent != &cpu->nextEvent
+        || (uint32_t)timing->globalCycles != timing->masterCycles) return false;
+    uint32_t now = timing->masterCycles + (uint32_t)cpu->cycles;
+    if (timing->root && (int32_t)(timing->root->when - now) <= (int32_t)cycles) return false;
+    /* No line stage, peripheral callback or intermediate data strobe can see
+     * this held interval. The owned renderer observes its ordinary completed
+     * tick after release; foreign observers retain the general path. The
+     * default release only clears an empty pause and leaves its dequeued
+     * event here. Preserve that state and the same completed ready clock. */
+    ready->when = now + cycles;
+    ready->next = NULL;
+    cpu->nextEvent = cpu->cycles + (int32_t)cycles;
+    return true;
+}
+
 void cupid_irq_hold_cpu(struct CupidGBA* gba, unsigned cycles) {
     if (cycles < 2) abort();
     cupid_irq_pause_cpu(gba);

@@ -338,6 +338,9 @@ void cupid_video_skip_bios(struct CupidVideo* video);
 void cupid_video_update_match(struct CupidVideo* video);
 void cupid_video_sync(struct CupidVideo* video);
 void cupid_video_sync_to(struct CupidVideo* video, uint64_t time);
+/* Owned scheduler observer: advances only renderer state at the supplied
+ * clock. It neither dispatches callbacks nor changes scheduler deadlines. */
+void cupid_video_clock(void* context, uint64_t time);
 bool cupid_video_memory_busy(struct CupidVideo* video, uint32_t address);
 void cupid_video_deinit(struct CupidVideo* video);
 

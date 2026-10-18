@@ -11,7 +11,6 @@
  * @brief Forward declarations for irqh callbacks.
  */
 static void _cupidGBAReset(struct CupidARM* cpu);
-static void _cupidProcessEvents(struct CupidARM* cpu);
 static void _cupidSwi16(struct CupidARM* cpu, int immediate);
 static void _cupidSwi32(struct CupidARM* cpu, int immediate);
 static void _cupidHitIllegal(struct CupidARM* cpu, uint32_t opcode);
@@ -24,7 +23,7 @@ static void _cupidCPSRChanged(struct CupidARM* cpu);
  */
 static void _cupidInterruptHandlerInit(struct CupidARMInterruptHandler* irqh) {
     irqh->reset = _cupidGBAReset;
-    irqh->processEvents = _cupidProcessEvents;
+    irqh->processEvents = cupid_gba_process_cpu_events;
     irqh->swi16 = _cupidSwi16;
     irqh->swi32 = _cupidSwi32;
     irqh->hitIllegal = _cupidHitIllegal;
@@ -396,7 +395,7 @@ void cupid_gba_run_interval(struct CupidGBA* gba, uint32_t clocks) {
 /**
  * @brief Process timing events when cpu->cycles reaches cpu->nextEvent.
  */
-static void _cupidProcessEvents(struct CupidARM* cpu) {
+void cupid_gba_process_cpu_events(struct CupidARM* cpu) {
     struct CupidGBA* gba = cpu->master;
 
     /** Update open bus value from prefetch pipeline. */
