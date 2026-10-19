@@ -32,13 +32,15 @@ The selected lane and reset policies have logical regression coverage;
 physical propagation, overflow contents and partial-write behavior remain
 unmeasured.
 
-On each timer overflow, an empty staged word takes the oldest queued word
-before the FIFO decides whether to request DMA. Three or fewer words remaining
-in queued storage request a refill through the existing two-clock activation
-path. An occupied stage keeps its current bytes and does not consume another
-word. This ordering lets the word load itself cross the refill threshold.
-DMA still transfers four words, retains its programmed source progress and
-publishes each destination write at its existing bus deadline.
+On each timer overflow, the FIFO samples queued storage before an empty stage
+takes its next word. Three or fewer queued words request a refill. In particular,
+four queued words and an empty stage do not request DMA until the next overflow.
+An occupied stage keeps its current bytes and does not consume another word.
+The audio request reaches DMA three clocks after the timer overflow; ordinary
+DMA triggers retain their two-clock activation path. A pending request keeps
+its first deadline. Bus ownership still waits for the active CPU transfer.
+DMA transfers four words, retains its programmed source progress and publishes
+each destination write after the existing source and destination bus waits.
 
 ## Regression coverage
 
@@ -66,6 +68,15 @@ an independent running timer, bulk versus single-clock dispatch, master power,
 timer selection, disabled or non-FIFO timing and destination ownership.
 The level and chronology groups fail with the preceding audio implementation;
 the inactive-source controls pass with either implementation.
+
+The chronology fixture starts with four queued words and a four-clock timer.
+Its first overflow at clock 6 loads the stage without requesting DMA. The next
+overflow at clock 10 requests activation at clock 13. With an idle bus and an
+internal word source, destination writes occur at clocks 16, 18, 20 and 22;
+the completion IRQ belongs to clock 22 and bus release to clock 23. Single-clock
+and overdue dispatch must produce identical FIFO, timer and interrupt state.
+These deadlines replace the earlier after-load decision and two-clock audio
+request together. Changing either alone fails an original cartridge comparison.
 
 Four `gba.fifo-lanes-*` groups require 256 complete access-width scenes across
 both FIFOs and four clock epochs, including counter crossings. Golden queued
@@ -134,8 +145,12 @@ the same frame, instruction and process guards. The source case remains a
 timing failure; the current model reads `0x62` at its first `0x68` comparison.
 
 The IRQ cartridge retains its original `0x008000AF` comparison with both live
-operands and both firmware paths. Original base, prefetch, threshold and
-IRQ-latch timing failures remain enabled, including the separate source base.
+operands and both firmware paths. The combined queue and activation ordering
+also satisfies all eight original prefetch comparisons and both threshold
+comparisons. All 20 configured FIFO cases retain their inputs and run guards;
+14 pass. Base, IRQ-latch and the separate source base still fail on both firmware
+paths. The first base timer reading remains `0x62` instead of `0x68`; IRQ-latch
+reads `0x7A` instead of `0x7B`. These are remaining failures, not new expectations.
 Every original input, comparison and execution guard remains required. The
 power, refill and access-width regressions cover their selected logical model;
 complete FIFO/DMA timing acceptance remains open in #76. Physical queue capacity,

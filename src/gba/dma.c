@@ -123,12 +123,12 @@ static void activation_callback(struct CupidTiming* timing, void* context, uint3
     cupid_dma_kick(dma->gba, cupid_timing_global_time(timing));
 }
 
-static void request_at(struct CupidGBA* gba, int ch, uint64_t timestamp) {
+static void request_at(struct CupidGBA* gba, int ch, uint64_t timestamp, unsigned delay) {
     struct CupidDMA* dma = &gba->memory.dma[ch];
     if (!dma->enable || dma->ready ||
         cupid_timing_is_scheduled(&gba->timing, &dma->requestEvent)) return;
     cupid_timing_schedule_absolute(&gba->timing, &dma->requestEvent,
-                                   (int32_t)(uint32_t)(timestamp + 2));
+                                   (int32_t)(uint32_t)(timestamp + delay));
 }
 
 static void complete_channel(struct CupidGBA* gba, struct CupidDMA* dma, uint64_t when) {
@@ -314,12 +314,14 @@ void cupid_dma_write_cnt(struct CupidGBA* gba, int ch, uint16_t value) {
 }
 
 void cupid_dma_transfer(struct CupidGBA* gba, int ch) {
-    request_at(gba, ch, cupid_timing_global_time(&gba->timing));
+    request_at(gba, ch, cupid_timing_global_time(&gba->timing), 2);
 }
 
 void cupid_dma_request_fifo(struct CupidGBA* gba, int ch, uint64_t timestamp) {
     if (ch >= 1 && ch <= 2 && gba->memory.dma[ch].timing == DMA_TIMING_CUSTOM) {
-        request_at(gba, ch, timestamp);
+        /* The audio request reaches DMA one clock after the ordinary trigger
+         * path. Bus ownership still waits for the current CPU transfer. */
+        request_at(gba, ch, timestamp, 3);
     }
 }
 

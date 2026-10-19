@@ -43,10 +43,10 @@ static struct CupidAudioFIFO* selected(struct CupidGBA* gba, unsigned fifo) {
     return fifo ? &gba->audio.chB : &gba->audio.chA;
 }
 
-static void refill_uses_the_queue_after_loading_the_staged_word(void) {
+static void refill_samples_the_queue_before_loading_the_staged_word(void) {
     /* Rows are the queued-word count before the timer. A loaded stage retains
      * its existing bytes; an empty stage consumes the oldest complete word. */
-    const bool emptyStage[] = {true, true, true, true, true, false, false, false};
+    const bool emptyStage[] = {true, true, true, true, false, false, false, false};
     const bool occupiedStage[] = {true, true, true, true, false, false, false, false};
     const uint32_t stages[] = {0, 0x80, 0x807F, 0x807F34};
     for (unsigned epoch = 0; epoch < 4; epoch++) for (unsigned fifo = 0; fifo < 2; fifo++)
@@ -70,14 +70,16 @@ static void refill_uses_the_queue_after_loading_the_staged_word(void) {
         CHECK(cupid_timing_is_scheduled(&gba->timing, &dma->requestEvent) == requested);
         CHECK(!dma->ready && !gba->memory.dmaRunning);
         CHECK(dma->nextCount == 4 && dma->nextSource == GBA_BASE_IWRAM + 0x400);
-        if (requested) CHECK(dma->requestEvent.when == (uint32_t)(origins[epoch] + 2));
+        if (requested) CHECK(dma->requestEvent.when == (uint32_t)(origins[epoch] + 3));
         observations++;
         destroy(gba);
     }
 }
 
-static void timer_dma_and_irq_edges_retain_the_original_deadlines(void) {
-    const unsigned writes[] = {11, 13, 15, 17};
+static void timer_dma_and_irq_edges_follow_the_audio_request_phase(void) {
+    /* Four queued words delay the request until the second timer overflow:
+     * overflow 10, request 13, bus head 14, then four read/write pairs. */
+    const unsigned writes[] = {16, 18, 20, 22};
     const int8_t samples[] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77};
     for (unsigned epoch = 0; epoch < 4; epoch++) for (unsigned fifo = 0; fifo < 2; fifo++)
     for (unsigned channel = 1; channel <= 2; channel++) for (unsigned timer = 0; timer < 2; timer++) {
@@ -96,13 +98,17 @@ static void timer_dma_and_irq_edges_retain_the_original_deadlines(void) {
             cupid_timing_tick(&punctual->timing, 1);
             struct CupidDMA* dma = &punctual->memory.dma[channel];
             struct CupidAudioFIFO* output = selected(punctual, fifo);
-            if (clock < 6) CHECK(!cupid_timing_is_scheduled(&punctual->timing, &dma->requestEvent));
+            if (clock < 10) CHECK(!cupid_timing_is_scheduled(&punctual->timing, &dma->requestEvent));
             if (clock == 6) {
                 CHECK(output->fifoRead == 1 && output->internalRemaining == 3);
-                CHECK(cupid_timing_is_scheduled(&punctual->timing, &dma->requestEvent));
-                CHECK(dma->requestEvent.when == (uint32_t)(origins[epoch] + 8));
+                CHECK(!cupid_timing_is_scheduled(&punctual->timing, &dma->requestEvent));
             }
-            CHECK(punctual->memory.dmaRunning == (clock >= 8 && clock < 18));
+            if (clock == 10) {
+                CHECK(output->fifoRead == 1 && output->internalRemaining == 2);
+                CHECK(cupid_timing_is_scheduled(&punctual->timing, &dma->requestEvent));
+                CHECK(dma->requestEvent.when == (uint32_t)(origins[epoch] + 13));
+            }
+            CHECK(punctual->memory.dmaRunning == (clock >= 13 && clock < 23));
             unsigned published = 0;
             for (unsigned word = 0; word < 4; word++) {
                 if (clock >= writes[word]) {
@@ -117,7 +123,7 @@ static void timer_dma_and_irq_edges_retain_the_original_deadlines(void) {
         CHECK(!memcmp(selected(punctual, fifo), selected(late, fifo), sizeof(struct CupidAudioFIFO)));
         CHECK(punctual->memory.dma[channel].nextSource == late->memory.dma[channel].nextSource);
         CHECK(punctual->memory.dma[channel].nextCount == late->memory.dma[channel].nextCount);
-        CHECK(punctual->memory.dma[channel].busyUntil == origins[epoch] + 17);
+        CHECK(punctual->memory.dma[channel].busyUntil == origins[epoch] + 22);
         CHECK(late->memory.dma[channel].busyUntil == punctual->memory.dma[channel].busyUntil);
         CHECK(cupid_io_read(punctual, REG_TM2CNT_L) == 30 && cupid_io_read(late, REG_TM2CNT_L) == 30);
         CHECK(punctual->irqf == ((IRQ_TIMER0 << timer) | (IRQ_DMA0 << channel)));
@@ -159,8 +165,8 @@ static void inactive_sources_do_not_publish_refill_requests(void) {
 
 int main(int argc, char** argv) {
     if (argc != 2) return 2;
-    if (!strcmp(argv[1], "levels")) RUN(refill_uses_the_queue_after_loading_the_staged_word);
-    else if (!strcmp(argv[1], "chronology")) RUN(timer_dma_and_irq_edges_retain_the_original_deadlines);
+    if (!strcmp(argv[1], "levels")) RUN(refill_samples_the_queue_before_loading_the_staged_word);
+    else if (!strcmp(argv[1], "chronology")) RUN(timer_dma_and_irq_edges_follow_the_audio_request_phase);
     else if (!strcmp(argv[1], "selection")) RUN(inactive_sources_do_not_publish_refill_requests);
     else return 2;
     printf("observations=%u\n", observations);
