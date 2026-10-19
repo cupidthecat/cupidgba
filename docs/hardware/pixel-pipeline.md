@@ -254,6 +254,30 @@ timing and geometry observations. Physical sampling, arbitrary OBJ matrices,
 every priority/window interaction and full PPU accuracy remain open under
 issues 16 and 1.
 
+## OBJ texture-bank boundary
+
+OBJ texture addresses wrap within their 32 KiB bank after both the tile offset
+and byte offset have been added. In one-dimensional 8-bit mode, an odd tile
+base can place the lower four rows of a tile beyond the bank end. Those bytes
+come from the beginning of the OBJ bank. Masking only the tile number left
+those rows transparent. Two-dimensional 8-bit mapping still ignores the low
+tile bit. Bitmap modes retain their existing restriction on the lower bank
+after the address wraps.
+
+Sixteen `gba.object-bank-*` groups cover all eight display-mode values, both
+color depths and tile mappings, the first and last two tile bases, normal
+flips, identity-affine and double-size identity-affine sprites, clipped and
+wrapped origins, one-clock dispatch and clock wrap. The twelve owned texture
+patterns describe every pixel of each eight-by-eight source tile. Each scene
+checks the complete framebuffer, including transparent pixels and backdrop.
+
+The independent stable-renderer comparison covers 288 complete frames across
+all twelve sprite sizes. The address correction repairs 24 end-tile cases and
+retains all 264 controls. The preceding core fails six native groups at pixel
+assertions; bitmap restrictions remain positive controls. These results select
+the logical bank-address policy. They do not measure physical memory-port
+edges or qualify every renderer interaction.
+
 ## Host work between observable clocks
 
 Display-memory accesses still advance each physical beat and synchronize the

@@ -112,8 +112,11 @@ static unsigned texture_address(const struct CupidVideo* v, const struct CupidOb
         tile = ((d->tile + by * 32) & 0x3E0)
             | (((d->fullPalette ? d->tile & ~1u : d->tile) + (bx << d->fullPalette)) & 31);
     }
-    return 0x10000 + (tile & 1023) * 32 + ((unsigned)y & 7) * (d->fullPalette ? 8 : 4)
+    unsigned offset = (tile & 1023) * 32 + ((unsigned)y & 7) * (d->fullPalette ? 8 : 4)
         + (d->fullPalette ? (unsigned)x & 7 : ((unsigned)x & 7) >> 1);
+    /* An odd 8-bit tile base can carry the byte offset into the next bank.
+     * Keep the complete texture address inside the 32 KiB OBJ bank. */
+    return 0x10000 + (offset & 0x7FFF);
 }
 
 static void plot(struct CupidVideo* v, const struct CupidObjectDraw* d, int x, unsigned index) {

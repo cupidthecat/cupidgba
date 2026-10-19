@@ -13,6 +13,18 @@ fixtures check every pixel in each completed scanline. OBJ controls retain
 constant-height grouping with HBlank access; additional writes cross signed
 and unsigned clock wrap. Each group has a ten-second limit.
 
+OBJ bank-boundary coverage runs with:
+
+```sh
+ctest --test-dir build -R '^gba[.]object-bank-' --output-on-failure
+```
+
+The sixteen groups partition eight display-mode values and normal/affine
+sprites. They check 2,928 complete frames and 112,435,200 pixels per profile,
+including bank-end reads, bitmap restrictions, flips, clipping, wrapped
+origins and signed/unsigned clock wrap. Each group has a thirty-second limit.
+The expected source-tile rows come from independently executed observations.
+
 On WSL, keep Linux executable output on native Linux storage. Repeated
 sanitizer process startup through a Windows mount can dominate short CLI
 checks. `CMAKE_RUNTIME_OUTPUT_DIRECTORY` selects executable placement while
