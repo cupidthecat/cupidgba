@@ -366,10 +366,21 @@ static void guest_polling_uses_the_default_byte_program_profile(void) {
     puts("PASS owned IWRAM/ROM ARM driver polling with default programming duration");
 }
 
-static void firmware_reboot_preserves_accepted_operations(void) {
+/* Observe cartridge entry after each ordinary step return. Count zero is
+ * before execution, so it cannot satisfy the reboot's entry observation. */
+static bool reboot_entry(struct CupidGBA* gba, uint64_t steps, void* context) {
+    if (!steps) return true;
+    bool* entered = context;
+    *entered = gba->cpu.executionMode == MODE_ARM && gba->cpu.gprs[ARM_PC] == GBA_BASE_ROM0 + 4;
+    return !*entered;
+}
+
+static void firmware_reboot_preserves_accepted_operations(int worker) {
+    CHECK(worker >= -1 && worker <= 1);
     unsigned observations = 0;
     for (unsigned c = 0; c < 4; c++) for (unsigned operation = 0; operation < 4; operation++)
-        for (unsigned thumb = 0; thumb < 2; thumb++) {
+        for (unsigned thumb = worker < 0 ? 0u : (unsigned)worker; thumb < 2;
+             thumb += worker < 0 ? 1u : 2u) {
             struct CupidGBA* gba = machine(anchors[c], operation ? SAVE_FLASH1M : SAVE_EEPROM512);
             struct CupidSavedata* save = &gba->memory.savedata;
             gba->cpu.cpsr.f = 1;
@@ -411,11 +422,12 @@ static void firmware_reboot_preserves_accepted_operations(void) {
             _CupidSetMode(&gba->cpu, thumb ? MODE_THUMB : MODE_ARM);
             gba->cpu.gprs[ARM_PC] = GBA_BASE_IWRAM + 0x100;
             if (thumb) CupidThumbWritePC(&gba->cpu); else CupidARMWritePC(&gba->cpu);
-            unsigned steps;
-            for (steps = 0; steps < 500000; steps++) {
-                cupid_gba_step(gba);
-                if (gba->cpu.executionMode == MODE_ARM && gba->cpu.gprs[ARM_PC] == GBA_BASE_ROM0 + 4) break;
-            }
+            bool entered = false;
+            const uint64_t completed = cupid_gba_run_steps(gba, 500000, reboot_entry, &entered);
+            CHECK(completed && completed <= 500000 && entered);
+            /* The bounded API counts completed returns; this loop index keeps
+             * the same final-step acceptance and original 500,000-step guard. */
+            const unsigned steps = (unsigned)(completed - 1);
             CHECK(steps < 500000 && save->programming && !save->dirty);
             CHECK(save->data == storage && save->readyClock == deadline);
             CHECK(save->programOffset == offset && save->programLength == length);
@@ -434,9 +446,15 @@ static void firmware_reboot_preserves_accepted_operations(void) {
                 CHECK(save->data[i] == (i >= offset && i - offset < length ? 0xFF : 0));
             observations++;
             destroy(gba);
+            if (worker >= 0) printf("case=%u thumb=%u\n", (c * 4 + operation) * 2 + thumb, thumb);
         }
-    CHECK(observations == 32);
-    puts("PASS 32 pending EEPROM/Flash operations through ARM/Thumb HardReset and clock wrap");
+    if (worker < 0) {
+        CHECK(observations == 32);
+        puts("PASS 32 pending EEPROM/Flash operations through ARM/Thumb HardReset and clock wrap");
+    } else {
+        CHECK(observations == 16);
+        printf("PASS reboot-worker thumb=%u cases=%u\n", (unsigned)worker, observations);
+    }
 }
 
 int main(int argc, char** argv) {
@@ -448,7 +466,9 @@ int main(int argc, char** argv) {
     else if (!strcmp(argv[1], "cpu")) cpu_store_acceptance_and_polling_use_bus_clocks();
     else if (!strcmp(argv[1], "configuration")) configuration_and_replacement_preserve_clock_ownership();
     else if (!strcmp(argv[1], "guest")) guest_polling_uses_the_default_byte_program_profile();
-    else if (!strcmp(argv[1], "reboot")) firmware_reboot_preserves_accepted_operations();
+    else if (!strcmp(argv[1], "reboot")) firmware_reboot_preserves_accepted_operations(-1);
+    else if (!strcmp(argv[1], "reboot-arm")) firmware_reboot_preserves_accepted_operations(0);
+    else if (!strcmp(argv[1], "reboot-thumb")) firmware_reboot_preserves_accepted_operations(1);
     else if (!strcmp(argv[1], "persistence") && argc == 3)
         pending_programming_and_file_failures_retain_complete_images(argv[2]);
     else return 2;

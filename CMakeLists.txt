@@ -8,6 +8,10 @@ option(CUPID_BUILD_FRONTEND "Build the SDL2 frontend" ON)
 option(CUPID_SANITIZERS "Enable address and undefined behavior sanitizers" OFF)
 option(CUPID_THREAD_SANITIZER "Enable the thread sanitizer" OFF)
 option(CUPID_FAST_CONTEXT "Use native context switching when available on Linux" ON)
+set(CUPID_TEST_JOBS "1" CACHE STRING "Processes for independent test scenes (1 or 2)")
+if(NOT CUPID_TEST_JOBS MATCHES "^[12]$")
+    message(FATAL_ERROR "CUPID_TEST_JOBS must be 1 or 2")
+endif()
 set(CUPID_TEST_ROM_DIR "" CACHE PATH "Directory containing checksum-verified external test ROMs")
 set(CUPID_TIMER_SUITE_ROM "" CACHE FILEPATH "Locally built timer and IRQ suite ROM")
 set(CUPID_DMA_SUITE_ROM "" CACHE FILEPATH "Locally built DMA transfer suite ROM")
@@ -51,7 +55,7 @@ endif()
 
 add_library(cupid_core STATIC
     src/arm/arm.c src/arm/isa-arm.c src/arm/isa-thumb.c
-    src/core/timing.c src/core/file.c
+    src/core/timing.c src/core/file.c src/platform/context.c
     src/gba/gba.c src/gba/memory.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
     src/gba/audio.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c
     src/gba/hle-bios.c src/gba/bios/file.c src/gba/savedata.c src/gba/save/file.c
@@ -70,7 +74,7 @@ if(NOT WIN32)
     target_link_libraries(cupid_core PUBLIC m)
 endif()
 
-add_library(cupid_link STATIC src/link/cable.c src/platform/context.c)
+add_library(cupid_link STATIC src/link/cable.c)
 target_link_libraries(cupid_link PUBLIC cupid_core)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CUPID_FAST_CONTEXT)
     find_library(CUPID_CONTEXT_LIBRARY NAMES boost_context)
@@ -82,8 +86,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CUPID_FAST_CONTEXT)
         string(REGEX REPLACE ".*BOOST_VERSION ([0-9]+).*" "\\1" cupid_context_version "${cupid_context_version_line}")
     endif()
     if(CUPID_CONTEXT_LIBRARY AND cupid_context_version GREATER_EQUAL 106100)
-        target_compile_definitions(cupid_link PRIVATE CUPID_USE_FCONTEXT=1)
-        target_link_libraries(cupid_link PRIVATE ${CUPID_CONTEXT_LIBRARY})
+        target_compile_definitions(cupid_core PRIVATE CUPID_USE_FCONTEXT=1)
+        target_link_libraries(cupid_core PRIVATE ${CUPID_CONTEXT_LIBRARY})
         message(STATUS "Local contexts: native C ABI (${cupid_context_version})")
     else()
         message(STATUS "Local contexts: portable backend; native support needs Boost.Context 1.61 or later")
@@ -142,26 +146,30 @@ if(BUILD_TESTING)
     add_test(NAME rom.rtc-parameters COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_parameters.py --runner $<TARGET_FILE:cupidgba-headless>)
     set_tests_properties(rom.rtc-parameters PROPERTIES TIMEOUT 30)
+    set(calendar_jobs)
+    if(CUPID_TEST_JOBS STREQUAL "2")
+        set(calendar_jobs --jobs 2)
+    endif()
     foreach(mode arm thumb)
         foreach(width 2 4)
             add_test(NAME rom.rtc-calendar-${mode}-${width} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_calendar.py
-                --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width ${width})
+                --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width ${width} ${calendar_jobs})
             set_tests_properties(rom.rtc-calendar-${mode}-${width} PROPERTIES TIMEOUT 30)
             add_test(NAME rom.rtc-calendar-continued-${mode}-${width} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_calendar.py
-                --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width ${width} --continued)
+                --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width ${width} --continued ${calendar_jobs})
             set_tests_properties(rom.rtc-calendar-continued-${mode}-${width} PROPERTIES TIMEOUT 30)
             if(CUPID_TEST_BIOS)
                 add_test(NAME rom.rtc-calendar-${mode}-${width}-external COMMAND ${Python3_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_calendar.py
                     --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width ${width}
-                    --bios ${CUPID_TEST_BIOS})
+                    --bios ${CUPID_TEST_BIOS} ${calendar_jobs})
                 set_tests_properties(rom.rtc-calendar-${mode}-${width}-external PROPERTIES TIMEOUT 30)
                 add_test(NAME rom.rtc-calendar-continued-${mode}-${width}-external COMMAND ${Python3_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_calendar.py
                     --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width ${width}
-                    --bios ${CUPID_TEST_BIOS} --continued)
+                    --bios ${CUPID_TEST_BIOS} --continued ${calendar_jobs})
                 set_tests_properties(rom.rtc-calendar-continued-${mode}-${width}-external PROPERTIES TIMEOUT 30)
             endif()
         endforeach()
@@ -175,13 +183,13 @@ if(BUILD_TESTING)
                 endif()
                 add_test(NAME rom.rtc-calendar-${stream}-${mode}-${lane} COMMAND ${Python3_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_calendar.py
-                    --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width 1 --lane ${lane} ${stream_option})
+                    --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width 1 --lane ${lane} ${stream_option} ${calendar_jobs})
                 set_tests_properties(rom.rtc-calendar-${stream}-${mode}-${lane} PROPERTIES TIMEOUT 30)
                 if(CUPID_TEST_BIOS)
                     add_test(NAME rom.rtc-calendar-${stream}-${mode}-${lane}-external COMMAND ${Python3_EXECUTABLE}
                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_rtc_calendar.py
                         --runner $<TARGET_FILE:cupidgba-headless> --mode ${mode} --width 1 --lane ${lane}
-                        --bios ${CUPID_TEST_BIOS} ${stream_option})
+                        --bios ${CUPID_TEST_BIOS} ${stream_option} ${calendar_jobs})
                     set_tests_properties(rom.rtc-calendar-${stream}-${mode}-${lane}-external PROPERTIES TIMEOUT 30)
                 endif()
             endforeach()
@@ -347,6 +355,13 @@ if(BUILD_TESTING)
     add_executable(test_system tests/gba/test_system.c)
     target_link_libraries(test_system PRIVATE cupid_core)
     add_test(NAME gba.system COMMAND test_system)
+
+    add_executable(test_execution tests/gba/test_execution.c)
+    target_link_libraries(test_execution PRIVATE cupid_link)
+    foreach(group frames interval wake lifetime cable ready-wake batch)
+        add_test(NAME gba.execution-${group} COMMAND test_execution ${group})
+        set_tests_properties(gba.execution-${group} PROPERTIES TIMEOUT 5)
+    endforeach()
     set_tests_properties(gba.system PROPERTIES TIMEOUT 10)
 
     add_executable(test_reset_entry tests/arm/test_reset_entry.c)
@@ -444,10 +459,21 @@ if(BUILD_TESTING)
 
     add_executable(test_save_programming tests/gba/save/test_programming.c)
     target_link_libraries(test_save_programming PRIVATE cupid_core)
-    foreach(group eeprom flash chronology power cpu configuration guest reboot)
+    foreach(group eeprom flash chronology power cpu configuration guest)
         add_test(NAME gba.save-programming-${group} COMMAND test_save_programming ${group})
         set_tests_properties(gba.save-programming-${group} PROPERTIES TIMEOUT 10)
     endforeach()
+    if(CUPID_TEST_JOBS STREQUAL "2")
+        add_test(NAME gba.save-programming-reboot COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_save_reboot.py
+            --runner $<TARGET_FILE:test_save_programming> --directory ${CMAKE_CURRENT_BINARY_DIR})
+    else()
+        add_test(NAME gba.save-programming-reboot COMMAND test_save_programming reboot)
+    endif()
+    set_tests_properties(gba.save-programming-reboot PROPERTIES TIMEOUT 10)
+    add_test(NAME runner.save-reboot-workers COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_save_reboot.py --self-test)
+    set_tests_properties(runner.save-reboot-workers PROPERTIES TIMEOUT 10)
     add_test(NAME gba.save-programming-persistence COMMAND test_save_programming persistence ${CMAKE_CURRENT_BINARY_DIR})
     set_tests_properties(gba.save-programming-persistence PROPERTIES TIMEOUT 10)
 

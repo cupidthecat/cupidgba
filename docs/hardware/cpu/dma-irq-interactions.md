@@ -20,13 +20,21 @@ initial-state correction, with no additional IRQ latency or bus timing credit.
 The independent startup waveform groups retain the complete status, request
 and frame-counter chronology through two frame periods and clock wrap.
 
-The ordinary HALT/DMA case still reaches its encoded return address but reads
-`0x88` instead of `0x87` with either firmware path. The OAM variant additionally
-depends on display-memory arbitration: the CPU/bus stack reads `0xDC` instead
-of `0xDD`, while the pixel stack satisfies that comparison. These remaining
-boundaries stay enabled in their respective profiles. A passing startup phase
-does not establish every power-on register, timer-divider phase or physical
-IRQ sampling edge.
+A timed HALTCNT write accepts sleep one clock later while retaining the
+following fetch. Wake completes that request once. The ordinary HALT/DMA
+case passes its original return-address and `0x87` timer comparisons,
+pre-display result and issued terminal with both firmware paths. Frame and
+interval returns can suspend this fetch without issuing another instruction.
+
+The HALT/OAM variant additionally requires display-memory arbitration. The
+CPU/bus-only profile still reads `0xDC` instead of `0xDD` and passes thirty of
+the thirty-two interaction runs. With the pixel pipeline and display-bus owner
+integrated, all thirty-two runs pass, including the OAM case's original `0x74`
+return address and `0xDD` timer comparison with both firmware paths. Original
+inputs, comparison observers and limits remain unchanged. These covered
+interactions do not establish every power-on register, timer-divider phase or
+physical IRQ sampling edge. See [display bus waits](display-irq.md) for the
+shared request owner and CPU-ready waveform coverage.
 
 The CPU samples its synchronized IRQ input at instruction boundaries. Its
 synchronizer keeps two CPU-clock stages after register acceptance. DMA bus

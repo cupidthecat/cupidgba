@@ -130,7 +130,13 @@ deadlines, polling, bus strobes, timer/DMA/IRQ chronology, clock wrap, STOP,
 reset, profile validation and complete save-file images through failures and
 replacement. A 32-case reboot group retains every captured operation and its
 original deadline through ARM/Thumb HardReset at four clock epochs, including
-signed/unsigned wrap. An owned ARM driver also polls through the default byte-program
+signed/unsigned wrap. Entry is observed after each step return inside a batch,
+with the original 500,000-step cap per scene. Count zero cannot complete a reboot.
+`-DCUPID_TEST_JOBS=2` runs its independent ARM and Thumb scenes in two isolated
+processes. The worker checker requires every ordered case and both completed
+worker summaries. The default uses the full serial group. CI selects two workers
+for the unoptimized native build; the whole group retains its ten-second limit.
+An owned ARM driver also polls through the default byte-program
 interval from IWRAM and ROM. Synthetic operation durations separate scheduler correctness
 from chip calibration. Each group retains a ten-second deadline; see
 [save programming](../hardware/cartridge/programming.md).
@@ -673,8 +679,8 @@ ctest --test-dir build-thread -R '^platform.audio$' --output-on-failure
 
 ThreadSanitizer and AddressSanitizer require separate build directories.
 
-`platform.context` checks local data across repeated cooperative yields, normal
-completion and cancellation. AddressSanitizer builds also require each live
+`platform.context` checks shared host ownership and local data across repeated
+cooperative yields, normal completion and cancellation. AddressSanitizer builds also require each live
 local buffer's boundary to remain poisoned after every return to its stack.
 The portable backend uses the sanitizer fiber interface and clears the generic
 stack-cleanup marker installed by `makecontext`; otherwise `swapcontext` can
@@ -685,9 +691,30 @@ portable backend locally:
 ```sh
 cmake -S . -B build-context-portable -DCMAKE_C_COMPILER=clang \
   -DCMAKE_BUILD_TYPE=Debug -DCUPID_SANITIZERS=ON -DCUPID_FAST_CONTEXT=OFF
-cmake --build build-context-portable --target test_context --parallel 2
-ctest --test-dir build-context-portable -R '^platform.context$' --output-on-failure
+cmake --build build-context-portable --target test_context test_execution --parallel 2
+ctest --test-dir build-context-portable -R '^platform.context$|^gba.execution-' --output-on-failure
 ```
+
+Seven `gba.execution-*` groups cover frames with no eligible wake, paced interval
+accounting, one-time instruction issue and stores after wake, reset and stack
+cancellation, shared standalone/cable ownership, and an already eligible wake.
+ARM and Thumb cases include scheduler wrap. Each group keeps a five-second
+deadline. The IRQ acceptance regression checks the write at clock two, the
+following CPU phase at clock three, and the original handler registers and
+return addresses at clocks eight or nine. Its former single-step observation
+combined the write with an empty internal clock; the retained fetch now occupies
+that clock. The cartridge operands, terminal observations and execution limits
+are unchanged.
+
+The batch group compares sixteen batched and repeated-step sequences in both
+CPU modes and across scheduler wrap. It checks every observed boundary, input
+and wake publication, complete registers, frame/audio counters, event queues
+and final memory/images. It also checks early return, zero work, STOP and
+resuming a different request after the callback has returned. The headless
+runner uses these boundaries to retain its original checkpoint, terminal,
+frame, step-count and elapsed-clock guards without switching host stacks
+after every ordinary step. Its instruction observer and all process deadlines
+remain unchanged.
 
 `gba.save-file` checks complete replacements and reloads at every supported
 capacity, inferred expansion, explicit type choices, invalid inputs, companion
@@ -868,6 +895,15 @@ year and weekday carry, coupling wire encoding to calendar advancement.
 twenty-second process limits and five-million-step/120-frame guards are fixed.
 These are explicit-entry drivers; they do not boot firmware or qualify partial
 or active-output date writes. See [RTC limits](../hardware/cartridge/rtc.md).
+
+`-DCUPID_TEST_JOBS=2` runs each calendar group's eight independent cartridge
+cases with at most two isolated processes. Each case has its own input, output
+and working directory. Completed records are reported in the original case
+order. Every calendar byte, header, terminal and negative-control result is
+checked. The whole group retains thirty seconds, and each process retains its
+twenty-second, five-million-step and 120-frame guards. The checker also accepts
+`--jobs 2` directly; its default remains serial. Clang's full sanitizer job uses
+two processes, while GCC and Windows keep the default serial coverage.
 
 `gba.rtc-parameters-component` observes every sixteen-bit parameter payload
 through both command directions, including each partial word, repeated levels,
