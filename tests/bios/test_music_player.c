@@ -977,10 +977,14 @@ static void music_reaches_fifo_and_timestamped_output(unsigned fixture) {
             cupid_gba_step(gba); ++steps;
         }
         CHECK(steps < 200000);
+        /* Retain the exact call duration separately from the frame spin's
+         * instruction-boundary phase under FIFO/DMA arbitration. */
+        const uint64_t finishStart = cupid_timing_global_time(&gba->timing);
         invoke(gba, 0x1D, 0, 0x11220001, 0x11220002, (frame & 1) == 0, MODE_SYS);
         /* Consume the host queue after observing every original timestamp/sample. */
         gba->audio.sampleReadPos = gba->audio.sampleWritePos;
         const struct MusicPlaybackExpected* expected = &musicPlaybackExpected[fixture][frame];
+        CHECK(cupid_timing_global_time(&gba->timing) - finishStart == expected->finishClocks);
         CHECK(cupid_timing_global_time(&gba->timing) - trace.origin == expected->elapsed);
         CHECK(song_image_signature(gba) == expected->image);
         CHECK(trace.signature == expected->pcm && trace.count == expected->count && trace.nonzero == expected->nonzero);

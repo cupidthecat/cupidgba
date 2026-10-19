@@ -12,6 +12,11 @@ bytes retain the qualified routing, volume and FIFO reset masks described in
 [I/O registers](../io-registers.md). Reserved register bytes have no write side
 effects.
 
+Powered FIFO byte and halfword stores append a word while replacing only the
+addressed lanes of its next storage slot. Word requests append once at the
+existing bus deadline. Queue storage, staged bytes and the held output retain
+separate state; see [FIFO access and power](fifo-power.md).
+
 Wave RAM holds two 16-byte banks. The CPU window at `0x04000090` through
 `0x0400009F` accesses the bank opposite the programmed playback bank. Byte,
 halfword and word reads use the actual waveform storage. A byte write retains
@@ -24,6 +29,10 @@ wave RAM remains stored. PSG and `SOUNDCNT_L` writes are ignored while powered
 off; the CPU wave window remains accessible in bank 1. These bank and power
 rules follow the [AGB Programming Manual](https://www.manuallib.com/download/2023-10-17/AGB%20Programming%20Manual.pdf),
 pages 93, 96 and 101.
+
+FIFO stores while master sound is off are ignored. Disabling sound discards
+queued words without canceling an accepted DMA transfer. See
+[FIFO power](fifo-power.md) for access-width, transfer and qualification details.
 
 Native regressions cover both banks and every access width, ARM/Thumb byte
 stores, running counters and envelopes, explicit triggers, ignored bytes,

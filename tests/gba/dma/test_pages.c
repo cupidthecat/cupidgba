@@ -123,7 +123,10 @@ static void pages_follow_the_preceding_programmed_strobe(unsigned width) {
                 CHECK(dma->nextSource == source + (uint32_t)(step * 4 * (int)width));
                 CHECK(dma->nextDest == target + 4 * width && dma->nextCount == 0);
                 advance(gba, 1, punctual != 0);
-                CHECK(!gba->memory.dmaRunning && gba->irqf == IRQ_DMA3);
+                CHECK(!gba->memory.dmaRunning && gba->irqf == 0);
+                CHECK(gba->irq.pendingIF == IRQ_DMA3);
+                advance(gba, 1, punctual != 0);
+                CHECK(gba->irqf == IRQ_DMA3);
                 for (unsigned beat = 0; beat < 4; beat++) {
                     uint32_t offset = (uint32_t)(0x20000 + transfer->data[beat] * (int)width);
                     CHECK(destination(gba, beat, width) == payload(offset, width));

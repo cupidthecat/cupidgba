@@ -256,3 +256,18 @@ its separate before/current qualification.
 At the `da40d4c` checkpoint, the local unoptimized save-reboot check reached its
 original deadline. That receipt remains preserved. The broader PPU acceptance
 limits above remain open.
+
+## Direct Sound DMA interaction
+
+The same bus timeline serves display fetches and Direct Sound DMA. A FIFO
+refill request becomes eligible three clocks after its timer overflow; the
+DMA engine then arbitrates at an available bus boundary. Each destination
+strobe still waits for its selected memory port, including occupied display
+slots. FIFO mode forces four words and a fixed destination, including when
+the programmed destination is outside the FIFO ports.
+
+The final write retains its own data deadline. DMA completion signals on the
+following clock, and the interrupt register accepts that signal one clock
+later. These stages do not move pixel fetches or release a busy display port
+early. See [Direct Sound storage and power](audio/fifo-power.md) and
+[DMA phases](dma.md) for the request, storage and completion rules.

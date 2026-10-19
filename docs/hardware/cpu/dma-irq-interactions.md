@@ -27,7 +27,7 @@ pre-display result and issued terminal with both firmware paths. Frame and
 interval returns can suspend this fetch without issuing another instruction.
 
 The HALT/OAM variant additionally requires display-memory arbitration. The
-CPU/bus-only profile still reads `0xDC` instead of `0xDD` and passes thirty of
+CPU/bus-only profile still reads `0xDB` instead of `0xDD` and passes thirty of
 the thirty-two interaction runs. With the pixel pipeline and display-bus owner
 integrated, all thirty-two runs pass, including the OAM case's original `0x74`
 return address and `0xDD` timer comparison with both firmware paths. Original

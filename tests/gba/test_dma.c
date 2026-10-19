@@ -193,7 +193,10 @@ static void channel_priority_and_preemption(void) {
     CHECK(cupid_memory_load16(&gba->cpu, GBA_BASE_IWRAM + 4, NULL) == 0x3333);
     CHECK(gba->memory.dma[3].busyUntil == 21 && gba->irqf == IRQ_DMA0);
     tick(gba, 1);
-    CHECK(gba->irqf == (IRQ_DMA0 | IRQ_DMA3) && !gba->memory.dmaRunning);
+    CHECK(gba->irqf == IRQ_DMA0 && !gba->memory.dmaRunning);
+    CHECK(gba->irq.pendingIF == (IRQ_DMA0 | IRQ_DMA3));
+    tick(gba, 1);
+    CHECK(gba->irqf == (IRQ_DMA0 | IRQ_DMA3));
     destroy(gba);
 }
 

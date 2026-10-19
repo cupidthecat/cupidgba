@@ -853,8 +853,7 @@ void cupid_memory_store32(struct CupidARM* cpu, uint32_t address, int32_t value,
         break;
     case GBA_REGION_IO:
         sync_io(cpu, cycleCounter);
-        cupid_io_write(gba, address & (GBA_OFFSET_MASK - 3), value & 0xFFFF);
-        cupid_io_write(gba, (address & (GBA_OFFSET_MASK - 3)) + 2, value >> 16);
+        cupid_io_write32(gba, address & (GBA_OFFSET_MASK - 3), (uint32_t)value);
         break;
     case GBA_REGION_PALETTE:
         STORE_32(value, address & (GBA_SIZE_PALETTE - 4), gba->video.palette);
