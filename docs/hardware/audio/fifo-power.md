@@ -28,9 +28,27 @@ own the publication deadline. FIFO reads retain their open-bus behavior.
 
 FIFO reset control bits discard queued words while retaining the current
 staged bytes and held output. A full machine reset clears all of that state.
-The selected lane and reset policies have logical regression coverage;
-physical propagation, overflow contents and partial-write behavior remain
-unmeasured.
+Queue reset also clears the stored lanes. A later narrow write therefore starts
+with zero in its untouched lanes. Physical propagation and partial-write
+behavior remain qualification limits.
+
+## Capacity and overflow
+
+Each channel has seven queued 32-bit words and a separate four-byte playback
+stage. Queue occupancy is explicit: equal read and write indices can describe
+either zero or seven queued words. Consuming a word frees a slot before its four
+sample bytes finish playing. A partial port store still appends one whole word.
+
+A write to an already full queue discards all seven queued words and the
+overflowing write. It clears the stored lanes and restarts the queue pointers.
+The independent stage and held output retain their phase. A following accepted
+write starts a new queue. DMA still performs every programmed source read and
+destination strobe, advances its addresses and count, releases the bus and
+publishes its completion interrupt when a destination strobe overflows a FIFO.
+
+This is the selected logical storage/reset policy. Independent source execution
+qualifies queue rotations, narrow writes, overflow and staged-byte retention;
+physical overflow contents and reset propagation have not been measured here.
 
 On each timer overflow, the FIFO samples queued storage before an empty stage
 takes its next word. Three or fewer queued words request a refill. In particular,
@@ -63,6 +81,14 @@ The five `gba.fifo-power-*` groups require 160 owned observations:
 The clock anchors include signed and unsigned 32-bit wrap and a later epoch.
 Each group keeps its ten-second deadline. All five groups fail against the
 preceding core without changing their assertions.
+
+Four `gba.fifo-queue-*` groups cover 3,472 additional scenes. They retain every
+output byte across two complete queue rotations, all seven port access forms,
+both FIFOs, all reachable staged-byte counts and four clock epochs. Reset checks
+include byte, halfword and word control writes and master-power cycles. DMA
+checks retain each destination strobe, source/count progress, bus release and
+completion IRQ clocks. They include accepted audio refills whose queue fills
+before activation. All four groups reject the preceding storage model.
 
 The three `gba.fifo-refill-*` groups add 1,248 complete cases. They cover all
 eight queued-word levels and four reachable staged-byte counts, both FIFOs,
@@ -159,18 +185,23 @@ returns, and requires the complete expected output digest. It works from an
 isolated copy and refuses an output inside the source checkout or an existing
 file with different contents. Configure `CUPID_FIFO_SOURCE_ROM` with that output
 path alongside the original `CUPID_FIFO_PROBE_DIR`. Both BIOS selections retain
-the same frame, instruction and process guards. The source case remains a
-timing failure; the current model reads `0x62` at its first `0x68` comparison.
+the same frame, instruction and process guards. The preceding source-built
+qualification reads `0x62` at its first `0x68` comparison; it remains an open
+timing failure. The queue-capacity qualification below reruns the bundled images.
 
 The IRQ cartridge retains its original `0x008000AF` comparison with both live
 operands and both firmware paths. The combined queue and activation ordering
 also satisfies all eight original prefetch comparisons and both threshold
-comparisons. All 20 configured FIFO cases retain their inputs and run guards;
-16 pass. The DMA completion signal follows the final destination write by one
+comparisons. The preceding complete 20-case qualification retains its inputs
+and run guards, with 16 passes. The DMA completion signal follows the final destination write by one
 clock, before the existing IF register pipeline. That separate event repairs
 both IRQ-latch runs at their original `0x7B` comparison. Base and the separate
 source base still fail on both firmware paths. Their first timer reading
 remains `0x62` instead of `0x68`. These are remaining failures, not new expectations.
+Seven-word queue qualification repeats all nine bundled images with both BIOS
+paths. All eighteen complete outputs and exit statuses match the preceding
+storage model. Sixteen pass; the two bundled base runs retain the `0x62` versus
+`0x68` failure. This does not rerun or replace the separate source-built result.
 Every original input, comparison and execution guard remains required. The
 power, refill and access-width regressions cover their selected logical model;
 complete FIFO/DMA timing acceptance remains open in #76. Physical queue capacity,

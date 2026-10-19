@@ -507,6 +507,13 @@ if(BUILD_TESTING)
         set_tests_properties(gba.fifo-refill-${group} PROPERTIES TIMEOUT 10)
     endforeach()
 
+    add_executable(test_fifo_queue tests/gba/audio/test_fifo_queue.c)
+    target_link_libraries(test_fifo_queue PRIVATE cupid_core)
+    foreach(group rotations overflow reset dma)
+        add_test(NAME gba.fifo-queue-${group} COMMAND test_fifo_queue ${group})
+        set_tests_properties(gba.fifo-queue-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
     add_executable(test_fifo_destinations tests/gba/audio/test_fifo_destinations.c)
     target_link_libraries(test_fifo_destinations PRIVATE cupid_core)
     add_test(NAME gba.fifo-dma-destinations COMMAND test_fifo_destinations)

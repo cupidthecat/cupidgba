@@ -41,8 +41,8 @@ original pre-display result, ordered comparisons and terminal must pass. Known
 FIFO timing failures remain enabled. See [FIFO power](../hardware/audio/fifo-power.md).
 
 The three `gba.fifo-refill-*` groups retain 1,248 complete level, chronology and
-selection cases under ten-second deadlines. Timer consumption loads the staged
-word before testing the remaining queue for a DMA refill. Two groups reject
+selection cases under ten-second deadlines. Timer consumption tests queued
+storage for a DMA refill before loading an empty stage. Two groups reject
 the preceding order; inactive-source controls pass with either order. The
 unchanged original IRQ cartridge now reaches its `0x008000AF` comparison and
 passes both result boundaries on each BIOS path. Other FIFO timing gaps remain.
@@ -53,6 +53,13 @@ occupied-stage behavior, ARM/Thumb I/O request clocks, 32-clock DMA/IRQ historie
 and mixed-width output order across both FIFOs and counter crossings. All four
 reject the preceding lower-port latching behavior. Original FIFO cartridges,
 comparisons and execution guards remain unchanged.
+
+Four `gba.fifo-queue-*` groups cover 3,472 queue rotation, overflow, reset and
+DMA scenes under ten-second deadlines. Seven distinct queued words retain
+their individual storage lanes through wrap. A full queue differs from an empty
+queue even when its pointers match. Each group rejects the preceding storage
+model. Checks preserve every output byte, staged-byte phase and affected DMA
+publication/completion clock. See [FIFO capacity](../hardware/audio/fifo-power.md#capacity-and-overflow).
 
 Playback checks keep exact elapsed-frame observations alongside sixty exact
 VSync-call duration checks. A frame spin may finish one or two clocks past its

@@ -190,6 +190,7 @@ void cupid_audio_reset(struct CupidAudio* audio) {
     audio->chA.dmaSource = 1;
     audio->chA.fifoWrite = 0;
     audio->chA.fifoRead  = 0;
+    audio->chA.fifoCount = 0;
     audio->chA.internalSample = 0;
     audio->chA.internalRemaining = 0;
     audio->chA.latchedSample = 0;
@@ -199,6 +200,7 @@ void cupid_audio_reset(struct CupidAudio* audio) {
     audio->chB.dmaSource = 2;
     audio->chB.fifoWrite = 0;
     audio->chB.fifoRead  = 0;
+    audio->chB.fifoCount = 0;
     audio->chB.internalSample = 0;
     audio->chB.internalRemaining = 0;
     audio->chB.latchedSample = 0;
@@ -559,27 +561,41 @@ void cupid_audio_psg_frame_step(struct CupidAudioPSG* psg) {
 }
 
 /** @section audio_fifo_ops FIFO operations */
+/* Queue reset is independent of the word currently shifting into the mixer.
+ * Clear old storage lanes as well as occupancy so a later narrow write cannot
+ * recover samples discarded by reset or overflow. */
+static void clear_fifo_queue(struct CupidAudioFIFO* fifo) {
+    fifo->fifoWrite = fifo->fifoRead = fifo->fifoCount = 0;
+    memset(fifo->fifo, 0, sizeof(fifo->fifo));
+}
+
 /**
- * @brief Append one 32-bit word to a Direct Sound FIFO ring buffer.
+ * @brief Enqueue one word, or discard queued storage on an overflowing write.
  *
  * @param fifo  FIFO state to update.
  * @param value 32-bit packed sample word to enqueue.
  */
 void cupid_audio_fifo_write(struct CupidAudioFIFO* fifo, uint32_t value) {
+    /* The eighth queued write resets storage and is itself discarded. The
+     * independent byte stage and held output keep their current phase. */
+    if (fifo->fifoCount == GBA_AUDIO_FIFO_SIZE) {
+        clear_fifo_queue(fifo);
+        return;
+    }
     fifo->fifo[fifo->fifoWrite] = value;
     fifo->fifoWrite = (fifo->fifoWrite + 1) % GBA_AUDIO_FIFO_SIZE;
+    ++fifo->fifoCount;
 }
 
 /**
  * @brief Reset a Direct Sound FIFO channel.
  *
- * Clears FIFO indices and the internal staged sample byte state.
+ * Clears queued words, FIFO indices and the internal staged sample byte state.
  *
  * @param fifo FIFO state to reset.
  */
 void cupid_audio_fifo_reset(struct CupidAudioFIFO* fifo) {
-    fifo->fifoWrite = 0;
-    fifo->fifoRead  = 0;
+    clear_fifo_queue(fifo);
     fifo->internalSample = 0;
     fifo->internalRemaining = 0;
 }
@@ -632,16 +648,11 @@ void cupid_audio_sample_fifo(struct CupidAudio* audio, int fifoId, uint64_t time
     }
 
     /** Compute FIFO fill level. */
-    int fifoSize;
-    if (channel->fifoWrite >= channel->fifoRead) {
-        fifoSize = channel->fifoWrite - channel->fifoRead;
-    } else {
-        fifoSize = GBA_AUDIO_FIFO_SIZE - channel->fifoRead + channel->fifoWrite;
-    }
+    int fifoSize = channel->fifoCount;
 
     /** Sample the queued words before loading the independent byte stage.
      * Loading a stage from four queued words must not request a burst yet. */
-    if ((GBA_AUDIO_FIFO_SIZE - fifoSize) > 4 && channel->dmaSource > 0) {
+    if (fifoSize <= 3 && channel->dmaSource > 0) {
         struct CupidGBA* gba = audio->gba;
         int dmaCh = channel->dmaSource;
         if (dmaCh >= 1 && dmaCh <= 2) {
@@ -666,6 +677,7 @@ void cupid_audio_sample_fifo(struct CupidAudio* audio, int fifoId, uint64_t time
             channel->internalSample = channel->fifo[channel->fifoRead];
             channel->internalRemaining = 4;
             channel->fifoRead = (channel->fifoRead + 1) % GBA_AUDIO_FIFO_SIZE;
+            --channel->fifoCount;
             --fifoSize;
             _audioDebugLog(audio, "fifo%d pop word=0x%08X remainingWords=%d", fifoId,
                 channel->internalSample, fifoSize);
@@ -1531,12 +1543,10 @@ void cupid_audio_write_register(struct CupidAudio* audio, uint32_t addr,
         bool chBReset    = (val >> 15) & 1;
 
         if (chAReset) {
-            audio->chA.fifoWrite = 0;
-            audio->chA.fifoRead = 0;
+            clear_fifo_queue(&audio->chA);
         }
         if (chBReset) {
-            audio->chB.fifoWrite = 0;
-            audio->chB.fifoRead = 0;
+            clear_fifo_queue(&audio->chB);
         }
         _audioDebugLog(audio,
             "SOUNDCNT_H: psgVol=%d A(vol=%d L=%d R=%d T=%d rst=%d) B(vol=%d L=%d R=%d T=%d rst=%d)",
@@ -1564,8 +1574,8 @@ void cupid_audio_write_register(struct CupidAudio* audio, uint32_t addr,
         if (!audio->enable && oldEnable) {
             /* Master power discards queued words. The staged word and held
              * output have separate state and retain their current phase. */
-            audio->chA.fifoWrite = audio->chA.fifoRead = 0;
-            audio->chB.fifoWrite = audio->chB.fifoRead = 0;
+            clear_fifo_queue(&audio->chA);
+            clear_fifo_queue(&audio->chB);
             audio->soundcntL = 0;
             /** Disable: clear SOUNDCNT_H fields too. */
             audio->volume    = 0;

@@ -25,7 +25,7 @@ struct CupidGBA;
 struct CupidDMA;
 
 /** @name Constants */
-#define GBA_AUDIO_FIFO_SIZE      8       /**< 8 x uint32_t = 32 bytes per FIFO */
+#define GBA_AUDIO_FIFO_SIZE      7       /**< Seven queued words plus the separate four-byte stage */
 #define GBA_AUDIO_SAMPLES        8192    /**< SDL output ring buffer size (stereo frames) */
 #define GBA_AUDIO_SAMPLE_RATE    32768   /**< Default output rate at resolution 0 */
 #define GBA_AUDIO_VOLUME_MAX     0x100   /**< Master volume 1.0 in fixed point */
@@ -158,6 +158,7 @@ struct CupidAudioFIFO {
     uint32_t fifo[GBA_AUDIO_FIFO_SIZE];
     int fifoWrite;
     int fifoRead;
+    int fifoCount;                  /**< Queued words; equal pointers can also mean a full queue */
     uint32_t internalSample;
     int internalRemaining;
     int dmaSource;

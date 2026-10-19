@@ -61,7 +61,8 @@ static void refill_samples_the_queue_before_loading_the_staged_word(void) {
         const bool pop = !stage && words;
         const uint32_t sample = pop ? queued[0] : stages[stage];
         CHECK(output->latchedSample == (int8_t)sample);
-        CHECK(output->fifoRead == (int)pop && output->fifoWrite == (int)words);
+        CHECK(output->fifoRead == (int)pop && output->fifoWrite == (int)(words % GBA_AUDIO_FIFO_SIZE));
+        CHECK(output->fifoCount == (int)(words - pop));
         CHECK(output->internalRemaining == (stage ? (int)stage - 1 : pop ? 3 : 0));
         CHECK(output->internalSample == sample >> 8);
         CHECK(!memcmp(output->fifo, queued, words * sizeof(*queued)));
@@ -112,9 +113,12 @@ static void timer_dma_and_irq_edges_follow_the_audio_request_phase(void) {
             unsigned published = 0;
             for (unsigned word = 0; word < 4; word++) {
                 if (clock >= writes[word]) {
-                    CHECK(output->fifo[4 + word] == incoming[word]);
+                    CHECK(output->fifo[(4 + word) % GBA_AUDIO_FIFO_SIZE] == incoming[word]);
                     ++published;
-                } else CHECK(output->fifo[4 + word] == 0);
+                } else {
+                    unsigned slot = (4 + word) % GBA_AUDIO_FIFO_SIZE;
+                    CHECK(output->fifo[slot] == (slot < 4 ? queued[slot] : 0));
+                }
             }
             CHECK(dma->nextSource == GBA_BASE_IWRAM + 0x400 + published * 4);
             if (clock >= 6) CHECK(output->latchedSample == samples[(clock - 6) / 4]);
