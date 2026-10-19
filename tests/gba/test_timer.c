@@ -274,35 +274,39 @@ static void fifo_dma_latency_cancellation_and_irq(void) {
     tick(gba, 3);
     CHECK(gba->memory.dma[1].nextSource == GBA_BASE_IWRAM);
     CHECK(gba->audio.chA.latchedSample == 0);
-    CHECK(gba->memory.dma[1].requestEvent.when == 5);
+    CHECK(gba->memory.dma[1].requestEvent.when == 6);
     tick(gba, 1);
-    CHECK(gba->memory.dma[1].requestEvent.when == 5); /* Repeated requests keep the first deadline. */
+    CHECK(gba->memory.dma[1].requestEvent.when == 6); /* Repeated requests keep the first deadline. */
     tick(gba, 1);
     CHECK(gba->memory.dma[1].nextSource == GBA_BASE_IWRAM);
-    CHECK(gba->memory.dma[1].nextCount == 4 && gba->memory.dmaRunning);
+    CHECK(gba->memory.dma[1].nextCount == 4 && !gba->memory.dmaRunning);
     CHECK(gba->audio.chA.latchedSample == 0);
     CHECK(gba->irqf == IRQ_TIMER0);
     CHECK(!gba->irq.line);
     CHECK(gba->irq.lineChanges[0].event.when == 6);
     CHECK(cupid_io_read(gba, REG_TM1CNT_L) == 3);
     CHECK(gba->cpu.cycles == 0);
+    tick(gba, 1); /* Audio activation and the existing timer IRQ line at clock 6. */
+    CHECK(gba->memory.dmaRunning && gba->memory.dma[1].ready && gba->irq.line);
+    CHECK(gba->memory.dma[1].nextSource == GBA_BASE_IWRAM);
+    CHECK(cupid_io_read(gba, REG_TM1CNT_L) == 4);
     tick(gba, 3); /* Handover, read, first FIFO write. */
     CHECK(gba->memory.dma[1].nextSource == GBA_BASE_IWRAM + 4);
     CHECK(gba->audio.chA.latchedSample == 1 && gba->irq.line);
-    CHECK(cupid_io_read(gba, REG_TM1CNT_L) == 6);
+    CHECK(cupid_io_read(gba, REG_TM1CNT_L) == 7);
     tick(gba, 6); /* Remaining three read/write pairs. */
     CHECK(gba->memory.dma[1].nextSource == GBA_BASE_IWRAM + 16);
-    CHECK(gba->memory.dma[1].nextCount == 4 && gba->memory.dma[1].busyUntil == 14);
+    CHECK(gba->memory.dma[1].nextCount == 4 && gba->memory.dma[1].busyUntil == 15);
     CHECK(gba->irqf == IRQ_TIMER0 && gba->memory.dmaRunning);
-    CHECK(cupid_io_read(gba, REG_TM1CNT_L) == 12);
+    CHECK(cupid_io_read(gba, REG_TM1CNT_L) == 13);
     tick(gba, 1); /* Bus release and completion IF visibility. */
     CHECK(gba->irq.line);
     CHECK(gba->irqf == (IRQ_TIMER0 | IRQ_DMA1));
     CHECK(gba->irq.pendingIF == (IRQ_TIMER0 | IRQ_DMA1));
-    CHECK(cupid_io_read(gba, REG_TM1CNT_L) == 13);
+    CHECK(cupid_io_read(gba, REG_TM1CNT_L) == 14);
     CHECK(gba->cpu.cycles == 0 && !gba->memory.dmaRunning);
     /* The timer at the final write can queue the next burst during release. */
-    CHECK(gba->memory.dma[1].requestEvent.when == 16);
+    CHECK(gba->memory.dma[1].requestEvent.when == 18);
     destroy(gba);
 
     gba = machine(0);
@@ -316,6 +320,8 @@ static void fifo_dma_latency_cancellation_and_irq(void) {
     cupid_dma_write_cnt(gba, 2, 0);
     CHECK(!cupid_timing_is_scheduled(&gba->timing, &gba->memory.dma[2].requestEvent));
     tick(gba, 2);
+    CHECK(gba->memory.dma[2].nextSource == GBA_BASE_IWRAM && !gba->memory.dmaRunning);
+    tick(gba, 2); /* Pass the cancelled three-clock activation deadline too. */
     CHECK(gba->memory.dma[2].nextSource == GBA_BASE_IWRAM);
     CHECK(gba->cpu.cycles == 0);
     destroy(gba);

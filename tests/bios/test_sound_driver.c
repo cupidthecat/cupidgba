@@ -500,7 +500,9 @@ static void playback_reaches_fifo_and_output(void) {
     const uint64_t origins[] = {0, UINT32_MAX - 200000u};
     const uint64_t outputs[] = {UINT64_C(0xC1BA4C9839934FFE), UINT64_C(0x883CE24630E02C68)};
     const uint64_t areas[] = {UINT64_C(0x0769CB27762A2CB4), UINT64_C(0x387119929D02A8A3)};
-    const uint64_t elapsed[] = {3370836, 3370836};
+    /* The final idle branch completes before VSync; FIFO arbitration changes
+     * its phase by at most two clocks, while PCM and work areas stay equal. */
+    const uint64_t elapsed[] = {3370837, 3370835};
     const unsigned finishClocks[2][12] = {
         {83, 83, 83, 83, 83, 83, 107, 83, 83, 83, 83, 83},
         {83, 83, 83, 83, 83, 83, 107, 83, 83, 83, 83, 83},

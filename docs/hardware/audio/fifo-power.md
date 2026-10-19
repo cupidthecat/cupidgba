@@ -93,6 +93,17 @@ include the current FIFO/DMA scheduling phase. Sixty separate exact-duration
 checks retain each following VSync call independently of that spin-loop phase.
 Both firmware paths must satisfy the same observations and original run guards.
 
+The queue and activation correction changes which three-clock idle instruction
+finishes each playback frame spin. Exact elapsed endpoint fixtures include that
+instruction and retain the following firmware call's separate duration check.
+Paired qualification preserves ten complete timestamped PCM files and 76 complete
+RAM snapshots byte for byte across the preceding and corrected cores. Endpoint
+changes are at most two clocks. PCM signatures, counts, work-area images, FIFO
+source positions, held samples and the 60 independent finish-call checks retain
+their original expectations. The separate one-clock timer fixture checks the
+three-clock request, all four DMA writes, IRQ publication, bus release and a
+cancelled request beyond its activation deadline.
+
 `CUPID_FIFO_PROBE_DIR` enables nine original local FIFO/DMA cartridges.
 `CUPID_TEST_BIOS` repeats them with an external image. The manifest pins each
 input digest and its original result-display and terminal addresses. The runner
