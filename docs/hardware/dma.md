@@ -1,7 +1,8 @@
 # DMA and bus ownership
 
-DMA requests become ready two clocks after the trigger. Once the CPU releases
-the bus, the engine spends one handover clock, then schedules each read and
+Ordinary DMA requests become ready two clocks after the trigger; Direct Sound
+refill requests use three clocks. Once the CPU releases the bus, the engine
+spends one handover clock, then schedules each read and
 write separately. It samples the source when the read completes and publishes
 the destination when the write completes. One release clock follows the last
 transfer. Timers, video events, audio requests and interrupt signals continue
@@ -82,11 +83,40 @@ using destination bit 1. Write-only display-register reads expose the CPU
 prefetch value or the latest DMA read latch according to bus ownership.
 
 Channels 1 and 2 force FIFO transfers to four words with a fixed destination.
-The programmed width and destination-control bits remain readable. Repeated
+The programmed width and destination-control bits remain readable. The FIFO
+supplies a request independently of the destination address. Sound DMA can
+therefore retain a RAM destination or an address whose writes are ignored.
+Such a burst does not fill the FIFO; later timer overflows can request another
+burst. A FIFO-port destination continues to select that port's request line.
+Source/count progress, bus ownership and completion signals still run. Repeated
 requests during a pending or active burst are coalesced. Disabling a channel
-cancels its pending request and removes it from arbitration. A completion IRQ
-is requested after the final write. Pending IF changes retain their individual
-acceptance deadlines; an earlier timer update cannot publish a later DMA bit.
+cancels its pending request and removes it from arbitration. The final destination
+write accepts a completion interrupt when the channel's IRQ bit is enabled.
+Its signal reaches the interrupt controller one clock later; the existing
+register pipeline makes IF visible on the following clock. Disabling or
+reconfiguring the channel after that write cannot cancel the accepted signal.
+A DMA reset cancels outstanding completion events. Pending IF changes retain
+their individual acceptance deadlines; an earlier timer update cannot publish
+a later DMA bit.
+
+The `gba.dma-completion` group checks 196 complete scenes across all four
+channels, both transfer widths, enabled/disabled completion interrupts and four
+clock epochs. It preserves destination, address/count and bus-release deadlines
+while distinguishing the completion signal, IF acceptance, HALT availability
+and CPU IRQ input. Other scenes cover register acknowledgements on either side
+of the signal, IE/IME changes, an independent timer interrupt, channel handover,
+control changes and reset. Bulk and single-clock dispatch must agree. This
+group and the eight existing groups with exact completion-edge assertions
+reject the preceding completion model.
+
+`gba.fifo-dma-destinations` checks 512 scenes and 1,024 complete bursts using
+the default DMA1/FIFO A and DMA2/FIFO B associations. Both timers, programmed
+widths, all four destination modes and four clock epochs retain the forced
+four-word, fixed-destination transfer. The cases cover IWRAM, EWRAM and two
+ignored BIOS addresses, including each destination publication, source/count
+progress, BIOS write protection, unchanged FIFO storage and completion IF.
+The preceding core rejects the first request. Cross-routing after repeated
+channel reconfiguration remains outside this group's qualification.
 
 HBlank requests run on visible lines and VBlank requests run on entry to line
 160. The current display-request model services channel 3 at HBlank on lines
@@ -96,13 +126,18 @@ HBlank requests run on visible lines and VBlank requests run on entry to line
 
 `CUPID_DMA_PROBE_DIR` registers nine unchanged local DMA cartridges and repeats
 them with `CUPID_TEST_BIOS`. Each run requires its original pre-display and
-terminal results. All nine pass with the external BIOS. The built-in path
-passes the enabled-mode-change and fixed-ROM page cases; seven pause/preemption
-observations still fail. Their inputs, comparisons and guards remain intact.
+terminal results. All nine pass with both firmware paths, including the seven
+built-in pause/preemption cases repaired by the startup display phase. Their
+inputs, comparisons and guards remain intact.
 The fixed-ROM case retains its original low-byte timer comparison of `0x30`.
 The independent CPU/DMA page cartridge now passes all eighteen original rows
 with either BIOS, including both decrement rows requiring 70 clocks. These
-source results do not qualify the remaining built-in firmware/CPU/DMA phases.
+source results cover their recorded DMA cases. The separate ordinary HALT/DMA
+interaction passes its original `0x74` return address and `0x87` timer
+comparisons with both firmware paths. The CPU/bus stack also retains the
+HALT/OAM boundary described in
+[CPU/DMA/IRQ interactions](cpu/dma-irq-interactions.md). Passing the direct DMA
+probes does not establish those remaining interaction phases.
 
 Four checksum-pinned hardware ROMs pass ten assertions with both BIOS paths:
 immediate timer sampling at 20 clocks, the two 88-clock burst-restart cases,

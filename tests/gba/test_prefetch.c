@@ -340,7 +340,9 @@ static void dma_external_write_waits_for_completing_prefetch_halfword(void) {
     CHECK(gba->memory.dma[3].busyUntil == 22 && !gba->memory.dma[3].enable);
     CHECK(gba->memory.dmaRunning && !gba->memory.prefetchUnit.active);
     idle(gba, 1);
-    CHECK(!gba->memory.dmaRunning && gba->irqf == IRQ_DMA3);
+    CHECK(!gba->memory.dmaRunning && gba->irqf == 0 && gba->irq.pendingIF == IRQ_DMA3);
+    idle(gba, 1);
+    CHECK(gba->irqf == IRQ_DMA3);
     destroy(gba);
 }
 

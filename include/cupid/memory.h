@@ -128,8 +128,9 @@ enum CupidDMATiming {
 struct CupidDMA {
     struct CupidGBA* gba;
     unsigned id;
-    uint64_t busyUntil;
+    uint64_t busyUntil; /**< Timestamp of the final destination strobe */
     struct CupidTimingEvent requestEvent; /**< Pending activation request */
+    struct CupidTimingEvent completionEvent; /**< Accepted completion IRQ signal */
     uint16_t reg;            /**< Raw DMA control register (CNT_HI) */
 
     uint32_t source;         /**< Programmed SAD (masked on write) */

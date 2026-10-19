@@ -378,6 +378,8 @@ static void dma_completion_requests_the_channel_bit(void) {
         CHECK(gba->irqf == 0);
         tick(gba, 1);
         CHECK(!gba->memory.dmaRunning);
+        CHECK(gba->irqf == 0 && (gba->irq.pendingIF & (IRQ_DMA0 << channel)));
+        tick(gba, 1); /* IF accepts the completed channel's signal. */
         CHECK(gba->irqf == (IRQ_DMA0 << channel) && !gba->irq.line);
         tick(gba, 2);
         CHECK(gba->irq.line);

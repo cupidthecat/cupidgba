@@ -500,7 +500,13 @@ static void playback_reaches_fifo_and_output(void) {
     const uint64_t origins[] = {0, UINT32_MAX - 200000u};
     const uint64_t outputs[] = {UINT64_C(0xC1BA4C9839934FFE), UINT64_C(0x883CE24630E02C68)};
     const uint64_t areas[] = {UINT64_C(0x0769CB27762A2CB4), UINT64_C(0x387119929D02A8A3)};
-    const uint64_t elapsed[] = {3370836, 3370837};
+    /* The final idle branch completes before VSync; FIFO arbitration changes
+     * its phase by at most two clocks, while PCM and work areas stay equal. */
+    const uint64_t elapsed[] = {3370837, 3370835};
+    const unsigned finishClocks[2][12] = {
+        {83, 83, 83, 83, 83, 83, 107, 83, 83, 83, 83, 83},
+        {83, 83, 83, 83, 83, 83, 107, 83, 83, 83, 83, 83},
+    };
     const unsigned nonzero[] = {11772, 11978};
     for (unsigned fixture = 0; fixture < 2; fixture++) {
         struct CupidGBA* gba = machine(origins[fixture], false);
@@ -518,7 +524,11 @@ static void playback_reaches_fifo_and_output(void) {
                 cupid_gba_step(gba); ++steps;
             }
             CHECK(steps < 200000);
+            /* A complete CPU instruction may overrun the frame boundary.
+             * Check the following firmware call independently of that phase. */
+            const uint64_t finishStart = cupid_timing_global_time(&gba->timing);
             call(gba, 0x1D, 0, (frame & 1) == 0, MODE_SYS);
+            CHECK(cupid_timing_global_time(&gba->timing) - finishStart == finishClocks[fixture][frame]);
             /* Model the host consuming each frame without changing samples. */
             gba->audio.sampleReadPos = gba->audio.sampleWritePos;
         }

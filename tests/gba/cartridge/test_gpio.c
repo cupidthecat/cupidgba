@@ -165,10 +165,13 @@ static void dma_word_ports_sample_each_strobe_before_completion_irq(void) {
     CHECK(!(gba->irqf & IRQ_DMA3));
     cupid_timing_tick(&gba->timing, 1);
     CHECK(cupid_memory_load32(&gba->cpu, GBA_BASE_IWRAM, NULL) == 0x00040001);
-    CHECK(!(gba->irqf & IRQ_DMA3) && (gba->irq.pendingIF & IRQ_DMA3));
+    CHECK(!(gba->irqf & IRQ_DMA3) && !(gba->irq.pendingIF & IRQ_DMA3));
     CHECK(gba->memory.dma[3].busyUntil == start + 12);
     cupid_timing_tick(&gba->timing, 1);
-    CHECK((gba->irqf & IRQ_DMA3) && !gba->memory.dmaRunning && !gba->cpuBlocked);
+    CHECK(!(gba->irqf & IRQ_DMA3) && (gba->irq.pendingIF & IRQ_DMA3));
+    CHECK(!gba->memory.dmaRunning && !gba->cpuBlocked);
+    cupid_timing_tick(&gba->timing, 1); /* Completion signal precedes IF visibility. */
+    CHECK(gba->irqf & IRQ_DMA3);
     destroy(gba);
 
     gba = machine(true);
@@ -188,9 +191,12 @@ static void dma_word_ports_sample_each_strobe_before_completion_irq(void) {
     CHECK(gba->cartridge.direction == 15 && !(gba->irqf & IRQ_DMA3));
     cupid_timing_tick(&gba->timing, 1);
     CHECK(gba->cartridge.direction == 7 && !(gba->irqf & IRQ_DMA3));
-    CHECK(gba->irq.pendingIF & IRQ_DMA3);
+    CHECK(!(gba->irq.pendingIF & IRQ_DMA3));
     cupid_timing_tick(&gba->timing, 1);
-    CHECK((gba->irqf & IRQ_DMA3) && !gba->memory.dmaRunning && !gba->cpuBlocked);
+    CHECK(!(gba->irqf & IRQ_DMA3) && (gba->irq.pendingIF & IRQ_DMA3));
+    CHECK(!gba->memory.dmaRunning && !gba->cpuBlocked);
+    cupid_timing_tick(&gba->timing, 1);
+    CHECK(gba->irqf & IRQ_DMA3);
     destroy(gba);
 }
 

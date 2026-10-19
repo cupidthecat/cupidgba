@@ -71,6 +71,7 @@ def main():
             assert 'checkpoint=yes r12=0 result=PASS' in rejected.stdout and 'terminal=yes r12=0 result=PASS' in rejected.stdout
             assert 'observations=2/2 result=FAIL' in rejected.stdout
 
+
         # BX PC at a halfword offset: logical ARM +26h, physical opcode +24h.
         # Preserve the logical PC operand while matching issued byte addresses,
         # including the checkpoint and terminal with A1 still set.
@@ -112,6 +113,19 @@ def main():
         for fields in [[], ['0'], ['0', '0']]:
             invalid = run(checkpoint, terminal, extra=['--expect-register-at', *fields])
             assert invalid.returncode == 2, fields
+        checkpoint, terminal, probes = image()
+        pair = ['--expect-register-pair-at', '0x0800001c', '1', '0x6a', '0', '0x4c']
+        passed = run(checkpoint, terminal, probes[:1], pair)
+        assert passed.returncode == 0 and 'r1=0000006a expected=0000006a r0=0000004c expected=0000004c result=PASS' in passed.stdout
+        rejected = run(checkpoint, terminal, probes[:1], pair[:-1] + ['0x44'])
+        assert rejected.returncode == 1 and 'r0=0000004c expected=00000044 result=FAIL' in rejected.stdout
+        assert 'checkpoint=yes r12=0 result=PASS' in rejected.stdout and 'terminal=yes r12=0 result=PASS' in rejected.stdout
+        for fields in [[], ['0'], ['0', '0'], ['0', '0', '0'], ['0', '0', '0', '0'],
+                       ['0', '0', '0', '16', '0'], ['0', '0', '0', '-1', '0'],
+                       ['0', '0', '0', '0', '0x100000000'], ['0', '0', '0', '0', '-1']]:
+            invalid = run(checkpoint, terminal, extra=['--expect-register-pair-at', *fields])
+            assert invalid.returncode == 2, fields
+
     print('PASS ARM/Thumb comparisons, skipped failure writes, order/missing/extra visits, exact capacity and input bounds')
 
 
