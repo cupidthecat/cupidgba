@@ -255,7 +255,9 @@ static void dma_observe(struct CupidTiming* timing, void* context, uint32_t late
         CHECK(gba->memory.iwram[i] == wanted);
     }
     const unsigned irq = gba->irq.pendingIF | gba->irqf;
-    CHECK(((irq & IRQ_DMA3) != 0) == (phase >= 9));
+    /* The destination strobe is phase 9; its completion signal is phase 10. */
+    CHECK(((irq & IRQ_DMA3) != 0) == (phase >= 10));
+    CHECK(!(gba->irqf & IRQ_DMA3));
     CHECK(((irq & IRQ_TIMER0) != 0) == (phase >= 10));
     CHECK(gba->cpuBlocked == (phase < 10));
     scene->observations++;

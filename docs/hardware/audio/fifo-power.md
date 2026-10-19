@@ -73,8 +73,9 @@ The chronology fixture starts with four queued words and a four-clock timer.
 Its first overflow at clock 6 loads the stage without requesting DMA. The next
 overflow at clock 10 requests activation at clock 13. With an idle bus and an
 internal word source, destination writes occur at clocks 16, 18, 20 and 22;
-the completion IRQ belongs to clock 22 and bus release to clock 23. Single-clock
-and overdue dispatch must produce identical FIFO, timer and interrupt state.
+the completion signal and bus release belong to clock 23, followed by IF
+visibility at clock 24. Single-clock and overdue dispatch must produce identical
+FIFO, timer and interrupt state.
 These deadlines replace the earlier after-load decision and two-clock audio
 request together. Changing either alone fails an original cartridge comparison.
 
@@ -159,9 +160,11 @@ The IRQ cartridge retains its original `0x008000AF` comparison with both live
 operands and both firmware paths. The combined queue and activation ordering
 also satisfies all eight original prefetch comparisons and both threshold
 comparisons. All 20 configured FIFO cases retain their inputs and run guards;
-14 pass. Base, IRQ-latch and the separate source base still fail on both firmware
-paths. The first base timer reading remains `0x62` instead of `0x68`; IRQ-latch
-reads `0x7A` instead of `0x7B`. These are remaining failures, not new expectations.
+16 pass. The DMA completion signal follows the final destination write by one
+clock, before the existing IF register pipeline. That separate event repairs
+both IRQ-latch runs at their original `0x7B` comparison. Base and the separate
+source base still fail on both firmware paths. Their first timer reading
+remains `0x62` instead of `0x68`. These are remaining failures, not new expectations.
 Every original input, comparison and execution guard remains required. The
 power, refill and access-width regressions cover their selected logical model;
 complete FIFO/DMA timing acceptance remains open in #76. Physical queue capacity,

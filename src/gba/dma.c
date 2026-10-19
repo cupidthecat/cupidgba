@@ -123,6 +123,13 @@ static void activation_callback(struct CupidTiming* timing, void* context, uint3
     cupid_dma_kick(dma->gba, cupid_timing_global_time(timing));
 }
 
+static void completion_callback(struct CupidTiming* timing, void* context, uint32_t late) {
+    struct CupidDMA* dma = context;
+    /* Completion was accepted at the final write. A later channel-control
+     * change cannot cancel it; the IRQ register pipeline starts on this edge. */
+    cupid_raise_irq_at(dma->gba, IRQ_DMA0 << dma->id, timing->globalCycles - late);
+}
+
 static void request_at(struct CupidGBA* gba, int ch, uint64_t timestamp, unsigned delay) {
     struct CupidDMA* dma = &gba->memory.dma[ch];
     if (!dma->enable || dma->ready ||
@@ -134,7 +141,12 @@ static void request_at(struct CupidGBA* gba, int ch, uint64_t timestamp, unsigne
 static void complete_channel(struct CupidGBA* gba, struct CupidDMA* dma, uint64_t when) {
     dma->ready = false;
     dma->busyUntil = when;
-    if (dma->doIrq) cupid_raise_irq_at(gba, IRQ_DMA0 << dma->id, when);
+    if (dma->doIrq) {
+        /* The completion signal follows the destination strobe by one clock.
+         * Publish it then, using the interrupt registers pending at that edge. */
+        cupid_timing_schedule_absolute(&gba->timing, &dma->completionEvent,
+                                       (int32_t)(uint32_t)(when + 1));
+    }
     if (dma->repeat && dma->timing != DMA_TIMING_NOW) {
         dma->nextCount = dma->fifo ? 4 : (int32_t)transfer_count(dma);
         if (dma->destControl == GBA_DMA_INCREMENT_RELOAD && !dma->fifo) {
@@ -249,6 +261,8 @@ void cupid_dma_init(struct CupidGBA* gba) {
         dma->id = ch;
         dma->requestEvent = (struct CupidTimingEvent){.context = dma,
             .callback = activation_callback, .name = "DMA activation", .priority = 0};
+        dma->completionEvent = (struct CupidTimingEvent){.context = dma,
+            .callback = completion_callback, .name = "DMA completion signal", .priority = 0};
     }
 }
 
@@ -256,6 +270,7 @@ void cupid_dma_reset(struct CupidGBA* gba) {
     cupid_timing_deschedule(&gba->timing, &gba->memory.dmaEvent);
     for (unsigned ch = 0; ch < GBA_DMA_COUNT; ch++) {
         cupid_timing_deschedule(&gba->timing, &gba->memory.dma[ch].requestEvent);
+        cupid_timing_deschedule(&gba->timing, &gba->memory.dma[ch].completionEvent);
     }
     cupid_dma_init(gba);
     gba->memory.activeDMA = -1;

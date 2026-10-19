@@ -299,14 +299,17 @@ static void fifo_dma_latency_cancellation_and_irq(void) {
     CHECK(gba->memory.dma[1].nextCount == 4 && gba->memory.dma[1].busyUntil == 15);
     CHECK(gba->irqf == IRQ_TIMER0 && gba->memory.dmaRunning);
     CHECK(cupid_io_read(gba, REG_TM1CNT_L) == 13);
-    tick(gba, 1); /* Bus release and completion IF visibility. */
+    tick(gba, 1); /* Bus release and completion signal; IF is one clock later. */
     CHECK(gba->irq.line);
-    CHECK(gba->irqf == (IRQ_TIMER0 | IRQ_DMA1));
+    CHECK(gba->irqf == IRQ_TIMER0);
     CHECK(gba->irq.pendingIF == (IRQ_TIMER0 | IRQ_DMA1));
     CHECK(cupid_io_read(gba, REG_TM1CNT_L) == 14);
     CHECK(gba->cpu.cycles == 0 && !gba->memory.dmaRunning);
     /* The timer at the final write can queue the next burst during release. */
     CHECK(gba->memory.dma[1].requestEvent.when == 18);
+    tick(gba, 1);
+    CHECK(gba->irqf == (IRQ_TIMER0 | IRQ_DMA1));
+    CHECK(cupid_io_read(gba, REG_TM1CNT_L) == 15);
     destroy(gba);
 
     gba = machine(0);

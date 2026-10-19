@@ -1,7 +1,8 @@
 # DMA and bus ownership
 
-DMA requests become ready two clocks after the trigger. Once the CPU releases
-the bus, the engine spends one handover clock, then schedules each read and
+Ordinary DMA requests become ready two clocks after the trigger; Direct Sound
+refill requests use three clocks. Once the CPU releases the bus, the engine
+spends one handover clock, then schedules each read and
 write separately. It samples the source when the read completes and publishes
 the destination when the write completes. One release clock follows the last
 transfer. Timers, video events, audio requests and interrupt signals continue
@@ -84,9 +85,24 @@ prefetch value or the latest DMA read latch according to bus ownership.
 Channels 1 and 2 force FIFO transfers to four words with a fixed destination.
 The programmed width and destination-control bits remain readable. Repeated
 requests during a pending or active burst are coalesced. Disabling a channel
-cancels its pending request and removes it from arbitration. A completion IRQ
-is requested after the final write. Pending IF changes retain their individual
-acceptance deadlines; an earlier timer update cannot publish a later DMA bit.
+cancels its pending request and removes it from arbitration. The final destination
+write accepts a completion interrupt when the channel's IRQ bit is enabled.
+Its signal reaches the interrupt controller one clock later; the existing
+register pipeline makes IF visible on the following clock. Disabling or
+reconfiguring the channel after that write cannot cancel the accepted signal.
+A DMA reset cancels outstanding completion events. Pending IF changes retain
+their individual acceptance deadlines; an earlier timer update cannot publish
+a later DMA bit.
+
+The `gba.dma-completion` group checks 196 complete scenes across all four
+channels, both transfer widths, enabled/disabled completion interrupts and four
+clock epochs. It preserves destination, address/count and bus-release deadlines
+while distinguishing the completion signal, IF acceptance, HALT availability
+and CPU IRQ input. Other scenes cover register acknowledgements on either side
+of the signal, IE/IME changes, an independent timer interrupt, channel handover,
+control changes and reset. Bulk and single-clock dispatch must agree. This
+group and the eight existing groups with exact completion-edge assertions
+reject the preceding completion model.
 
 HBlank requests run on visible lines and VBlank requests run on entry to line
 160. The current display-request model services channel 3 at HBlank on lines
@@ -103,8 +119,9 @@ The fixed-ROM case retains its original low-byte timer comparison of `0x30`.
 The independent CPU/DMA page cartridge now passes all eighteen original rows
 with either BIOS, including both decrement rows requiring 70 clocks. These
 source results cover their recorded DMA cases. The separate ordinary HALT/DMA
-interaction still reads `0x88` instead of `0x87` with both firmware paths. The
-CPU/bus stack also retains the HALT/OAM boundary described in
+interaction passes its original `0x74` return address and `0x87` timer
+comparisons with both firmware paths. The CPU/bus stack also retains the
+HALT/OAM boundary described in
 [CPU/DMA/IRQ interactions](cpu/dma-irq-interactions.md). Passing the direct DMA
 probes does not establish those remaining interaction phases.
 

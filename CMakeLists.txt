@@ -670,6 +670,11 @@ if(BUILD_TESTING)
     add_test(NAME gba.dma COMMAND test_dma)
     set_tests_properties(gba.dma PROPERTIES TIMEOUT 10)
 
+    add_executable(test_dma_completion tests/gba/dma/test_completion.c)
+    target_link_libraries(test_dma_completion PRIVATE cupid_core)
+    add_test(NAME gba.dma-completion COMMAND test_dma_completion)
+    set_tests_properties(gba.dma-completion PROPERTIES TIMEOUT 10)
+
     add_executable(test_dma_pages tests/gba/dma/test_pages.c)
     target_link_libraries(test_dma_pages PRIVATE cupid_core)
     foreach(width halfword word)
