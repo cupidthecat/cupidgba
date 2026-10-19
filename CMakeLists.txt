@@ -510,6 +510,11 @@ if(BUILD_TESTING)
         set_tests_properties(gba.fifo-refill-${group} PROPERTIES TIMEOUT 10)
     endforeach()
 
+    add_executable(test_fifo_destinations tests/gba/audio/test_fifo_destinations.c)
+    target_link_libraries(test_fifo_destinations PRIVATE cupid_core)
+    add_test(NAME gba.fifo-dma-destinations COMMAND test_fifo_destinations)
+    set_tests_properties(gba.fifo-dma-destinations PROPERTIES TIMEOUT 10)
+
     add_executable(test_fifo_lanes tests/gba/audio/test_fifo_lanes.c)
     target_link_libraries(test_fifo_lanes PRIVATE cupid_core)
     foreach(group lanes cpu dma mixed)

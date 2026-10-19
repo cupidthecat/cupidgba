@@ -41,6 +41,10 @@ DMA triggers retain their two-clock activation path. A pending request keeps
 its first deadline. Bus ownership still waits for the active CPU transfer.
 DMA transfers four words, retains its programmed source progress and publishes
 each destination write after the existing source and destination bus waits.
+The selected FIFO remains the request source when the configured DMA writes
+another address. Its width and length are forced, while its destination stays
+programmed and fixed throughout the burst. A transfer to RAM or an ignored
+address leaves FIFO storage empty and permits another refill request.
 
 ## Regression coverage
 
@@ -67,7 +71,9 @@ retain each of four DMA publications, signed sample order, completion IRQs,
 an independent running timer, bulk versus single-clock dispatch, master power,
 timer selection, disabled or non-FIFO timing and destination ownership.
 The level and chronology groups fail with the preceding audio implementation;
-the inactive-source controls pass with either implementation.
+the inactive-source controls pass with either implementation. A separate
+`gba.fifo-dma-destinations` group covers 512 default-association scenes and two
+bursts per scene outside the FIFO ports; see [DMA](../dma.md).
 
 The chronology fixture starts with four queued words and a four-clock timer.
 Its first overflow at clock 6 loads the stage without requesting DMA. The next
