@@ -141,7 +141,7 @@ struct CupidDMA {
     int32_t  nextCount;      /**< Transfer units remaining in the latched burst */
     uint32_t latch;          /**< Open-bus: last value transferred */
 
-    int32_t  sourceOffset;   /**< Bytes per step (Â±width, forced +width for ROM) */
+    int32_t  sourceOffset;   /**< Bytes per DMA pointer step; ROM has a separate counter */
     int32_t  destOffset;     /**< Bytes per step */
 
     /** Decoded control fields (written by cupid_dma_write_cnt) */

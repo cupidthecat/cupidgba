@@ -179,8 +179,8 @@ endpoints, coefficient saturation and red/blue symmetry. Scanout tests retain
 the extra green bit through direct bitmap, background palette, backdrop and
 semi-transparent OBJ inputs. These qualify the implemented numerical model;
 direct hardware captures for fractional rounding and bit 15 remain open.
-Physical mosaic sampling edges, vertical size changes, and reset or BIOS-skipped
-phases also remain open. Horizontal size writes have the logical qualification
+Physical mosaic sampling edges and reset or BIOS-skipped phases remain
+unmeasured. Horizontal and vertical size writes have the logical qualification
 described below. The ten selections do not qualify every
 scroll phase, layer combination, OBJ mode or contention pattern. These limits remain under
 [issue 16](https://github.com/cupidthecat/cupidgba/issues/16) and the complete
@@ -216,7 +216,43 @@ core with its matching headers. Both width-one groups pass; all thirty groups
 that can shorten an active period reject the preceding retained-counter state.
 Existing raster, color, window, object, blanking and bus checks remain required.
 The geometry corpus does not qualify LCD color response, vertical mosaic
-changes, every sprite-priority interaction, or physical reset phase.
+sampling on hardware, every sprite-priority interaction, or physical reset phase.
+
+## Vertical mosaic writes
+
+Background and OBJ vertical mosaic retain separate four-bit line counters.
+Changing the selected height keeps the elapsed counter. Equality with the new
+height ends a group; a counter that has passed that height continues until its
+four-bit wrap. Affine backgrounds retain their separate reference accumulators
+and apply the selected group height when a group ends. Background fetches and
+next-line OBJ preparation can therefore observe different sides of a boundary
+write. Shortening the OBJ fetch budget for HBlank access retains its separate
+line-counter progression.
+
+The 64 `gba.mosaic-vertical-*` groups cover text and bitmap backgrounds, normal
+and identity-transformed OBJ, all sixteen counter phases and replacement
+heights, and byte, halfword and word writes at three adjacent boundary clocks.
+Owned Gray-code textures encode each row in eight thirty-pixel stripes. The
+expected data describe every pixel in each complete observed line, including
+opaque black. Each case checks the stored control and both final counters.
+Bulk and one-clock dispatch use the same geometry. Additional cases retain
+constant-height OBJ grouping with HBlank access and place writes at signed and
+unsigned clock wrap.
+
+The private comparison executes the independent pinned renderer, scheduler and
+register bus for all 9,216 ordinary-budget scenes. All complete geometry and
+counter/control records agree across 400,896 scanlines and 96,215,040 geometry
+pixels per core. The separate boundary survey agrees in 98,304 background
+states. Its shortened-budget OBJ results differ, so those results are not used
+as a universal timing replacement. The retained independent line-counter policy
+also matches static screen-row grouping; its constant-height controls remain
+separate from the ordinary-budget source comparison.
+
+The fixture configures owned graphics during VBlank and enters the ordinary
+line-zero callbacks. It does not choose a power-on LCD phase. These are logical
+timing and geometry observations. Physical sampling, arbitrary OBJ matrices,
+every priority/window interaction and full PPU accuracy remain open under
+issues 16 and 1.
 
 ## Host work between observable clocks
 

@@ -1,5 +1,18 @@
 # Testing
 
+The vertical mosaic geometry matrix can be selected with:
+
+```sh
+ctest --test-dir build -R '^gba[.]mosaic-vertical-' --output-on-failure
+```
+
+Its 64 groups partition four layer types and sixteen starting phases. Each
+group retains all sixteen replacement heights, three access widths and three
+adjacent boundary clocks, with bulk and one-clock dispatch. The owned row
+fixtures check every pixel in each completed scanline. OBJ controls retain
+constant-height grouping with HBlank access; additional writes cross signed
+and unsigned clock wrap. Each group has a ten-second limit.
+
 On WSL, keep Linux executable output on native Linux storage. Repeated
 sanitizer process startup through a Windows mount can dominate short CLI
 checks. `CMAKE_RUNTIME_OUTPUT_DIRECTORY` selects executable placement while
