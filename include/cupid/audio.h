@@ -7,8 +7,9 @@
  *   - PSG engine: ch1 (square+sweep), ch2 (square),
  *     ch3 (wave), ch4 (noise), mixed via NR50/NR51
  *   - timingFactor = 4 converts internal PSG periods to CPU clocks
- *   - Two Direct Sound FIFO channels (A, B): 8x uint32_t ring buffers
- *     that feed int8_t samples one byte at a time
+ *   - Two Direct Sound FIFO channels (A, B): seven queued 32-bit words
+ *     and separate four-byte stages feed signed samples one byte at a time
+ *   - FIFO A requests DMA1; FIFO B requests DMA2, independently of destination
  *   - Mixer captures run at sampleInterval (default 512) CPU cycles
  *   - FIFO bytes latch on timer overflow and are held until the next overflow
  *   - Each output frame retains its elapsed clocks for host resampling

@@ -107,7 +107,7 @@ cross-channel level and chronology rows retain their original sample and clock
 checks as negative source controls. The queue DMA cases continue to exercise
 accepted bursts from either channel to either FIFO by placing both sources on
 timer 0. A separate
-`gba.fifo-dma-destinations` group covers 512 default-association scenes and two
+`gba.fifo-dma-destinations` group covers 512 fixed-source scenes and two
 bursts per scene outside the FIFO ports; see [DMA](../dma.md).
 
 Four `gba.fifo-routing-*` groups cover 11,520 additional cases:
