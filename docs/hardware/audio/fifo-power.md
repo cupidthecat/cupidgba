@@ -59,10 +59,17 @@ DMA triggers retain their two-clock activation path. A pending request keeps
 its first deadline. Bus ownership still waits for the active CPU transfer.
 DMA transfers four words, retains its programmed source progress and publishes
 each destination write after the existing source and destination bus waits.
-The selected FIFO remains the request source when the configured DMA writes
-another address. Its width and length are forced, while its destination stays
-programmed and fixed throughout the burst. A transfer to RAM or an ignored
-address leaves FIFO storage empty and permits another refill request.
+FIFO A drives the DMA1 request line; FIFO B drives DMA2. Destination writes and
+channel configuration history do not change these connections. Both channels
+can request together when their FIFO sources use the same timer. Each enabled
+channel must use special timing to accept its request.
+
+The request source stays fixed when the configured DMA writes the other FIFO,
+RAM or an ignored address. Its width and length are forced, while its destination
+stays programmed and fixed throughout the burst. A transfer outside the FIFO
+ports leaves their storage empty and permits another refill request. DMA1 has
+priority when both channels are ready. Sending both bursts to the same empty
+FIFO performs all eight writes, including the final queue overflow.
 
 ## Regression coverage
 
@@ -95,11 +102,33 @@ eight queued-word levels and four reachable staged-byte counts, both FIFOs,
 both sound DMA channels, both timers and four clock anchors. Other cases
 retain each of four DMA publications, signed sample order, completion IRQs,
 an independent running timer, bulk versus single-clock dispatch, master power,
-timer selection, disabled or non-FIFO timing and destination ownership.
-The level and chronology groups fail with the preceding audio implementation;
-the inactive-source controls pass with either implementation. A separate
+timer selection, disabled or non-FIFO timing and fixed request sources. The
+cross-channel level and chronology rows retain their original sample and clock
+checks as negative source controls. The queue DMA cases continue to exercise
+accepted bursts from either channel to either FIFO by placing both sources on
+timer 0. A separate
 `gba.fifo-dma-destinations` group covers 512 default-association scenes and two
 bursts per scene outside the FIFO ports; see [DMA](../dma.md).
+
+Four `gba.fifo-routing-*` groups cover 11,520 additional cases:
+
+- 8,192 selector rows vary both channels' enable and timing bits, eight paired
+  destinations, both FIFO sources and timers, and four scheduler epochs.
+- 2,048 destination histories check address writes while enabled, disable and
+  re-enable, power cycles, both programmed widths and both source timers.
+- 512 simultaneous bursts check all 64 destination pairs, each word's payload
+  and source/count progress, fixed priority, bus release and completion IF.
+  The destinations include both FIFO lanes, IWRAM, EWRAM and protected BIOS.
+  Every surviving sample byte is played after DMA is disabled.
+- 768 pending-request cases repeat a request before activation, cancel it at
+  three pre-activation clocks, then re-enable with another destination and
+  check the complete accepted burst.
+
+All four groups reject the preceding destination-based selector without
+changing their checks or ten-second deadlines. Independent execution of two
+source selectors agrees on 2,048 rows and the current implementation matches
+each row. This qualifies source-line selection. It does not calibrate physical
+request propagation, same-edge control writes or full-system bus timing.
 
 The chronology fixture starts with four queued words and a four-clock timer.
 Its first overflow at clock 6 loads the stage without requesting DMA. The next

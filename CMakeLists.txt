@@ -519,6 +519,13 @@ if(BUILD_TESTING)
     add_test(NAME gba.fifo-dma-destinations COMMAND test_fifo_destinations)
     set_tests_properties(gba.fifo-dma-destinations PROPERTIES TIMEOUT 10)
 
+    add_executable(test_fifo_routing tests/gba/audio/test_fifo_routing.c)
+    target_link_libraries(test_fifo_routing PRIVATE cupid_core)
+    foreach(group selectors history simultaneous pending)
+        add_test(NAME gba.fifo-routing-${group} COMMAND test_fifo_routing ${group})
+        set_tests_properties(gba.fifo-routing-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
     add_executable(test_fifo_lanes tests/gba/audio/test_fifo_lanes.c)
     target_link_libraries(test_fifo_lanes PRIVATE cupid_core)
     foreach(group lanes cpu dma mixed)

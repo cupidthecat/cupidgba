@@ -210,7 +210,9 @@ static void dma_overflow_keeps_every_bus_and_completion_edge(void) {
     for (unsigned e = 0; e < 4; ++e) for (unsigned id = 0; id < 2; ++id)
     for (unsigned channel = 1; channel <= 2; ++channel) for (unsigned word = 0; word < 2; ++word) {
         struct CupidGBA* gba = machine(e);
-        cupid_io_write(gba, REG_SOUNDCNT_H, id ? 0x0400 : 0x4000);
+        /* Both request sources use timer 0. This retains the accepted burst
+         * for either channel even when its destination is the other FIFO. */
+        cupid_io_write(gba, REG_SOUNDCNT_H, 0);
         cupid_memory_store32(&gba->cpu, port(id), (int32_t)0xD4C3B2A1, NULL);
         for (unsigned i = 0; i < 2; ++i)
             cupid_memory_store32(&gba->cpu, port(id), (int32_t)(0x10203040u + i), NULL);

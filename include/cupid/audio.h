@@ -161,7 +161,6 @@ struct CupidAudioFIFO {
     int fifoCount;                  /**< Queued words; equal pointers can also mean a full queue */
     uint32_t internalSample;
     int internalRemaining;
-    int dmaSource;
     int8_t latchedSample;            /**< Most recent timer-selected byte */
 };
 
@@ -228,8 +227,6 @@ uint16_t cupid_audio_read_register(struct CupidAudio* audio, uint32_t addr);
 
 void cupid_audio_fifo_write(struct CupidAudioFIFO* fifo, uint32_t value);
 void cupid_audio_fifo_reset(struct CupidAudioFIFO* fifo);
-void cupid_audio_schedule_fifo_dma(struct CupidAudio* audio, int dmaNumber,
-                                   struct CupidDMA* dma);
 
 void cupid_audio_sample(struct CupidAudio* audio, uint64_t timestamp);
 

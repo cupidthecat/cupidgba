@@ -187,7 +187,6 @@ void cupid_audio_reset(struct CupidAudio* audio) {
     cupid_timing_schedule(timing, &audio->sampleEvent, 512);
 
     /** Reset FIFO A. */
-    audio->chA.dmaSource = 1;
     audio->chA.fifoWrite = 0;
     audio->chA.fifoRead  = 0;
     audio->chA.fifoCount = 0;
@@ -197,7 +196,6 @@ void cupid_audio_reset(struct CupidAudio* audio) {
     memset(audio->chA.fifo, 0, sizeof(audio->chA.fifo));
 
     /** Reset FIFO B. */
-    audio->chB.dmaSource = 2;
     audio->chB.fifoWrite = 0;
     audio->chB.fifoRead  = 0;
     audio->chB.fifoCount = 0;
@@ -601,34 +599,6 @@ void cupid_audio_fifo_reset(struct CupidAudioFIFO* fifo) {
 }
 
 /**
- * @brief Configure a DMA channel for Direct Sound FIFO service.
- *
- * A FIFO-port destination selects its request association. Other destinations
- * retain the existing association, including DMA1/FIFO A and DMA2/FIFO B at reset.
- * The DMA engine forces FIFO burst width, length and destination stepping.
- *
- * @param audio     Audio subsystem state.
- * @param dmaNumber DMA channel number.
- * @param dma       DMA state to configure.
- */
-void cupid_audio_schedule_fifo_dma(struct CupidAudio* audio, int dmaNumber,
-                                   struct CupidDMA* dma)
-{
-    /* The association selects a request source; it does not restrict where
-     * a later accepted transfer may write. */
-    if (dma->nextDest != GBA_BASE_IO + REG_FIFO_A_LO &&
-        dma->nextDest != GBA_BASE_IO + REG_FIFO_B_LO) return;
-    /** Record which DMA feeds which FIFO. */
-    if (dma->nextDest == GBA_BASE_IO + REG_FIFO_A_LO) {
-        /** FIFO_A. */
-        audio->chA.dmaSource = dmaNumber;
-    } else if (dma->nextDest == GBA_BASE_IO + REG_FIFO_B_LO) {
-        /** FIFO_B. */
-        audio->chB.dmaSource = dmaNumber;
-    }
-}
-
-/**
  * @brief Consume one Direct Sound FIFO byte on timer overflow.
  *
  * Captures due mixer values before replacing the byte held by this channel,
@@ -652,22 +622,16 @@ void cupid_audio_sample_fifo(struct CupidAudio* audio, int fifoId, uint64_t time
 
     /** Sample the queued words before loading the independent byte stage.
      * Loading a stage from four queued words must not request a burst yet. */
-    if (fifoSize <= 3 && channel->dmaSource > 0) {
+    if (fifoSize <= 3) {
         struct CupidGBA* gba = audio->gba;
-        int dmaCh = channel->dmaSource;
-        if (dmaCh >= 1 && dmaCh <= 2) {
-            struct CupidDMA* dma = &gba->memory.dma[dmaCh];
-            if (dma->enable && dma->timing == DMA_TIMING_CUSTOM) {
-                _audioDebugLog(audio, "fifo%d dma refill: dma=%d fifoSize=%d", fifoId, dmaCh, fifoSize);
-                /* A FIFO-port destination selects that port's request line.
-                 * Other destinations retain the configured association and
-                 * still receive the four-word, fixed-destination burst. */
-                uint32_t portA = GBA_BASE_IO + REG_FIFO_A_LO;
-                uint32_t portB = GBA_BASE_IO + REG_FIFO_B_LO;
-                bool port = dma->nextDest == portA || dma->nextDest == portB;
-                if (!port || dma->nextDest == (fifoId ? portB : portA))
-                    cupid_dma_request_fifo(gba, dmaCh, timestamp);
-            }
+        /* The request wires are fixed: FIFO A drives DMA1 and FIFO B drives
+         * DMA2. A destination write never reroutes either request line, even
+         * when the accepted burst writes the other FIFO or ordinary memory. */
+        int dmaCh = fifoId ? 2 : 1;
+        struct CupidDMA* dma = &gba->memory.dma[dmaCh];
+        if (dma->enable && dma->timing == DMA_TIMING_CUSTOM) {
+            _audioDebugLog(audio, "fifo%d dma refill: dma=%d fifoSize=%d", fifoId, dmaCh, fifoSize);
+            cupid_dma_request_fifo(gba, dmaCh, timestamp);
         }
     }
 

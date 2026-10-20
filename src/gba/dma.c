@@ -361,7 +361,6 @@ void cupid_dma_write_cnt(struct CupidGBA* gba, int ch, uint16_t value) {
         dma->destOffset = dma->fifo ? 0 : (dma->destControl == 3 ? (int)width
             : offsets[dma->destControl] * (int)width);
         if (dma->timing == DMA_TIMING_NOW) cupid_dma_transfer(gba, ch);
-        if (dma->fifo) cupid_audio_schedule_fifo_dma(&gba->audio, ch, dma);
     }
 }
 

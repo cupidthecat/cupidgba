@@ -24,7 +24,7 @@ static struct CupidGBA* machine(uint64_t origin, unsigned channel, unsigned time
     gba->audio.lastSample = gba->audio.sampleOrigin = origin;
     gba->audio.nextSample = origin + 512;
     cupid_io_write(gba, REG_SOUNDCNT_X, 0x80);
-    /* Keep the default FIFO A/DMA1 and FIFO B/DMA2 associations. The other
+    /* Keep the fixed FIFO A/DMA1 and FIFO B/DMA2 request lines. The other
      * FIFO uses the opposite timer, so it cannot supply this request. */
     unsigned timerA = channel == 1 ? timer : timer ^ 1;
     unsigned timerB = channel == 2 ? timer : timer ^ 1;

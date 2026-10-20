@@ -66,7 +66,7 @@ static void refill_samples_the_queue_before_loading_the_staged_word(void) {
         CHECK(output->internalRemaining == (stage ? (int)stage - 1 : pop ? 3 : 0));
         CHECK(output->internalSample == sample >> 8);
         CHECK(!memcmp(output->fifo, queued, words * sizeof(*queued)));
-        const bool requested = stage ? occupiedStage[words] : emptyStage[words];
+        const bool requested = channel == fifo + 1 && (stage ? occupiedStage[words] : emptyStage[words]);
         struct CupidDMA* dma = &gba->memory.dma[channel];
         CHECK(cupid_timing_is_scheduled(&gba->timing, &dma->requestEvent) == requested);
         CHECK(!dma->ready && !gba->memory.dmaRunning);
@@ -78,12 +78,15 @@ static void refill_samples_the_queue_before_loading_the_staged_word(void) {
 }
 
 static void timer_dma_and_irq_edges_follow_the_audio_request_phase(void) {
-    /* Four queued words delay the request until the second timer overflow:
-     * overflow 10, request 13, bus head 14, then four read/write pairs. */
+    /* Four queued words delay the matching channel's request until the second
+     * timer overflow: overflow 10, request 13, bus head 14, then four pairs. */
     const unsigned writes[] = {16, 18, 20, 22};
     const int8_t samples[] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77};
     for (unsigned epoch = 0; epoch < 4; epoch++) for (unsigned fifo = 0; fifo < 2; fifo++)
     for (unsigned channel = 1; channel <= 2; channel++) for (unsigned timer = 0; timer < 2; timer++) {
+        /* The opposite channel is a negative control: changing its destination
+         * to this FIFO does not connect it to this timer's request wire. */
+        bool associated = channel == fifo + 1;
         struct CupidGBA* punctual = machine(origins[epoch], fifo, channel, timer);
         struct CupidGBA* late = machine(origins[epoch], fifo, channel, timer);
         struct CupidGBA* machines[] = {punctual, late};
@@ -106,13 +109,13 @@ static void timer_dma_and_irq_edges_follow_the_audio_request_phase(void) {
             }
             if (clock == 10) {
                 CHECK(output->fifoRead == 1 && output->internalRemaining == 2);
-                CHECK(cupid_timing_is_scheduled(&punctual->timing, &dma->requestEvent));
-                CHECK(dma->requestEvent.when == (uint32_t)(origins[epoch] + 13));
+                CHECK(cupid_timing_is_scheduled(&punctual->timing, &dma->requestEvent) == associated);
+                if (associated) CHECK(dma->requestEvent.when == (uint32_t)(origins[epoch] + 13));
             }
-            CHECK(punctual->memory.dmaRunning == (clock >= 13 && clock < 23));
+            CHECK(punctual->memory.dmaRunning == (associated && clock >= 13 && clock < 23));
             unsigned published = 0;
             for (unsigned word = 0; word < 4; word++) {
-                if (clock >= writes[word]) {
+                if (associated && clock >= writes[word]) {
                     CHECK(output->fifo[(4 + word) % GBA_AUDIO_FIFO_SIZE] == incoming[word]);
                     ++published;
                 } else {
@@ -127,10 +130,10 @@ static void timer_dma_and_irq_edges_follow_the_audio_request_phase(void) {
         CHECK(!memcmp(selected(punctual, fifo), selected(late, fifo), sizeof(struct CupidAudioFIFO)));
         CHECK(punctual->memory.dma[channel].nextSource == late->memory.dma[channel].nextSource);
         CHECK(punctual->memory.dma[channel].nextCount == late->memory.dma[channel].nextCount);
-        CHECK(punctual->memory.dma[channel].busyUntil == origins[epoch] + 22);
+        CHECK(punctual->memory.dma[channel].busyUntil == (associated ? origins[epoch] + 22 : 0));
         CHECK(late->memory.dma[channel].busyUntil == punctual->memory.dma[channel].busyUntil);
         CHECK(cupid_io_read(punctual, REG_TM2CNT_L) == 30 && cupid_io_read(late, REG_TM2CNT_L) == 30);
-        CHECK(punctual->irqf == ((IRQ_TIMER0 << timer) | (IRQ_DMA0 << channel)));
+        CHECK(punctual->irqf == ((IRQ_TIMER0 << timer) | (associated ? IRQ_DMA0 << channel : 0)));
         CHECK(late->irqf == punctual->irqf && late->irq.line == punctual->irq.line);
         observations++;
         destroy(punctual);
@@ -138,7 +141,7 @@ static void timer_dma_and_irq_edges_follow_the_audio_request_phase(void) {
     }
 }
 
-static void inactive_sources_do_not_publish_refill_requests(void) {
+static void source_and_timer_selection_require_the_matching_fifo(void) {
     for (unsigned epoch = 0; epoch < 4; epoch++) for (unsigned fifo = 0; fifo < 2; fifo++)
     for (unsigned channel = 1; channel <= 2; channel++) for (unsigned timer = 0; timer < 2; timer++)
     for (unsigned state = 0; state < 6; state++) {
@@ -159,7 +162,11 @@ static void inactive_sources_do_not_publish_refill_requests(void) {
         }
         const struct CupidAudioFIFO before = *output;
         cupid_audio_timer_overflow(&gba->audio, overflow, origins[epoch]);
-        CHECK(!cupid_timing_is_scheduled(&gba->timing, &dma->requestEvent));
+        /* The opposite timer leaves this FIFO unchanged. It can still drive
+         * the tested channel through that channel's own empty FIFO. */
+        bool requested = state == 1 && channel != fifo + 1;
+        CHECK(cupid_timing_is_scheduled(&gba->timing, &dma->requestEvent) == requested);
+        if (requested) CHECK(dma->requestEvent.when == (uint32_t)(origins[epoch] + 3));
         CHECK(!dma->ready && !gba->memory.dmaRunning);
         if (state < 2) CHECK(!memcmp(output, &before, sizeof(before)));
         observations++;
@@ -171,7 +178,7 @@ int main(int argc, char** argv) {
     if (argc != 2) return 2;
     if (!strcmp(argv[1], "levels")) RUN(refill_samples_the_queue_before_loading_the_staged_word);
     else if (!strcmp(argv[1], "chronology")) RUN(timer_dma_and_irq_edges_follow_the_audio_request_phase);
-    else if (!strcmp(argv[1], "selection")) RUN(inactive_sources_do_not_publish_refill_requests);
+    else if (!strcmp(argv[1], "selection")) RUN(source_and_timer_selection_require_the_matching_fifo);
     else return 2;
     printf("observations=%u\n", observations);
     return 0;
