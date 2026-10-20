@@ -122,9 +122,9 @@ struct CupidAudioNoiseChannel {
     int length;
 
     uint32_t lfsr;
-    int nSamples;         /**< Accumulated samples for coalescence */
-    int samples;          /**< Accumulated positive samples x volume */
     uint64_t lastEvent;   /**< Cycles since power-on at last noise step */
+    uint64_t lastUpdate;  /**< Clock through which the divider was observed */
+    int remaining;        /**< Enabled clocks remaining before the next step */
 
     int8_t sample;
 };

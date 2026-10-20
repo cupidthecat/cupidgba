@@ -35,6 +35,10 @@ static void _frameCallback(struct CupidTiming* timing, void* context,
 static void _updateSquareSample(struct CupidAudioSquareChannel* ch);
 static void _runSquare(struct CupidAudioSquareChannel* ch, uint64_t timestamp,
                        int timingFactor);
+static int _noisePeriod(const struct CupidAudioNoiseChannel* ch, int timingFactor);
+static void _runNoise(struct CupidAudioNoiseChannel* ch, uint64_t timestamp,
+                      int timingFactor);
+static void _updateNoiseSample(struct CupidAudioNoiseChannel* ch);
 static void _resetEnvelope(struct CupidAudioEnvelope* envelope);
 static void _updateEnvelopeDead(struct CupidAudioEnvelope* envelope);
 static bool _writeEnvelope(struct CupidAudioEnvelope* envelope, uint8_t value);
@@ -367,33 +371,7 @@ void cupid_audio_psg_run(struct CupidAudioPSG* psg, uint64_t timestamp,
     if (channels & 0x8) {
         struct CupidAudioNoiseChannel* ch4 = &psg->ch4;
         if (psg->playingCh4) {
-            int ratio = ch4->ratio;
-            int freq  = ch4->frequency;
-            int32_t noiseCycles = ((ratio ? 2 * ratio : 1) << freq) *
-                                   8 * timingFactor;
-            if (noiseCycles > 0) {
-                uint64_t diff = timestamp >= ch4->lastEvent ? timestamp - ch4->lastEvent : 0;
-                if (diff >= (uint64_t)noiseCycles) {
-                    uint64_t steps = diff / noiseCycles;
-                    ch4->lastEvent += steps * noiseCycles;
-
-                    uint32_t lfsr = ch4->lfsr;
-                    uint32_t coeff = ch4->power ? 0x4040 : 0x4000;
-                    int lsb = 0;
-
-                    for (uint64_t i = 0; i < steps; i++) {
-                        lsb = ((int)lfsr ^ ((int)lfsr >> 1) ^ 1) & 1;
-                        lfsr >>= 1;
-                        if (lsb) {
-                            lfsr |= coeff;
-                        } else {
-                            lfsr &= ~coeff;
-                        }
-                    }
-                    ch4->lfsr = lfsr & 0x7FFF;
-                    ch4->sample = (int8_t)(lsb * ch4->envelope.currentVolume);
-                }
-            }
+            _runNoise(ch4, timestamp, timingFactor);
         }
     }
 }
@@ -534,15 +512,13 @@ void cupid_audio_psg_frame_step(struct CupidAudioPSG* psg) {
         }
         /** Ch4 envelope. */
         if (psg->playingCh4 && psg->ch4.envelope.dead == 0) {
-            int oldSample = psg->ch4.sample;
             if (psg->ch4.envelope.nextStep > 0) {
                 --psg->ch4.envelope.nextStep;
             }
             if (psg->ch4.envelope.nextStep == 0) {
                 _updateEnvelope(&psg->ch4.envelope);
             }
-            psg->ch4.sample = (int8_t)((oldSample > 0) *
-                               psg->ch4.envelope.currentVolume);
+            _updateNoiseSample(&psg->ch4);
         }
     }
 }
@@ -825,6 +801,55 @@ static void _frameCallback(struct CupidTiming* timing, void* context,
 }
 
 /** @section audio_psg_helpers PSG helpers */
+
+/** @brief Compute the noise timer reload in GBA clocks. */
+static int _noisePeriod(const struct CupidAudioNoiseChannel* ch, int timingFactor) {
+    return ((ch->ratio ? 2 * ch->ratio : 1) << ch->frequency) * 8 * timingFactor;
+}
+
+/** @brief Scale the held polynomial output bit by the current envelope. */
+static void _updateNoiseSample(struct CupidAudioNoiseChannel* ch) {
+    ch->sample = (int8_t)((ch->lfsr & 1) * ch->envelope.currentVolume);
+}
+
+/**
+ * @brief Advance the noise divider and polynomial through the requested clock.
+ *
+ * Register writes retain the current countdown and supply its next reload.
+ * Shifts 14 and 15 pause this countdown; elapsed paused time is not replayed
+ * when a clocked shift is selected. The output comes from bit zero after each
+ * shift, independently of the feedback bit inserted into the high positions.
+ */
+static void _runNoise(struct CupidAudioNoiseChannel* ch, uint64_t timestamp,
+                      int timingFactor) {
+    if (timestamp < ch->lastUpdate) return;
+    int period = _noisePeriod(ch, timingFactor);
+    if (period <= 0) return;
+    if (ch->remaining <= 0) ch->remaining = period;
+    uint64_t elapsed = timestamp - ch->lastUpdate;
+    ch->lastUpdate = timestamp;
+    if (ch->frequency >= 14) return;
+    if (elapsed < (unsigned)ch->remaining) {
+        ch->remaining -= (int)elapsed;
+        return;
+    }
+
+    elapsed -= (unsigned)ch->remaining;
+    uint64_t steps = 1 + elapsed / (unsigned)period;
+    unsigned remainder = (unsigned)(elapsed % (unsigned)period);
+    ch->lastEvent = timestamp - remainder;
+    ch->remaining = period - (int)remainder;
+
+    uint32_t state = ch->lfsr;
+    uint32_t feedbackMask = ch->power ? 0x4040 : 0x4000;
+    for (uint64_t i = 0; i < steps; ++i) {
+        unsigned feedback = (state ^ (state >> 1) ^ 1) & 1;
+        state = (state >> 1) & ~feedbackMask;
+        if (feedback) state |= feedbackMask;
+    }
+    ch->lfsr = state & 0x7FFF;
+    _updateNoiseSample(ch);
+}
 
 /**
  * @brief Advance a square channel's duty timer through the requested clock.
@@ -1328,6 +1353,8 @@ static void _writeNR44(struct CupidAudioPSG* psg, uint8_t value,
         }
 
         psg->ch4.lastEvent = timestamp;
+        psg->ch4.lastUpdate = timestamp;
+        psg->ch4.remaining = _noisePeriod(&psg->ch4, psg->timingFactor);
 
         if (dacOn) {
             psg->playingCh4 = true;
