@@ -17,7 +17,7 @@ bit using the new volume, including when the previous amplitude was zero.
 
 ## Regression coverage
 
-Five native groups cover 2,919,432 scenes. They exercise every 15-bit stored
+Five native groups cover 2,917,896 scenes. They exercise every 15-bit stored
 state in both widths, volume boundaries, all clocked ratio/shift combinations,
 byte and halfword writes, pending reloads, stopped shifts and resumption,
 envelope changes, four clock origins and scheduled stereo mixer captures.
