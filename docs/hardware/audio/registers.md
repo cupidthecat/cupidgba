@@ -40,6 +40,9 @@ accesses during playback, complete wave cycles and power transitions. The
 unchanged local register-read suite remains required with either BIOS path.
 The signal cartridge also checks the complete programmed wave pattern.
 
+Channel 1 sweep arithmetic, negate history and divider writes are described in
+[Frequency sweep](sweep.md).
+
 The wave trigger startup delay is retained and remains unqualified. The
 programmed first bank and CPU window phase during active 64-step playback,
 frequency changes inside an oscillator period, retrigger corruption, FIFO

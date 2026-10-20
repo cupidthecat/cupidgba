@@ -493,6 +493,13 @@ if(BUILD_TESTING)
     add_test(NAME gba.audio COMMAND test_audio)
     set_tests_properties(gba.audio PROPERTIES TIMEOUT 10)
 
+    add_executable(test_psg_sweep tests/gba/audio/test_psg_sweep.c)
+    target_link_libraries(test_psg_sweep PRIVATE cupid_core)
+    foreach(group trigger clocks history registers)
+        add_test(NAME gba.psg-sweep-${group} COMMAND test_psg_sweep ${group})
+        set_tests_properties(gba.psg-sweep-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
     add_executable(test_fifo_power tests/gba/audio/test_fifo_power.c)
     target_link_libraries(test_fifo_power PRIVATE cupid_core)
     foreach(group writes cpu dma phases transitions)

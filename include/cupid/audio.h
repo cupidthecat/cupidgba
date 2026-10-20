@@ -70,11 +70,11 @@ struct CupidAudioSquareControl {
 /** Frequency sweep — ch1 only */
 struct CupidAudioSweep {
     int shift;
-    int time;             /**< Sweep period */
-    int step;
+    int time;             /**< Programmed pace, with zero stored as eight */
+    int step;             /**< Remaining 128 Hz edges before divider reload */
     bool direction;       /**< False = increase, true = decrease */
-    bool enable;
-    bool occurred;        /**< Negate has been used */
+    bool enable;          /**< Latched on trigger from nonzero pace or shift */
+    bool occurred;        /**< Subtract calculation since the last trigger */
     int realFrequency;    /**< Shadow frequency */
 };
 

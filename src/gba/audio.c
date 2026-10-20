@@ -37,7 +37,8 @@ static void _resetEnvelope(struct CupidAudioEnvelope* envelope);
 static void _updateEnvelopeDead(struct CupidAudioEnvelope* envelope);
 static bool _writeEnvelope(struct CupidAudioEnvelope* envelope, uint8_t value);
 static void _updateEnvelope(struct CupidAudioEnvelope* envelope);
-static bool _updateSweep(struct CupidAudioSquareChannel* ch, bool initial);
+static int _sweepTarget(struct CupidAudioSquareChannel* ch);
+static bool _clockSweep(struct CupidAudioSquareChannel* ch);
 static void _resetSweep(struct CupidAudioSweep* sweep);
 
 static int16_t _applyBias(struct CupidAudio* audio, int32_t sample);
@@ -514,7 +515,7 @@ void cupid_audio_psg_frame_step(struct CupidAudioPSG* psg) {
                 --psg->ch1.sweep.step;
             }
             if (psg->ch1.sweep.step == 0) {
-                if (!_updateSweep(&psg->ch1, false)) {
+                if (!_clockSweep(&psg->ch1)) {
                     psg->playingCh1 = false;
                 }
             }
@@ -919,46 +920,43 @@ static void _updateEnvelope(struct CupidAudioEnvelope* envelope) {
 }
 
 /**
- * @brief Apply one channel-1 frequency sweep calculation.
+ * @brief Calculate a sweep target without updating either frequency register.
  *
- * @param ch      Channel 1 square-wave state.
- * @param initial Whether this is the initial overflow-check pass.
- * @return @c true if the resulting frequency remains valid, @c false if the
- *         channel should be disabled.
+ * A subtract calculation records negate use until the next trigger. A register
+ * write or a divider expiry without a calculation does not clear that history.
+ *
+ * @param ch Channel 1 square-wave state.
+ * @return Calculated frequency, including values beyond the 11-bit range.
  */
-static bool _updateSweep(struct CupidAudioSquareChannel* ch, bool initial) {
+static int _sweepTarget(struct CupidAudioSquareChannel* ch) {
     struct CupidAudioSweep* sweep = &ch->sweep;
-
-    if (initial || sweep->time != 8) {
-        int frequency = sweep->realFrequency;
-        if (sweep->direction) {
-            /** Subtract. */
-            frequency -= frequency >> sweep->shift;
-            if (!initial && frequency >= 0) {
-                ch->control.frequency = frequency;
-                sweep->realFrequency = frequency;
-            }
-        } else {
-            /** Add. */
-            frequency += frequency >> sweep->shift;
-            if (frequency < 2048) {
-                if (!initial && sweep->shift > 0) {
-                    ch->control.frequency = frequency;
-                    sweep->realFrequency = frequency;
-                    /** Double-check: recursive call to test overflow. */
-                    if (!_updateSweep(ch, true)) {
-                        return false;
-                    }
-                }
-            }
-        }
-        if (frequency >= 2048) {
-            return false;
-        }
+    int delta = sweep->realFrequency >> sweep->shift;
+    if (sweep->direction) {
+        sweep->occurred = true;
+        return sweep->realFrequency - delta;
     }
+    return sweep->realFrequency + delta;
+}
 
-    sweep->occurred = true;
+/**
+ * @brief Reload an expired sweep divider and apply its optional calculation.
+ *
+ * A programmed pace of zero reloads as eight without changing the frequency or
+ * negate history. A zero shift still checks overflow but never writes back.
+ */
+static bool _clockSweep(struct CupidAudioSquareChannel* ch) {
+    struct CupidAudioSweep* sweep = &ch->sweep;
     sweep->step = sweep->time;
+    if (sweep->time == 8) return true;
+
+    int frequency = _sweepTarget(ch);
+    if (frequency >= 2048) return false;
+    if (sweep->shift) {
+        ch->control.frequency = frequency;
+        sweep->realFrequency = frequency;
+        /* The second target is checked without being written back. */
+        if (_sweepTarget(ch) >= 2048) return false;
+    }
     return true;
 }
 
@@ -984,18 +982,15 @@ static void _resetSweep(struct CupidAudioSweep* sweep) {
 static void _writeNR10(struct CupidAudioPSG* psg, uint8_t value) {
     struct CupidAudioSweep* sweep = &psg->ch1.sweep;
 
-    bool oldDirection = sweep->direction;
-
     sweep->shift     = value & 0x7;
     sweep->direction = (value >> 3) & 1;
     sweep->time      = (value >> 4) & 0x7;
     if (sweep->time == 0) sweep->time = 8;
 
     /** If negate was used and direction changed from subtract to add, disable. */
-    if (sweep->occurred && oldDirection && !sweep->direction) {
+    if (sweep->occurred && !sweep->direction) {
         psg->playingCh1 = false;
     }
-    sweep->occurred = false;
 }
 
 /**
@@ -1070,13 +1065,8 @@ static void _writeNR14(struct CupidAudioPSG* psg, uint8_t value,
         ch->sweep.realFrequency = ch->control.frequency;
         _resetSweep(&ch->sweep);
 
-        /** If shift nonzero, do initial sweep check. */
-        if (ch->sweep.shift) {
-            if (!_updateSweep(ch, true)) {
-                psg->playingCh1 = false;
-                return;
-            }
-        }
+        /* Overflow mutes this trigger while length and oscillator state reload. */
+        bool sweepValid = !dacOn || !ch->sweep.shift || _sweepTarget(ch) < 2048;
 
         /** Reload length if zero. */
         if (ch->control.length == 0) {
@@ -1089,11 +1079,7 @@ static void _writeNR14(struct CupidAudioPSG* psg, uint8_t value,
         ch->lastUpdate = timestamp;
         _updateSquareSample(ch);
 
-        if (dacOn) {
-            psg->playingCh1 = true;
-        } else {
-            psg->playingCh1 = false;
-        }
+        psg->playingCh1 = dacOn && sweepValid;
     }
 }
 
