@@ -500,6 +500,13 @@ if(BUILD_TESTING)
         set_tests_properties(gba.psg-sweep-${group} PROPERTIES TIMEOUT 10)
     endforeach()
 
+    add_executable(test_square_clock tests/gba/audio/test_square_clock.c)
+    target_link_libraries(test_square_clock PRIVATE cupid_core)
+    foreach(group writes-1 writes-2 sequences silence sweep)
+        add_test(NAME gba.square-clock-${group} COMMAND test_square_clock ${group})
+        set_tests_properties(gba.square-clock-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
     add_executable(test_fifo_power tests/gba/audio/test_fifo_power.c)
     target_link_libraries(test_fifo_power PRIVATE cupid_core)
     foreach(group writes cpu dma phases transitions)

@@ -83,7 +83,8 @@ struct CupidAudioSquareChannel {
     struct CupidAudioSweep sweep;
     struct CupidAudioEnvelope envelope;
     struct CupidAudioSquareControl control;
-    uint64_t lastUpdate;  /**< Cycles since power-on at last run */
+    uint64_t lastUpdate;  /**< Clock of the last duty-step timer reload */
+    int period;           /**< Latched clocks per step until the next reload */
     uint8_t index;        /**< Duty cycle position (0-7) */
     int8_t sample;        /**< Current output sample (0..15) */
 };

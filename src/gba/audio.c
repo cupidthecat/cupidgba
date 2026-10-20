@@ -33,6 +33,8 @@ static void _frameCallback(struct CupidTiming* timing, void* context,
                             uint32_t cyclesLate);
 
 static void _updateSquareSample(struct CupidAudioSquareChannel* ch);
+static void _runSquare(struct CupidAudioSquareChannel* ch, uint64_t timestamp,
+                       int timingFactor);
 static void _resetEnvelope(struct CupidAudioEnvelope* envelope);
 static void _updateEnvelopeDead(struct CupidAudioEnvelope* envelope);
 static bool _writeEnvelope(struct CupidAudioEnvelope* envelope, uint8_t value);
@@ -278,16 +280,8 @@ void cupid_audio_psg_run(struct CupidAudioPSG* psg, uint64_t timestamp,
     /** Channel 1 (Square + Sweep). */
     if (channels & 0x1) {
         struct CupidAudioSquareChannel* ch = &psg->ch1;
-        if (psg->playingCh1 && ch->envelope.dead != 2) {
-            int32_t period = 4 * (2048 - ch->control.frequency) * timingFactor;
-            if (period > 0) {
-                uint64_t diff = timestamp >= ch->lastUpdate ? timestamp - ch->lastUpdate : 0;
-                if (diff >= (uint64_t)period) {
-                    uint64_t steps = diff / period;
-                    ch->index = (ch->index + (uint8_t)steps) & 7;
-                    ch->lastUpdate += steps * period;
-                }
-            }
+        if (psg->playingCh1) {
+            _runSquare(ch, timestamp, timingFactor);
             _updateSquareSample(ch);
         }
     }
@@ -295,16 +289,8 @@ void cupid_audio_psg_run(struct CupidAudioPSG* psg, uint64_t timestamp,
     /** Channel 2 (Square). */
     if (channels & 0x2) {
         struct CupidAudioSquareChannel* ch = &psg->ch2;
-        if (psg->playingCh2 && ch->envelope.dead != 2) {
-            int32_t period = 4 * (2048 - ch->control.frequency) * timingFactor;
-            if (period > 0) {
-                uint64_t diff = timestamp >= ch->lastUpdate ? timestamp - ch->lastUpdate : 0;
-                if (diff >= (uint64_t)period) {
-                    uint64_t steps = diff / period;
-                    ch->index = (ch->index + (uint8_t)steps) & 7;
-                    ch->lastUpdate += steps * period;
-                }
-            }
+        if (psg->playingCh2) {
+            _runSquare(ch, timestamp, timingFactor);
             _updateSquareSample(ch);
         }
     }
@@ -841,6 +827,29 @@ static void _frameCallback(struct CupidTiming* timing, void* context,
 /** @section audio_psg_helpers PSG helpers */
 
 /**
+ * @brief Advance a square channel's duty timer through the requested clock.
+ *
+ * Frequency writes and sweep updates change the next reload value. The current
+ * period completes first. An active zero-volume channel retains this clock.
+ */
+static void _runSquare(struct CupidAudioSquareChannel* ch, uint64_t timestamp,
+                       int timingFactor) {
+    int reloadPeriod = 4 * (2048 - ch->control.frequency) * timingFactor;
+    if (reloadPeriod <= 0) return;
+    if (!ch->period) ch->period = reloadPeriod;
+
+    uint64_t elapsed = timestamp >= ch->lastUpdate ? timestamp - ch->lastUpdate : 0;
+    if (elapsed < (uint64_t)ch->period) return;
+
+    ch->lastUpdate += (unsigned)ch->period;
+    /* After the pending edge, every further reload uses the current register. */
+    uint64_t steps = (timestamp - ch->lastUpdate) / (unsigned)reloadPeriod;
+    ch->lastUpdate += steps * (unsigned)reloadPeriod;
+    ch->index = (uint8_t)((ch->index + 1 + (steps & 7)) & 7);
+    ch->period = reloadPeriod;
+}
+
+/**
  * @brief Recompute the current square-wave sample from duty and envelope.
  *
  * @param ch Square-wave channel state.
@@ -1079,6 +1088,7 @@ static void _writeNR14(struct CupidAudioPSG* psg, uint8_t value,
         }
 
         ch->lastUpdate = timestamp;
+        ch->period = 4 * (2048 - ch->control.frequency) * psg->timingFactor;
         _updateSquareSample(ch);
 
         psg->playingCh1 = dacOn && sweepValid;
@@ -1158,6 +1168,7 @@ static void _writeNR24(struct CupidAudioPSG* psg, uint8_t value,
         }
 
         ch->lastUpdate = timestamp;
+        ch->period = 4 * (2048 - ch->control.frequency) * psg->timingFactor;
         _updateSquareSample(ch);
 
         if (dacOn) {

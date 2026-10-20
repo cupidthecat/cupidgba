@@ -42,6 +42,8 @@ The signal cartridge also checks the complete programmed wave pattern.
 
 Channel 1 sweep arithmetic, negate history and divider writes are described in
 [Frequency sweep](sweep.md).
+Both square channels retain their pending duty edge across frequency writes;
+see [Square-channel duty timers](oscillator.md).
 
 The wave trigger startup delay is retained and remains unqualified. The
 programmed first bank and CPU window phase during active 64-step playback,
