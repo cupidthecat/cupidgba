@@ -168,6 +168,8 @@ void cupid_audio_reset(struct CupidAudio* audio) {
     memset(&audio->psg.ch2, 0, sizeof(audio->psg.ch2));
     memset(&audio->psg.ch3, 0, sizeof(audio->psg.ch3));
     memset(&audio->psg.ch4, 0, sizeof(audio->psg.ch4));
+    /* The zero sweep pace uses an eight-edge divider even before its first write. */
+    audio->psg.ch1.sweep.time = 8;
     audio->psg.ch4.lfsr = 0;
 
     audio->psg.volumeRight = 0;
@@ -1373,6 +1375,7 @@ static void _writeNR52(struct CupidAudioPSG* psg, uint8_t value) {
         memset(&psg->ch2, 0, sizeof(psg->ch2));
         memset(&psg->ch3, 0, sizeof(psg->ch3));
         memset(&psg->ch4, 0, sizeof(psg->ch4));
+        psg->ch1.sweep.time = 8;
         memcpy(psg->ch3.wavedata8, wave, sizeof(wave));
 
         psg->volumeLeft = 0;

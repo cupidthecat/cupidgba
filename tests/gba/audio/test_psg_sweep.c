@@ -74,6 +74,35 @@ static void trigger_matrix(void) {
     free(gba);
 }
 
+static void unwritten_sweep_register_stays_disabled_after_reset(void) {
+    struct CupidGBA* gba = machine();
+    struct CupidAudioPSG* psg = &gba->audio.psg;
+    for (unsigned path = 0; path < 2; ++path) {
+        for (unsigned width = 1; width <= 2; ++width) {
+            for (unsigned frequency = 0; frequency < 2048; ++frequency) {
+                if (path) cupid_io_write(gba, REG_SOUNDCNT_X, 0);
+                else cupid_audio_reset(&gba->audio);
+                cupid_timing_clear(&gba->timing);
+                cupid_io_write(gba, REG_SOUNDCNT_X, 0x80);
+                CHECK(cupid_io_read(gba, REG_SOUND1CNT_L) == 0);
+                cupid_io_write(gba, REG_SOUND1CNT_H, 0xF080);
+                if (width == 1) {
+                    cupid_audio_write_register8(&gba->audio, REG_SOUND1CNT_X, (uint8_t)frequency);
+                    cupid_audio_write_register8(&gba->audio, REG_SOUND1CNT_X + 1, (uint8_t)(0x80 | (frequency >> 8)));
+                } else cupid_io_write(gba, REG_SOUND1CNT_X, (uint16_t)(0x8000 | frequency));
+                CHECK(!psg->ch1.sweep.enable && psg->ch1.sweep.step == 8);
+                for (unsigned i = 0; i < 16; ++i) sweep_edge(psg);
+                CHECK(psg->ch1.control.frequency == (int)frequency);
+                CHECK(psg->ch1.sweep.realFrequency == (int)frequency);
+                CHECK(!psg->ch1.sweep.occurred && psg->playingCh1);
+                ++scenes;
+            }
+        }
+    }
+    cupid_gba_destroy(gba);
+    free(gba);
+}
+
 static void clock_matrix(void) {
     struct CupidGBA* gba = machine();
     struct CupidAudioPSG* psg = &gba->audio.psg;
@@ -248,7 +277,10 @@ static void scheduled_sweep_preserves_stereo_waveform_and_clock(void) {
 
 int main(int argc, char** argv) {
     CHECK(argc == 2);
-    if (!strcmp(argv[1], "trigger")) RUN(trigger_matrix);
+    if (!strcmp(argv[1], "trigger")) {
+        RUN(trigger_matrix);
+        RUN(unwritten_sweep_register_stays_disabled_after_reset);
+    }
     else if (!strcmp(argv[1], "clocks")) RUN(clock_matrix);
     else if (!strcmp(argv[1], "history")) RUN(negate_history);
     else if (!strcmp(argv[1], "registers")) {

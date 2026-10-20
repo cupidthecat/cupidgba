@@ -28,10 +28,12 @@ trigger refreshes the shadow, divider, enable latch and negate history.
 
 ## Regression coverage
 
-Four native test groups cover 688,424 scenes: every 11-bit frequency and sweep
+Four native test groups cover 696,616 scenes: every 11-bit frequency and sweep
 register combination at trigger and divider expiry, repeated register writes,
 byte and halfword accesses, length reload after overflow, shadow preservation,
-pace changes, power transitions and trigger resets. Scheduled stereo tests
+pace changes, power transitions and trigger resets. Both full reset and sound
+power-off initialize the zero sweep pace before its first register write, so a
+trigger with an unwritten sweep register leaves the unit disabled. Scheduled stereo tests
 compare a tone with zero-shift subtraction against an otherwise identical
 channel 2 tone, checking every PCM capture and its clock across four clock
 origins and a repeat.
