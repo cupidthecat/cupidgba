@@ -514,6 +514,13 @@ if(BUILD_TESTING)
         set_tests_properties(gba.noise-clock-${group} PROPERTIES TIMEOUT 10)
     endforeach()
 
+    add_executable(test_noise_trigger tests/gba/audio/test_noise_trigger.c)
+    target_link_libraries(test_noise_trigger PRIVATE cupid_core)
+    foreach(group active inactive mixer)
+        add_test(NAME gba.noise-trigger-${group} COMMAND test_noise_trigger ${group})
+        set_tests_properties(gba.noise-trigger-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
     add_executable(test_fifo_power tests/gba/audio/test_fifo_power.c)
     target_link_libraries(test_fifo_power PRIVATE cupid_core)
     foreach(group writes cpu dma phases transitions)

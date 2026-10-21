@@ -1328,6 +1328,7 @@ static void _writeNR43(struct CupidAudioPSG* psg, uint8_t value) {
 static void _writeNR44(struct CupidAudioPSG* psg, uint8_t value,
                        uint64_t timestamp)
 {
+    bool wasPlaying = psg->playingCh4;
     bool oldStop = psg->ch4.stop;
     psg->ch4.stop = (value >> 6) & 1;
 
@@ -1343,6 +1344,14 @@ static void _writeNR44(struct CupidAudioPSG* psg, uint8_t value,
         _resetEnvelope(&psg->ch4.envelope);
         bool dacOn = psg->ch4.envelope.initialVolume || psg->ch4.envelope.direction;
 
+        /* Reload the active held level before resetting the polynomial.
+         * A stopped channel must not expose its cached amplitude on restart.
+         * Capture playback before the simultaneous length-control update. */
+        if (wasPlaying && dacOn) {
+            _updateNoiseSample(&psg->ch4);
+        } else {
+            psg->ch4.sample = 0;
+        }
         psg->ch4.lfsr = 0;
 
         if (psg->ch4.length == 0) {
@@ -1356,9 +1365,7 @@ static void _writeNR44(struct CupidAudioPSG* psg, uint8_t value,
         psg->ch4.lastUpdate = timestamp;
         psg->ch4.remaining = _noisePeriod(&psg->ch4, psg->timingFactor);
 
-        if (dacOn) {
-            psg->playingCh4 = true;
-        }
+        psg->playingCh4 = dacOn;
     }
 }
 
