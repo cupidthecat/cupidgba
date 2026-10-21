@@ -18,6 +18,15 @@ using the current volume, before the next wave-clock deadline. Powering sound
 off clears the held nibble along with the channel controls and retains wave RAM.
 Wave RAM continues to use the existing cyclic shift representation.
 
+In 64-sample mode, the selected bank supplies the first 32 samples and the
+other bank supplies the next 32. Both banks rotate through the DAC tap at the
+start of the selected bank. A complete 64-step cycle restores the waveform
+bytes. In 32-sample mode, only the selected bank rotates. Bank-control writes
+select the tap for the next wave step and retain the pending clock deadline.
+The selected-first ordering follows the
+[AGB Programming Manual](https://www.manuallib.com/download/2023-10-17/AGB%20Programming%20Manual.pdf),
+page 93.
+
 ## Regression coverage
 
 Three native groups cover 114,688 scenes across all 16 nibble values and eight
@@ -26,6 +35,12 @@ mute/unmute writes, stopped-channel triggers, four clock origins and stereo
 mixer output. A byte-oriented rotation oracle checks 128 wave steps per
 timeline, both complete bank lengths and the pending deadline after writes.
 
+Three bank groups add 8,960 scenes and 622,592 sample observations. They cover
+all 16 constant values independently in both banks, both bank and size settings,
+byte/halfword loads and controls, nonuniform patterns, four clock origins,
+complete cycles, CPU-window reads and bank changes between sample edges.
+The volume timeline oracle also selects the programmed bank's DAC tap.
+
 These checks qualify the selected held-output model. Trigger startup delay,
-physical register acceptance, active bank phase and analog output calibration
+physical register acceptance, CPU-window clock phase and analog output calibration
 remain open in [issue 1](https://github.com/cupidthecat/cupidgba/issues/1).

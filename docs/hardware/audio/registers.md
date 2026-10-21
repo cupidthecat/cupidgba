@@ -50,7 +50,7 @@ Wave volume writes rescale the retained unscaled nibble without changing the
 clock deadline or waveform banks; see [Wave-channel held output](wave.md).
 
 The wave trigger startup delay is retained and remains unqualified. The
-programmed first bank and CPU window phase during active 64-step playback,
+physical clock alignment of bank selection and the CPU window during active 64-step playback,
 frequency changes inside an oscillator period, retrigger corruption, FIFO
 partial writes and reset pipeline behavior, and `SOUNDCNT_H` power transitions
 require further hardware evidence.

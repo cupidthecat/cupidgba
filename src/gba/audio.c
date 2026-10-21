@@ -328,6 +328,9 @@ void cupid_audio_psg_run(struct CupidAudioPSG* psg, uint64_t timestamp,
 
                     int8_t sample = 0;
                     for (uint64_t s = 0; s < steps; s++) {
+                        /* The selected front bank feeds the DAC in both modes.
+                         * A 64-sample shift rotates both banks past this tap. */
+                        sample = (int8_t)(ch3->wavedata8[ch3->bank ? 16 : 0] >> 4);
                         /**
                          * Rotate nibbles through the wavedata array.
                          * The first byte's high nibble is read first. Its
@@ -344,7 +347,6 @@ void cupid_audio_psg_run(struct CupidAudioPSG* psg, uint64_t timestamp,
                                 (bitsCarry << 20);
                             bitsCarry = old & 0xF0;
                         }
-                        sample = (int8_t)(bitsCarry >> 4);
                     }
 
                     ch3->rawSample = (uint8_t)sample;

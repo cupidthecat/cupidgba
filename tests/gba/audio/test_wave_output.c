@@ -106,11 +106,13 @@ static void stopped_trigger_rescales_the_retained_sample(void) {
 /* A byte-oriented rotation oracle keeps RAM checks separate from word packing. */
 static unsigned rotate(uint8_t* ram, unsigned bank, unsigned size) {
     unsigned first = size ? 0 : bank * 16, count = size ? 32 : 16;
+    /* The selected bank supplies the DAC tap even when both banks rotate. */
+    unsigned sample = ram[bank * 16] >> 4;
     uint8_t copy[32];
     memcpy(copy, ram + first, count);
     for (unsigned i = 0; i < count; ++i)
         ram[first + i] = (uint8_t)((copy[i] << 4) | (copy[(i + 1) % count] >> 4));
-    return copy[0] >> 4;
+    return sample;
 }
 
 static void clocks_and_mixer_preserve_wave_rotation(void) {

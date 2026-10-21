@@ -528,6 +528,13 @@ if(BUILD_TESTING)
         set_tests_properties(gba.wave-output-${group} PROPERTIES TIMEOUT 10)
     endforeach()
 
+    add_executable(test_wave_bank tests/gba/audio/test_wave_bank.c)
+    target_link_libraries(test_wave_bank PRIVATE cupid_core)
+    foreach(group first patterns switches)
+        add_test(NAME gba.wave-bank-${group} COMMAND test_wave_bank ${group})
+        set_tests_properties(gba.wave-bank-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
     add_executable(test_fifo_power tests/gba/audio/test_fifo_power.c)
     target_link_libraries(test_fifo_power PRIVATE cupid_core)
     foreach(group writes cpu dma phases transitions)
