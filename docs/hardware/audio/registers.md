@@ -46,6 +46,8 @@ Both square channels retain their pending duty edge across frequency writes;
 see [Square-channel duty timers](oscillator.md).
 The noise channel retains its pending countdown and scales the shifted low bit;
 see [Noise-channel clock and held output](noise.md).
+Wave volume writes rescale the retained unscaled nibble without changing the
+clock deadline or waveform banks; see [Wave-channel held output](wave.md).
 
 The wave trigger startup delay is retained and remains unqualified. The
 programmed first bank and CPU window phase during active 64-step playback,

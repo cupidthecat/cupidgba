@@ -104,6 +104,7 @@ struct CupidAudioWaveChannel {
 
     int window;           /**< Current wave RAM position */
     bool readable;        /**< Wave RAM accessible while playing */
+    uint8_t rawSample;    /**< Held nibble before volume scaling */
     union {
         uint32_t wavedata32[8]; /**< 8 x 32-bit = 64 nybble samples */
         uint8_t  wavedata8[32]; /**< Byte-addressable view */

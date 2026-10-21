@@ -33,6 +33,7 @@ static void _frameCallback(struct CupidTiming* timing, void* context,
                             uint32_t cyclesLate);
 
 static void _updateSquareSample(struct CupidAudioSquareChannel* ch);
+static void _updateWaveSample(struct CupidAudioWaveChannel* ch);
 static void _runSquare(struct CupidAudioSquareChannel* ch, uint64_t timestamp,
                        int timingFactor);
 static int _noisePeriod(const struct CupidAudioNoiseChannel* ch, int timingFactor);
@@ -346,20 +347,8 @@ void cupid_audio_psg_run(struct CupidAudioPSG* psg, uint64_t timestamp,
                         sample = (int8_t)(bitsCarry >> 4);
                     }
 
-                    /** Apply volume. */
-                    int vol = ch3->volume;
-                    if (vol == 0) {
-                        sample >>= 4;  /* mute */
-                    } else if (vol > 3) {
-                        /** GBA 75% mode: sample * 3 / 4. */
-                        sample = (int8_t)(sample * 3);
-                        sample >>= 2;
-                    } else {
-                        /** vol 1 = 100% (shift 0), vol 2 = 50% (shift 1), vol 3 = 25% (shift 2). */
-                        static const int volShift[4] = { 4, 0, 1, 2 };
-                        sample >>= volShift[vol];
-                    }
-                    ch3->sample = sample;
+                    ch3->rawSample = (uint8_t)sample;
+                    _updateWaveSample(ch3);
                     ch3->nextUpdate = timestamp + cycles - (diff % cycles);
                     ch3->readable = true;
                 }
@@ -802,6 +791,25 @@ static void _frameCallback(struct CupidTiming* timing, void* context,
 
 /** @section audio_psg_helpers PSG helpers */
 
+/** @brief Scale the held wave nibble without reading or rotating wave RAM. */
+static void _updateWaveSample(struct CupidAudioWaveChannel* ch) {
+    int8_t sample = (int8_t)ch->rawSample;
+    /** Apply volume. */
+    int vol = ch->volume;
+    if (vol == 0) {
+        sample >>= 4;  /* mute */
+    } else if (vol > 3) {
+        /** GBA 75% mode: sample * 3 / 4. */
+        sample = (int8_t)(sample * 3);
+        sample >>= 2;
+    } else {
+        /** vol 1 = 100% (shift 0), vol 2 = 50% (shift 1), vol 3 = 25% (shift 2). */
+        static const int volShift[4] = { 4, 0, 1, 2 };
+        sample >>= volShift[vol];
+    }
+    ch->sample = sample;
+}
+
 /** @brief Compute the noise timer reload in GBA clocks. */
 static int _noisePeriod(const struct CupidAudioNoiseChannel* ch, int timingFactor) {
     return ((ch->ratio ? 2 * ch->ratio : 1) << ch->frequency) * 8 * timingFactor;
@@ -1227,6 +1235,14 @@ static void _writeNR31(struct CupidAudioPSG* psg, uint8_t value) {
     psg->ch3.length = 256 - value;
 }
 
+/** @brief Apply the GBA wave volume field to the held nibble immediately. */
+static void _writeNR32(struct CupidAudioPSG* psg, uint8_t value) {
+    psg->ch3.volume = (value >> 5) & 7;
+    if (psg->playingCh3) {
+        _updateWaveSample(&psg->ch3);
+    }
+}
+
 /**
  * @brief Handle a write to `NR33`.
  *
@@ -1280,6 +1296,8 @@ static void _writeNR34(struct CupidAudioPSG* psg, uint8_t value,
 
         if (ch3->enable) {
             psg->playingCh3 = true;
+            /* A trigger retains the sample buffer and reloads its output level. */
+            _updateWaveSample(ch3);
         }
     }
 }
@@ -1498,7 +1516,7 @@ void cupid_audio_write_register(struct CupidAudio* audio, uint32_t addr,
     case REG_SOUND3CNT_H:
         _writeNR31(psg, (uint8_t)(val & 0xFF));
         /** GBA volume = bits 15:13 of the 16-bit reg = bits 7:5 of high byte. */
-        psg->ch3.volume = (val >> 13) & 0x7;
+        _writeNR32(psg, (uint8_t)(val >> 8));
         break;
 
     case REG_SOUND3CNT_X:
@@ -1675,7 +1693,7 @@ void cupid_audio_write_register8(struct CupidAudio* audio, uint32_t addr, uint8_
         _writeNR30(psg, val);
         break;
     case REG_SOUND3CNT_H: _writeNR31(psg, val); break;
-    case REG_SOUND3CNT_H + 1: psg->ch3.volume = (val >> 5) & 7; break;
+    case REG_SOUND3CNT_H + 1: _writeNR32(psg, val); break;
     case REG_SOUND3CNT_X: _writeNR33(psg, val); break;
     case REG_SOUND3CNT_X + 1: _writeNR34(psg, val, timestamp); break;
     case REG_SOUND4CNT_L: _writeNR41(psg, val); break;
