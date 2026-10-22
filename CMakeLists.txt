@@ -853,6 +853,13 @@ if(BUILD_TESTING)
         endforeach()
     endforeach()
 
+    add_executable(test_cpu_raster tests/gba/render/test_cpu_raster.c)
+    target_link_libraries(test_cpu_raster PRIVATE cupid_core)
+    foreach(width half word)
+        add_test(NAME gba.cpu-raster-${width} COMMAND test_cpu_raster ${width})
+        set_tests_properties(gba.cpu-raster-${width} PROPERTIES TIMEOUT 30)
+    endforeach()
+
     add_executable(test_raster tests/gba/test_raster.c)
     target_link_libraries(test_raster PRIVATE cupid_core)
     foreach(group RANGE 0 7)

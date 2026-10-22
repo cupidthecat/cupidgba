@@ -331,3 +331,28 @@ following clock, and the interrupt register accepts that signal one clock
 later. These stages do not move pixel fetches or release a busy display port
 early. See [Direct Sound storage and power](audio/fifo-power.md) and
 [DMA phases](dma.md) for the request, storage and completion rules.
+
+## CPU-driven palette writes
+
+`gba.cpu-raster-half` and `gba.cpu-raster-word` execute owned ARM programs from
+cartridge memory. Each program enables the VBlank interrupt source, masks CPU
+interrupt entry, acknowledges IF and calls Halt through the replacement BIOS.
+The VBlank wake anchors each frame before a VCOUNT polling loop writes a new
+backdrop color during visible output. ROM code cannot write HALTCNT directly;
+the BIOS call supplies that register strobe through the normal CPU path.
+
+Each group checks 36 scenes: scanlines 1, 79, 80 and 159, three color
+transitions, two instruction delays and a constant-color control. Halfword
+and word stores use the ordinary palette bus. The checks require guest
+progress, the programmed VCOUNT, masked CPU interrupts, unchanged preceding
+lines, the new color on following lines and identical final two frames.
+The changed line must contain an ordered transition, and seven additional
+NOP instructions must move that transition later. Pixel comparisons use
+RGB555 values so channel expansion does not affect the result.
+
+Run both tests with `ctest --test-dir build -R '^gba.cpu-raster-' --output-on-failure`.
+For an optional local BIOS check, pass an authorized BIOS path as the third
+argument to `test_cpu_raster half` or `test_cpu_raster word`. CI uses the
+replacement BIOS and needs no external firmware. These tests cover the
+recorded CPU, BIOS wait, interrupt wake and palette interaction; they do not
+qualify physical pixel timing or every raster and display-memory conflict.
