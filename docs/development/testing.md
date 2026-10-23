@@ -213,6 +213,14 @@ deadline covers complete output/deadline comparisons across clock wrap.
 These checks cover the selected logical policy and leave physical serial
 propagation and partial-register effects unqualified.
 
+The five optional `rom.cpu-corpus-*` groups check 50,000 generated ARM/Thumb
+records, retaining every original comparison and failure branch. The native
+`runner.cpu-corpus-observer` group checks the read-only observer protocol and
+rejects incomplete or corrupted transcripts. See
+[generated CPU corpus](cpu-corpus.md) for immutable inputs, complete counts,
+firmware paths and execution bounds. These checks qualify generated instruction
+results rather than CPU timing.
+
 Local-session checks are `gba.cable-*`, `gba.video-cable-*` and `platform.local-*`. They cover
 complete paired guest bytes and words, multiplayer receive slots, bus/event
 coordination, cancellation, STOP, SDL input/video/audio and independent battery

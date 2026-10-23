@@ -24,6 +24,7 @@ set(CUPID_RTC_STATE_ROM "" CACHE FILEPATH "Checksum-verified local RTC state cor
 set(CUPID_SERIAL_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified serial cartridge probes")
 set(CUPID_HALT_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified firmware HALT and IRQ probes")
 set(CUPID_PREFETCH_PROBE_DIR "" CACHE PATH "Root containing checksum-verified prefetcher and timing cartridge probes")
+set(CUPID_CPU_CORPUS_DIR "" CACHE PATH "Directory containing the checksum-verified generated CPU corpus")
 set(CUPID_BUS_PAGE_PROBE_ROM "" CACHE FILEPATH "Local checksum-verified CPU/DMA page-boundary cartridge")
 set(CUPID_CPU_INTERACTION_PROBE_DIR "" CACHE PATH "Root containing checksum-verified CPU/DMA/IRQ cartridges")
 set(CUPID_USER_BANK_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified user-bank cartridge probes")
@@ -107,6 +108,30 @@ target_link_libraries(cupidgba-headless PRIVATE cupid_core)
 include(CTest)
 if(BUILD_TESTING)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_executable(test_cpu_corpus tests/roms/cpu_corpus_runner.c)
+    target_link_libraries(test_cpu_corpus PRIVATE cupid_core)
+    add_executable(test_cpu_corpus_observer tests/roms/test_cpu_corpus_observer.c)
+    target_link_libraries(test_cpu_corpus_observer PRIVATE cupid_core)
+    add_test(NAME runner.cpu-corpus-observer COMMAND test_cpu_corpus_observer)
+    set_tests_properties(runner.cpu-corpus-observer PROPERTIES TIMEOUT 10)
+    add_test(NAME runner.cpu-corpus-inputs COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_cpu_corpus_inputs.py)
+    set_tests_properties(runner.cpu-corpus-inputs PROPERTIES TIMEOUT 10)
+    if(CUPID_CPU_CORPUS_DIR)
+        foreach(case arm-any arm-data thumb-any thumb-data mixed)
+            add_test(NAME rom.cpu-corpus-${case} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_cpu_corpus.py
+                --directory ${CUPID_CPU_CORPUS_DIR} --runner $<TARGET_FILE:test_cpu_corpus> --test ${case})
+            set_tests_properties(rom.cpu-corpus-${case} PROPERTIES TIMEOUT 95)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.cpu-corpus-${case}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_cpu_corpus.py
+                    --directory ${CUPID_CPU_CORPUS_DIR} --runner $<TARGET_FILE:test_cpu_corpus>
+                    --test ${case} --bios ${CUPID_TEST_BIOS})
+                set_tests_properties(rom.cpu-corpus-${case}-external PROPERTIES TIMEOUT 95)
+            endif()
+        endforeach()
+    endif()
     add_test(NAME rom.flash-profile COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_flash_profile.py --runner $<TARGET_FILE:cupidgba-headless>)
     set_tests_properties(rom.flash-profile PROPERTIES TIMEOUT 15)

@@ -64,6 +64,7 @@ jobs:
           python3 tests/roms/check_ppu_access.py --fetch --directory .local-research/test-roms
           python3 tests/roms/check_raster.py --fetch --directory .local-research/test-roms
           python3 tests/roms/check_prefetch_probe.py --fetch --directory .local-research/test-roms
+          python3 tests/roms/check_cpu_corpus.py --fetch --directory .local-research/test-roms/cpu-corpus
       - name: Configure
         run: |
           sanitizer_flags=()
@@ -75,7 +76,8 @@ jobs:
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             "${sanitizer_flags[@]}" \
             -DCUPID_TEST_ROM_DIR=${{ github.workspace }}/.local-research/test-roms \
-            -DCUPID_PREFETCH_PROBE_DIR=${{ github.workspace }}/.local-research/test-roms
+            -DCUPID_PREFETCH_PROBE_DIR=${{ github.workspace }}/.local-research/test-roms \
+            -DCUPID_CPU_CORPUS_DIR=${{ github.workspace }}/.local-research/test-roms/cpu-corpus
       - name: Build
         run: cmake --build build --parallel 2
       - name: Verify sanitized compiler optimization
@@ -143,6 +145,7 @@ jobs:
           python tests/roms/check_ppu_access.py --fetch --directory .local-research/test-roms
           python tests/roms/check_raster.py --fetch --directory .local-research/test-roms
           python tests/roms/check_prefetch_probe.py --fetch --directory .local-research/test-roms
+          python tests/roms/check_cpu_corpus.py --fetch --directory .local-research/test-roms/cpu-corpus
       - name: Configure
         # Keep input fetching and CTest on the same installed interpreter.
         run: >-
@@ -150,6 +153,7 @@ jobs:
           -DPython3_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')"
           -DCUPID_TEST_ROM_DIR="$(pwd)/.local-research/test-roms"
           -DCUPID_PREFETCH_PROBE_DIR="$(pwd)/.local-research/test-roms"
+          -DCUPID_CPU_CORPUS_DIR="$(pwd)/.local-research/test-roms/cpu-corpus"
       - name: Build
         run: cmake --build build --parallel 2
       - name: Test
