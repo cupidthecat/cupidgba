@@ -85,9 +85,9 @@ static void update_lines(struct CupidGBA* gba, uint64_t when) {
 static void write_callback(struct CupidTiming* timing, void* context, uint32_t late) {
     struct CupidIRQRegisterWrite* write = context;
     struct CupidGBA* gba = write->gba;
-    gba->ie = write->ie;
+    if (write->writeIE) gba->ie = write->ie;
     gba->irqf = (gba->irqf & ~write->ifClear) | write->ifSet;
-    gba->ime = write->ime;
+    if (write->writeIME) gba->ime = write->ime;
     gba->memory.io[REG_IE >> 1] = gba->ie;
     gba->memory.io[REG_IF >> 1] = gba->irqf;
     gba->memory.io[REG_IME >> 1] = gba->ime;
@@ -95,7 +95,7 @@ static void write_callback(struct CupidTiming* timing, void* context, uint32_t l
 }
 
 static void queue_write(struct CupidGBA* gba, uint64_t when, unsigned priority,
-                        uint16_t ifSet, uint16_t ifClear) {
+                        uint32_t address, uint16_t ifSet, uint16_t ifClear) {
     struct CupidIRQRegisterWrite* write = NULL;
     for (unsigned i = 0; i < 4; i++) {
         struct CupidIRQRegisterWrite* candidate = &gba->irq.writes[i];
@@ -113,13 +113,22 @@ static void queue_write(struct CupidGBA* gba, uint64_t when, unsigned priority,
     if (!cupid_timing_is_scheduled(&gba->timing, &write->event)) {
         write->ifSet = 0;
         write->ifClear = 0;
+        write->writeIE = false;
+        write->writeIME = false;
     }
     /* Coalesce changes with the same acceptance deadline. Later deadlines
      * must not publish a newly asserted source through an earlier write. */
     write->ifSet = (write->ifSet & ~ifClear) | ifSet;
     write->ifClear |= ifClear;
-    write->ie = gba->irq.pendingIE;
-    write->ime = gba->irq.pendingIME;
+    /* Retain only the registers this deadline actually writes. A display
+     * source phase can be queued ahead of an intervening CPU mask write. */
+    if (address == REG_IE) {
+        write->ie = gba->irq.pendingIE;
+        write->writeIE = true;
+    } else if (address == REG_IME) {
+        write->ime = gba->irq.pendingIME;
+        write->writeIME = true;
+    }
     write->event.priority = priority;
     schedule_at(gba, &write->event, when);
 }
@@ -155,7 +164,7 @@ void cupid_irq_write(struct CupidGBA* gba, uint32_t address, uint16_t value) {
     default: return;
     }
     queue_write(gba, cupid_timing_global_time(&gba->timing) + 1, IRQ_WRITE_PHASE,
-                0, address == REG_IF ? value : 0);
+                address, 0, address == REG_IF ? value : 0);
 }
 
 void cupid_irq_write8(struct CupidGBA* gba, uint32_t address, uint8_t value) {
@@ -174,7 +183,7 @@ void cupid_irq_write8(struct CupidGBA* gba, uint32_t address, uint8_t value) {
 void cupid_raise_irq_at(struct CupidGBA* gba, enum CupidIRQ source, uint64_t timestamp) {
     cupid_gba_wake_stop(gba, source);
     gba->irq.pendingIF |= source;
-    queue_write(gba, timestamp + 1, IRQ_ASSERT_PHASE, source, 0);
+    queue_write(gba, timestamp + 1, IRQ_ASSERT_PHASE, 0, source, 0);
 }
 
 void cupid_raise_irq(struct CupidGBA* gba, enum CupidIRQ source, uint32_t late) {

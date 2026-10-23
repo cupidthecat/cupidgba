@@ -702,6 +702,11 @@ if(BUILD_TESTING)
     add_test(NAME gba.irq-pulses COMMAND test_irq_pulses)
     set_tests_properties(gba.irq-pulses PROPERTIES TIMEOUT 10)
 
+    add_executable(test_irq_registers tests/gba/test_irq_registers.c)
+    target_link_libraries(test_irq_registers PRIVATE cupid_core)
+    add_test(NAME gba.irq-registers COMMAND test_irq_registers)
+    set_tests_properties(gba.irq-registers PROPERTIES TIMEOUT 10)
+
     add_executable(test_display_irq tests/gba/test_display_irq.c)
     target_link_libraries(test_display_irq PRIVATE cupid_core)
     foreach(group pulse level captured edge quiet)

@@ -169,7 +169,7 @@ static void halt_control_acceptance_retains_the_following_cpu_phase(void) {
     const uint64_t clocks[] = {10, UINT32_MAX - UINT64_C(2)};
     for (unsigned wrap = 0; wrap < 2; wrap++) for (unsigned thumb = 0; thumb < 2; thumb++)
         for (unsigned asserted = 0; asserted < 2; asserted++) {
-            struct CupidGBA* gba = machine(clocks[wrap]);
+            struct CupidGBA* gba = machine(clocks[wrap] - 1);
             gba->cpu.cpsr.packed = MODE_SYS;
             const uint32_t handler = 0xE3A03063;
             memcpy(gba->memory.bios + BASE_IRQ, &handler, sizeof(handler));
@@ -189,6 +189,9 @@ static void halt_control_acceptance_retains_the_following_cpu_phase(void) {
             gba->cpu.gprs[1] = GBA_BASE_IO + REG_HALTCNT;
             cupid_io_write(gba, REG_IE, IRQ_TIMER0);
             cupid_io_write(gba, REG_IME, 1);
+            /* Accept the masks before announcing the historical source
+             * phase. A backdated IF event must not publish newer masks. */
+            tick(gba, 1);
             cupid_raise_irq_at(gba, IRQ_TIMER0, clocks[wrap] - asserted);
             cupid_gba_step(gba);
             /* STRB finishes its fetch and data clocks. HALT is accepted on

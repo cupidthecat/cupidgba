@@ -355,6 +355,7 @@ static void same_quiet_state(const struct CupidGBA* a, const struct CupidGBA* b)
         CHECK(cupid_timing_is_scheduled(&a->timing,&x->event) == cupid_timing_is_scheduled(&b->timing,&y->event));
         const struct CupidIRQRegisterWrite* wa=&a->irq.writes[i], *wb=&b->irq.writes[i];
         CHECK(wa->ie == wb->ie && wa->ime == wb->ime && wa->ifSet == wb->ifSet && wa->ifClear == wb->ifClear);
+        CHECK(wa->writeIE == wb->writeIE && wa->writeIME == wb->writeIME);
         CHECK(wa->event.when == wb->event.when && wa->event.priority == wb->event.priority);
     }
     const struct CupidTimingEvent* qa[]={a->timing.root,a->timing.reroot};

@@ -19,6 +19,8 @@ struct CupidIRQRegisterWrite {
     uint16_t ie;
     uint16_t ifSet, ifClear;
     bool ime;
+    /* A future peripheral assertion must not restore an older CPU mask. */
+    bool writeIE, writeIME;
     struct CupidTimingEvent event;
 };
 

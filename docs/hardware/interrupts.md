@@ -5,6 +5,12 @@ request. IE retains its low 14 bits, IME retains bit 0, and writing one to an
 IF bit acknowledges that request. Byte writes merge with the pending IE value
 or acknowledge only the selected IF byte. The reserved IME byte has no effect.
 
+Each accepted update owns only the registers it changes. A queued peripheral
+request changes IF and retains its source timestamp; it cannot restore an IE
+or IME value captured before an intervening CPU write. Updates with the same
+acceptance deadline combine their explicit register writes and IF masks.
+Reusing a queue slot clears its previous register ownership.
+
 After register acceptance, the enabled-request signal reaches HALT one cycle
 later. The CPU IRQ line follows two CPU clocks after acceptance. With no held
 bus cycle this keeps the existing system-clock deadlines. Both signals retain
@@ -97,6 +103,14 @@ The old core fails the pulse, HALT-resume and DMA controls. These regressions
 preserve the documented pipeline; they do not settle physical IRQ sampling at
 every instruction/refill boundary. Remaining original CPU/bus cartridge
 failures stay tracked in #10.
+
+`gba.irq-registers` covers 10,080 queued-update scenes across every interrupt
+source, byte/halfword/word writes, both mask directions, host call orders,
+single-clock and bulk dispatch, slot reuse and five clock epochs. Another
+540 scenes issue timed CPU data writes around actual HBlank callbacks. Both
+controls fail on the preceding core because a later peripheral acceptance
+can overwrite the CPU's newer interrupt mask. The fix preserves the existing
+acceptance, HALT and CPU-line deadlines.
 
 Four `gba.irq-clock-*` timing groups add 2,056 observed waveform clocks, complete
 CPU load/store data, repeated unclocked input pulses, already captured stages,
