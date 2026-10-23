@@ -12,7 +12,10 @@ from fetch_inputs import download_verified
 
 
 def rgb(color):
-    return bytes(((color & 31) * 8, ((color >> 5) & 31) * 8, ((color >> 10) & 31) * 8))
+    # The original expectations below remain BGR555 words. Compare every host
+    # bit after expanding their five-bit channels into opaque RGB output.
+    return bytes(((value << 3) | (value >> 2))
+                 for value in (color & 31, (color >> 5) & 31, (color >> 10) & 31))
 
 
 def check_pixels(name, data):

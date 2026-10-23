@@ -44,8 +44,17 @@ The implemented bitmap pipeline exposes the following stages for the first pair:
 
 Subsequent pairs leave at eight-clock intervals. Green swapping exchanges only
 the green components of an adjacent pair after effects. A write can affect later
-pairs without changing those already emitted. Output uses the existing BGR555
-to RGB presentation mapping; these checks do not model LCD color response.
+pairs without changing those already emitted. Output then expands each displayed
+five-bit component to eight host bits by repeating its high bits in the low
+positions. Full intensity maps to 255, black stays zero, and alpha stays opaque.
+This final BGR555-to-RGBA8888 conversion ignores input bit 15. It follows the
+five-bit color arithmetic and green swap; it does not model LCD color response.
+
+The color-output regressions check all 65,536 input words against an independent
+32-entry component table, including channel order, opaque alpha, ignored bit 15
+and recovery of the original five-bit components. Two complete bitmap frames
+cover every color with bit 15 clear and set through timed scanout. A separate
+complete forced-blank frame must publish full white.
 
 Horizontal and vertical windows use comparison flags. Window controls determine
 which layers and effects participate at merge time. BG and OBJ mosaic counters

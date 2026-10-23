@@ -117,6 +117,9 @@ if(BUILD_TESTING)
     add_test(NAME runner.cpu-corpus-inputs COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_cpu_corpus_inputs.py)
     set_tests_properties(runner.cpu-corpus-inputs PROPERTIES TIMEOUT 10)
+    add_test(NAME runner.raster-output COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_raster_output.py)
+    set_tests_properties(runner.raster-output PROPERTIES TIMEOUT 10)
     if(CUPID_CPU_CORPUS_DIR)
         foreach(case arm-any arm-data thumb-any thumb-data mixed)
             add_test(NAME rom.cpu-corpus-${case} COMMAND ${Python3_EXECUTABLE}
@@ -943,6 +946,13 @@ if(BUILD_TESTING)
     target_link_libraries(test_color PRIVATE cupid_core)
     add_test(NAME gba.color COMMAND test_color)
     set_tests_properties(gba.color PROPERTIES TIMEOUT 10)
+
+    add_executable(test_color_output tests/gba/test_color_output.c)
+    target_link_libraries(test_color_output PRIVATE cupid_core)
+    foreach(group unit bitmap blank)
+        add_test(NAME gba.color-output-${group} COMMAND test_color_output ${group})
+        set_tests_properties(gba.color-output-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
 
     add_executable(test_cpu tests/arm/test_cpu.c)
     target_link_libraries(test_cpu PRIVATE cupid_core)
