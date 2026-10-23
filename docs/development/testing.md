@@ -869,8 +869,25 @@ To run another authorized input for a fixed number of frames:
   --frames 600 --steps 168537600 --screenshot .local-research/frame.ppm
 ```
 
-The headless runner does not load or write disk saves. Its screenshot is the
-native 240x160 framebuffer, written as a binary PPM file. Step and emulated-cycle
+The headless runner uses a fresh backup unless `--load-save FILE` explicitly
+loads battery bytes after reset and before guest execution. It uses the same
+backup-family and capacity validation as the frontend. A failed explicit load
+stops before creating output files. The input is opened for reading; no save
+sidecar or automatic writeback is created. `--dump-save FILE` remains an
+explicit raw backup snapshot, so persistence replays should use separate input
+and output paths:
+
+```sh
+./build/cupidgba-headless /path/to/game.gba --load-save .local-research/previous.sav \
+  --frames 600 --steps 168537600 --dump-save .local-research/next.sav
+```
+
+`runner.save-input` exercises guest reads and writes across separate processes,
+complete backup images, capacity inference, retained Flash selection and rejected
+inputs. It uses owned cartridges and the existing ten-second group deadline.
+
+The headless screenshot is the native 240x160 framebuffer, written as a binary
+PPM file. Step and emulated-cycle
 budgets bound execution; `--expect-loop-register` reports the result register
 at an ARM branch to itself. `--terminal-address` restricts that observation to
 a specific instruction address.

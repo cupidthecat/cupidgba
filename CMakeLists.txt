@@ -407,6 +407,10 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_runner_observations.py
         --runner $<TARGET_FILE:cupidgba-headless>)
     set_tests_properties(runner.observations PROPERTIES TIMEOUT 10)
+    add_test(NAME runner.save-input COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_runner_save.py
+        --runner $<TARGET_FILE:cupidgba-headless>)
+    set_tests_properties(runner.save-input PROPERTIES TIMEOUT 10)
     add_executable(test_observer tests/arm/test_observer.c)
     target_link_libraries(test_observer PRIVATE cupid_core)
     foreach(group stream boundaries bank)
