@@ -682,6 +682,12 @@ if(BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_save_startup.py
             --frontend $<TARGET_FILE:cupidgba>)
         set_tests_properties(platform.save-startup PROPERTIES TIMEOUT 10)
+        add_executable(test_frontend_frames tests/platform/test_frontend_frames.c src/platform/local.c src/platform/window.c src/platform/audio.c src/platform/input.c src/platform/rumble.c src/platform/rtc.c src/platform/peripherals.c)
+        target_link_libraries(test_frontend_frames PRIVATE cupid_link SDL2::SDL2)
+        add_test(NAME platform.frontend-frames COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_frontend_frames.py
+            --frontend $<TARGET_FILE:cupidgba> --observer $<TARGET_FILE:test_frontend_frames>)
+        set_tests_properties(platform.frontend-frames PROPERTIES TIMEOUT 30)
     endif()
 
     add_executable(test_timer tests/gba/test_timer.c)

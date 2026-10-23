@@ -53,7 +53,7 @@ static bool derive_save_path(const char* romPath, char* out, size_t outSize) {
  */
 
 static void printUsage(const char* progname) {
-    fprintf(stderr, "Usage: %s rom.gba [-b bios.bin] [-s scale] [-S savetype]\n", progname);
+    fprintf(stderr, "Usage: %s rom.gba [-b bios.bin] [-s scale] [-S savetype] [--frames count]\n", progname);
     fprintf(stderr, "       %s rom.gba --link peer.gba [--link third.gba] [--link fourth.gba] [--frames count]\n", progname);
     fprintf(stderr, "\nSave types (GBA): sram, sram512, flash512, flash1m, sst39vf512, eeprom, eeprom512, none\n");
     fprintf(stderr, "\nRTC: --rtc auto|on|off  --rtc-time YYYY-MM-DDTHH:MM:SS\n");
@@ -167,7 +167,6 @@ int main(int argc, char* argv[]) {
         const struct CupidLocalDevices devices = {rtcPresence, rtcConfig, peripherals};
         return cupid_platform_run_local(linked, peerCount + 1, biosPath, saveTypeStr, scale, frames, &devices);
     }
-    if (frames) { fprintf(stderr, "Error: --frames requires --link\n"); return 1; }
 
     /** GBA path. */
 
@@ -301,6 +300,7 @@ int main(int argc, char* argv[]) {
      * 4. Periodically flush dirty save data.
      */
     int saveFlushCounter = 0;
+    unsigned completedIntervals = 0;
     while (plat.running) {
         /** Poll input. */
         if (!cupid_platform_poll_events(&plat, &gba)) break;
@@ -322,6 +322,10 @@ int main(int argc, char* argv[]) {
             if (!flush_rtc(&gba, &rtcConfig))
                 fprintf(stderr, "Error: Cannot save RTC state %s: %s\n", rtcPath, strerror(errno));
         }
+
+        /* Count paced intervals, including STOP, rather than completed video
+         * frames. The ordinary shutdown path still owns the final batteries. */
+        if (frames && ++completedIntervals == frames) break;
 
         /**
          * Pace to hardware frame length.

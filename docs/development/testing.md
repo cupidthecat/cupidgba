@@ -840,6 +840,19 @@ dirty state must survive. Windows checks replacement while another reader holds
 the destination. Fixtures are created in an exclusive test directory and only
 those owned files are removed. Failed tests retain their directory for inspection.
 
+`platform.frontend-frames` checks bounded single-console runs with an owned ARM
+SRAM guest. An observer includes the actual frontend entry point and retains
+real core intervals, SDL input/render/audio and battery paths; it replaces only
+host pacing. Counts 1, 2, 299, 300 and 301 check exact input, interval, display
+and periodic/final save boundaries. STOP counts intervals without requiring a
+new video frame and persists the complete seeded RTC state. The shipped
+executable separately creates and reloads a complete SRAM image across three
+processes. Other cases cover earlier input quit, invalid counts, the largest
+accepted count and read-only destination failures. Each process has a
+three-second guard and the group has a thirty-second CTest deadline. This
+qualifies the frontend run bound and persistence paths, not physical chip
+timing or full-game progress. See [running games](../usage/running.md).
+
 `platform.save-startup` uses a small generated ROM to check invalid-save startup,
 explicit capacity mismatch, dotted directories and path-length handling. It
 requires Python 3 and SDL2. No game, BIOS or save input is distributed. See
