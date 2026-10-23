@@ -175,4 +175,8 @@ uint64_t cupid_gba_run_steps(struct CupidGBA* gba, uint64_t limit,
 /** Process events (video, audio, timers, DMA, IRQ) after CPU steps */
 void cupid_gba_process_events(struct CupidGBA* gba);
 
+/* Default CPU event handler identity used to qualify owned bus waits.
+ * Custom handlers observe the ordinary held-clock and release sequence. */
+void cupid_gba_process_cpu_events(struct CupidARM* cpu);
+
 #endif /* CUPID_GBA_H */

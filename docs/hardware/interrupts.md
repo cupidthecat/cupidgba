@@ -5,6 +5,12 @@ request. IE retains its low 14 bits, IME retains bit 0, and writing one to an
 IF bit acknowledges that request. Byte writes merge with the pending IE value
 or acknowledge only the selected IF byte. The reserved IME byte has no effect.
 
+Each accepted update owns only the registers it changes. A queued peripheral
+request changes IF and retains its source timestamp; it cannot restore an IE
+or IME value captured before an intervening CPU write. Updates with the same
+acceptance deadline combine their explicit register writes and IF masks.
+Reusing a queue slot clears its previous register ownership.
+
 After register acceptance, the enabled-request signal reaches HALT one cycle
 later. The CPU IRQ line follows two CPU clocks after acceptance. With no held
 bus cycle this keeps the existing system-clock deadlines. Both signals retain
@@ -28,7 +34,7 @@ stage on the next CPU-ready edge. A scheduled ready-edge event preserves this
 ownership without splitting peripheral dispatch batches. Timer, DMA, audio and
 existing bus-progress observations retain their previous dispatch partitions.
 
-The CPU-line slots track scheduled and held ownership. A bus hold always sets
+The CPU-line slots track scheduled and held ownership. A general bus hold sets
 the held-clock state, including when no line publication needs moving. Empty
 domains avoid the queue walk; a new input accepted during the hold still keeps
 its remaining CPU stages. Resume releases the clock and queues each retained
@@ -98,6 +104,14 @@ preserve the documented pipeline; they do not settle physical IRQ sampling at
 every instruction/refill boundary. Remaining original CPU/bus cartridge
 failures stay tracked in #10.
 
+`gba.irq-registers` covers 10,080 queued-update scenes across every interrupt
+source, byte/halfword/word writes, both mask directions, host call orders,
+single-clock and bulk dispatch, slot reuse and five clock epochs. Another
+540 scenes issue timed CPU data writes around actual HBlank callbacks. Both
+controls fail on the preceding core because a later peripheral acceptance
+can overwrite the CPU's newer interrupt mask. The fix preserves the existing
+acceptance, HALT and CPU-line deadlines.
+
 Four `gba.irq-clock-*` timing groups add 2,056 observed waveform clocks, complete
 CPU load/store data, repeated unclocked input pulses, already captured stages,
 real DMA transfers, multiply internal-cycle overlap and reset. Memory regions,
@@ -109,7 +123,8 @@ aligns the initial display phase with full firmware boot, correcting the
 formerly built-in-only interaction failures. The HALT/DMA timer comparison
 requires retaining the following fetch across sleep; the OAM variant also
 depends on the selected display-memory arbiter.
-See [CPU/DMA/IRQ interactions](cpu/dma-irq-interactions.md).
+See [CPU/DMA/IRQ interactions](cpu/dma-irq-interactions.md) and
+[display bus waits](cpu/display-irq.md).
 
 The additional observer group rejects skipped comparisons, wrong opcodes or
 modes and missing visits in owned ARM/Thumb streams that still report zero.
@@ -134,3 +149,43 @@ Game Pak prefetch interactions and precise STOP wake-up latency need separate
 hardware coverage. STOP now freezes the system clock and accepts enabled
 external wake sources; see [serial and GPIO](serial/normal-and-gpio.md).
 Both BIOS paths pass the listed count-up and IRQ suite on the pinned local input.
+
+## Event dispatch and host clock observers
+
+The ordinary timing loop reads the next event deadline before entering its
+dispatcher. Due callbacks retain the existing priority order, lateness and
+unlink-before-callback ownership. A deferred future queue is restored before
+the tick returns or calls a host clock observer. An observer can cancel, add
+or defer an event, so the loop computes the returned CPU deadline again after
+that observer. An event newly made due by the observer waits until the next
+tick, including a tick that advances zero clocks. Linked clock coordinators
+retain their own synchronization path.
+
+The nine scheduler checks include observer queue changes, deferred callbacks,
+owned rescheduling and signed, 32-bit and 64-bit clock-wrap boundaries. The
+same complete check output is retained against a matching preceding core.
+
+## Atomic waits with an empty CPU-line pipeline
+
+An occupied request consumed in one call can retain its final ready state
+directly when no CPU-line stage is pending and no peripheral event is due
+before or at that ready edge. The CPU handler, release callback, context and
+release priority must have their owned identities. Deferred queues, active
+callbacks, linked clock coordinators, foreign observers, intermediate data
+strobes and dynamic readiness predicates retain the ordinary event path.
+
+The final board tick consumes the full original wait and advances the owned
+renderer at its ordinary completed clock. The release event retains its
+dequeued timestamp and empty link. A custom CPU handler observes the held
+clock before release; it also receives ordinary bus-entry, completion and
+partial-advance calls even when no board clock is due. These calls publish
+ARM or Thumb open bus and clear the early-exit flag.
+
+The `gba.irq-clock-quiet-atomic` group compares 2,880 scenes across six wait
+lengths, three relative CPU positions, five clock epochs, eight event/IRQ
+conditions, two clock-observer configurations and two reference handlers.
+It checks complete renderer buffers, latches and memory, IRQ state and both
+event queues at the ready edge and after following clocks. Forwarding clock
+observers and CPU handlers provide the ordinary-path controls. These are
+host-dispatch equivalence checks; the original reboot deadline, cartridge
+comparisons and full platform profiles remain separate requirements.

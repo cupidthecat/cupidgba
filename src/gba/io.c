@@ -80,6 +80,8 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
     if (addr >= GBA_SIZE_IO) return;
     addr &= ~1u;
 
+    if (addr <= REG_BLDY) cupid_video_sync(&gba->video);
+
     switch (addr) {
     /** VIDEO 0x000-0x056. */
     case REG_DISPCNT:
@@ -87,7 +89,7 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
         break;
 
     case REG_GREENSWAP:
-        /** Rarely used; just store. */
+        value &= 1;
         break;
 
     case REG_DISPSTAT:
@@ -127,18 +129,22 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
     case REG_BG2X_LO:
         gba->video.bg[2].refx = (gba->video.bg[2].refx & 0xFFFF0000) | value;
         gba->video.bg[2].sx = gba->video.bg[2].refx;
+        gba->video.pipeline.affine[0].writtenX = true;
         break;
     case REG_BG2X_HI:
         gba->video.bg[2].refx = affine_high(gba->video.bg[2].refx, value);
         gba->video.bg[2].sx = gba->video.bg[2].refx;
+        gba->video.pipeline.affine[0].writtenX = true;
         break;
     case REG_BG2Y_LO:
         gba->video.bg[2].refy = (gba->video.bg[2].refy & 0xFFFF0000) | value;
         gba->video.bg[2].sy = gba->video.bg[2].refy;
+        gba->video.pipeline.affine[0].writtenY = true;
         break;
     case REG_BG2Y_HI:
         gba->video.bg[2].refy = affine_high(gba->video.bg[2].refy, value);
         gba->video.bg[2].sy = gba->video.bg[2].refy;
+        gba->video.pipeline.affine[0].writtenY = true;
         break;
 
     /** BG3 affine. */
@@ -149,18 +155,22 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
     case REG_BG3X_LO:
         gba->video.bg[3].refx = (gba->video.bg[3].refx & 0xFFFF0000) | value;
         gba->video.bg[3].sx = gba->video.bg[3].refx;
+        gba->video.pipeline.affine[1].writtenX = true;
         break;
     case REG_BG3X_HI:
         gba->video.bg[3].refx = affine_high(gba->video.bg[3].refx, value);
         gba->video.bg[3].sx = gba->video.bg[3].refx;
+        gba->video.pipeline.affine[1].writtenX = true;
         break;
     case REG_BG3Y_LO:
         gba->video.bg[3].refy = (gba->video.bg[3].refy & 0xFFFF0000) | value;
         gba->video.bg[3].sy = gba->video.bg[3].refy;
+        gba->video.pipeline.affine[1].writtenY = true;
         break;
     case REG_BG3Y_HI:
         gba->video.bg[3].refy = affine_high(gba->video.bg[3].refy, value);
         gba->video.bg[3].sy = gba->video.bg[3].refy;
+        gba->video.pipeline.affine[1].writtenY = true;
         break;
 
     /** Windows. */
@@ -185,6 +195,7 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
 
     /** Mosaic (write-only). */
     case REG_MOSAIC:
+        gba->video.mosaic = value;
         break;
 
     /** Blending. */

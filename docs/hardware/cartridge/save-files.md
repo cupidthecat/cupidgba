@@ -42,8 +42,13 @@ is rejected rather than truncated.
 Native regressions cover all capacities, two complete replacements and reloads,
 capacity expansion, explicit overrides, invalid input, companion-file collisions,
 protected files, open readers and recovery after a real delayed write error.
-Frontend checks verify invalid-save rejection and filename handling. These tests
-qualify file persistence. Chip-specific EEPROM/Flash durations, disputed bus accesses,
+Frontend checks verify invalid-save rejection and filename handling. They also
+cover bounded single-console runs, complete SRAM reloads across three
+processes, periodic and final flushes, early quit, STOP with an RTC battery, and
+read-only destination failures. The interval observer retains the real core,
+SDL input/render/audio and battery paths while removing only host pacing.
+See [running games](../../usage/running.md) for `--frames`. These checks qualify
+file persistence. Chip-specific EEPROM/Flash durations, disputed bus accesses,
 peripheral metadata and complete cartridge accuracy remain in
 [issue 1](https://github.com/cupidthecat/cupidgba/issues/1). Power-loss behavior
 beyond the host's file and replacement guarantees remains unqualified.

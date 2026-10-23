@@ -20,8 +20,9 @@ elapsed time alone. Devices provide driven pin masks and levels through
 `cupid_serial_set_input`; `cupid_serial_set_output_callback` reports output
 levels and directions at emulated timestamps. Callers must dispatch preceding
 events before applying an input change. Native tests connect two core instances
-and exchange distinct 8-bit and 32-bit values. The SDL2 frontend does not yet
-provide a cable or network connection interface.
+and exchange distinct 8-bit and 32-bit values. The SDL2 frontend connects a pair
+through [local sessions](local-session.md). Network transport and physical
+multiplayer-cable wiring remain separate from that logical pin connection.
 
 In general-purpose mode, RCNT selects each pin's direction and output level.
 Input pins expose driven levels or their pull-up level. A falling SI input

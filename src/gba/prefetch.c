@@ -85,7 +85,7 @@ unsigned cupid_prefetch_fetch(struct CupidGBA* gba, uint32_t address, unsigned w
         }
     }
     bool restart = memory->prefetchUnit.paused;
-    cycles += stop(gba);
+    unsigned penalty = stop(gba);
     if (memory->prefetchUnit.disabled || restart) {
         cycles = 1 + (width == 4 ? memory->waitstatesNonseq32[region]
                                   : memory->waitstatesNonseq16[region]);
@@ -93,7 +93,8 @@ unsigned cupid_prefetch_fetch(struct CupidGBA* gba, uint32_t address, unsigned w
     }
     memory->prefetchUnit.fetchKind = CUPID_PREFETCH_START;
     memory->prefetchUnit.busy = true;
-    return cycles;
+    /* A forced N transfer still owes the stream-stop arbitration clock. */
+    return cycles + penalty;
 }
 
 void cupid_prefetch_finish_fetch(struct CupidGBA* gba) {

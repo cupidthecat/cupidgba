@@ -87,7 +87,8 @@ The programmed width and destination-control bits remain readable. The FIFO
 supplies a request independently of the destination address. Sound DMA can
 therefore retain a RAM destination or an address whose writes are ignored.
 Such a burst does not fill the FIFO; later timer overflows can request another
-burst. A FIFO-port destination continues to select that port's request line.
+burst. FIFO A always drives DMA1 and FIFO B always drives DMA2, including
+crossed FIFO-port destinations and repeated channel reconfiguration.
 Source/count progress, bus ownership and completion signals still run. Repeated
 requests during a pending or active burst are coalesced. Disabling a channel
 cancels its pending request and removes it from arbitration. The final destination
@@ -115,8 +116,13 @@ widths, all four destination modes and four clock epochs retain the forced
 four-word, fixed-destination transfer. The cases cover IWRAM, EWRAM and two
 ignored BIOS addresses, including each destination publication, source/count
 progress, BIOS write protection, unchanged FIFO storage and completion IF.
-The preceding core rejects the first request. Cross-routing after repeated
-channel reconfiguration remains outside this group's qualification.
+The preceding core rejects the first request. Four `gba.fifo-routing-*` groups
+add 11,520 selector, reconfiguration, simultaneous-burst and pending-request
+cases. They cover both channels writing one FIFO, crossing destinations,
+RAM and protected addresses, with per-word progress, priority, overflow,
+playback and completion IF checks. See [FIFO coverage](audio/fifo-power.md).
+Physical request propagation and control writes coincident with activation
+remain outside this qualification.
 
 HBlank requests run on visible lines and VBlank requests run on entry to line
 160. The current display-request model services channel 3 at HBlank on lines

@@ -1,7 +1,7 @@
 # Running games
 
 ```sh
-cupidgba game.gba [-b bios.bin] [-s scale] [-S savetype]
+cupidgba game.gba [-b bios.bin] [-s scale] [-S savetype] [--frames count]
 ```
 
 `-b` loads an external GBA BIOS dump containing exactly 16,384 bytes. An invalid
@@ -9,6 +9,12 @@ requested BIOS stops startup with an error; see [BIOS image loading](../hardware
 Without it, the emulator uses its built-in
 replacement BIOS and HLE calls. `-s` selects integer window scaling from 1 to 10
 (default 3). Supply a BIOS and ROM you are authorized to use.
+
+`--frames N` exits after N paced frame-length intervals through the normal
+shutdown path, including its save and RTC flushes. N must be a positive integer.
+STOP still consumes these intervals even when it produces no new video frame.
+Closing the window or pressing Escape can end the run sooner. Omit the option
+for ordinary play. It also applies to [local sessions](../hardware/serial/local-session.md).
 
 The emulator detects save hardware from the ROM. `-S` overrides it with `sram`,
 `sram512`, `flash512`, `flash1m`, `sst39vf512`, `eeprom`, `eeprom512`, or `none`.

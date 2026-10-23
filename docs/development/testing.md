@@ -1,5 +1,30 @@
 # Testing
 
+The vertical mosaic geometry matrix can be selected with:
+
+```sh
+ctest --test-dir build -R '^gba[.]mosaic-vertical-' --output-on-failure
+```
+
+Its 64 groups partition four layer types and sixteen starting phases. Each
+group retains all sixteen replacement heights, three access widths and three
+adjacent boundary clocks, with bulk and one-clock dispatch. The owned row
+fixtures check every pixel in each completed scanline. OBJ controls retain
+constant-height grouping with HBlank access; additional writes cross signed
+and unsigned clock wrap. Each group has a ten-second limit.
+
+OBJ bank-boundary coverage runs with:
+
+```sh
+ctest --test-dir build -R '^gba[.]object-bank-' --output-on-failure
+```
+
+The sixteen groups partition eight display-mode values and normal/affine
+sprites. They check 2,928 complete frames and 112,435,200 pixels per profile,
+including bank-end reads, bitmap restrictions, flips, clipping, wrapped
+origins and signed/unsigned clock wrap. Each group has a thirty-second limit.
+The expected source-tile rows come from independently executed observations.
+
 On WSL, keep Linux executable output on native Linux storage. Repeated
 sanitizer process startup through a Windows mount can dominate short CLI
 checks. `CMAKE_RUNTIME_OUTPUT_DIRECTORY` selects executable placement while
@@ -16,8 +41,8 @@ original pre-display result, ordered comparisons and terminal must pass. Known
 FIFO timing failures remain enabled. See [FIFO power](../hardware/audio/fifo-power.md).
 
 The three `gba.fifo-refill-*` groups retain 1,248 complete level, chronology and
-selection cases under ten-second deadlines. Timer consumption loads the staged
-word before testing the remaining queue for a DMA refill. Two groups reject
+selection cases under ten-second deadlines. Timer consumption tests queued
+storage for a DMA refill before loading an empty stage. Two groups reject
 the preceding order; inactive-source controls pass with either order. The
 unchanged original IRQ cartridge now reaches its `0x008000AF` comparison and
 passes both result boundaries on each BIOS path. Other FIFO timing gaps remain.
@@ -28,6 +53,13 @@ occupied-stage behavior, ARM/Thumb I/O request clocks, 32-clock DMA/IRQ historie
 and mixed-width output order across both FIFOs and counter crossings. All four
 reject the preceding lower-port latching behavior. Original FIFO cartridges,
 comparisons and execution guards remain unchanged.
+
+Four `gba.fifo-queue-*` groups cover 3,472 queue rotation, overflow, reset and
+DMA scenes under ten-second deadlines. Seven distinct queued words retain
+their individual storage lanes through wrap. A full queue differs from an empty
+queue even when its pointers match. Each group rejects the preceding storage
+model. Checks preserve every output byte, staged-byte phase and affected DMA
+publication/completion clock. See [FIFO capacity](../hardware/audio/fifo-power.md#capacity-and-overflow).
 
 Playback checks keep exact elapsed-frame observations alongside sixty exact
 VSync-call duration checks. A frame spin may finish one or two clocks past its
@@ -181,7 +213,15 @@ deadline covers complete output/deadline comparisons across clock wrap.
 These checks cover the selected logical policy and leave physical serial
 propagation and partial-register effects unqualified.
 
-Local-session checks are `gba.cable-*` and `platform.local-*`. They cover
+The five optional `rom.cpu-corpus-*` groups check 50,000 generated ARM/Thumb
+records, retaining every original comparison and failure branch. The native
+`runner.cpu-corpus-observer` group checks the read-only observer protocol and
+rejects incomplete or corrupted transcripts. See
+[generated CPU corpus](cpu-corpus.md) for immutable inputs, complete counts,
+firmware paths and execution bounds. These checks qualify generated instruction
+results rather than CPU timing.
+
+Local-session checks are `gba.cable-*`, `gba.video-cable-*` and `platform.local-*`. They cover
 complete paired guest bytes and words, multiplayer receive slots, bus/event
 coordination, cancellation, STOP, SDL input/video/audio and independent battery
 files. Guest matrix cases have separate CTest entries; each retains its clock
@@ -190,6 +230,19 @@ for the host API and scope. With `CUPID_TEST_BIOS`, the owned word and UART
 guest cases also run with the external firmware. Reconstruct `cable-driver.s`
 at `0x03001000` with the same ARMv4T binary-link flags as the UART driver and
 verify all 512 bytes with `tests/gba/serial/generate_cable_driver.py`.
+
+The two display/session groups compare 768 complete display snapshots and
+29,491,200 pixels at sixteen requested endpoints. HALTed and active CPUs,
+pending EWRAM fetches, two- and four-console sessions, a frozen STOP console,
+mid-line memory writes and clock wrap must match independent clock advances.
+Each group has a ten-second deadline and runs with native and portable context
+switching. Both reject the preceding session clock-completion path.
+
+Eight `gba.object-shape-*` groups check the selected shape-3 decoding through
+complete images and CPU-visible display-bus ownership. They include normal,
+affine, alpha and OBJ-window scenes and retain mode-3 suppression. Each group
+has a thirty-second deadline. See [pixel rendering](../hardware/pixel-pipeline.md)
+for the exact policy, coverage and physical qualification limits.
 
 Hosted Linux qualification uses the explicit Ubuntu 24.04 release for GCC
 Release and Clang Debug with address/undefined-behavior sanitizers. The complete
@@ -200,7 +253,9 @@ GBA, platform and runner check without optimization. The complete profile
 retains all available cartridge cases, their original frame counts and process
 deadlines. Unoptimized full-cartridge runs timed out on
 slower hosted workers; those failures remain recorded rather than increasing
-their limits. Both compiler flag sets appear in the job log. This keeps
+their limits. Both compiler flag sets appear in the job log. The exported
+compiler commands also verify effective optimization for every translation
+unit, including flags inherited through linked targets. This keeps
 an automatic `ubuntu-latest` release migration from changing the compiler,
 sanitizer and firmware-assembler baseline. Windows checks use GCC and SDL2.
 The Windows configure step selects the same Python interpreter used to fetch
@@ -211,6 +266,13 @@ Both checkout steps pin a verified Node.js 24 action revision. An OS release
 upgrade needs the same complete test, firmware regeneration, Make and live
 ThreadSanitizer qualification as the current workflow.
 
+The four `gba.display-irq-*` groups retain 4,608 complete display transactions
+and per-clock IRQ waveforms across both bus widths, three display regions,
+sixteen port phases and four clock epochs. Short pulses, persistent levels,
+captured stages and assertions accepted on the ready edge use separate
+ten-second checks. They retain full data payloads,
+physical clocks and internal-cycle counts. See
+[display waits and CPU IRQ sampling](../hardware/cpu/display-irq.md).
 The ten `gba.uart-*` groups check 12,288 complete format-matrix frames, 124,928
 bit-center samples, FIFO capacity, errors, IRQs, connected peers, DMA/timer
 chronology and lifecycle. Owned ARM/Thumb guests each require 1,024 transferred
@@ -359,16 +421,39 @@ words, both instruction-width changes and BIOS/RAM exception returns,
 uncached page boundaries and DMA/timer/IRQ interactions across clock wrap.
 They also write wait controls before the first fetch, after a firmware reset
 and after an invalid jump, then require the configured costs on a valid fetch.
+Color checks cover fractional numerical vectors, all 65,536 input-color
+endpoints, coefficient saturation and matching red/blue precision. Scanout
+checks retain the extra green bit through direct and palette fetches, backdrop
+alpha and semi-transparent OBJ effects. Physical fractional rounding and bit 15
+remain unqualified.
+
 `CUPID_PREFETCH_PROBE_DIR` points to the root containing the `prefetcher` and
 `timing` input subdirectories and enables all twenty unchanged cartridge groups;
 `CUPID_TEST_BIOS` adds their external-firmware comparisons. Each requires the
 original result before its display routine and at its terminal, a verified
-input digest and unchanged frame/instruction bounds. Nineteen groups have
+input digest and unchanged frame/instruction bounds. Each firmware path also
+requires all 84 original comparison observations. Nineteen groups have
 matching source; the additional legacy boundary cartridge has binary evidence
-only. The Thumb-to-ARM and legacy boundary failures remain registered.
+only. All twenty groups pass on both firmware paths. Fetch the pinned inputs
+and their verified license notice with:
+
+```sh
+python3 tests/roms/check_prefetch_probe.py --fetch --directory .local-research/test-roms
+cmake -S . -B build -DCUPID_PREFETCH_PROBE_DIR="$PWD/.local-research/test-roms"
+ctest --test-dir build -R '^rom\.prefetch-' --output-on-failure
+```
+
+Linux and Windows CI fetch and run these twenty cartridge groups with the
+built-in firmware. `rom.prefetch-inputs` checks fetching, input selection,
+checksum rejection and license retention without network access. Downloads use
+the shared bounded transport retry path; an altered payload fails immediately.
+The original 360-frame, 150,000,000-step and 90-second execution guards remain
+unchanged, with a 95-second CTest limit per cartridge. These cases do not cover
+every stream transition or close the separate CPU/DMA/IRQ timing gaps.
+
 `CUPID_BUS_PAGE_PROBE_ROM` adds the eighteen-result CPU/DMA page-boundary
 cartridge and repeats it when `CUPID_TEST_BIOS` is set. Missing or failing
-console rows fail the check; current DMA decrement mismatches remain visible.
+console rows fail the check; both DMA decrement rows retain their original comparisons.
 See [prefetch](../hardware/prefetch.md).
 Music-frequency fixtures cover caller banks,
 fractional interpolation, upper-key clamps, source alignment/waits and live
@@ -482,6 +567,9 @@ ctest --test-dir build --output-on-failure
 
 Use `-DCUPID_SANITIZERS=ON -DCMAKE_BUILD_TYPE=Debug` on Linux with GCC or Clang
 to run address and undefined behavior checks. Compiler warnings are errors.
+Debug sanitizer builds retain symbols and use `-O1` to keep the clocked renderer
+within the hardware observers' existing deadlines. Both sanitizers and fatal
+error reporting remain enabled.
 
 The optional ROM checks use pinned manifests of CPU, memory, timer and DMA tests.
 Fetch the inputs, then configure their location:
@@ -509,9 +597,11 @@ It rejects a FAIL line or an incomplete result. It does not modify the ROM,
 counter values, or expected results. These checks use the replacement BIOS;
 `check_console.py --bios /path/to/gba-bios.bin` can run the same checks with
 an external dump.
-The observer allows 400 frames with an external BIOS to include its startup
-animation, and 20 frames with the built-in path. Both runs require the same
-complete visible results.
+The timer and DMA observers allow 400 frames with an external BIOS to include
+its startup animation, and 20 frames with the built-in path. The VRAM-mirror
+case uses 120 built-in frames for its two CRC loops and the same 400 external
+frames. Both paths require all ten original mirror/CRC results. Subprocess and
+CTest deadlines are unchanged.
 
 Four hardware DMA ROMs require ten assertions: immediate sampling at 20 clocks,
 two 88-clock burst-restart cases, four latch cases, and three cartridge-crossover
@@ -535,6 +625,40 @@ cycle sweeps and, with an external BIOS, startup. The default instruction limit
 is unchanged. `CUPID_TEST_ROM_DIR` registers all four checks, and `CUPID_TEST_BIOS`
 adds the external comparisons. See [display timing](../hardware/video-timing.md).
 
+The native renderer tests advance the actual fetch and merge pipeline. They
+cover all six display modes, OBJ, windows, mosaic, effects, affine and display
+latches, writes between stages, CPU/DMA bus beats, blanking and clock wrap.
+The four `gba.object-mosaic-*` groups check complete normal/affine screens,
+all mosaic sizes, both OBJ color depths and HBlank fetch budgets. They also
+require line-counter progression after fetching stops, size-change/frame phases
+and identical bulk/single-clock results while the budget changes. Run them with
+`ctest --test-dir build -R '^gba.object-mosaic-' --output-on-failure`.
+The optional raster and access observers use unchanged inputs and source-derived
+expectations rather than hashes of hardware photographs:
+
+```sh
+python3 tests/roms/check_raster.py --fetch --directory .local-research/test-roms
+python3 tests/roms/check_ppu_access.py --fetch --directory .local-research/test-roms
+python3 tests/roms/check_raster.py --directory .local-research/test-roms \
+  --runner build/cupidgba-headless
+python3 tests/roms/check_ppu_access.py --directory .local-research/test-roms \
+  --runner build/cupidgba-headless
+```
+
+The access observer runs ten menu selections: bitmap, 4-bit and 8-bit text,
+single and paired affine backgrounds, three palette cases, and sprite OAM and
+texture VRAM. Each selection requires all 1231 SRAM observations, including
+the expected occupied slots. Use `--test bitmap`, `--test text-4`,
+`--test text-8`, `--test affine-2`, `--test affine-both`,
+`--test palette-single`, `--test palette-direct`, `--test palette-alpha`,
+`--test object-oam` or `--test object-vram` to select one case. CTest registers
+each separately. Each 1500-frame budget covers the original per-frame samples;
+the default step limit and per-case timeout remain unchanged. `--dump-save`
+exports the runner's save-memory snapshot and fails if no save data exists.
+The three raster cases check 20,592 green-swap pixels, 38,400 affine-step pixels
+and 2,816 sprite/mosaic pixels. `--bios` repeats these raster checks through the
+external path. See [pixel rendering](../hardware/pixel-pipeline.md) for the
+timing derivation and the remaining hardware qualification boundaries.
 The native video group also checks complete frame publication across clock
 and counter wrap, late dispatch, STOP, reset and observer removal. A partially
 drawn next frame is its negative control: every published pixel must retain
@@ -724,6 +848,19 @@ dirty state must survive. Windows checks replacement while another reader holds
 the destination. Fixtures are created in an exclusive test directory and only
 those owned files are removed. Failed tests retain their directory for inspection.
 
+`platform.frontend-frames` checks bounded single-console runs with an owned ARM
+SRAM guest. An observer includes the actual frontend entry point and retains
+real core intervals, SDL input/render/audio and battery paths; it replaces only
+host pacing. Counts 1, 2, 299, 300 and 301 check exact input, interval, display
+and periodic/final save boundaries. STOP counts intervals without requiring a
+new video frame and persists the complete seeded RTC state. The shipped
+executable separately creates and reloads a complete SRAM image across three
+processes. Other cases cover earlier input quit, invalid counts, the largest
+accepted count and read-only destination failures. Each process has a
+three-second guard and the group has a thirty-second CTest deadline. This
+qualifies the frontend run bound and persistence paths, not physical chip
+timing or full-game progress. See [running games](../usage/running.md).
+
 `platform.save-startup` uses a small generated ROM to check invalid-save startup,
 explicit capacity mismatch, dotted directories and path-length handling. It
 requires Python 3 and SDL2. No game, BIOS or save input is distributed. See
@@ -753,8 +890,25 @@ To run another authorized input for a fixed number of frames:
   --frames 600 --steps 168537600 --screenshot .local-research/frame.ppm
 ```
 
-The headless runner does not load or write disk saves. Its screenshot is the
-native 240x160 framebuffer, written as a binary PPM file. Step and emulated-cycle
+The headless runner uses a fresh backup unless `--load-save FILE` explicitly
+loads battery bytes after reset and before guest execution. It uses the same
+backup-family and capacity validation as the frontend. A failed explicit load
+stops before creating output files. The input is opened for reading; no save
+sidecar or automatic writeback is created. `--dump-save FILE` remains an
+explicit raw backup snapshot, so persistence replays should use separate input
+and output paths:
+
+```sh
+./build/cupidgba-headless /path/to/game.gba --load-save .local-research/previous.sav \
+  --frames 600 --steps 168537600 --dump-save .local-research/next.sav
+```
+
+`runner.save-input` exercises guest reads and writes across separate processes,
+complete backup images, capacity inference, retained Flash selection and rejected
+inputs. It uses owned cartridges and the existing ten-second group deadline.
+
+The headless screenshot is the native 240x160 framebuffer, written as a binary
+PPM file. Step and emulated-cycle
 budgets bound execution; `--expect-loop-register` reports the result register
 at an ARM branch to itself. `--terminal-address` restricts that observation to
 a specific instruction address.
@@ -790,7 +944,7 @@ result inspection.
 `--dump-ewram FILE` provides the result counters and failure log for the local
 timer suite observer.
 The example explicitly allows at most one instruction per emulated clock for
-600 frames (600 Ã— 280896 clocks). The runner's default 50-million-step guard
+600 frames (600 Ãƒâ€” 280896 clocks). The runner's default 50-million-step guard
 can stop a valid long run when prefetch permits more instructions per frame.
 This changes the observation budget; it does not change emulation timing or
 any hardware test expectation.

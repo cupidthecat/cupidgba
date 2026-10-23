@@ -40,8 +40,17 @@ accesses during playback, complete wave cycles and power transitions. The
 unchanged local register-read suite remains required with either BIOS path.
 The signal cartridge also checks the complete programmed wave pattern.
 
+Channel 1 sweep arithmetic, negate history and divider writes are described in
+[Frequency sweep](sweep.md).
+Both square channels retain their pending duty edge across frequency writes;
+see [Square-channel duty timers](oscillator.md).
+The noise channel retains its pending countdown and scales the shifted low bit;
+see [Noise-channel clock and held output](noise.md).
+Wave volume writes rescale the retained unscaled nibble without changing the
+clock deadline or waveform banks; see [Wave-channel held output](wave.md).
+
 The wave trigger startup delay is retained and remains unqualified. The
-programmed first bank and CPU window phase during active 64-step playback,
+physical clock alignment of bank selection and the CPU window during active 64-step playback,
 frequency changes inside an oscillator period, retrigger corruption, FIFO
 partial writes and reset pipeline behavior, and `SOUNDCNT_H` power transitions
 require further hardware evidence.

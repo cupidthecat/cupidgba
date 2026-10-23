@@ -34,6 +34,8 @@ static unsigned access_cycles(struct CupidMemory* memory, struct CupidDMA* dma,
     unsigned penalty = cupid_prefetch_before_data(dma->gba, address);
     if (read && address < GBA_BASE_EWRAM) return 1 + penalty;
     unsigned region = address >> GBA_BASE_OFFSET;
+    dma->displayBeat = 0;
+    if (region == GBA_REGION_PALETTE || region == GBA_REGION_VRAM) return 1 + penalty;
     bool sequential = true;
     if (address >= GBA_BASE_ROM0 && !dma->externalSeen) {
         sequential = false;
@@ -107,8 +109,14 @@ void cupid_dma_kick(struct CupidGBA* gba, uint64_t timestamp) {
 
 void cupid_dma_poll(struct CupidGBA* gba) {
     const struct CupidMemory* memory = &gba->memory;
-    if (memory->dmaRunning || memory->busBusy || memory->busLocked ||
-        next_channel(memory) < 0) return;
+    if (memory->dmaRunning || memory->busBusy || memory->busLocked) return;
+    /* Polling only needs to know whether a request exists. Keep these live
+     * flags here so an idle bus strobe does not call the priority selector.
+     * read_next() still selects the winning channel at the handover edge. */
+    if (!(memory->dma[0].enable && memory->dma[0].ready) &&
+        !(memory->dma[1].enable && memory->dma[1].ready) &&
+        !(memory->dma[2].enable && memory->dma[2].ready) &&
+        !(memory->dma[3].enable && memory->dma[3].ready)) return;
     /* The clock getter has no side effects. Idle CPU strobes need neither a
      * timestamp nor a queued event; accepted transfers keep the same clock. */
     begin_transfer(gba, cupid_timing_global_time(&gba->timing));
@@ -220,8 +228,37 @@ static void phase_callback(struct CupidTiming* timing, void* context, uint32_t l
         cupid_dma_kick(gba, when);
     } else {
         struct CupidDMA* dma = &memory->dma[memory->activeDMA];
+        uint32_t address = dma->accessAddress;
+        if (memory->dmaPhase == DMA_READ_HIGH || memory->dmaPhase == DMA_WRITE_HIGH) address += 2;
+        unsigned region = address >> 24;
         if (!dma->enable) {
             read_next(gba, when);
+        } else if (cupid_video_memory_busy(&gba->video, address)) {
+            phase_at(gba, (enum DMAPhase)memory->dmaPhase, when + 1);
+        } else if (dma->transferWord && (region == GBA_REGION_PALETTE || region == GBA_REGION_VRAM)) {
+            address += dma->displayBeat * 2;
+            if (memory->dmaPhase == DMA_READ) {
+                uint16_t value = (uint16_t)cupid_memory_load16(&gba->cpu, address, NULL);
+                if (!dma->displayBeat) dma->displayLow = value;
+                else {
+                    dma->latch = dma->displayLow | ((uint32_t)value << 16);
+                    memory->dmaBus = dma->latch;
+                }
+            } else cupid_memory_store16(&gba->cpu, address,
+                (int16_t)(dma->latch >> (dma->displayBeat * 16)), NULL);
+            if (!dma->displayBeat++) phase_at(gba, (enum DMAPhase)memory->dmaPhase, when + 1);
+            else {
+                memory->lastWasDMA = true;
+                cupid_prefetch_after_data(gba);
+                if (memory->dmaPhase == DMA_READ) {
+                    phase_at(gba, DMA_WRITE, when + access_cycles(memory, dma, dma->nextDest, false));
+                } else {
+                    dma->nextSource += (uint32_t)dma->sourceOffset;
+                    dma->nextDest += (uint32_t)dma->destOffset;
+                    if (dma->enable && --dma->nextCount == 0) complete_channel(gba, dma, when);
+                    read_next(gba, when);
+                }
+            }
         } else if (memory->dmaPhase == DMA_READ || memory->dmaPhase == DMA_READ_HIGH) {
             if (memory->dmaPhase == DMA_READ && dma->gpioHalfCycles) {
                 gba->performingDMA = 1 | (dma->id << 1);
@@ -324,7 +361,6 @@ void cupid_dma_write_cnt(struct CupidGBA* gba, int ch, uint16_t value) {
         dma->destOffset = dma->fifo ? 0 : (dma->destControl == 3 ? (int)width
             : offsets[dma->destControl] * (int)width);
         if (dma->timing == DMA_TIMING_NOW) cupid_dma_transfer(gba, ch);
-        if (dma->fifo) cupid_audio_schedule_fifo_dma(&gba->audio, ch, dma);
     }
 }
 
