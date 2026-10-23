@@ -356,3 +356,27 @@ argument to `test_cpu_raster half` or `test_cpu_raster word`. CI uses the
 replacement BIOS and needs no external firmware. These tests cover the
 recorded CPU, BIOS wait, interrupt wake and palette interaction; they do not
 qualify physical pixel timing or every raster and display-memory conflict.
+
+## CPU-driven window masks
+
+`gba.cpu-windows-half` and `gba.cpu-windows-word` use the same owned ARM
+program builder and BIOS Halt/VBlank wake path. A solid red mode-3 background
+and blue backdrop distinguish BG2 visibility from palette changes. Window 0
+covers the visible screen for WININ checks. WINOUT checks place that window
+entirely in VBlank, keeping its horizontal bounds nonempty. The guest changes
+the BG2 mask at scanlines 1, 79, 80 and 159 after polling VCOUNT.
+
+Each group checks 48 scenes across both window regions, enabling and disabling
+BG2, seven extra NOPs and constant-mask controls. Halfword stores address the
+selected mask. Word stores write WININ and WINOUT together, with geometry
+selecting the half that controls visible pixels. The checks require guest
+progress, the final register value, an ordered transition on the changed line,
+unchanged preceding lines, the selected color on following lines and identical
+final two frames. Extra NOPs must move the transition later.
+
+Run these groups with
+`ctest --test-dir build -R '^gba.cpu-windows-' --output-on-failure`.
+An optional local BIOS path is the third argument to `test_cpu_windows half`
+or `test_cpu_windows word`. CI uses the replacement BIOS. These scenes cover
+CPU writes to layer masks during scanout; they do not qualify every window
+boundary, OBJ window interaction or physical register-acceptance phase.
