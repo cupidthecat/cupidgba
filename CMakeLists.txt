@@ -842,6 +842,13 @@ if(BUILD_TESTING)
         set_tests_properties(gba.prefetch-boundary-${group} PROPERTIES TIMEOUT 30)
     endforeach()
 
+    add_executable(test_prefetch_restart tests/gba/test_prefetch_restart.c)
+    target_link_libraries(test_prefetch_restart PRIVATE cupid_core)
+    foreach(group RANGE 0 3)
+        add_test(NAME gba.prefetch-restart-${group} COMMAND test_prefetch_restart ${group})
+        set_tests_properties(gba.prefetch-restart-${group} PROPERTIES TIMEOUT 30)
+    endforeach()
+
     add_executable(test_fast_boot tests/gba/test_fast_boot.c)
     target_link_libraries(test_fast_boot PRIVATE cupid_core)
     foreach(group RANGE 0 3)
