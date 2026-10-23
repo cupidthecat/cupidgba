@@ -423,9 +423,26 @@ remain unqualified.
 `timing` input subdirectories and enables all twenty unchanged cartridge groups;
 `CUPID_TEST_BIOS` adds their external-firmware comparisons. Each requires the
 original result before its display routine and at its terminal, a verified
-input digest and unchanged frame/instruction bounds. Nineteen groups have
+input digest and unchanged frame/instruction bounds. Each firmware path also
+requires all 84 original comparison observations. Nineteen groups have
 matching source; the additional legacy boundary cartridge has binary evidence
-only. The two legacy boundary failures remain registered.
+only. All twenty groups pass on both firmware paths. Fetch the pinned inputs
+and their verified license notice with:
+
+```sh
+python3 tests/roms/check_prefetch_probe.py --fetch --directory .local-research/test-roms
+cmake -S . -B build -DCUPID_PREFETCH_PROBE_DIR="$PWD/.local-research/test-roms"
+ctest --test-dir build -R '^rom\.prefetch-' --output-on-failure
+```
+
+Linux and Windows CI fetch and run these twenty cartridge groups with the
+built-in firmware. `rom.prefetch-inputs` checks fetching, input selection,
+checksum rejection and license retention without network access. Downloads use
+the shared bounded transport retry path; an altered payload fails immediately.
+The original 360-frame, 150,000,000-step and 90-second execution guards remain
+unchanged, with a 95-second CTest limit per cartridge. These cases do not cover
+every stream transition or close the separate CPU/DMA/IRQ timing gaps.
+
 `CUPID_BUS_PAGE_PROBE_ROM` adds the eighteen-result CPU/DMA page-boundary
 cartridge and repeats it when `CUPID_TEST_BIOS` is set. Missing or failing
 console rows fail the check; both DMA decrement rows retain their original comparisons.

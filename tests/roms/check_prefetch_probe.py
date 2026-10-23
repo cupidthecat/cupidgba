@@ -7,16 +7,42 @@ import json
 from pathlib import Path
 import struct
 import subprocess
+from fetch_inputs import download_verified
+
+
+def fetch_cases(manifest, cases, directory):
+    source = f'https://raw.githubusercontent.com/jsmolka/gba-tests/{manifest["revision"]}'
+    # Keep the pinned permission notice beside the unchanged cartridge inputs.
+    license_data = download_verified(f'{source}/LICENSE', manifest['license_sha256'])
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / 'prefetch-LICENSE.txt').write_bytes(license_data)
+    for case in cases:
+        data = download_verified(f'{source}/{case["path"]}', case['sha256'])
+        path = directory / case['path']
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+        print(f'Fetched verified prefetch input: {case["name"]}')
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--fetch', action='store_true')
     parser.add_argument('--directory', type=Path, required=True)
-    parser.add_argument('--runner', type=Path, required=True)
+    parser.add_argument('--runner', type=Path)
     parser.add_argument('--bios', type=Path)
-    parser.add_argument('--test', required=True)
+    parser.add_argument('--test')
     args = parser.parse_args()
-    cases = json.loads(Path(__file__).with_name('prefetch-probes.json').read_text())['cases']
+    manifest = json.loads(Path(__file__).with_name('prefetch-probes.json').read_text())
+    cases = manifest['cases']
+    if args.fetch:
+        if args.test:
+            cases = [case for case in cases if case['name'] == args.test]
+        if not cases:
+            parser.error('Unknown prefetch cartridge')
+        fetch_cases(manifest, cases, args.directory)
+        return
+    if not args.runner or not args.test:
+        parser.error('--runner and --test are required unless fetching inputs')
     case = next((case for case in cases if case['name'] == args.test), None)
     if case is None:
         parser.error('Unknown prefetch cartridge')

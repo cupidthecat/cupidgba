@@ -1363,6 +1363,9 @@ if(BUILD_TESTING)
     endif()
 
     if(CUPID_PREFETCH_PROBE_DIR)
+        add_test(NAME rom.prefetch-inputs COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_fetch_prefetch.py)
+        set_tests_properties(rom.prefetch-inputs PROPERTIES TIMEOUT 10)
         foreach(case boundary-1 boundary-2 boundary-3 boundary-4 branch-thumb
                      branch-thumb-2 branch-thumb-3 branch-thumb-4 branch-thumb-5 branch-thumb-6
                      branch-thumb-arm branch-thumb-arm-3 branch-thumb-arm-4 dma full-arm full-arm-2 full-thumb
