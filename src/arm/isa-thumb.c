@@ -594,7 +594,7 @@ DEFINE_INSTRUCTION_THUMB(BL2,
 
 /** @name Format 5 — BX: Branch and Exchange
  *
- * Encoding: 010001110xsssddd  (index bits 0x11C–0x11D)
+ * Encoding: 01000111xssssddd  (index bits 0x11C–0x11F)
  */
 
 DEFINE_INSTRUCTION_THUMB(BX,

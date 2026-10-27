@@ -10,9 +10,34 @@
       "checkpoint": "0x08000174",
       "terminal": "0x080002EC",
       "observations": [
-        {"address": "0x08000144", "mode": "thumb", "instruction": "0x4780", "register": 1, "value": 8},
-        {"address": "0x08000150", "mode": "arm", "instruction": "0xE2411001", "register": 1, "value": 8},
-        {"address": "0x08000160", "mode": "arm", "instruction": "0xE3510004", "register": 1, "value": 4}
+        {
+          "address": "0x08000144",
+          "mode": "thumb",
+          "instruction": "0x4780",
+          "register": 1,
+          "value": 8
+        },
+        {
+          "address": "0x08000150",
+          "mode": "arm",
+          "instruction": "0xE2411001",
+          "register": 1,
+          "value": 8
+        },
+        {
+          "address": "0x08000160",
+          "mode": "arm",
+          "instruction": "0xE3510004",
+          "register": 1,
+          "value": 4
+        },
+        {
+          "address": "0x080002EC",
+          "mode": "arm",
+          "instruction": "0xEAFFFFFE",
+          "register": 12,
+          "value": 0
+        }
       ]
     }
   ]

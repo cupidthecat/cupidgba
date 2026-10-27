@@ -32,8 +32,8 @@ struct RunState {
     uint64_t frames, cycleLimit, stepLimit, terminalAddress, checkpointAddress;
     uint64_t completed, steps, stoppedClocks;
     int expectedRegister;
-    bool terminal, checkpoint, done;
-    uint32_t checkpointValue;
+    bool terminal, terminalIssued, checkpoint, done;
+    uint32_t checkpointValue, terminalIssuedAddress, terminalLogicalPC;
     const struct KeyEvent* keyEvents;
     unsigned keyEventCount, nextKeyEvent;
 };
@@ -51,16 +51,14 @@ static bool run_boundary(struct CupidGBA* gba, uint64_t completedSteps, void* co
         run->done = true;
         return false;
     }
-    if (run->checkpointAddress && !run->checkpoint && gba->cpu.executionMode == MODE_ARM &&
-        cupid_arm_instruction_address(&gba->cpu) == run->checkpointAddress) {
-        run->checkpoint = true;
-        run->checkpointValue = (uint32_t)gba->cpu.gprs[run->expectedRegister];
-    }
-    if (run->expectedRegister >= 0 && gba->cpu.executionMode == MODE_ARM &&
-        (uint32_t)gba->cpu.gprs[ARM_PC] >= GBA_BASE_ROM0 &&
-        (!run->terminalAddress || cupid_arm_instruction_address(&gba->cpu) == run->terminalAddress) &&
-        gba->cpu.prefetch[0] == UINT32_C(0xEAFFFFFE)) {
-        run->terminal = run->done = true;
+    if (run->terminalIssued && !gba->cpuInstructionPending) {
+        /* A HALT wait can return while the branch still owns an unfinished
+         * fetch. Accept only its completed return to the same idle pipeline. */
+        run->terminal = gba->cpu.executionMode == MODE_ARM &&
+            cupid_arm_instruction_address(&gba->cpu) == run->terminalIssuedAddress &&
+            (uint32_t)gba->cpu.gprs[ARM_PC] == run->terminalLogicalPC &&
+            gba->cpu.prefetch[0] == UINT32_C(0xEAFFFFFE);
+        run->done = true;
         return false;
     }
     while (run->nextKeyEvent < run->keyEventCount && run->keyEvents[run->nextKeyEvent].frame <= run->completed) {
@@ -88,12 +86,28 @@ struct RegisterObservations {
     struct RegisterObservation entries[MAX_REGISTER_OBSERVATIONS];
     unsigned count, next;
     bool failed, orderFailed;
+    struct RunState* run;
 };
 
 static void observe_instruction(const struct CupidARM* cpu, void* context) {
     struct RegisterObservations* observations = context;
     const bool thumb = cpu->executionMode == MODE_THUMB;
     const uint32_t pc = cupid_arm_instruction_address(cpu);
+    struct RunState* run = observations->run;
+    if (run && !thumb) {
+        /* A prefetched address can be discarded by IRQ arbitration. Both
+         * result boundaries use the same actual-issue hook as comparisons. */
+        if (run->checkpointAddress && !run->checkpoint && pc == run->checkpointAddress) {
+            run->checkpoint = true;
+            run->checkpointValue = (uint32_t)cpu->gprs[run->expectedRegister];
+        }
+        if (run->expectedRegister >= 0 && (uint32_t)cpu->gprs[ARM_PC] >= GBA_BASE_ROM0 &&
+            (!run->terminalAddress || pc == run->terminalAddress) && cpu->prefetch[0] == UINT32_C(0xEAFFFFFE)) {
+            run->terminalIssued = true;
+            run->terminalIssuedAddress = pc;
+            run->terminalLogicalPC = (uint32_t)cpu->gprs[ARM_PC];
+        }
+    }
     bool watched = false;
     for (unsigned i = 0; i < observations->count; i++) {
         if (observations->entries[i].address == pc) { watched = true; break; }
@@ -256,10 +270,6 @@ int main(int argc, char** argv) {
         perror(saveInput);
         goto cleanup;
     }
-    if (observations.count) {
-        gba->cpu.instructionObserver = observe_instruction;
-        gba->cpu.instructionObserverContext = &observations;
-    }
     /* An explicit probe entry exercises guest code with the selected BIOS
      * mapped. It does not execute or qualify the BIOS boot sequence. */
     if (startAddress) {
@@ -284,6 +294,11 @@ int main(int argc, char** argv) {
     struct RunState run = {.frames = frames, .cycleLimit = cycleLimit, .stepLimit = stepLimit,
         .terminalAddress = terminalAddress, .checkpointAddress = checkpointAddress,
         .expectedRegister = expectedRegister, .keyEvents = keyEvents, .keyEventCount = keyEventCount};
+    observations.run = &run;
+    if (observations.count || expectedRegister >= 0) {
+        gba->cpu.instructionObserver = observe_instruction;
+        gba->cpu.instructionObserverContext = &observations;
+    }
     while (!run.done) {
         if (run_boundary(gba, 0, &run)) {
             cupid_gba_run_steps(gba, stepLimit - run.steps, run_boundary, &run);
@@ -308,8 +323,10 @@ int main(int argc, char** argv) {
     if (stoppedClocks) printf("stopped_cycles=%" PRIu64 "\n", stoppedClocks);
     if (expectedRegister >= 0) {
         uint32_t value = (uint32_t)gba->cpu.gprs[expectedRegister];
+        printf("terminal-issued=%s completed=%s pc=%08" PRIx32 "\n",
+               run.terminalIssued ? "yes" : "no", terminal ? "yes" : "no", run.terminalIssuedAddress);
         printf("terminal=%s r%d=%" PRIu32 " result=%s\n", terminal ? "yes" : "no", expectedRegister,
-               value, terminal ? (value ? "FAIL" : "PASS") : "TIMEOUT");
+               value, terminal ? (value ? "FAIL" : "PASS") : run.terminalIssued ? "INCOMPLETE" : "TIMEOUT");
         if (checkpointAddress) printf("checkpoint=%s r%d=%" PRIu32 " result=%s\n",
             checkpoint ? "yes" : "no", expectedRegister, checkpointValue,
             checkpoint ? (checkpointValue ? "FAIL" : "PASS") : "MISSING");

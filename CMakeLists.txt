@@ -435,6 +435,12 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_runner_observations.py
         --runner $<TARGET_FILE:cupidgba-headless>)
     set_tests_properties(runner.observations PROPERTIES TIMEOUT 10)
+    add_executable(test_runner_terminal tests/platform/test_runner_terminal.c src/platform/peripherals.c)
+    target_link_libraries(test_runner_terminal PRIVATE cupid_core)
+    foreach(group issued arbitration suspended)
+        add_test(NAME runner.terminal-${group} COMMAND test_runner_terminal ${group})
+        set_tests_properties(runner.terminal-${group} PROPERTIES TIMEOUT 30)
+    endforeach()
     add_test(NAME runner.save-input COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_runner_save.py
         --runner $<TARGET_FILE:cupidgba-headless>)

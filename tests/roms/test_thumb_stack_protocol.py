@@ -16,7 +16,8 @@ class ResultProtocol(unittest.TestCase):
             f"opcode={int(row['instruction'], 16):08x} r{row['register']}={row['value']:08x} "
             f"expected={row['value']:08x} result=PASS"
             for i, row in enumerate(self.case["observations"])
-        ] + ["terminal=yes r12=0 result=PASS", "checkpoint=yes r12=0 result=PASS", "observations=3/3 result=PASS"]
+        ] + [f'terminal-issued=yes completed=yes pc={int(self.case["terminal"],16):08x}',
+             "terminal=yes r12=0 result=PASS", "checkpoint=yes r12=0 result=PASS", f'observations={len(self.case["observations"])}/{len(self.case["observations"])} result=PASS']
 
     def test_complete(self):
         require_result("\n".join(self.lines), 0, self.case)
@@ -41,8 +42,16 @@ class ResultProtocol(unittest.TestCase):
                 require_result("\n".join(self.lines) + extra, status, self.case)
 
     def test_duplicate_terminal(self):
-        with self.assertRaises(ValueError):
-            require_result("\n".join(self.lines + [self.lines[3]]), 0, self.case)
+        for line in self.lines[len(self.case["observations"]):]:
+            with self.assertRaises(ValueError):
+                require_result("\n".join(self.lines + [line]), 0, self.case)
+
+    def test_incomplete_terminal(self):
+        for before, after in [("terminal-issued=yes", "terminal-issued=no"),
+                              ("completed=yes", "completed=no")]:
+            lines = [line.replace(before, after) for line in self.lines]
+            with self.assertRaises(ValueError):
+                require_result("\n".join(lines), 0, self.case)
 
     def input_fixture(self):
         # This owned byte layout tests input validation, not CPU execution.

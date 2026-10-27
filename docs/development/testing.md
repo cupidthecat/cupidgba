@@ -229,6 +229,11 @@ comparison, display checkpoint and terminal. Its input is fetched by
 See [Thumb branch exchange](../hardware/cpu/thumb-branch-exchange.md) for
 the selected decoder policy, reserved-encoding limits and fixed run guards.
 
+`runner.terminal-*` checks actual result-boundary issue and completed idle
+branches, including IRQ-discarded prefetch and retained HALT fetches. See
+[runner result boundaries](runner-boundaries.md) for the protocol, negative
+controls and unchanged cartridge execution guards.
+
 `arm.thumb-stack-*` checks empty-list POP pipeline refill, SP writeback,
 register banks, alignment, bus clocks and every normal POP register list.
 `rom.thumb-stack` retains the original cartridge's timer/SP comparisons,

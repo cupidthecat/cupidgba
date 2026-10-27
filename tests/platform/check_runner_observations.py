@@ -89,8 +89,14 @@ def main():
         checkpoint, terminal, probes = image()
         missing = run(checkpoint, terminal, probes + [(0x08000044, 0, 0)])
         assert missing.returncode == 1 and 'observations=2/3 result=MISSING' in missing.stdout
-        unissued = run(checkpoint, terminal, probes + [(terminal, 12, 0)])
+        issued = run(checkpoint, terminal, probes + [(terminal, 12, 0)])
+        assert issued.returncode == 0 and 'observations=3/3 result=PASS' in issued.stdout
+        assert 'terminal-issued=yes completed=yes pc=08000024' in issued.stdout
+        # Seven owned instructions reach the prefetched terminal but do not
+        # issue it. Keep this negative control separate from actual completion.
+        unissued = run(checkpoint, terminal, probes + [(terminal, 12, 0)], ['--steps', '7'])
         assert unissued.returncode == 1 and 'observations=2/3 result=MISSING' in unissued.stdout
+        assert 'terminal-issued=no completed=no pc=00000000' in unissued.stdout
         reordered = run(checkpoint, terminal, list(reversed(probes)))
         assert reordered.returncode == 1 and 'observation-order=FAIL' in reordered.stdout
         checkpoint, terminal, probes = image(repeats=2)

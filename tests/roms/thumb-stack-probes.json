@@ -30,6 +30,13 @@
           "instruction": "0x283C",
           "register": 0,
           "value": 60
+        },
+        {
+          "address": "0x08000318",
+          "mode": "arm",
+          "instruction": "0xEAFFFFFE",
+          "register": 12,
+          "value": 0
         }
       ]
     }

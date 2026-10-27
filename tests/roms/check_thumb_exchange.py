@@ -55,7 +55,8 @@ def require_result(stdout, status, case):
     ]
     actual = [line for line in lines if line.startswith("observation=")]
     count = len(expected)
-    required = ["terminal=yes r12=0 result=PASS", "checkpoint=yes r12=0 result=PASS",
+    required = [f'terminal-issued=yes completed=yes pc={int(case["terminal"],16):08x}',
+                "terminal=yes r12=0 result=PASS", "checkpoint=yes r12=0 result=PASS",
                 f"observations={count}/{count} result=PASS"]
     if status or actual != expected or any(lines.count(line) != 1 for line in required) or \
             any("result=FAIL" in line or "observation-order=FAIL" in line for line in lines):
