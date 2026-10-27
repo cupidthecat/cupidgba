@@ -715,7 +715,7 @@ uint32_t cupid_memory_load8(struct CupidARM* cpu, uint32_t address, int* cycleCo
         break;
     case GBA_REGION_IO:
         sync_io(cpu, cycleCounter);
-        value = (cupid_io_read(gba, address & 0xFFFE) >> ((address & 1) << 3)) & 0xFF;
+        value = (cupid_io_read(gba, address & (GBA_OFFSET_MASK & ~1u)) >> ((address & 1) << 3)) & 0xFF;
         break;
     case GBA_REGION_PALETTE:
         value = ((uint8_t*)gba->video.palette)[address & (GBA_SIZE_PALETTE - 1)];

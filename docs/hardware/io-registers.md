@@ -37,3 +37,18 @@ Sound register and wave access checks are described in
 are described in [audio timing](audio/timing.md). FIFO partial writes, oscillator
 edges and output precision remain part of the broader audit in
 [issue 1](https://github.com/cupidthecat/cupidgba/issues/1).
+
+## Address decoding
+
+Byte, halfword and word reads retain the complete 24-bit offset within the
+I/O region. An address in an upper 64 KiB bank does not alias the low register
+block. Unmapped byte reads select their byte lane from the existing CPU or DMA
+bus value, just as wider reads do. The internal memory-control register is a
+separate decoder and remains outside this coverage.
+
+Native address checks cover the four low register lanes, 522,240 upper-bank
+byte reads across all 255 upper banks with distinct CPU/DMA bus patterns,
+and 8,160 issued ARM/Thumb byte loads with timed and untimed execution. The
+upper-bank checks also compare byte reads with halfword and word lane selection.
+These fixtures exercise the existing bus-value model; they do not establish a
+complete physical bus-latch model or add a hardware capture.
