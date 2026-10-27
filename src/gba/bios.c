@@ -1,6 +1,6 @@
 /**
  * @file bios.c
- * @brief High-Level Emulation of GBA BIOS SWI calls.
+ * @brief SWI exception entry for the built-in BIOS.
  */
 
 #include "cupid/gba.h"
@@ -65,6 +65,9 @@ void cupid_bios_swi(struct CupidGBA* gba, uint8_t comment) {
         /* Download words and checksums use timed serial register accesses. */
         cupid_arm_raise_swi(&gba->cpu);
         break;
-    default: break;    /** Unknown SWI */
+    default:
+        /* The CPU traps before firmware interprets the service number. */
+        cupid_arm_raise_swi(&gba->cpu);
+        break;
     }
 }

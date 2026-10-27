@@ -1030,6 +1030,18 @@ if(BUILD_TESTING)
     add_test(NAME gba.bios COMMAND test_bios)
     set_tests_properties(gba.bios PROPERTIES TIMEOUT 10)
 
+    add_executable(test_bios_swi_entry tests/bios/test_swi_entry.c)
+    target_link_libraries(test_bios_swi_entry PRIVATE cupid_core)
+    foreach(group arm thumb banks predicates sources)
+        add_test(NAME gba.bios-swi-entry-${group} COMMAND test_bios_swi_entry ${group})
+        set_tests_properties(gba.bios-swi-entry-${group} PROPERTIES TIMEOUT 10)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME gba.bios-swi-entry-${group}-external
+                COMMAND test_bios_swi_entry ${group} --bios ${CUPID_TEST_BIOS})
+            set_tests_properties(gba.bios-swi-entry-${group}-external PROPERTIES TIMEOUT 10)
+        endif()
+    endforeach()
+
     add_executable(test_bios_irq tests/bios/test_irq.c tests/arm/irq_probe.c)
     target_link_libraries(test_bios_irq PRIVATE cupid_core)
     foreach(group arm thumb events)
