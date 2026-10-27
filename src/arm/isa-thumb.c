@@ -483,7 +483,11 @@ DEFINE_LOAD_STORE_MULTIPLE_THUMB(POP,
 	IA,
 	,
 	THUMB_LOAD_POST_BODY;
-	cpu->gprs[ARM_SP] = address)
+	cpu->gprs[ARM_SP] = address;
+	if (!rs) {
+		/* An empty list transfers PC and advances SP by sixteen words. */
+		CupidFlushCycles(cpu, &currentCycles); currentCycles += CupidThumbWritePC(cpu);
+	})
 
 DEFINE_LOAD_STORE_MULTIPLE_THUMB(POPR,
 	ARM_SP,

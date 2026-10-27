@@ -66,6 +66,7 @@ jobs:
           python3 tests/roms/check_prefetch_probe.py --fetch --directory .local-research/test-roms
           python3 tests/roms/check_cpu_corpus.py --fetch --directory .local-research/test-roms/cpu-corpus
           python3 tests/roms/check_thumb_exchange.py --fetch --directory .local-research/test-roms
+          python3 tests/roms/check_thumb_stack.py --fetch --directory .local-research/test-roms
       - name: Configure
         run: |
           sanitizer_flags=()
@@ -148,6 +149,7 @@ jobs:
           python tests/roms/check_prefetch_probe.py --fetch --directory .local-research/test-roms
           python tests/roms/check_cpu_corpus.py --fetch --directory .local-research/test-roms/cpu-corpus
           python tests/roms/check_thumb_exchange.py --fetch --directory .local-research/test-roms
+          python tests/roms/check_thumb_stack.py --fetch --directory .local-research/test-roms
       - name: Configure
         # Keep input fetching and CTest on the same installed interpreter.
         run: >-

@@ -229,6 +229,14 @@ comparison, display checkpoint and terminal. Its input is fetched by
 See [Thumb branch exchange](../hardware/cpu/thumb-branch-exchange.md) for
 the selected decoder policy, reserved-encoding limits and fixed run guards.
 
+`arm.thumb-stack-*` checks empty-list POP pipeline refill, SP writeback,
+register banks, alignment, bus clocks and every normal POP register list.
+`rom.thumb-stack` retains the original cartridge's timer/SP comparisons,
+display checkpoint and terminal. Fetch its input with
+`python tests/roms/check_thumb_stack.py --fetch --directory .local-research/test-roms`.
+See [Thumb stack transfers](../hardware/cpu/thumb-stack.md) for coverage and
+the fixed run guards.
+
 Local-session checks are `gba.cable-*`, `gba.video-cable-*` and `platform.local-*`. They cover
 complete paired guest bytes and words, multiplayer receive slots, bus/event
 coordination, cancellation, STOP, SDL input/video/audio and independent battery

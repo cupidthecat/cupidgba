@@ -1,0 +1,37 @@
+{
+  "revision": "66f5f1d60cd7030b600606886c76f5c821ecaf9d",
+  "license_sha256": "b59a9ed235d76752c977f04116bc72155a14af48176bdbf50d7e5c29fca35aa7",
+  "cases": [
+    {
+      "name": "empty-pop",
+      "path": "thumb/Pop_no_regs.gba",
+      "bytes": 1740,
+      "sha256": "64d3b4d98443f72093f503b40f51a988109e67012d82542f2746a5e2f7452415",
+      "checkpoint": "0x080001A0",
+      "terminal": "0x08000318",
+      "observations": [
+        {
+          "address": "0x08000164",
+          "mode": "thumb",
+          "instruction": "0xBC00",
+          "register": 1,
+          "value": 134218088
+        },
+        {
+          "address": "0x08000176",
+          "mode": "thumb",
+          "instruction": "0x2816",
+          "register": 0,
+          "value": 22
+        },
+        {
+          "address": "0x0800017E",
+          "mode": "thumb",
+          "instruction": "0x283C",
+          "register": 0,
+          "value": 60
+        }
+      ]
+    }
+  ]
+}
