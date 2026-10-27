@@ -977,6 +977,13 @@ if(BUILD_TESTING)
     target_link_libraries(test_cpu PRIVATE cupid_core)
     add_test(NAME arm.cpu COMMAND test_cpu)
 
+    add_executable(test_msr_pipeline tests/arm/test_msr_pipeline.c)
+    target_link_libraries(test_msr_pipeline PRIVATE cupid_core)
+    foreach(group ordinary branch register immediate register-control immediate-control user-register user-immediate)
+        add_test(NAME arm.msr-pipeline-${group} COMMAND test_msr_pipeline ${group})
+        set_tests_properties(arm.msr-pipeline-${group} PROPERTIES TIMEOUT 30)
+    endforeach()
+
     add_executable(test_saved_status tests/arm/test_saved_status.c)
     target_link_libraries(test_saved_status PRIVATE cupid_core)
     foreach(group reads registers immediate-0 immediate-4 immediate-8 immediate-12 timing predicates banks events)
