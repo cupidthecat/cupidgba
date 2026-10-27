@@ -1025,6 +1025,21 @@ if(BUILD_TESTING)
     endif()
     set_tests_properties(arm.cpu PROPERTIES TIMEOUT 10)
 
+    add_executable(test_thumb_exchange tests/arm/test_thumb_exchange.c)
+    target_link_libraries(test_thumb_exchange PRIVATE cupid_core)
+    foreach(group encodings banks buses continued)
+        add_test(NAME arm.thumb-exchange-${group} COMMAND test_thumb_exchange ${group})
+        set_tests_properties(arm.thumb-exchange-${group} PROPERTIES TIMEOUT 30)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME arm.thumb-exchange-${group}-external
+                COMMAND test_thumb_exchange ${group} --bios ${CUPID_TEST_BIOS})
+            set_tests_properties(arm.thumb-exchange-${group}-external PROPERTIES TIMEOUT 30)
+        endif()
+    endforeach()
+    add_test(NAME runner.thumb-exchange-protocol COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_thumb_exchange_protocol.py)
+    set_tests_properties(runner.thumb-exchange-protocol PROPERTIES TIMEOUT 10)
+
     add_executable(test_bios tests/bios/test_bios.c)
     target_link_libraries(test_bios PRIVATE cupid_core)
     add_test(NAME gba.bios COMMAND test_bios)
@@ -1298,6 +1313,17 @@ if(BUILD_TESTING)
                 --runner $<TARGET_FILE:cupidgba-headless> --test ${case})
             set_tests_properties(rom.${case} PROPERTIES TIMEOUT 50)
         endforeach()
+        add_test(NAME rom.thumb-exchange COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_thumb_exchange.py
+            --directory ${CUPID_TEST_ROM_DIR} --runner $<TARGET_FILE:cupidgba-headless>)
+        set_tests_properties(rom.thumb-exchange PROPERTIES TIMEOUT 100)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME rom.thumb-exchange-external COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_thumb_exchange.py
+                --directory ${CUPID_TEST_ROM_DIR} --runner $<TARGET_FILE:cupidgba-headless>
+                --bios ${CUPID_TEST_BIOS})
+            set_tests_properties(rom.thumb-exchange-external PROPERTIES TIMEOUT 100)
+        endif()
         foreach(case timer-reload timer-start-stop timer-tick-before-reload
                      dma-start-delay dma-nonseq dma-latch dma-burst vram-mirror)
             add_test(NAME rom.${case} COMMAND ${Python3_EXECUTABLE}

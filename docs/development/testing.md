@@ -221,6 +221,14 @@ rejects incomplete or corrupted transcripts. See
 firmware paths and execution bounds. These checks qualify generated instruction
 results rather than CPU timing.
 
+The four `arm.thumb-exchange-*` groups compare 28,160 canonical/candidate BX
+pairs, including reserved H1 encodings, caller banks, memory windows and target
+execution. `rom.thumb-exchange` retains the original cartridge's branch,
+comparison, display checkpoint and terminal. Its input is fetched by
+`python tests/roms/check_thumb_exchange.py --fetch --directory .local-research/test-roms`.
+See [Thumb branch exchange](../hardware/cpu/thumb-branch-exchange.md) for
+the selected decoder policy, reserved-encoding limits and fixed run guards.
+
 Local-session checks are `gba.cable-*`, `gba.video-cable-*` and `platform.local-*`. They cover
 complete paired guest bytes and words, multiplayer receive slots, bus/event
 coordination, cancellation, STOP, SDL input/video/audio and independent battery
