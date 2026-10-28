@@ -281,6 +281,9 @@ bool cupid_cartridge_gpio_write(struct CupidGBA* gba, uint32_t address, uint16_t
 }
 
 bool cupid_cartridge_fetch_opcode(struct CupidARM* cpu, uint32_t address, unsigned width, uint32_t* value) {
+    /* Interworking can retain ARM A1 in the logical stream. GPIO selects
+     * the aligned opcode word, including any value captured at its strobes. */
+    address &= ~(width - 1u);
     struct CupidGBA* gba = cpu->master;
     if (gba->cartridge.opcodeValid) {
         gba->cartridge.opcodeValid = false;
@@ -361,6 +364,8 @@ static void prefetch_sample(struct CupidTiming* timing, void* context, uint32_t 
 }
 
 bool cupid_cartridge_fetch_bus(struct CupidGBA* gba, uint32_t address, unsigned width, unsigned cycles) {
+    /* Select physical GPIO lanes without changing the logical FIFO cursor. */
+    address &= ~(width - 1u);
     struct CupidCartridge* cart = &gba->cartridge;
     cart->opcodeValid = false;
     if (width != 4 || gba->memory.prefetchUnit.fetchKind != CUPID_PREFETCH_START ||
