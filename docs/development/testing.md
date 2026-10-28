@@ -1106,3 +1106,14 @@ guards remain. Every original comparison must issue in order with its expected
 flags, and both original result boundaries must issue with R12=0. Current local
 results and remaining failures are documented under
 [firmware IRQ entry](../hardware/bios/interrupt-entry.md).
+
+## Internal memory timing
+
+The ten `gba.ewram-wait-control-*` groups cover the mirrored control port,
+writable and reserved lanes, ARM/Thumb stores, live EWRAM instruction execution,
+CPU data timing, both DMA directions, decoder boundaries and reset/instance
+ownership. Run them with `ctest --test-dir build -R gba.ewram-wait-control
+--output-on-failure`. These are owned software regressions. Value 15 checks the
+selected readback/timing policy; it does not qualify physical RAM failure.
+See [internal memory timing](../hardware/memory/ewram-wait-control.md) for the
+supported fields and remaining RAM-control gaps.

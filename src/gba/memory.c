@@ -197,6 +197,8 @@ void cupid_memory_reset(struct CupidGBA* gba) {
     }
     memset(mem->io, 0, sizeof(mem->io));
 
+    mem->ewramWaitControl = 0x0D00;
+
     /** Initialize default wait states. */
     int i;
     for (i = 0; i < 16; ++i) {
@@ -291,11 +293,15 @@ void cupid_memory_update_waitstates(struct CupidGBA* gba, uint16_t parameters) {
 }
 
 /**
- * @brief Update EWRAM wait-state timing from control parameters.
+ * @brief Retain the high control halfword and update valid EWRAM timing.
  */
 void cupid_memory_update_ewram_waitstates(struct CupidGBA* gba, uint16_t parameters) {
     struct CupidMemory* memory = &gba->memory;
 
+    /* Readback includes the undocumented writable upper nibble. Value 15
+     * retains the existing last-valid timing policy; physical failure at that
+     * setting is not modeled by the wait tables. */
+    memory->ewramWaitControl = parameters & 0xFF00;
     int wait = 15 - ((parameters >> 8) & 0xF);
     if (wait) {
         memory->waitstatesNonseq16[GBA_REGION_EWRAM] = wait;

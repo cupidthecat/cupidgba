@@ -318,6 +318,8 @@ struct CupidMemory {
     char waitstatesNonseq32[256];
     char waitstatesSeq32[256];
 
+    uint16_t ewramWaitControl;  /**< High control halfword, with bits 0-7 unused */
+
     int      activeRegion;       /**< Current fetch region (-1 = none) */
     uint32_t biosPrefetch;       /**< BIOS read protection latch */
     bool     biosLoaded;

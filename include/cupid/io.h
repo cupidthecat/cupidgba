@@ -156,6 +156,10 @@ struct CupidGBA;
 #define REG_POSTFLG     0x300
 #define REG_HALTCNT     0x301
 
+/** @name Internal memory timing (outside the ordinary I/O array) */
+#define REG_MEMCNT_LO   0x800
+#define REG_MEMCNT_HI   0x802
+
 /** @name IRQ Bit Definitions */
 enum CupidIRQ {
     IRQ_VBLANK  = (1 << 0),
