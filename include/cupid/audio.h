@@ -7,8 +7,9 @@
  *   - PSG engine: ch1 (square+sweep), ch2 (square),
  *     ch3 (wave), ch4 (noise), mixed via NR50/NR51
  *   - timingFactor = 4 converts internal PSG periods to CPU clocks
- *   - Two Direct Sound FIFO channels (A, B): 8x uint32_t ring buffers
- *     that feed int8_t samples one byte at a time
+ *   - Two Direct Sound FIFO channels (A, B): seven queued 32-bit words
+ *     and separate four-byte stages feed signed samples one byte at a time
+ *   - FIFO A requests DMA1; FIFO B requests DMA2, independently of destination
  *   - Mixer captures run at sampleInterval (default 512) CPU cycles
  *   - FIFO bytes latch on timer overflow and are held until the next overflow
  *   - Each output frame retains its elapsed clocks for host resampling
@@ -25,7 +26,7 @@ struct CupidGBA;
 struct CupidDMA;
 
 /** @name Constants */
-#define GBA_AUDIO_FIFO_SIZE      8       /**< 8 x uint32_t = 32 bytes per FIFO */
+#define GBA_AUDIO_FIFO_SIZE      7       /**< Seven queued words plus the separate four-byte stage */
 #define GBA_AUDIO_SAMPLES        8192    /**< SDL output ring buffer size (stereo frames) */
 #define GBA_AUDIO_SAMPLE_RATE    32768   /**< Default output rate at resolution 0 */
 #define GBA_AUDIO_VOLUME_MAX     0x100   /**< Master volume 1.0 in fixed point */
@@ -69,11 +70,11 @@ struct CupidAudioSquareControl {
 /** Frequency sweep — ch1 only */
 struct CupidAudioSweep {
     int shift;
-    int time;             /**< Sweep period */
-    int step;
+    int time;             /**< Programmed pace, with zero stored as eight */
+    int step;             /**< Remaining 128 Hz edges before divider reload */
     bool direction;       /**< False = increase, true = decrease */
-    bool enable;
-    bool occurred;        /**< Negate has been used */
+    bool enable;          /**< Latched on trigger from nonzero pace or shift */
+    bool occurred;        /**< Subtract calculation since the last trigger */
     int realFrequency;    /**< Shadow frequency */
 };
 
@@ -82,7 +83,8 @@ struct CupidAudioSquareChannel {
     struct CupidAudioSweep sweep;
     struct CupidAudioEnvelope envelope;
     struct CupidAudioSquareControl control;
-    uint64_t lastUpdate;  /**< Cycles since power-on at last run */
+    uint64_t lastUpdate;  /**< Clock of the last duty-step timer reload */
+    int period;           /**< Latched clocks per step until the next reload */
     uint8_t index;        /**< Duty cycle position (0-7) */
     int8_t sample;        /**< Current output sample (0..15) */
 };
@@ -102,6 +104,7 @@ struct CupidAudioWaveChannel {
 
     int window;           /**< Current wave RAM position */
     bool readable;        /**< Wave RAM accessible while playing */
+    uint8_t rawSample;    /**< Held nibble before volume scaling */
     union {
         uint32_t wavedata32[8]; /**< 8 x 32-bit = 64 nybble samples */
         uint8_t  wavedata8[32]; /**< Byte-addressable view */
@@ -120,9 +123,9 @@ struct CupidAudioNoiseChannel {
     int length;
 
     uint32_t lfsr;
-    int nSamples;         /**< Accumulated samples for coalescence */
-    int samples;          /**< Accumulated positive samples x volume */
     uint64_t lastEvent;   /**< Cycles since power-on at last noise step */
+    uint64_t lastUpdate;  /**< Clock through which the divider was observed */
+    int remaining;        /**< Enabled clocks remaining before the next step */
 
     int8_t sample;
 };
@@ -158,9 +161,9 @@ struct CupidAudioFIFO {
     uint32_t fifo[GBA_AUDIO_FIFO_SIZE];
     int fifoWrite;
     int fifoRead;
+    int fifoCount;                  /**< Queued words; equal pointers can also mean a full queue */
     uint32_t internalSample;
     int internalRemaining;
-    int dmaSource;
     int8_t latchedSample;            /**< Most recent timer-selected byte */
 };
 
@@ -227,8 +230,6 @@ uint16_t cupid_audio_read_register(struct CupidAudio* audio, uint32_t addr);
 
 void cupid_audio_fifo_write(struct CupidAudioFIFO* fifo, uint32_t value);
 void cupid_audio_fifo_reset(struct CupidAudioFIFO* fifo);
-void cupid_audio_schedule_fifo_dma(struct CupidAudio* audio, int dmaNumber,
-                                   struct CupidDMA* dma);
 
 void cupid_audio_sample(struct CupidAudio* audio, uint64_t timestamp);
 

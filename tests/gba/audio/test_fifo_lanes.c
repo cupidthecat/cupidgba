@@ -22,7 +22,7 @@ static uint32_t port(unsigned id) {
     return GBA_BASE_IO + (id ? REG_FIFO_B_LO : REG_FIFO_A_LO);
 }
 static unsigned count(const struct CupidAudioFIFO* f) {
-    return (unsigned)(f->fifoWrite - f->fifoRead + GBA_AUDIO_FIFO_SIZE) % GBA_AUDIO_FIFO_SIZE;
+    return (unsigned)f->fifoCount;
 }
 static void advance(struct CupidGBA* g, unsigned clocks) {
     uint64_t before = cupid_timing_global_time(&g->timing);

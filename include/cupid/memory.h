@@ -141,7 +141,7 @@ struct CupidDMA {
     int32_t  nextCount;      /**< Transfer units remaining in the latched burst */
     uint32_t latch;          /**< Open-bus: last value transferred */
 
-    int32_t  sourceOffset;   /**< Bytes per step (±width, forced +width for ROM) */
+    int32_t  sourceOffset;   /**< Bytes per DMA pointer step; ROM has a separate counter */
     int32_t  destOffset;     /**< Bytes per step */
 
     /** Decoded control fields (written by cupid_dma_write_cnt) */
@@ -157,6 +157,8 @@ struct CupidDMA {
     bool     transferWord;
     bool     externalSeen;
     uint32_t accessAddress;  /**< Address sampled by the current bus phase */
+    unsigned displayBeat;   /**< Low/high half of a 32-bit display-memory transfer */
+    uint16_t displayLow;
     unsigned gpioHalfCycles; /**< Second halfword strobe of a cartridge port word */
     uint16_t gpioReadLow;
 };
@@ -316,11 +318,16 @@ struct CupidMemory {
     char waitstatesNonseq32[256];
     char waitstatesSeq32[256];
 
+    uint16_t ewramWaitControl;  /**< High control halfword, with bits 0-7 unused */
+
     int      activeRegion;       /**< Current fetch region (-1 = none) */
     uint32_t biosPrefetch;       /**< BIOS read protection latch */
     bool     biosLoaded;
 
     /** Prefetch buffer state */
+    /* The display bridge may finish two beats before a CPU word is ready. */
+    uint32_t displayAddress;
+    bool displayBeatReady, displayFinal;
     bool     prefetch;           /**< WAITCNT bit 14: prefetch enable */
     uint32_t lastPrefetchedPc;   /**< Last PC that triggered a prefetch */
 
@@ -344,6 +351,7 @@ void     cupid_memory_store32(struct CupidARM* cpu, uint32_t addr, int32_t val, 
 void     cupid_memory_store16(struct CupidARM* cpu, uint32_t addr, int16_t val, int* cyc);
 void     cupid_memory_store8(struct CupidARM* cpu, uint32_t addr, int8_t val, int* cyc);
 void     cupid_memory_set_active_region(struct CupidARM* cpu, uint32_t addr);
+void     cupid_memory_refresh_vram_fetch(struct CupidARM* cpu, uint32_t addr);
 bool     cupid_memory_is_eeprom_address(const struct CupidMemory* memory, uint32_t address);
 
 /** Block transfer (LDM/STM) */
@@ -374,6 +382,7 @@ void cupid_bus_fetch(struct CupidARM* cpu, uint32_t address, unsigned width, boo
 void cupid_bus_finish(struct CupidARM* cpu);
 void cupid_bus_wait(struct CupidARM* cpu);
 void cupid_bus_advance(struct CupidARM* cpu, unsigned cycles, bool occupied);
+void cupid_bus_display_beat(struct CupidARM* cpu, uint32_t address, bool final);
 /* Split board strobes may belong to one CPU request. Begin with its complete
  * duration, then advance each part without adding another CPU-ready edge. */
 void cupid_bus_begin_transfer(struct CupidARM* cpu, unsigned cycles, bool occupied);

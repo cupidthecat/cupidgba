@@ -187,14 +187,18 @@ static void image_is(const uint32_t* pixels, uint16_t color) {
 static void completed_images_survive_drawing_stop_late_dispatch_and_reset(void) {
     const uint64_t epochs[] = {0, UINT32_MAX - UINT64_C(512)};
     for (unsigned epoch = 0; epoch < sizeof(epochs) / sizeof(*epochs); ++epoch) {
-        struct CupidGBA* gba = machine(epochs[epoch], 0);
+        struct CupidGBA* gba = machine(epochs[epoch], 225);
         struct FrameCapture* frame = calloc(1, sizeof(*frame)); CHECK(frame);
         frame->gba = gba;
-        frame->nextClock = epochs[epoch] + VIDEO_VDRAW_LINES * VIDEO_HORIZONTAL_LENGTH;
-        cupid_video_set_frame_callback(&gba->video, capture_image, frame);
-        gba->video.frameCounter = UINT32_MAX;
         cupid_io_write(gba, REG_DISPCNT, 0x0403);
         for (unsigned i = 0; i < GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT; ++i) gba->video.vram[i] = 0x001F;
+        /* Settle all three display latches during VBlank before asserting a
+         * uniform completed image. No visible line or frame handoff is skipped. */
+        tick(gba, 3 * VIDEO_HORIZONTAL_LENGTH);
+        CHECK(gba->video.vcount == 0);
+        frame->nextClock = cupid_timing_global_time(&gba->timing) + VIDEO_VDRAW_LINES * VIDEO_HORIZONTAL_LENGTH;
+        cupid_video_set_frame_callback(&gba->video, capture_image, frame);
+        gba->video.frameCounter = UINT32_MAX;
         tick(gba, VIDEO_TOTAL_LENGTH);
         CHECK(frame->calls == 1 && gba->video.frameCounter == 0);
         image_is(frame->pixels, 0x001F);
@@ -224,10 +228,13 @@ static void completed_images_survive_drawing_stop_late_dispatch_and_reset(void) 
         gba->timing.globalCycles = epochs[epoch];
         gba->timing.masterCycles = (uint32_t)epochs[epoch];
         cupid_video_reset(&gba->video);
-        gba->memory.io[REG_VCOUNT >> 1] = 0;
-        frame->nextClock = epochs[epoch] + VIDEO_VDRAW_LINES * VIDEO_HORIZONTAL_LENGTH;
+        gba->video.vcount = 225;
+        gba->memory.io[REG_VCOUNT >> 1] = 225;
+        frame->nextClock = epochs[epoch] + (3 + VIDEO_VDRAW_LINES) * VIDEO_HORIZONTAL_LENGTH;
         cupid_io_write(gba, REG_DISPCNT, 0x0403);
         for (unsigned i = 0; i < GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT; ++i) gba->video.vram[i] = 0x001F;
+        tick(gba, 3 * VIDEO_HORIZONTAL_LENGTH);
+        CHECK(gba->video.vcount == 0 && frame->calls == 4);
         tick(gba, VIDEO_TOTAL_LENGTH);
         CHECK(frame->calls == 5);
         image_is(frame->pixels, 0x001F);

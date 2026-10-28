@@ -5,7 +5,8 @@
  * The IO array (gba->memory.io) is a flat uint16_t[0x400/2] addressed as
  * io[byte_offset >> 1]. Subsystem structs shadow the registers they care
  * about; writes dispatch through the switch into the appropriate subsystem,
- * then the (possibly modified) value is stored into the IO array.
+ * then the (possibly modified) value is stored into the IO array. The internal
+ * memory timing port has a separate high-halfword latch outside this array.
  */
 
 #include "cupid/gba.h"
@@ -25,6 +26,12 @@ static void fifo_store(struct CupidGBA* gba, uint32_t addr, uint32_t value, unsi
     uint32_t next = fifo->fifo[fifo->fifoWrite];
     gba->memory.io[base >> 1] = (uint16_t)next;
     gba->memory.io[(base >> 1) + 1] = (uint16_t)(next >> 16);
+}
+
+/* The EWRAM timing halfword is the exceptional I/O decode repeated in
+ * every 64 KiB bank. The ordinary 1 KiB register array has no such aliases. */
+static bool ewram_wait_port(uint32_t address) {
+    return address < 0x01000000 && (address & 0xFFFEu) == REG_MEMCNT_HI;
 }
 
 static int32_t affine_high(int32_t previous, uint16_t high) {
@@ -77,8 +84,14 @@ void cupid_io_init(struct CupidGBA* gba) {
  * storage for read-only or self-managed registers.
  */
 void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
+    if (ewram_wait_port(addr)) {
+        cupid_memory_update_ewram_waitstates(gba, value);
+        return;
+    }
     if (addr >= GBA_SIZE_IO) return;
     addr &= ~1u;
+
+    if (addr <= REG_BLDY) cupid_video_sync(&gba->video);
 
     switch (addr) {
     /** VIDEO 0x000-0x056. */
@@ -87,7 +100,7 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
         break;
 
     case REG_GREENSWAP:
-        /** Rarely used; just store. */
+        value &= 1;
         break;
 
     case REG_DISPSTAT:
@@ -127,18 +140,22 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
     case REG_BG2X_LO:
         gba->video.bg[2].refx = (gba->video.bg[2].refx & 0xFFFF0000) | value;
         gba->video.bg[2].sx = gba->video.bg[2].refx;
+        gba->video.pipeline.affine[0].writtenX = true;
         break;
     case REG_BG2X_HI:
         gba->video.bg[2].refx = affine_high(gba->video.bg[2].refx, value);
         gba->video.bg[2].sx = gba->video.bg[2].refx;
+        gba->video.pipeline.affine[0].writtenX = true;
         break;
     case REG_BG2Y_LO:
         gba->video.bg[2].refy = (gba->video.bg[2].refy & 0xFFFF0000) | value;
         gba->video.bg[2].sy = gba->video.bg[2].refy;
+        gba->video.pipeline.affine[0].writtenY = true;
         break;
     case REG_BG2Y_HI:
         gba->video.bg[2].refy = affine_high(gba->video.bg[2].refy, value);
         gba->video.bg[2].sy = gba->video.bg[2].refy;
+        gba->video.pipeline.affine[0].writtenY = true;
         break;
 
     /** BG3 affine. */
@@ -149,18 +166,22 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
     case REG_BG3X_LO:
         gba->video.bg[3].refx = (gba->video.bg[3].refx & 0xFFFF0000) | value;
         gba->video.bg[3].sx = gba->video.bg[3].refx;
+        gba->video.pipeline.affine[1].writtenX = true;
         break;
     case REG_BG3X_HI:
         gba->video.bg[3].refx = affine_high(gba->video.bg[3].refx, value);
         gba->video.bg[3].sx = gba->video.bg[3].refx;
+        gba->video.pipeline.affine[1].writtenX = true;
         break;
     case REG_BG3Y_LO:
         gba->video.bg[3].refy = (gba->video.bg[3].refy & 0xFFFF0000) | value;
         gba->video.bg[3].sy = gba->video.bg[3].refy;
+        gba->video.pipeline.affine[1].writtenY = true;
         break;
     case REG_BG3Y_HI:
         gba->video.bg[3].refy = affine_high(gba->video.bg[3].refy, value);
         gba->video.bg[3].sy = gba->video.bg[3].refy;
+        gba->video.pipeline.affine[1].writtenY = true;
         break;
 
     /** Windows. */
@@ -185,6 +206,7 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
 
     /** Mosaic (write-only). */
     case REG_MOSAIC:
+        gba->video.mosaic = value;
         break;
 
     /** Blending. */
@@ -412,6 +434,10 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
  * HALTCNT at 0x301 is byte-only.
  */
 void cupid_io_write32(struct CupidGBA* gba, uint32_t addr, uint32_t value) {
+    if (addr < 0x01000000 && (addr & 0xFFFCu) == REG_MEMCNT_LO) {
+        cupid_io_write(gba, (addr & ~3u) + 2, (uint16_t)(value >> 16));
+        return;
+    }
     if (addr >= GBA_SIZE_IO) return;
     addr &= ~3u;
     if (addr == REG_FIFO_A_LO || addr == REG_FIFO_B_LO) {
@@ -423,6 +449,10 @@ void cupid_io_write32(struct CupidGBA* gba, uint32_t addr, uint32_t value) {
 }
 
 void cupid_io_write8(struct CupidGBA* gba, uint32_t addr, uint8_t value) {
+    if (ewram_wait_port(addr)) {
+        if (addr & 1) cupid_memory_update_ewram_waitstates(gba, (uint16_t)value << 8);
+        return;
+    }
     if (addr >= GBA_SIZE_IO) return;
     if (addr >= REG_FIFO_A_LO && addr <= REG_FIFO_B_HI + 1) {
         fifo_store(gba, addr, value, 1);
@@ -487,6 +517,10 @@ void cupid_io_write8(struct CupidGBA* gba, uint32_t addr, uint8_t value) {
  * @brief Read a 16-bit IO register.
  */
 uint16_t cupid_io_read(struct CupidGBA* gba, uint32_t addr) {
+    /* Normal RAM mapping has low control value 0020h. Disable/remapping
+     * writes retain their existing unsupported behavior. */
+    if (addr < 0x01000000 && (addr & 0xFFFCu) == REG_MEMCNT_LO)
+        return (addr & 2) ? gba->memory.ewramWaitControl : 0x0020;
     if (addr >= GBA_SIZE_IO) {
         return (uint16_t)(cupid_memory_open_bus(&gba->cpu) >> ((addr & 2) * 8));
     }

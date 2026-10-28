@@ -33,11 +33,19 @@ static void _frameCallback(struct CupidTiming* timing, void* context,
                             uint32_t cyclesLate);
 
 static void _updateSquareSample(struct CupidAudioSquareChannel* ch);
+static void _updateWaveSample(struct CupidAudioWaveChannel* ch);
+static void _runSquare(struct CupidAudioSquareChannel* ch, uint64_t timestamp,
+                       int timingFactor);
+static int _noisePeriod(const struct CupidAudioNoiseChannel* ch, int timingFactor);
+static void _runNoise(struct CupidAudioNoiseChannel* ch, uint64_t timestamp,
+                      int timingFactor);
+static void _updateNoiseSample(struct CupidAudioNoiseChannel* ch);
 static void _resetEnvelope(struct CupidAudioEnvelope* envelope);
 static void _updateEnvelopeDead(struct CupidAudioEnvelope* envelope);
 static bool _writeEnvelope(struct CupidAudioEnvelope* envelope, uint8_t value);
 static void _updateEnvelope(struct CupidAudioEnvelope* envelope);
-static bool _updateSweep(struct CupidAudioSquareChannel* ch, bool initial);
+static int _sweepTarget(struct CupidAudioSquareChannel* ch);
+static bool _clockSweep(struct CupidAudioSquareChannel* ch);
 static void _resetSweep(struct CupidAudioSweep* sweep);
 
 static int16_t _applyBias(struct CupidAudio* audio, int32_t sample);
@@ -167,6 +175,8 @@ void cupid_audio_reset(struct CupidAudio* audio) {
     memset(&audio->psg.ch2, 0, sizeof(audio->psg.ch2));
     memset(&audio->psg.ch3, 0, sizeof(audio->psg.ch3));
     memset(&audio->psg.ch4, 0, sizeof(audio->psg.ch4));
+    /* The zero sweep pace uses an eight-edge divider even before its first write. */
+    audio->psg.ch1.sweep.time = 8;
     audio->psg.ch4.lfsr = 0;
 
     audio->psg.volumeRight = 0;
@@ -187,18 +197,18 @@ void cupid_audio_reset(struct CupidAudio* audio) {
     cupid_timing_schedule(timing, &audio->sampleEvent, 512);
 
     /** Reset FIFO A. */
-    audio->chA.dmaSource = 1;
     audio->chA.fifoWrite = 0;
     audio->chA.fifoRead  = 0;
+    audio->chA.fifoCount = 0;
     audio->chA.internalSample = 0;
     audio->chA.internalRemaining = 0;
     audio->chA.latchedSample = 0;
     memset(audio->chA.fifo, 0, sizeof(audio->chA.fifo));
 
     /** Reset FIFO B. */
-    audio->chB.dmaSource = 2;
     audio->chB.fifoWrite = 0;
     audio->chB.fifoRead  = 0;
+    audio->chB.fifoCount = 0;
     audio->chB.internalSample = 0;
     audio->chB.internalRemaining = 0;
     audio->chB.latchedSample = 0;
@@ -275,16 +285,8 @@ void cupid_audio_psg_run(struct CupidAudioPSG* psg, uint64_t timestamp,
     /** Channel 1 (Square + Sweep). */
     if (channels & 0x1) {
         struct CupidAudioSquareChannel* ch = &psg->ch1;
-        if (psg->playingCh1 && ch->envelope.dead != 2) {
-            int32_t period = 4 * (2048 - ch->control.frequency) * timingFactor;
-            if (period > 0) {
-                uint64_t diff = timestamp >= ch->lastUpdate ? timestamp - ch->lastUpdate : 0;
-                if (diff >= (uint64_t)period) {
-                    uint64_t steps = diff / period;
-                    ch->index = (ch->index + (uint8_t)steps) & 7;
-                    ch->lastUpdate += steps * period;
-                }
-            }
+        if (psg->playingCh1) {
+            _runSquare(ch, timestamp, timingFactor);
             _updateSquareSample(ch);
         }
     }
@@ -292,16 +294,8 @@ void cupid_audio_psg_run(struct CupidAudioPSG* psg, uint64_t timestamp,
     /** Channel 2 (Square). */
     if (channels & 0x2) {
         struct CupidAudioSquareChannel* ch = &psg->ch2;
-        if (psg->playingCh2 && ch->envelope.dead != 2) {
-            int32_t period = 4 * (2048 - ch->control.frequency) * timingFactor;
-            if (period > 0) {
-                uint64_t diff = timestamp >= ch->lastUpdate ? timestamp - ch->lastUpdate : 0;
-                if (diff >= (uint64_t)period) {
-                    uint64_t steps = diff / period;
-                    ch->index = (ch->index + (uint8_t)steps) & 7;
-                    ch->lastUpdate += steps * period;
-                }
-            }
+        if (psg->playingCh2) {
+            _runSquare(ch, timestamp, timingFactor);
             _updateSquareSample(ch);
         }
     }
@@ -334,6 +328,9 @@ void cupid_audio_psg_run(struct CupidAudioPSG* psg, uint64_t timestamp,
 
                     int8_t sample = 0;
                     for (uint64_t s = 0; s < steps; s++) {
+                        /* The selected front bank feeds the DAC in both modes.
+                         * A 64-sample shift rotates both banks past this tap. */
+                        sample = (int8_t)(ch3->wavedata8[ch3->bank ? 16 : 0] >> 4);
                         /**
                          * Rotate nibbles through the wavedata array.
                          * The first byte's high nibble is read first. Its
@@ -350,23 +347,10 @@ void cupid_audio_psg_run(struct CupidAudioPSG* psg, uint64_t timestamp,
                                 (bitsCarry << 20);
                             bitsCarry = old & 0xF0;
                         }
-                        sample = (int8_t)(bitsCarry >> 4);
                     }
 
-                    /** Apply volume. */
-                    int vol = ch3->volume;
-                    if (vol == 0) {
-                        sample >>= 4;  /* mute */
-                    } else if (vol > 3) {
-                        /** GBA 75% mode: sample * 3 / 4. */
-                        sample = (int8_t)(sample * 3);
-                        sample >>= 2;
-                    } else {
-                        /** vol 1 = 100% (shift 0), vol 2 = 50% (shift 1), vol 3 = 25% (shift 2). */
-                        static const int volShift[4] = { 4, 0, 1, 2 };
-                        sample >>= volShift[vol];
-                    }
-                    ch3->sample = sample;
+                    ch3->rawSample = (uint8_t)sample;
+                    _updateWaveSample(ch3);
                     ch3->nextUpdate = timestamp + cycles - (diff % cycles);
                     ch3->readable = true;
                 }
@@ -378,33 +362,7 @@ void cupid_audio_psg_run(struct CupidAudioPSG* psg, uint64_t timestamp,
     if (channels & 0x8) {
         struct CupidAudioNoiseChannel* ch4 = &psg->ch4;
         if (psg->playingCh4) {
-            int ratio = ch4->ratio;
-            int freq  = ch4->frequency;
-            int32_t noiseCycles = ((ratio ? 2 * ratio : 1) << freq) *
-                                   8 * timingFactor;
-            if (noiseCycles > 0) {
-                uint64_t diff = timestamp >= ch4->lastEvent ? timestamp - ch4->lastEvent : 0;
-                if (diff >= (uint64_t)noiseCycles) {
-                    uint64_t steps = diff / noiseCycles;
-                    ch4->lastEvent += steps * noiseCycles;
-
-                    uint32_t lfsr = ch4->lfsr;
-                    uint32_t coeff = ch4->power ? 0x4040 : 0x4000;
-                    int lsb = 0;
-
-                    for (uint64_t i = 0; i < steps; i++) {
-                        lsb = ((int)lfsr ^ ((int)lfsr >> 1) ^ 1) & 1;
-                        lfsr >>= 1;
-                        if (lsb) {
-                            lfsr |= coeff;
-                        } else {
-                            lfsr &= ~coeff;
-                        }
-                    }
-                    ch4->lfsr = lfsr & 0x7FFF;
-                    ch4->sample = (int8_t)(lsb * ch4->envelope.currentVolume);
-                }
-            }
+            _runNoise(ch4, timestamp, timingFactor);
         }
     }
 }
@@ -514,7 +472,7 @@ void cupid_audio_psg_frame_step(struct CupidAudioPSG* psg) {
                 --psg->ch1.sweep.step;
             }
             if (psg->ch1.sweep.step == 0) {
-                if (!_updateSweep(&psg->ch1, false)) {
+                if (!_clockSweep(&psg->ch1)) {
                     psg->playingCh1 = false;
                 }
             }
@@ -545,71 +503,55 @@ void cupid_audio_psg_frame_step(struct CupidAudioPSG* psg) {
         }
         /** Ch4 envelope. */
         if (psg->playingCh4 && psg->ch4.envelope.dead == 0) {
-            int oldSample = psg->ch4.sample;
             if (psg->ch4.envelope.nextStep > 0) {
                 --psg->ch4.envelope.nextStep;
             }
             if (psg->ch4.envelope.nextStep == 0) {
                 _updateEnvelope(&psg->ch4.envelope);
             }
-            psg->ch4.sample = (int8_t)((oldSample > 0) *
-                               psg->ch4.envelope.currentVolume);
+            _updateNoiseSample(&psg->ch4);
         }
     }
 }
 
 /** @section audio_fifo_ops FIFO operations */
+/* Queue reset is independent of the word currently shifting into the mixer.
+ * Clear old storage lanes as well as occupancy so a later narrow write cannot
+ * recover samples discarded by reset or overflow. */
+static void clear_fifo_queue(struct CupidAudioFIFO* fifo) {
+    fifo->fifoWrite = fifo->fifoRead = fifo->fifoCount = 0;
+    memset(fifo->fifo, 0, sizeof(fifo->fifo));
+}
+
 /**
- * @brief Append one 32-bit word to a Direct Sound FIFO ring buffer.
+ * @brief Enqueue one word, or discard queued storage on an overflowing write.
  *
  * @param fifo  FIFO state to update.
  * @param value 32-bit packed sample word to enqueue.
  */
 void cupid_audio_fifo_write(struct CupidAudioFIFO* fifo, uint32_t value) {
+    /* The eighth queued write resets storage and is itself discarded. The
+     * independent byte stage and held output keep their current phase. */
+    if (fifo->fifoCount == GBA_AUDIO_FIFO_SIZE) {
+        clear_fifo_queue(fifo);
+        return;
+    }
     fifo->fifo[fifo->fifoWrite] = value;
     fifo->fifoWrite = (fifo->fifoWrite + 1) % GBA_AUDIO_FIFO_SIZE;
+    ++fifo->fifoCount;
 }
 
 /**
  * @brief Reset a Direct Sound FIFO channel.
  *
- * Clears FIFO indices and the internal staged sample byte state.
+ * Clears queued words, FIFO indices and the internal staged sample byte state.
  *
  * @param fifo FIFO state to reset.
  */
 void cupid_audio_fifo_reset(struct CupidAudioFIFO* fifo) {
-    fifo->fifoWrite = 0;
-    fifo->fifoRead  = 0;
+    clear_fifo_queue(fifo);
     fifo->internalSample = 0;
     fifo->internalRemaining = 0;
-}
-
-/**
- * @brief Configure a DMA channel for Direct Sound FIFO service.
- *
- * A FIFO-port destination selects its request association. Other destinations
- * retain the existing association, including DMA1/FIFO A and DMA2/FIFO B at reset.
- * The DMA engine forces FIFO burst width, length and destination stepping.
- *
- * @param audio     Audio subsystem state.
- * @param dmaNumber DMA channel number.
- * @param dma       DMA state to configure.
- */
-void cupid_audio_schedule_fifo_dma(struct CupidAudio* audio, int dmaNumber,
-                                   struct CupidDMA* dma)
-{
-    /* The association selects a request source; it does not restrict where
-     * a later accepted transfer may write. */
-    if (dma->nextDest != GBA_BASE_IO + REG_FIFO_A_LO &&
-        dma->nextDest != GBA_BASE_IO + REG_FIFO_B_LO) return;
-    /** Record which DMA feeds which FIFO. */
-    if (dma->nextDest == GBA_BASE_IO + REG_FIFO_A_LO) {
-        /** FIFO_A. */
-        audio->chA.dmaSource = dmaNumber;
-    } else if (dma->nextDest == GBA_BASE_IO + REG_FIFO_B_LO) {
-        /** FIFO_B. */
-        audio->chB.dmaSource = dmaNumber;
-    }
 }
 
 /**
@@ -632,31 +574,20 @@ void cupid_audio_sample_fifo(struct CupidAudio* audio, int fifoId, uint64_t time
     }
 
     /** Compute FIFO fill level. */
-    int fifoSize;
-    if (channel->fifoWrite >= channel->fifoRead) {
-        fifoSize = channel->fifoWrite - channel->fifoRead;
-    } else {
-        fifoSize = GBA_AUDIO_FIFO_SIZE - channel->fifoRead + channel->fifoWrite;
-    }
+    int fifoSize = channel->fifoCount;
 
     /** Sample the queued words before loading the independent byte stage.
      * Loading a stage from four queued words must not request a burst yet. */
-    if ((GBA_AUDIO_FIFO_SIZE - fifoSize) > 4 && channel->dmaSource > 0) {
+    if (fifoSize <= 3) {
         struct CupidGBA* gba = audio->gba;
-        int dmaCh = channel->dmaSource;
-        if (dmaCh >= 1 && dmaCh <= 2) {
-            struct CupidDMA* dma = &gba->memory.dma[dmaCh];
-            if (dma->enable && dma->timing == DMA_TIMING_CUSTOM) {
-                _audioDebugLog(audio, "fifo%d dma refill: dma=%d fifoSize=%d", fifoId, dmaCh, fifoSize);
-                /* A FIFO-port destination selects that port's request line.
-                 * Other destinations retain the configured association and
-                 * still receive the four-word, fixed-destination burst. */
-                uint32_t portA = GBA_BASE_IO + REG_FIFO_A_LO;
-                uint32_t portB = GBA_BASE_IO + REG_FIFO_B_LO;
-                bool port = dma->nextDest == portA || dma->nextDest == portB;
-                if (!port || dma->nextDest == (fifoId ? portB : portA))
-                    cupid_dma_request_fifo(gba, dmaCh, timestamp);
-            }
+        /* The request wires are fixed: FIFO A drives DMA1 and FIFO B drives
+         * DMA2. A destination write never reroutes either request line, even
+         * when the accepted burst writes the other FIFO or ordinary memory. */
+        int dmaCh = fifoId ? 2 : 1;
+        struct CupidDMA* dma = &gba->memory.dma[dmaCh];
+        if (dma->enable && dma->timing == DMA_TIMING_CUSTOM) {
+            _audioDebugLog(audio, "fifo%d dma refill: dma=%d fifoSize=%d", fifoId, dmaCh, fifoSize);
+            cupid_dma_request_fifo(gba, dmaCh, timestamp);
         }
     }
 
@@ -666,6 +597,7 @@ void cupid_audio_sample_fifo(struct CupidAudio* audio, int fifoId, uint64_t time
             channel->internalSample = channel->fifo[channel->fifoRead];
             channel->internalRemaining = 4;
             channel->fifoRead = (channel->fifoRead + 1) % GBA_AUDIO_FIFO_SIZE;
+            --channel->fifoCount;
             --fifoSize;
             _audioDebugLog(audio, "fifo%d pop word=0x%08X remainingWords=%d", fifoId,
                 channel->internalSample, fifoSize);
@@ -861,6 +793,97 @@ static void _frameCallback(struct CupidTiming* timing, void* context,
 
 /** @section audio_psg_helpers PSG helpers */
 
+/** @brief Scale the held wave nibble without reading or rotating wave RAM. */
+static void _updateWaveSample(struct CupidAudioWaveChannel* ch) {
+    int8_t sample = (int8_t)ch->rawSample;
+    /** Apply volume. */
+    int vol = ch->volume;
+    if (vol == 0) {
+        sample >>= 4;  /* mute */
+    } else if (vol > 3) {
+        /** GBA 75% mode: sample * 3 / 4. */
+        sample = (int8_t)(sample * 3);
+        sample >>= 2;
+    } else {
+        /** vol 1 = 100% (shift 0), vol 2 = 50% (shift 1), vol 3 = 25% (shift 2). */
+        static const int volShift[4] = { 4, 0, 1, 2 };
+        sample >>= volShift[vol];
+    }
+    ch->sample = sample;
+}
+
+/** @brief Compute the noise timer reload in GBA clocks. */
+static int _noisePeriod(const struct CupidAudioNoiseChannel* ch, int timingFactor) {
+    return ((ch->ratio ? 2 * ch->ratio : 1) << ch->frequency) * 8 * timingFactor;
+}
+
+/** @brief Scale the held polynomial output bit by the current envelope. */
+static void _updateNoiseSample(struct CupidAudioNoiseChannel* ch) {
+    ch->sample = (int8_t)((ch->lfsr & 1) * ch->envelope.currentVolume);
+}
+
+/**
+ * @brief Advance the noise divider and polynomial through the requested clock.
+ *
+ * Register writes retain the current countdown and supply its next reload.
+ * Shifts 14 and 15 pause this countdown; elapsed paused time is not replayed
+ * when a clocked shift is selected. The output comes from bit zero after each
+ * shift, independently of the feedback bit inserted into the high positions.
+ */
+static void _runNoise(struct CupidAudioNoiseChannel* ch, uint64_t timestamp,
+                      int timingFactor) {
+    if (timestamp < ch->lastUpdate) return;
+    int period = _noisePeriod(ch, timingFactor);
+    if (period <= 0) return;
+    if (ch->remaining <= 0) ch->remaining = period;
+    uint64_t elapsed = timestamp - ch->lastUpdate;
+    ch->lastUpdate = timestamp;
+    if (ch->frequency >= 14) return;
+    if (elapsed < (unsigned)ch->remaining) {
+        ch->remaining -= (int)elapsed;
+        return;
+    }
+
+    elapsed -= (unsigned)ch->remaining;
+    uint64_t steps = 1 + elapsed / (unsigned)period;
+    unsigned remainder = (unsigned)(elapsed % (unsigned)period);
+    ch->lastEvent = timestamp - remainder;
+    ch->remaining = period - (int)remainder;
+
+    uint32_t state = ch->lfsr;
+    uint32_t feedbackMask = ch->power ? 0x4040 : 0x4000;
+    for (uint64_t i = 0; i < steps; ++i) {
+        unsigned feedback = (state ^ (state >> 1) ^ 1) & 1;
+        state = (state >> 1) & ~feedbackMask;
+        if (feedback) state |= feedbackMask;
+    }
+    ch->lfsr = state & 0x7FFF;
+    _updateNoiseSample(ch);
+}
+
+/**
+ * @brief Advance a square channel's duty timer through the requested clock.
+ *
+ * Frequency writes and sweep updates change the next reload value. The current
+ * period completes first. An active zero-volume channel retains this clock.
+ */
+static void _runSquare(struct CupidAudioSquareChannel* ch, uint64_t timestamp,
+                       int timingFactor) {
+    int reloadPeriod = 4 * (2048 - ch->control.frequency) * timingFactor;
+    if (reloadPeriod <= 0) return;
+    if (!ch->period) ch->period = reloadPeriod;
+
+    uint64_t elapsed = timestamp >= ch->lastUpdate ? timestamp - ch->lastUpdate : 0;
+    if (elapsed < (uint64_t)ch->period) return;
+
+    ch->lastUpdate += (unsigned)ch->period;
+    /* After the pending edge, every further reload uses the current register. */
+    uint64_t steps = (timestamp - ch->lastUpdate) / (unsigned)reloadPeriod;
+    ch->lastUpdate += steps * (unsigned)reloadPeriod;
+    ch->index = (uint8_t)((ch->index + 1 + (steps & 7)) & 7);
+    ch->period = reloadPeriod;
+}
+
 /**
  * @brief Recompute the current square-wave sample from duty and envelope.
  *
@@ -943,46 +966,43 @@ static void _updateEnvelope(struct CupidAudioEnvelope* envelope) {
 }
 
 /**
- * @brief Apply one channel-1 frequency sweep calculation.
+ * @brief Calculate a sweep target without updating either frequency register.
  *
- * @param ch      Channel 1 square-wave state.
- * @param initial Whether this is the initial overflow-check pass.
- * @return @c true if the resulting frequency remains valid, @c false if the
- *         channel should be disabled.
+ * A subtract calculation records negate use until the next trigger. A register
+ * write or a divider expiry without a calculation does not clear that history.
+ *
+ * @param ch Channel 1 square-wave state.
+ * @return Calculated frequency, including values beyond the 11-bit range.
  */
-static bool _updateSweep(struct CupidAudioSquareChannel* ch, bool initial) {
+static int _sweepTarget(struct CupidAudioSquareChannel* ch) {
     struct CupidAudioSweep* sweep = &ch->sweep;
-
-    if (initial || sweep->time != 8) {
-        int frequency = sweep->realFrequency;
-        if (sweep->direction) {
-            /** Subtract. */
-            frequency -= frequency >> sweep->shift;
-            if (!initial && frequency >= 0) {
-                ch->control.frequency = frequency;
-                sweep->realFrequency = frequency;
-            }
-        } else {
-            /** Add. */
-            frequency += frequency >> sweep->shift;
-            if (frequency < 2048) {
-                if (!initial && sweep->shift > 0) {
-                    ch->control.frequency = frequency;
-                    sweep->realFrequency = frequency;
-                    /** Double-check: recursive call to test overflow. */
-                    if (!_updateSweep(ch, true)) {
-                        return false;
-                    }
-                }
-            }
-        }
-        if (frequency >= 2048) {
-            return false;
-        }
+    int delta = sweep->realFrequency >> sweep->shift;
+    if (sweep->direction) {
+        sweep->occurred = true;
+        return sweep->realFrequency - delta;
     }
+    return sweep->realFrequency + delta;
+}
 
-    sweep->occurred = true;
+/**
+ * @brief Reload an expired sweep divider and apply its optional calculation.
+ *
+ * A programmed pace of zero reloads as eight without changing the frequency or
+ * negate history. A zero shift still checks overflow but never writes back.
+ */
+static bool _clockSweep(struct CupidAudioSquareChannel* ch) {
+    struct CupidAudioSweep* sweep = &ch->sweep;
     sweep->step = sweep->time;
+    if (sweep->time == 8) return true;
+
+    int frequency = _sweepTarget(ch);
+    if (frequency >= 2048) return false;
+    if (sweep->shift) {
+        ch->control.frequency = frequency;
+        sweep->realFrequency = frequency;
+        /* The second target is checked without being written back. */
+        if (_sweepTarget(ch) >= 2048) return false;
+    }
     return true;
 }
 
@@ -1008,18 +1028,15 @@ static void _resetSweep(struct CupidAudioSweep* sweep) {
 static void _writeNR10(struct CupidAudioPSG* psg, uint8_t value) {
     struct CupidAudioSweep* sweep = &psg->ch1.sweep;
 
-    bool oldDirection = sweep->direction;
-
     sweep->shift     = value & 0x7;
     sweep->direction = (value >> 3) & 1;
     sweep->time      = (value >> 4) & 0x7;
     if (sweep->time == 0) sweep->time = 8;
 
     /** If negate was used and direction changed from subtract to add, disable. */
-    if (sweep->occurred && oldDirection && !sweep->direction) {
+    if (sweep->occurred && !sweep->direction) {
         psg->playingCh1 = false;
     }
-    sweep->occurred = false;
 }
 
 /**
@@ -1094,13 +1111,8 @@ static void _writeNR14(struct CupidAudioPSG* psg, uint8_t value,
         ch->sweep.realFrequency = ch->control.frequency;
         _resetSweep(&ch->sweep);
 
-        /** If shift nonzero, do initial sweep check. */
-        if (ch->sweep.shift) {
-            if (!_updateSweep(ch, true)) {
-                psg->playingCh1 = false;
-                return;
-            }
-        }
+        /* Overflow mutes this trigger while length and oscillator state reload. */
+        bool sweepValid = !dacOn || !ch->sweep.shift || _sweepTarget(ch) < 2048;
 
         /** Reload length if zero. */
         if (ch->control.length == 0) {
@@ -1111,13 +1123,10 @@ static void _writeNR14(struct CupidAudioPSG* psg, uint8_t value,
         }
 
         ch->lastUpdate = timestamp;
+        ch->period = 4 * (2048 - ch->control.frequency) * psg->timingFactor;
         _updateSquareSample(ch);
 
-        if (dacOn) {
-            psg->playingCh1 = true;
-        } else {
-            psg->playingCh1 = false;
-        }
+        psg->playingCh1 = dacOn && sweepValid;
     }
 }
 
@@ -1194,6 +1203,7 @@ static void _writeNR24(struct CupidAudioPSG* psg, uint8_t value,
         }
 
         ch->lastUpdate = timestamp;
+        ch->period = 4 * (2048 - ch->control.frequency) * psg->timingFactor;
         _updateSquareSample(ch);
 
         if (dacOn) {
@@ -1225,6 +1235,14 @@ static void _writeNR30(struct CupidAudioPSG* psg, uint8_t value) {
  */
 static void _writeNR31(struct CupidAudioPSG* psg, uint8_t value) {
     psg->ch3.length = 256 - value;
+}
+
+/** @brief Apply the GBA wave volume field to the held nibble immediately. */
+static void _writeNR32(struct CupidAudioPSG* psg, uint8_t value) {
+    psg->ch3.volume = (value >> 5) & 7;
+    if (psg->playingCh3) {
+        _updateWaveSample(&psg->ch3);
+    }
 }
 
 /**
@@ -1280,6 +1298,8 @@ static void _writeNR34(struct CupidAudioPSG* psg, uint8_t value,
 
         if (ch3->enable) {
             psg->playingCh3 = true;
+            /* A trigger retains the sample buffer and reloads its output level. */
+            _updateWaveSample(ch3);
         }
     }
 }
@@ -1328,6 +1348,7 @@ static void _writeNR43(struct CupidAudioPSG* psg, uint8_t value) {
 static void _writeNR44(struct CupidAudioPSG* psg, uint8_t value,
                        uint64_t timestamp)
 {
+    bool wasPlaying = psg->playingCh4;
     bool oldStop = psg->ch4.stop;
     psg->ch4.stop = (value >> 6) & 1;
 
@@ -1343,6 +1364,14 @@ static void _writeNR44(struct CupidAudioPSG* psg, uint8_t value,
         _resetEnvelope(&psg->ch4.envelope);
         bool dacOn = psg->ch4.envelope.initialVolume || psg->ch4.envelope.direction;
 
+        /* Reload the active held level before resetting the polynomial.
+         * A stopped channel must not expose its cached amplitude on restart.
+         * Capture playback before the simultaneous length-control update. */
+        if (wasPlaying && dacOn) {
+            _updateNoiseSample(&psg->ch4);
+        } else {
+            psg->ch4.sample = 0;
+        }
         psg->ch4.lfsr = 0;
 
         if (psg->ch4.length == 0) {
@@ -1353,10 +1382,10 @@ static void _writeNR44(struct CupidAudioPSG* psg, uint8_t value,
         }
 
         psg->ch4.lastEvent = timestamp;
+        psg->ch4.lastUpdate = timestamp;
+        psg->ch4.remaining = _noisePeriod(&psg->ch4, psg->timingFactor);
 
-        if (dacOn) {
-            psg->playingCh4 = true;
-        }
+        psg->playingCh4 = dacOn;
     }
 }
 
@@ -1411,6 +1440,7 @@ static void _writeNR52(struct CupidAudioPSG* psg, uint8_t value) {
         memset(&psg->ch2, 0, sizeof(psg->ch2));
         memset(&psg->ch3, 0, sizeof(psg->ch3));
         memset(&psg->ch4, 0, sizeof(psg->ch4));
+        psg->ch1.sweep.time = 8;
         memcpy(psg->ch3.wavedata8, wave, sizeof(wave));
 
         psg->volumeLeft = 0;
@@ -1488,7 +1518,7 @@ void cupid_audio_write_register(struct CupidAudio* audio, uint32_t addr,
     case REG_SOUND3CNT_H:
         _writeNR31(psg, (uint8_t)(val & 0xFF));
         /** GBA volume = bits 15:13 of the 16-bit reg = bits 7:5 of high byte. */
-        psg->ch3.volume = (val >> 13) & 0x7;
+        _writeNR32(psg, (uint8_t)(val >> 8));
         break;
 
     case REG_SOUND3CNT_X:
@@ -1531,12 +1561,10 @@ void cupid_audio_write_register(struct CupidAudio* audio, uint32_t addr,
         bool chBReset    = (val >> 15) & 1;
 
         if (chAReset) {
-            audio->chA.fifoWrite = 0;
-            audio->chA.fifoRead = 0;
+            clear_fifo_queue(&audio->chA);
         }
         if (chBReset) {
-            audio->chB.fifoWrite = 0;
-            audio->chB.fifoRead = 0;
+            clear_fifo_queue(&audio->chB);
         }
         _audioDebugLog(audio,
             "SOUNDCNT_H: psgVol=%d A(vol=%d L=%d R=%d T=%d rst=%d) B(vol=%d L=%d R=%d T=%d rst=%d)",
@@ -1564,8 +1592,8 @@ void cupid_audio_write_register(struct CupidAudio* audio, uint32_t addr,
         if (!audio->enable && oldEnable) {
             /* Master power discards queued words. The staged word and held
              * output have separate state and retain their current phase. */
-            audio->chA.fifoWrite = audio->chA.fifoRead = 0;
-            audio->chB.fifoWrite = audio->chB.fifoRead = 0;
+            clear_fifo_queue(&audio->chA);
+            clear_fifo_queue(&audio->chB);
             audio->soundcntL = 0;
             /** Disable: clear SOUNDCNT_H fields too. */
             audio->volume    = 0;
@@ -1667,7 +1695,7 @@ void cupid_audio_write_register8(struct CupidAudio* audio, uint32_t addr, uint8_
         _writeNR30(psg, val);
         break;
     case REG_SOUND3CNT_H: _writeNR31(psg, val); break;
-    case REG_SOUND3CNT_H + 1: psg->ch3.volume = (val >> 5) & 7; break;
+    case REG_SOUND3CNT_H + 1: _writeNR32(psg, val); break;
     case REG_SOUND3CNT_X: _writeNR33(psg, val); break;
     case REG_SOUND3CNT_X + 1: _writeNR34(psg, val, timestamp); break;
     case REG_SOUND4CNT_L: _writeNR41(psg, val); break;

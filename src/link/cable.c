@@ -237,8 +237,15 @@ bool cupid_cable_run(struct CupidCable* cable, uint32_t clocks) {
     if (!cable || cable->running || clocks > INT32_MAX || UINT64_MAX - cable->now < clocks) return false;
     const uint64_t end = cable->now + clocks;
     cable->running = true;
+    unsigned completed = 0;
     for (;;) {
         dispatch_events(cable);
+        /* Finish every clock that advanced, even if its CPU is still inside
+         * a longer bus request. Preserve the preceding STOP interval when an
+         * endpoint event has just woken a previously frozen console. */
+        for (unsigned i = 0; i < cable->count; ++i)
+            if (completed & (1u << i)) cupid_timing_finish_tick(&cable->nodes[i].gba->timing);
+        completed = 0;
         /* A core may request several zero-clock boundaries at this instant.
          * Finish them in player order before choosing the next clock. */
         for (unsigned i = 0; i < cable->count; ++i) {
@@ -268,7 +275,10 @@ bool cupid_cable_run(struct CupidCable* cable, uint32_t clocks) {
         unsigned stopped = 0;
         for (unsigned i = 0; i < cable->count; ++i) {
             struct CableNode* node = &cable->nodes[i];
-            if (!node->gba->stopped) cupid_timing_advance_clock(&node->gba->timing, elapsed);
+            if (!node->gba->stopped) {
+                cupid_timing_advance_clock(&node->gba->timing, elapsed);
+                if (elapsed) completed |= 1u << i;
+            }
             else {
                 stopped |= 1u << i;
                 if (!node->idle) node->target += elapsed;

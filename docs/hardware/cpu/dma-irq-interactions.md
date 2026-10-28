@@ -36,6 +36,14 @@ interactions do not establish every power-on register, timer-divider phase or
 physical IRQ sampling edge. See [display bus waits](display-irq.md) for the
 shared request owner and CPU-ready waveform coverage.
 
+With the pixel pipeline and display-bus owner integrated, the HALT/OAM case
+passes its original `0x74` return-address and `0xDD` timer comparisons,
+pre-display result and terminal with both firmware paths. The combined Windows
+profile passes thirty of the thirty-two interaction runs, including fifteen
+externally. The separate `0x88` versus `0x87` DMA/HALT timer comparison remains
+failed with both paths. See [display bus waits](display-irq.md) for the shared
+request owner and its CPU-ready waveform coverage.
+
 The CPU samples its synchronized IRQ input at instruction boundaries. Its
 synchronizer keeps two CPU-clock stages after register acceptance. DMA bus
 waits and the intermediate clocks of stretched memory accesses hold those

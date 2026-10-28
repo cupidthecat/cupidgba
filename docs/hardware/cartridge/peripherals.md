@@ -5,6 +5,30 @@ read-control registers. GPIO remains visible in the three lower ROM windows;
 the underlying cartridge bytes remain unchanged. Disabling register reads
 restores ROM reads while device writes continue.
 
+## GPIO opcode words
+
+ARM interworking can retain A1 in the logical instruction address. GPIO
+selects the word-aligned register pair for each opcode request. The bus
+strobe helper and opcode callback use that same aligned address, so the
+callback consumes the value captured at the original halfword strobes.
+The logical program counter and Game Pak FIFO cursors retain their existing
+address and timing behavior.
+
+A word opcode requested at offset `0xC6` reads data and direction from
+`0xC4`/`0xC6`. A request at `0xCA` reads the control register at `0xC8`
+and the cartridge halfword at `0xCA`. Disabling GPIO reads restores the
+underlying ROM word. The upper 16 MiB ROM half remains ordinary cartridge
+memory, including addresses whose low offsets resemble the GPIO ports.
+
+The `gba.gpio-fetch-aligned` and `gba.gpio-fetch-a1` groups each cover 3,456
+owned scenes. They exercise untimed and timed refills, an executed Thumb
+`BX`, both GPIO word positions, six ROM windows, every cartridge wait
+setting, prefetch on/off, read control and clock-counter wrap. Input changes
+between the low and high strobes check that a completed word retains its
+earlier sample. Both fetched words, the logical PC, branch issue, elapsed
+clocks and pristine ROM bytes are checked. These qualify the described
+component and instruction paths; complete cartridge accuracy remains open.
+
 ## Solar sensor
 
 Pin 0 clocks the counter on a falling edge. Pin 1 clears it while high,

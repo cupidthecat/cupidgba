@@ -43,11 +43,16 @@ static inline uint32_t cupid_ror32(uint32_t val, unsigned shift) {
 /** Color: GBA uses BGR555 */
 typedef uint16_t Color16;
 
-/** Convert BGR555 → RGBA8888 for SDL */
+/** Convert BGR555 to opaque RGBA8888 for SDL. Repeat the high channel bits
+ * into the low host bits so five-bit full intensity maps to 255. Bit 15
+ * does not participate in this final presentation conversion. */
 static inline uint32_t color16_to_rgba(Color16 c) {
-    uint32_t r = (c & 0x001F) << 3;
-    uint32_t g = ((c >> 5) & 0x1F) << 3;
-    uint32_t b = ((c >> 10) & 0x1F) << 3;
+    uint32_t r = c & 0x001F;
+    uint32_t g = (c >> 5) & 0x1F;
+    uint32_t b = (c >> 10) & 0x1F;
+    r = (r << 3) | (r >> 2);
+    g = (g << 3) | (g >> 2);
+    b = (b << 3) | (b >> 2);
     return (r) | (g << 8) | (b << 16) | 0xFF000000u;
 }
 

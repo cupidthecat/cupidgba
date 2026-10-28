@@ -85,9 +85,9 @@ static void update_lines(struct CupidGBA* gba, uint64_t when) {
 static void write_callback(struct CupidTiming* timing, void* context, uint32_t late) {
     struct CupidIRQRegisterWrite* write = context;
     struct CupidGBA* gba = write->gba;
-    gba->ie = write->ie;
+    if (write->writeIE) gba->ie = write->ie;
     gba->irqf = (gba->irqf & ~write->ifClear) | write->ifSet;
-    gba->ime = write->ime;
+    if (write->writeIME) gba->ime = write->ime;
     gba->memory.io[REG_IE >> 1] = gba->ie;
     gba->memory.io[REG_IF >> 1] = gba->irqf;
     gba->memory.io[REG_IME >> 1] = gba->ime;
@@ -95,7 +95,7 @@ static void write_callback(struct CupidTiming* timing, void* context, uint32_t l
 }
 
 static void queue_write(struct CupidGBA* gba, uint64_t when, unsigned priority,
-                        uint16_t ifSet, uint16_t ifClear) {
+                        uint32_t address, uint16_t ifSet, uint16_t ifClear) {
     struct CupidIRQRegisterWrite* write = NULL;
     for (unsigned i = 0; i < 4; i++) {
         struct CupidIRQRegisterWrite* candidate = &gba->irq.writes[i];
@@ -113,13 +113,22 @@ static void queue_write(struct CupidGBA* gba, uint64_t when, unsigned priority,
     if (!cupid_timing_is_scheduled(&gba->timing, &write->event)) {
         write->ifSet = 0;
         write->ifClear = 0;
+        write->writeIE = false;
+        write->writeIME = false;
     }
     /* Coalesce changes with the same acceptance deadline. Later deadlines
      * must not publish a newly asserted source through an earlier write. */
     write->ifSet = (write->ifSet & ~ifClear) | ifSet;
     write->ifClear |= ifClear;
-    write->ie = gba->irq.pendingIE;
-    write->ime = gba->irq.pendingIME;
+    /* Retain only the registers this deadline actually writes. A display
+     * source phase can be queued ahead of an intervening CPU mask write. */
+    if (address == REG_IE) {
+        write->ie = gba->irq.pendingIE;
+        write->writeIE = true;
+    } else if (address == REG_IME) {
+        write->ime = gba->irq.pendingIME;
+        write->writeIME = true;
+    }
     write->event.priority = priority;
     schedule_at(gba, &write->event, when);
 }
@@ -155,7 +164,7 @@ void cupid_irq_write(struct CupidGBA* gba, uint32_t address, uint16_t value) {
     default: return;
     }
     queue_write(gba, cupid_timing_global_time(&gba->timing) + 1, IRQ_WRITE_PHASE,
-                0, address == REG_IF ? value : 0);
+                address, 0, address == REG_IF ? value : 0);
 }
 
 void cupid_irq_write8(struct CupidGBA* gba, uint32_t address, uint8_t value) {
@@ -174,7 +183,7 @@ void cupid_irq_write8(struct CupidGBA* gba, uint32_t address, uint8_t value) {
 void cupid_raise_irq_at(struct CupidGBA* gba, enum CupidIRQ source, uint64_t timestamp) {
     cupid_gba_wake_stop(gba, source);
     gba->irq.pendingIF |= source;
-    queue_write(gba, timestamp + 1, IRQ_ASSERT_PHASE, source, 0);
+    queue_write(gba, timestamp + 1, IRQ_ASSERT_PHASE, 0, source, 0);
 }
 
 void cupid_raise_irq(struct CupidGBA* gba, enum CupidIRQ source, uint32_t late) {
@@ -240,7 +249,44 @@ static void resume_cpu_clock(struct CupidTiming* timing, void* context, uint32_t
     struct CupidGBA* gba = context;
     /* Priority zero samples an already accepted input before a register
      * update on this same edge. A captured final stage publishes now. */
+    if (gba->irq.cpuReady && !gba->irq.cpuReady(gba)) {
+        /* Dispatch dequeued this owned event before testing bus readiness. */
+        cupid_timing_queue_absolute(&gba->timing, &gba->irq.cpuClockResumeEvent,
+            (int32_t)(uint32_t)(timing->globalCycles - late + 1));
+        return;
+    }
+    gba->irq.cpuReady = NULL;
     resume_cpu(gba, timing->globalCycles - late, 1);
+}
+
+bool cupid_irq_prepare_quiet_transfer(struct CupidGBA* gba, unsigned cycles) {
+    struct CupidARM* cpu = &gba->cpu;
+    struct CupidTiming* timing = &gba->timing;
+    struct CupidIRQState* irq = &gba->irq;
+    struct CupidTimingEvent* ready = &irq->cpuClockResumeEvent;
+    if (cycles < 2 || cycles > INT32_MAX || cpu->cycles < 0
+        || (uint32_t)cpu->cycles > (uint32_t)INT32_MAX - cycles
+        || cpu->cycles >= cpu->nextEvent || cpu->irqh.processEvents != cupid_gba_process_cpu_events
+        || irq->cpuClockPaused || irq->cpuReady
+        || irq->scheduledLineMask || irq->pausedLineMask
+        || ready->callback != resume_cpu_clock || ready->context != gba
+        || ready->priority != IRQ_SAMPLE_PHASE
+        || timing->inCallback || timing->reroot || timing->synchronize
+        || (timing->syncClock && (timing->syncClock != cupid_video_clock
+            || timing->clockContext != &gba->video))
+        || timing->relativeCycles != &cpu->cycles || timing->nextEvent != &cpu->nextEvent
+        || (uint32_t)timing->globalCycles != timing->masterCycles) return false;
+    uint32_t now = timing->masterCycles + (uint32_t)cpu->cycles;
+    if (timing->root && (int32_t)(timing->root->when - now) <= (int32_t)cycles) return false;
+    /* No line stage, peripheral callback or intermediate data strobe can see
+     * this held interval. The owned renderer observes its ordinary completed
+     * tick after release; foreign observers retain the general path. The
+     * default release only clears an empty pause and leaves its dequeued
+     * event here. Preserve that state and the same completed ready clock. */
+    ready->when = now + cycles;
+    ready->next = NULL;
+    cpu->nextEvent = cpu->cycles + (int32_t)cycles;
+    return true;
 }
 
 void cupid_irq_hold_cpu(struct CupidGBA* gba, unsigned cycles) {
@@ -252,4 +298,13 @@ void cupid_irq_hold_cpu(struct CupidGBA* gba, unsigned cycles) {
      * Its next request needs no cancellation search through peripheral events. */
     cupid_timing_queue_absolute(&gba->timing, &gba->irq.cpuClockResumeEvent,
         (int32_t)(uint32_t)(cupid_timing_global_time(&gba->timing) + cycles));
+}
+
+void cupid_irq_hold_cpu_until(struct CupidGBA* gba, bool (*ready)(struct CupidGBA*)) {
+    cupid_irq_pause_cpu(gba);
+    gba->irq.cpuReady = ready;
+    /* The bridge retains the wait across unavailable clocks and partial word
+     * beats. Its predicate completes exactly one CPU-ready edge. */
+    cupid_timing_queue_absolute(&gba->timing, &gba->irq.cpuClockResumeEvent,
+        (int32_t)(uint32_t)(cupid_timing_global_time(&gba->timing) + 1));
 }

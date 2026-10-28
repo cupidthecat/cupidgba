@@ -31,6 +31,11 @@ It takes the ordinary stream-stop path, retaining the existing completing
 halfword's cancellation clock. WAITCNT changes update access costs and
 track a pending burst restart when prefetch is disabled.
 
+A pending disable selects the next missed fetch's nonsequential transfer
+cost separately from stopping the old stream. The completing-halfword
+arbitration clock is added after that selection. Cached and pending hits
+continue to drain before consuming the restart flag.
+
 ARM opcode words are read at aligned physical addresses even when interworking
 retains bit 1 in R15. The FIFO compares that aligned CPU word query against its
 halfword cursor, preserving the cursor and the logical stream independently.
@@ -148,6 +153,21 @@ opcode data, logical PC, final FIFO state and actual signed/unsigned clock
 crossings are checked. Every group rejects the preceding core with its
 matching library; each retains its thirty-second deadline. These checks
 qualify the selected software ordering without claiming physical capture.
+
+Four `gba.prefetch-restart-*` groups check this ordering when WAITCNT
+disables an active stream. Three groups cover 37,632 boundary/miss/hit scene
+triples across six ROM windows, all wait settings, every FIFO occupancy and
+in-flight phase, both request types, Thumb/ARM widths, logical ARM A1 and four
+clock epochs. They require the configured N transfer plus the existing stop
+penalty, including 9,216 completing phases, while retaining 37,056 cached or
+pending hits. Opcode data, logical PC, restart flags, final FIFO state and
+signed/unsigned clock crossings are checked. The fourth group executes real
+ARM WAITCNT stores, three RAM loads, a page crossing and a branch refill at
+four clock epochs. It observes both original instruction words before issue
+and requires the boundary fetch's N8 plus one stop clock, then the unchanged
+N8/S6 branch refill. All four groups fail against the preceding core. Each
+retains its thirty-second deadline. These owned tests cover the software
+ordering; the broader hardware qualification limits below still apply.
 
 `CUPID_BUS_PAGE_PROBE_ROM` enables a separate fixed CPU/DMA page-boundary
 cartridge. The observer requires all eighteen original console results. The

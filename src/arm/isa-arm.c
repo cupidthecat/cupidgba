@@ -777,10 +777,10 @@ DEFINE_INSTRUCTION_ARM(MSR,
 		cpu->prefetch[0] = 0x46C0;
 		cpu->prefetch[1] &= 0xFFFF;
 		CupidWriteRegister(cpu, ARM_PC, CupidReadRegister(cpu, ARM_PC) + (WORD_SIZE_THUMB));
-	} else {
-		cpu->prefetch[0] = CupidReadOpcode(cpu, (uint32_t)CupidReadRegister(cpu, ARM_PC) - WORD_SIZE_ARM, WORD_SIZE_ARM);
-		cpu->prefetch[1] = CupidReadOpcode(cpu, (uint32_t)CupidReadRegister(cpu, ARM_PC), WORD_SIZE_ARM);
-	})
+	}
+	/* Staying in ARM state retains the instructions already fetched before
+	 * this status write. No extra memory read or pipeline refill occurs. */
+	)
 
 DEFINE_INSTRUCTION_ARM(MSRR,
 	int c = opcode & 0x00010000;
@@ -814,10 +814,10 @@ DEFINE_INSTRUCTION_ARM(MSRI,
 		cpu->prefetch[0] = 0x46C0;
 		cpu->prefetch[1] &= 0xFFFF;
 		CupidWriteRegister(cpu, ARM_PC, CupidReadRegister(cpu, ARM_PC) + (WORD_SIZE_THUMB));
-	} else {
-		cpu->prefetch[0] = CupidReadOpcode(cpu, (uint32_t)CupidReadRegister(cpu, ARM_PC) - WORD_SIZE_ARM, WORD_SIZE_ARM);
-		cpu->prefetch[1] = CupidReadOpcode(cpu, (uint32_t)CupidReadRegister(cpu, ARM_PC), WORD_SIZE_ARM);
-	})
+	}
+	/* Staying in ARM state retains the instructions already fetched before
+	 * this status write. No extra memory read or pipeline refill occurs. */
+	)
 
 DEFINE_INSTRUCTION_ARM(MSRRI,
 	_immediate(cpu, opcode);

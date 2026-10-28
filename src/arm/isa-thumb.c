@@ -483,7 +483,11 @@ DEFINE_LOAD_STORE_MULTIPLE_THUMB(POP,
 	IA,
 	,
 	THUMB_LOAD_POST_BODY;
-	cpu->gprs[ARM_SP] = address)
+	cpu->gprs[ARM_SP] = address;
+	if (!rs) {
+		/* An empty list transfers PC and advances SP by sixteen words. */
+		CupidFlushCycles(cpu, &currentCycles); currentCycles += CupidThumbWritePC(cpu);
+	})
 
 DEFINE_LOAD_STORE_MULTIPLE_THUMB(POPR,
 	ARM_SP,
@@ -590,7 +594,7 @@ DEFINE_INSTRUCTION_THUMB(BL2,
 
 /** @name Format 5 — BX: Branch and Exchange
  *
- * Encoding: 010001110xsssddd  (index bits 0x11C–0x11D)
+ * Encoding: 01000111xssssddd  (index bits 0x11C–0x11F)
  */
 
 DEFINE_INSTRUCTION_THUMB(BX,
