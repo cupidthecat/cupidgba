@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Captures use the owned synthetic waves and scene parameters. */
-struct SoundFrameExpected { uint64_t clocks, signature; };
+struct SoundFrameExpected {
+    uint64_t clocks, signature;
+};
 static const struct SoundFrameExpected soundFrameExpected[16][16] = {
     {
         {UINT64_C(1319), UINT64_C(0x6F3DEAD5A24C00DB)},

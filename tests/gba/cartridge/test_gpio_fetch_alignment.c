@@ -1,19 +1,21 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Owned GPIO opcode-fetch controls. Cartridge, BIOS and battery files are
  * never loaded. Logical ARM A1 must not select another physical GPIO word. */
+#include "../../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
 #include "cupid/registers.h"
-#include "../../test.h"
 
 static uint8_t input_pins(void *context) {
     return *(uint8_t *)context;
 }
+
 static void change_input(struct CupidTiming *timing, void *context, uint32_t late) {
     (void)timing;
     (void)late;
     *(uint8_t *)context = 9;
 }
+
 static void observe_branch(const struct CupidARM *cpu, void *context) {
     unsigned *count = context;
     CHECK((*count)++ == 0);
@@ -21,6 +23,7 @@ static void observe_branch(const struct CupidARM *cpu, void *context) {
     CHECK(cupid_arm_instruction_address(cpu) == GBA_BASE_IWRAM + 0x1000);
     CHECK(cpu->prefetch[0] == 0x4700);
 }
+
 static struct CupidGBA *machine(uint64_t epoch, uint8_t *image) {
     struct CupidGBA *g = calloc(1, sizeof(*g));
     CHECK(g);
@@ -37,6 +40,7 @@ static struct CupidGBA *machine(uint64_t epoch, uint8_t *image) {
     g->memory.romMask = GBA_SIZE_ROM - 1;
     return g;
 }
+
 int main(int argc, char **argv) {
     CHECK(argc == 2);
     bool a1 = !strcmp(argv[1], "a1");

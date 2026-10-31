@@ -1,14 +1,17 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "cupid/gba.h"
 
-void cupid_prefetch_update(struct CupidGBA* gba, uint64_t timestamp) {
-    struct CupidMemory* memory = &gba->memory;
-    if (timestamp < memory->prefetchUnit.epoch) return;
+void cupid_prefetch_update(struct CupidGBA *gba, uint64_t timestamp) {
+    struct CupidMemory *memory = &gba->memory;
+    if (timestamp < memory->prefetchUnit.epoch)
+        return;
     uint64_t elapsed = timestamp - memory->prefetchUnit.epoch;
     memory->prefetchUnit.epoch = timestamp;
     if (!memory->prefetchUnit.active || memory->prefetchUnit.busy ||
-        !memory->prefetchUnit.remaining) return;
-    if (elapsed) memory->prefetchUnit.engaged = true;
+        !memory->prefetchUnit.remaining)
+        return;
+    if (elapsed)
+        memory->prefetchUnit.engaged = true;
     unsigned capacity = 8;
     while (elapsed >= memory->prefetchUnit.remaining) {
         elapsed -= memory->prefetchUnit.remaining;
@@ -24,13 +27,14 @@ void cupid_prefetch_update(struct CupidGBA* gba, uint64_t timestamp) {
     memory->prefetchUnit.remaining -= (unsigned)elapsed;
 }
 
-static unsigned stop(struct CupidGBA* gba) {
-    struct CupidMemory* memory = &gba->memory;
+static unsigned stop(struct CupidGBA *gba) {
+    struct CupidMemory *memory = &gba->memory;
     unsigned penalty = 0;
     unsigned region = (uint32_t)gba->cpu.gprs[ARM_PC] >> GBA_BASE_OFFSET;
     if (memory->prefetchUnit.active && region >= GBA_REGION_ROM0 && region <= GBA_REGION_ROM2_EX) {
         unsigned remaining = memory->prefetchUnit.remaining;
-        if (remaining == 1) penalty = 1;
+        if (remaining == 1)
+            penalty = 1;
     }
     memory->prefetchUnit.active = false;
     memory->prefetchUnit.count = 0;
@@ -41,14 +45,15 @@ static unsigned stop(struct CupidGBA* gba) {
     return penalty;
 }
 
-unsigned cupid_prefetch_fetch(struct CupidGBA* gba, uint32_t address, unsigned width,
+unsigned cupid_prefetch_fetch(struct CupidGBA *gba, uint32_t address, unsigned width,
                               unsigned cycles, bool refill) {
-    struct CupidMemory* memory = &gba->memory;
+    struct CupidMemory *memory = &gba->memory;
     cupid_prefetch_update(gba, cupid_timing_global_time(&gba->timing));
     memory->prefetchUnit.fetchKind = CUPID_PREFETCH_NONE;
     memory->prefetchUnit.address = address;
     unsigned region = address >> GBA_BASE_OFFSET;
-    if (region < GBA_REGION_ROM0 || region > GBA_REGION_ROM2_EX) return cycles;
+    if (region < GBA_REGION_ROM0 || region > GBA_REGION_ROM2_EX)
+        return cycles;
     memory->prefetchUnit.width = width;
     /* Align the CPU's word query, preserving the halfword FIFO cursor. A
      * Thumb-to-ARM transition can leave A1 set in the logical fetch stream. */
@@ -61,7 +66,8 @@ unsigned cupid_prefetch_fetch(struct CupidGBA* gba, uint32_t address, unsigned w
         if (memory->prefetchUnit.count >= halfwords && lookup == memory->prefetchUnit.head) {
             memory->prefetchUnit.count -= halfwords;
             memory->prefetchUnit.head += width;
-            if (!memory->prefetchUnit.remaining && memory->prefetch && !memory->prefetchUnit.paused) {
+            if (!memory->prefetchUnit.remaining && memory->prefetch &&
+                !memory->prefetchUnit.paused) {
                 memory->prefetchUnit.remaining = memory->prefetchUnit.duty;
             }
             memory->prefetchUnit.fetchKind = CUPID_PREFETCH_CACHED;
@@ -88,7 +94,7 @@ unsigned cupid_prefetch_fetch(struct CupidGBA* gba, uint32_t address, unsigned w
     unsigned penalty = stop(gba);
     if (memory->prefetchUnit.disabled || restart) {
         cycles = 1 + (width == 4 ? memory->waitstatesNonseq32[region]
-                                  : memory->waitstatesNonseq16[region]);
+                                 : memory->waitstatesNonseq16[region]);
         memory->prefetchUnit.disabled = false;
     }
     memory->prefetchUnit.fetchKind = CUPID_PREFETCH_START;
@@ -97,8 +103,8 @@ unsigned cupid_prefetch_fetch(struct CupidGBA* gba, uint32_t address, unsigned w
     return cycles + penalty;
 }
 
-void cupid_prefetch_finish_fetch(struct CupidGBA* gba) {
-    struct CupidMemory* memory = &gba->memory;
+void cupid_prefetch_finish_fetch(struct CupidGBA *gba) {
+    struct CupidMemory *memory = &gba->memory;
     uint64_t now = cupid_timing_global_time(&gba->timing);
     cupid_prefetch_update(gba, now);
     if (memory->prefetchUnit.fetchKind == CUPID_PREFETCH_PENDING ||
@@ -120,8 +126,8 @@ void cupid_prefetch_finish_fetch(struct CupidGBA* gba) {
     cupid_cartridge_prefetch_schedule(gba);
 }
 
-unsigned cupid_prefetch_before_data(struct CupidGBA* gba, uint32_t address) {
-    struct CupidMemory* memory = &gba->memory;
+unsigned cupid_prefetch_before_data(struct CupidGBA *gba, uint32_t address) {
+    struct CupidMemory *memory = &gba->memory;
     cupid_prefetch_update(gba, cupid_timing_global_time(&gba->timing));
     unsigned region = address >> GBA_BASE_OFFSET;
     bool gamepak = region >= GBA_REGION_ROM0 && region <= GBA_REGION_SRAM_MIRROR;
@@ -130,7 +136,7 @@ unsigned cupid_prefetch_before_data(struct CupidGBA* gba, uint32_t address) {
     return penalty;
 }
 
-void cupid_prefetch_after_data(struct CupidGBA* gba) {
+void cupid_prefetch_after_data(struct CupidGBA *gba) {
     cupid_prefetch_update(gba, cupid_timing_global_time(&gba->timing));
     gba->memory.prefetchUnit.busy = false;
 }

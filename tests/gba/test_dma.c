@@ -1,10 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+#include "../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
-#include "../test.h"
 
-static struct CupidGBA* machine(uint64_t clock) {
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+static struct CupidGBA *machine(uint64_t clock) {
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba);
     cupid_gba_create(gba);
     cupid_gba_reset(gba);
@@ -19,25 +19,25 @@ static struct CupidGBA* machine(uint64_t clock) {
     return gba;
 }
 
-static void destroy(struct CupidGBA* gba) {
+static void destroy(struct CupidGBA *gba) {
     cupid_gba_destroy(gba);
     free(gba);
 }
 
-static void tick(struct CupidGBA* gba, int cycles) {
+static void tick(struct CupidGBA *gba, int cycles) {
     CHECK(gba->cpu.cycles == 0);
     cupid_timing_tick(&gba->timing, cycles);
 }
 
-static void start(struct CupidGBA* gba, int ch, uint32_t source, uint32_t dest,
-                   uint16_t count, uint16_t control) {
+static void start(struct CupidGBA *gba, int ch, uint32_t source, uint32_t dest, uint16_t count,
+                  uint16_t control) {
     cupid_dma_write_sad(gba, ch, source);
     cupid_dma_write_dad(gba, ch, dest);
     cupid_dma_write_cnt_lo(gba, ch, count);
     cupid_dma_write_cnt(gba, ch, control);
 }
 
-static void program(struct CupidGBA* gba, uint32_t first) {
+static void program(struct CupidGBA *gba, uint32_t first) {
     const uint32_t code[] = {first, 0xE1A00000, 0xE1A00000, 0xE1A00000};
     memcpy(gba->memory.iwram + 0x1000, code, sizeof(code));
     gba->cpu.gprs[ARM_PC] = GBA_BASE_IWRAM + 0x1000;
@@ -47,7 +47,7 @@ static void program(struct CupidGBA* gba, uint32_t first) {
 static void phases_sample_reads_and_publish_writes(void) {
     const uint64_t clocks[] = {0, INT32_MAX - 2u, UINT32_MAX - 2u, UINT64_C(0x300000000)};
     for (unsigned i = 0; i < sizeof(clocks) / sizeof(*clocks); i++) {
-        struct CupidGBA* gba = machine(clocks[i]);
+        struct CupidGBA *gba = machine(clocks[i]);
         cupid_memory_store32(&gba->cpu, GBA_BASE_EWRAM, 0x12345678, NULL);
         start(gba, 0, GBA_BASE_EWRAM, GBA_BASE_IWRAM, 1, 0x8400);
         tick(gba, 2);
@@ -72,9 +72,9 @@ static void phases_sample_reads_and_publish_writes(void) {
 
 static void masks_counts_and_enable_latches(void) {
     for (int ch = 0; ch < 4; ch++) {
-        struct CupidGBA* gba = machine(0);
+        struct CupidGBA *gba = machine(0);
         start(gba, ch, UINT32_MAX, UINT32_MAX, 0xFFFF, 0xFFFF);
-        struct CupidDMA* dma = &gba->memory.dma[ch];
+        struct CupidDMA *dma = &gba->memory.dma[ch];
         CHECK(dma->source == (ch ? 0x0FFFFFFF : 0x07FFFFFF));
         CHECK(dma->dest == (ch == 3 ? 0x0FFFFFFF : 0x07FFFFFF));
         CHECK(dma->count == (ch == 3 ? 0xFFFF : 0x3FFF));
@@ -106,7 +106,7 @@ static void stepping_modes_and_repeat_reload(void) {
         unsigned width = word ? 4 : 2;
         for (unsigned src = 0; src < 3; src++) {
             for (unsigned dst = 0; dst < 4; dst++) {
-                struct CupidGBA* gba = machine(0);
+                struct CupidGBA *gba = machine(0);
                 uint32_t expected[16] = {0};
                 for (unsigned i = 0; i < 16; i++) {
                     cupid_memory_store32(&gba->cpu, GBA_BASE_IWRAM + i * 4,
@@ -118,19 +118,26 @@ static void stepping_modes_and_repeat_reload(void) {
                     unsigned target = 24 + offset[dst] * (int)width * (int)i;
                     uint32_t value = word ? cupid_memory_load32(&gba->cpu, address, NULL)
                                           : cupid_memory_load16(&gba->cpu, address, NULL);
-                    if (word) memcpy((uint8_t*)expected + target, &value, 4);
-                    else { uint16_t half = (uint16_t)value; memcpy((uint8_t*)expected + target, &half, 2); }
+                    if (word)
+                        memcpy((uint8_t *)expected + target, &value, 4);
+                    else {
+                        uint16_t half = (uint16_t)value;
+                        memcpy((uint8_t *)expected + target, &half, 2);
+                    }
                 }
-                start(gba, 3, sad, dad, 3, (uint16_t)(0x8000 | (word << 10) | (src << 7) | (dst << 5)));
+                start(gba, 3, sad, dad, 3,
+                      (uint16_t)(0x8000 | (word << 10) | (src << 7) | (dst << 5)));
                 tick(gba, 10);
                 CHECK(memcmp(gba->memory.iwram + 0x100, expected, sizeof(expected)) == 0);
-                CHECK(gba->memory.dma[3].nextSource == sad + (uint32_t)(offset[src] * (int)width * 3));
-                CHECK(gba->memory.dma[3].nextDest == dad + (uint32_t)(offset[dst] * (int)width * 3));
+                CHECK(gba->memory.dma[3].nextSource ==
+                      sad + (uint32_t)(offset[src] * (int)width * 3));
+                CHECK(gba->memory.dma[3].nextDest ==
+                      dad + (uint32_t)(offset[dst] * (int)width * 3));
                 destroy(gba);
             }
         }
     }
-    struct CupidGBA* gba = machine(0);
+    struct CupidGBA *gba = machine(0);
     cupid_memory_store32(&gba->cpu, GBA_BASE_IWRAM, 0x76543210, NULL);
     start(gba, 1, GBA_BASE_IWRAM, GBA_BASE_EWRAM, 2, 0xA260);
     cupid_dma_run_hblank(gba, 0);
@@ -150,7 +157,7 @@ static void stepping_modes_and_repeat_reload(void) {
 }
 
 static void channel_priority_and_preemption(void) {
-    struct CupidGBA* gba = machine(0);
+    struct CupidGBA *gba = machine(0);
     for (int ch = 3; ch >= 0; ch--) {
         cupid_memory_store16(&gba->cpu, GBA_BASE_IWRAM + ch * 2, (int16_t)(0x1230 + ch), NULL);
         start(gba, ch, GBA_BASE_IWRAM + ch * 2, GBA_BASE_EWRAM, 1, 0x8000);
@@ -202,7 +209,7 @@ static void channel_priority_and_preemption(void) {
 
 static void cpu_bus_stalls_internal_overlap_and_swap_lock(void) {
     for (unsigned longMultiply = 0; longMultiply < 2; longMultiply++) {
-        struct CupidGBA* gba = machine(0);
+        struct CupidGBA *gba = machine(0);
         program(gba, 0xE0000291); /* mul r0, r1, r2 */
         gba->cpu.gprs[1] = 3;
         gba->cpu.gprs[2] = longMultiply ? 0x12345678 : 1;
@@ -216,7 +223,7 @@ static void cpu_bus_stalls_internal_overlap_and_swap_lock(void) {
         CHECK(cupid_memory_load16(&gba->cpu, GBA_BASE_IWRAM + 0x100, NULL) == 0x1234);
         destroy(gba);
     }
-    struct CupidGBA* gba = machine(0);
+    struct CupidGBA *gba = machine(0);
     program(gba, 0xE5910000); /* ldr r0, [r1] */
     gba->cpu.gprs[1] = GBA_BASE_EWRAM;
     cupid_memory_store32(&gba->cpu, GBA_BASE_EWRAM, 0x1234, NULL);
@@ -248,7 +255,7 @@ static void cpu_bus_stalls_internal_overlap_and_swap_lock(void) {
 }
 
 static void latches_are_independent_and_halfwords_select_destination_lane(void) {
-    struct CupidGBA* gba = machine(0);
+    struct CupidGBA *gba = machine(0);
     for (int ch = 0; ch < 4; ch++) {
         uint32_t value = UINT32_C(0xDEAD1234) + (uint32_t)ch;
         cupid_memory_store32(&gba->cpu, GBA_BASE_IWRAM, (int32_t)value, NULL);
@@ -259,8 +266,8 @@ static void latches_are_independent_and_halfwords_select_destination_lane(void) 
     for (int ch = 0; ch < 4; ch++) {
         start(gba, ch, 0, GBA_BASE_EWRAM + 0x100 + ch * 4, 2, 0x8000);
         tick(gba, 12);
-        CHECK(cupid_memory_load32(&gba->cpu, GBA_BASE_EWRAM + 0x100 + ch * 4, NULL)
-              == UINT32_C(0xDEAD1234) + (uint32_t)ch);
+        CHECK(cupid_memory_load32(&gba->cpu, GBA_BASE_EWRAM + 0x100 + ch * 4, NULL) ==
+              UINT32_C(0xDEAD1234) + (uint32_t)ch);
         CHECK(gba->memory.dma[ch].latch == UINT32_C(0xDEAD1234) + (uint32_t)ch);
     }
     cupid_memory_store16(&gba->cpu, GBA_BASE_IWRAM, 0x5A81, NULL);
@@ -271,17 +278,18 @@ static void latches_are_independent_and_halfwords_select_destination_lane(void) 
 }
 
 static void late_dma_mmio_matches_every_clock(void) {
-    struct CupidGBA* late = machine(0);
-    struct CupidGBA* punctual = machine(0);
-    struct CupidGBA* machines[] = {late, punctual};
+    struct CupidGBA *late = machine(0);
+    struct CupidGBA *punctual = machine(0);
+    struct CupidGBA *machines[] = {late, punctual};
     for (unsigned i = 0; i < 2; i++) {
-        struct CupidGBA* gba = machines[i];
+        struct CupidGBA *gba = machines[i];
         cupid_memory_store16(&gba->cpu, GBA_BASE_IWRAM, 0x80, NULL);
         cupid_io_write(gba, REG_TM0CNT_L, 0x1234);
         start(gba, 3, GBA_BASE_IWRAM, GBA_BASE_IO + REG_TM0CNT_H, 1, 0xC000);
     }
     tick(late, 20);
-    for (int clock = 0; clock < 20; clock++) tick(punctual, 1);
+    for (int clock = 0; clock < 20; clock++)
+        tick(punctual, 1);
     CHECK(cupid_io_read(late, REG_TM0CNT_L) == 0x1241);
     CHECK(cupid_io_read(late, REG_TM0CNT_L) == cupid_io_read(punctual, REG_TM0CNT_L));
     CHECK(late->irqf == IRQ_DMA3 && late->irqf == punctual->irqf);
@@ -294,11 +302,11 @@ static void late_dma_mmio_matches_every_clock(void) {
 static void fifo_refills_and_irqs_match_late_dispatch(void) {
     const uint64_t clocks[] = {0, UINT32_MAX - 10u, UINT64_C(0x200000000)};
     for (unsigned c = 0; c < sizeof(clocks) / sizeof(*clocks); c++) {
-        struct CupidGBA* late = machine(clocks[c]);
-        struct CupidGBA* punctual = machine(clocks[c]);
-        struct CupidGBA* machines[] = {late, punctual};
+        struct CupidGBA *late = machine(clocks[c]);
+        struct CupidGBA *punctual = machine(clocks[c]);
+        struct CupidGBA *machines[] = {late, punctual};
         for (unsigned i = 0; i < 2; i++) {
-            struct CupidGBA* gba = machines[i];
+            struct CupidGBA *gba = machines[i];
             gba->audio.enable = true;
             gba->audio.chBTimer = true;
             for (unsigned word = 0; word < 64; word++) {
@@ -318,7 +326,8 @@ static void fifo_refills_and_irqs_match_late_dispatch(void) {
             cupid_io_write(gba, REG_TM1CNT_H, 0x84);
         }
         tick(late, 100);
-        for (int clock = 0; clock < 100; clock++) tick(punctual, 1);
+        for (int clock = 0; clock < 100; clock++)
+            tick(punctual, 1);
         CHECK(memcmp(&late->audio.chA, &punctual->audio.chA, sizeof(late->audio.chA)) == 0);
         CHECK(late->memory.dma[1].nextSource == punctual->memory.dma[1].nextSource);
         CHECK(late->memory.dma[1].nextDest == GBA_BASE_IO + REG_FIFO_A_LO);
@@ -335,7 +344,7 @@ static void fifo_refills_and_irqs_match_late_dispatch(void) {
 }
 
 static void pending_and_preempted_transfers_can_be_cancelled(void) {
-    struct CupidGBA* gba = machine(0);
+    struct CupidGBA *gba = machine(0);
     cupid_memory_store32(&gba->cpu, GBA_BASE_IWRAM, 0x12345678, NULL);
     start(gba, 0, GBA_BASE_IWRAM, GBA_BASE_EWRAM, 1, 0xC400);
     tick(gba, 1);
@@ -361,7 +370,7 @@ static void pending_and_preempted_transfers_can_be_cancelled(void) {
 }
 
 static void waitstates_gamepak_counter_and_burst_restart(void) {
-    struct CupidGBA* gba = machine(0);
+    struct CupidGBA *gba = machine(0);
     gba->memory.rom = calloc(1, 0x40000);
     CHECK(gba->memory.rom);
     gba->memory.romSize = 0x40000;
@@ -393,30 +402,32 @@ static void fixed_rom_sources_keep_their_pointer_and_advance_cartridge_data(void
     const unsigned sequential[] = {3, 5, 9};
     const uint32_t words[] = {0x12345678, 0x9ABCDEF0, 0x13579BDF, 0x2468ACE0};
     const uint16_t halves[] = {0x5678, 0x1234, 0xDEF0, 0x9ABC};
-    for (unsigned epoch = 0; epoch < 4; epoch++) for (unsigned bank = 0; bank < 3; bank++) {
-        for (unsigned word = 0; word < 2; word++) {
-            struct CupidGBA* gba = machine(clocks[epoch]);
-            gba->memory.rom = calloc(1, 0x2000);
-            CHECK(gba->memory.rom);
-            gba->memory.romSize = 0x2000;
-            memcpy(gba->memory.rom + 0x100, words, sizeof(words));
-            unsigned width = word ? 4 : 2;
-            uint32_t source = banks[bank] + 0x100, dest = GBA_BASE_IWRAM + 0x100;
-            start(gba, 3, source, dest, 4, (uint16_t)(0x8100 | (word << 10)));
-            unsigned duration = 13 + (word ? 7 : 3) * sequential[bank];
-            tick(gba, (int)duration);
-            const struct CupidDMA* dma = &gba->memory.dma[3];
-            CHECK(!dma->enable && !gba->memory.dmaRunning);
-            CHECK(dma->nextSource == source && dma->nextDest == dest + 4 * width);
-            CHECK(dma->busyUntil == clocks[epoch] + duration - 1);
-            for (unsigned i = 0; i < 4; i++) {
-                uint32_t actual = word ? (uint32_t)cupid_memory_load32(&gba->cpu, dest + i * width, NULL)
-                                       : cupid_memory_loadU16(&gba->cpu, dest + i * width, NULL);
-                CHECK(actual == (word ? words[i] : halves[i]));
+    for (unsigned epoch = 0; epoch < 4; epoch++)
+        for (unsigned bank = 0; bank < 3; bank++) {
+            for (unsigned word = 0; word < 2; word++) {
+                struct CupidGBA *gba = machine(clocks[epoch]);
+                gba->memory.rom = calloc(1, 0x2000);
+                CHECK(gba->memory.rom);
+                gba->memory.romSize = 0x2000;
+                memcpy(gba->memory.rom + 0x100, words, sizeof(words));
+                unsigned width = word ? 4 : 2;
+                uint32_t source = banks[bank] + 0x100, dest = GBA_BASE_IWRAM + 0x100;
+                start(gba, 3, source, dest, 4, (uint16_t)(0x8100 | (word << 10)));
+                unsigned duration = 13 + (word ? 7 : 3) * sequential[bank];
+                tick(gba, (int)duration);
+                const struct CupidDMA *dma = &gba->memory.dma[3];
+                CHECK(!dma->enable && !gba->memory.dmaRunning);
+                CHECK(dma->nextSource == source && dma->nextDest == dest + 4 * width);
+                CHECK(dma->busyUntil == clocks[epoch] + duration - 1);
+                for (unsigned i = 0; i < 4; i++) {
+                    uint32_t actual =
+                        word ? (uint32_t)cupid_memory_load32(&gba->cpu, dest + i * width, NULL)
+                             : cupid_memory_loadU16(&gba->cpu, dest + i * width, NULL);
+                    CHECK(actual == (word ? words[i] : halves[i]));
+                }
+                destroy(gba);
             }
-            destroy(gba);
         }
-    }
 }
 
 static void decrementing_rom_sources_can_cross_back_into_oam(void) {
@@ -426,36 +437,40 @@ static void decrementing_rom_sources_can_cross_back_into_oam(void) {
                             0x6789, 0xABCD, 0xEF01, 0x3456, 0x789A};
     const uint32_t words[] = {0x67892345, 0xEF01ABCD, 0x789A3456, 0x12345678};
     const uint16_t halves[] = {0x89AB, 0xCDEF, 0x2345, 0x1234};
-    for (unsigned epoch = 0; epoch < 4; epoch++) for (unsigned size = 0; size < 2; size++) {
-        struct CupidGBA* gba = machine(clocks[epoch]);
-        gba->memory.rom = calloc(1, 0x2000);
-        CHECK(gba->memory.rom);
-        gba->memory.romSize = 0x2000;
-        memcpy(gba->memory.rom, rom, sizeof(rom));
-        cupid_memory_store32(&gba->cpu, GBA_BASE_OAM + 0x3FC, 0x12345678, NULL);
-        unsigned width = widths[size];
-        uint32_t dest = GBA_BASE_IWRAM + 0x100;
-        start(gba, 3, GBA_BASE_ROM0 + 2 * width, dest, 4,
-              (uint16_t)(0x8080 | (width == 4 ? 0x0400 : 0)));
-        tick(gba, 40);
-        const struct CupidDMA* dma = &gba->memory.dma[3];
-        uint64_t duration = dma->busyUntil - clocks[epoch] + 1;
-        unsigned expected = width == 4 ? 29 : 20;
-        if (duration != expected)
-            fprintf(stderr, "ROM-to-OAM DMA clocks: observed %u, expected %u\n", (unsigned)duration, expected);
-        CHECK(duration == expected && !dma->enable && !gba->memory.dmaRunning);
-        CHECK(dma->nextSource == GBA_BASE_ROM0 - 2 * width && dma->nextDest == dest + 4 * width);
-        for (unsigned i = 0; i < 4; i++) {
-            uint32_t actual = width == 4 ? (uint32_t)cupid_memory_load32(&gba->cpu, dest + i * width, NULL)
-                                         : cupid_memory_loadU16(&gba->cpu, dest + i * width, NULL);
-            CHECK(actual == (width == 4 ? words[i] : halves[i]));
+    for (unsigned epoch = 0; epoch < 4; epoch++)
+        for (unsigned size = 0; size < 2; size++) {
+            struct CupidGBA *gba = machine(clocks[epoch]);
+            gba->memory.rom = calloc(1, 0x2000);
+            CHECK(gba->memory.rom);
+            gba->memory.romSize = 0x2000;
+            memcpy(gba->memory.rom, rom, sizeof(rom));
+            cupid_memory_store32(&gba->cpu, GBA_BASE_OAM + 0x3FC, 0x12345678, NULL);
+            unsigned width = widths[size];
+            uint32_t dest = GBA_BASE_IWRAM + 0x100;
+            start(gba, 3, GBA_BASE_ROM0 + 2 * width, dest, 4,
+                  (uint16_t)(0x8080 | (width == 4 ? 0x0400 : 0)));
+            tick(gba, 40);
+            const struct CupidDMA *dma = &gba->memory.dma[3];
+            uint64_t duration = dma->busyUntil - clocks[epoch] + 1;
+            unsigned expected = width == 4 ? 29 : 20;
+            if (duration != expected)
+                fprintf(stderr, "ROM-to-OAM DMA clocks: observed %u, expected %u\n",
+                        (unsigned)duration, expected);
+            CHECK(duration == expected && !dma->enable && !gba->memory.dmaRunning);
+            CHECK(dma->nextSource == GBA_BASE_ROM0 - 2 * width &&
+                  dma->nextDest == dest + 4 * width);
+            for (unsigned i = 0; i < 4; i++) {
+                uint32_t actual =
+                    width == 4 ? (uint32_t)cupid_memory_load32(&gba->cpu, dest + i * width, NULL)
+                               : cupid_memory_loadU16(&gba->cpu, dest + i * width, NULL);
+                CHECK(actual == (width == 4 ? words[i] : halves[i]));
+            }
+            destroy(gba);
         }
-        destroy(gba);
-    }
 }
 
 static void display_requests_and_blanking_modes(void) {
-    struct CupidGBA* gba = machine(0);
+    struct CupidGBA *gba = machine(0);
     cupid_memory_store32(&gba->cpu, GBA_BASE_IWRAM, 0x12345678, NULL);
     start(gba, 0, GBA_BASE_IWRAM, GBA_BASE_EWRAM, 1, 0x9000);
     start(gba, 1, GBA_BASE_IWRAM + 2, GBA_BASE_EWRAM + 2, 1, 0xA000);
@@ -489,13 +504,14 @@ static void display_requests_and_blanking_modes(void) {
 static void cpu_internal_cycles_restart_fetches_and_precede_branch_refills(void) {
     for (unsigned mode = 0; mode < 2; mode++) {
         for (unsigned shift = 0; shift < 2; shift++) {
-            struct CupidGBA* gba = machine(0);
+            struct CupidGBA *gba = machine(0);
             gba->memory.rom = calloc(1, 0x400);
             CHECK(gba->memory.rom);
             gba->memory.romSize = 0x400;
             gba->memory.romMask = 0x3FF;
             if (mode) {
-                const uint16_t code[] = {(uint16_t)(shift ? 0x4088 : 0x4348), 0x46C0, 0x46C0, 0x46C0};
+                const uint16_t code[] = {(uint16_t)(shift ? 0x4088 : 0x4348), 0x46C0, 0x46C0,
+                                         0x46C0};
                 memcpy(gba->memory.rom + 0x100, code, sizeof(code));
                 _CupidSetMode(&gba->cpu, MODE_THUMB);
                 gba->cpu.gprs[ARM_PC] = GBA_BASE_ROM0 + 0x100;
@@ -516,7 +532,7 @@ static void cpu_internal_cycles_restart_fetches_and_precede_branch_refills(void)
             destroy(gba);
         }
     }
-    struct CupidGBA* gba = machine(0);
+    struct CupidGBA *gba = machine(0);
     program(gba, 0xE590F000); /* ldr pc, [r0] */
     gba->cpu.gprs[0] = GBA_BASE_IWRAM + 0x100;
     cupid_memory_store32(&gba->cpu, GBA_BASE_IWRAM + 0x100, GBA_BASE_IWRAM + 0x2000, NULL);

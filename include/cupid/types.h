@@ -6,30 +6,32 @@
 #ifndef CUPID_TYPES_H
 #define CUPID_TYPES_H
 
-#include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include <string.h>
-#include <stdlib.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 /** @name Helper Macros */
 
-#define LOAD_32(DEST, OFFSET, SRC) \
-    memcpy(&(DEST), (const uint8_t*)(SRC) + (OFFSET), 4)
+#define LOAD_32(DEST, OFFSET, SRC) memcpy(&(DEST), (const uint8_t *)(SRC) + (OFFSET), 4)
 
-#define LOAD_16(DEST, OFFSET, SRC) \
-    do { uint16_t _load16_tmp; memcpy(&_load16_tmp, (const uint8_t*)(SRC) + (OFFSET), 2); (DEST) = _load16_tmp; } while(0)
+#define LOAD_16(DEST, OFFSET, SRC)                                                                 \
+    do {                                                                                           \
+        uint16_t _load16_tmp;                                                                      \
+        memcpy(&_load16_tmp, (const uint8_t *)(SRC) + (OFFSET), 2);                                \
+        (DEST) = _load16_tmp;                                                                      \
+    } while (0)
 
-#define STORE_32(SRC, OFFSET, DST) \
-    memcpy((uint8_t*)(DST) + (OFFSET), &(SRC), 4)
+#define STORE_32(SRC, OFFSET, DST) memcpy((uint8_t *)(DST) + (OFFSET), &(SRC), 4)
 
-#define STORE_16(SRC, OFFSET, DST) \
-    memcpy((uint8_t*)(DST) + (OFFSET), &(SRC), 2)
+#define STORE_16(SRC, OFFSET, DST) memcpy((uint8_t *)(DST) + (OFFSET), &(SRC), 2)
 
 static inline uint32_t cupid_ror32(uint32_t val, unsigned shift) {
     shift &= 31;
-    if (!shift) return val;
+    if (!shift)
+        return val;
     return (val >> shift) | (val << (32 - shift));
 }
 
@@ -38,7 +40,7 @@ static inline uint32_t cupid_ror32(uint32_t val, unsigned shift) {
 /** GBA screen dimensions are in video.h */
 
 /** GBA clock = 2^24 Hz (16.78 MHz) */
-#define GBA_CLOCK_FREQ     0x1000000u
+#define GBA_CLOCK_FREQ 0x1000000u
 
 /** Color: GBA uses BGR555 */
 typedef uint16_t Color16;

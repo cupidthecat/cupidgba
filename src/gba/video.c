@@ -24,12 +24,13 @@ enum { FAST_ENTRY_HDRAW_REMAINING = 166 };
 /**
  * @brief Forward declarations for timing callbacks.
  */
-static void _startHblank(struct CupidTiming* timing, void* context, uint32_t cyclesLate);
-static void _startHdraw(struct CupidTiming* timing, void* context, uint32_t cyclesLate);
-static void _updateMatch(struct CupidTiming* timing, void* context, uint32_t cyclesLate);
-static void _requestDisplay(struct CupidTiming* timing, void* context, uint32_t cyclesLate);
-static void _latchDisplay(struct CupidTiming* timing, void* context, uint32_t cyclesLate);
-void cupid_video_clock(void* context, uint64_t time) {
+static void _startHblank(struct CupidTiming *timing, void *context, uint32_t cyclesLate);
+static void _startHdraw(struct CupidTiming *timing, void *context, uint32_t cyclesLate);
+static void _updateMatch(struct CupidTiming *timing, void *context, uint32_t cyclesLate);
+static void _requestDisplay(struct CupidTiming *timing, void *context, uint32_t cyclesLate);
+static void _latchDisplay(struct CupidTiming *timing, void *context, uint32_t cyclesLate);
+
+void cupid_video_clock(void *context, uint64_t time) {
     cupid_video_sync_to(context, time);
 }
 
@@ -37,38 +38,38 @@ void cupid_video_clock(void* context, uint64_t time) {
  * @brief OBJ sprite sizes indexed by [shape * 4 + size][width, height].
  */
 const int CupidObjSizes[16][2] = {
-    /** Square */     { 8, 8 }, { 16, 16 }, { 32, 32 }, { 64, 64 },
-    /** Horizontal */ { 16, 8 }, { 32, 8 }, { 32, 16 }, { 64, 32 },
-    /** Vertical */   { 8, 16 }, { 8, 32 }, { 16, 32 }, { 32, 64 },
-    /** Shape 3 */    { 8, 8 }, { 8, 8 }, { 8, 8 }, { 8, 8 }
-};
+    /** Square */ {8, 8},      {16, 16}, {32, 32}, {64, 64},
+    /** Horizontal */ {16, 8}, {32, 8},  {32, 16}, {64, 32},
+    /** Vertical */ {8, 16},   {8, 32},  {16, 32}, {32, 64},
+    /** Shape 3 */ {8, 8},     {8, 8},   {8, 8},   {8, 8}};
 
 /**
  * @brief Initialize, reset, and deinitialize video state.
  */
-void cupid_video_init(struct CupidVideo* video, struct CupidGBA* gba) {
+void cupid_video_init(struct CupidVideo *video, struct CupidGBA *gba) {
     video->gba = gba;
     video->frameCallback = NULL;
     video->frameContext = NULL;
-    if (!video->vram) video->vram = calloc(GBA_SIZE_VRAM / 2, sizeof(uint16_t));
+    if (!video->vram)
+        video->vram = calloc(GBA_SIZE_VRAM / 2, sizeof(uint16_t));
     /** Palette and outputBuffer are inline arrays zeroed by reset. */
 
     /** Wire the timing event fields that remain constant. */
-    video->event.name     = "GBA Video";
-    video->event.context  = video;
+    video->event.name = "GBA Video";
+    video->event.context = video;
     video->event.priority = 8;    /** Event priority. */
     video->event.callback = NULL; /** Set during reset. */
-    video->event.next     = NULL;
-    video->matchEvent = (struct CupidTimingEvent){.context = video,
-        .callback = _updateMatch, .name = "GBA VCOUNT match", .priority = 8};
-    video->displayEvent = (struct CupidTimingEvent){.context = video,
-        .callback = _requestDisplay, .name = "GBA display DMA", .priority = 8};
-    video->latchEvent = (struct CupidTimingEvent){.context = video,
-        .callback = _latchDisplay, .name = "GBA display latch", .priority = 8};
+    video->event.next = NULL;
+    video->matchEvent = (struct CupidTimingEvent){
+        .context = video, .callback = _updateMatch, .name = "GBA VCOUNT match", .priority = 8};
+    video->displayEvent = (struct CupidTimingEvent){
+        .context = video, .callback = _requestDisplay, .name = "GBA display DMA", .priority = 8};
+    video->latchEvent = (struct CupidTimingEvent){
+        .context = video, .callback = _latchDisplay, .name = "GBA display latch", .priority = 8};
 }
 
-void cupid_video_reset(struct CupidVideo* video) {
-    struct CupidGBA* gba = video->gba;
+void cupid_video_reset(struct CupidVideo *video) {
+    struct CupidGBA *gba = video->gba;
     cupid_timing_deschedule(&gba->timing, &video->matchEvent);
     cupid_timing_deschedule(&gba->timing, &video->displayEvent);
     cupid_timing_deschedule(&gba->timing, &video->latchEvent);
@@ -113,8 +114,8 @@ void cupid_video_reset(struct CupidVideo* video) {
 /**
  * @brief Reschedule video timing for post-boot state when BIOS is skipped.
  */
-void cupid_video_skip_bios(struct CupidVideo* video) {
-    struct CupidGBA* gba = video->gba;
+void cupid_video_skip_bios(struct CupidVideo *video) {
+    struct CupidGBA *gba = video->gba;
     video->vcount = 0x7E;
     cupid_timing_deschedule(&gba->timing, &video->event);
     cupid_timing_deschedule(&gba->timing, &video->latchEvent);
@@ -123,17 +124,19 @@ void cupid_video_skip_bios(struct CupidVideo* video) {
     cupid_timing_schedule(&gba->timing, &video->event, FAST_ENTRY_HDRAW_REMAINING);
 }
 
-void cupid_video_deinit(struct CupidVideo* video) {
+void cupid_video_deinit(struct CupidVideo *video) {
     video->gba->timing.syncClock = NULL;
     video->gba->timing.clockContext = NULL;
     video->frameCallback = NULL;
     video->frameContext = NULL;
-    free(video->vram);  video->vram = NULL;
+    free(video->vram);
+    video->vram = NULL;
     /** Palette and outputBuffer are inline, no free needed. */
 }
 
-void cupid_video_set_frame_callback(struct CupidVideo* video,
-    void (*callback)(void*, const uint32_t*, uint64_t), void* context) {
+void cupid_video_set_frame_callback(struct CupidVideo *video,
+                                    void (*callback)(void *, const uint32_t *, uint64_t),
+                                    void *context) {
     video->frameCallback = callback;
     video->frameContext = context;
 }
@@ -145,17 +148,16 @@ void cupid_video_set_frame_callback(struct CupidVideo* video,
 /**
  * @brief Hdraw ended and HBlank started.
  */
-static void _startHblank(struct CupidTiming* timing, void* context, uint32_t cyclesLate) {
-    struct CupidVideo* video = (struct CupidVideo*)context;
-    struct CupidGBA*   gba   = video->gba;
+static void _startHblank(struct CupidTiming *timing, void *context, uint32_t cyclesLate) {
+    struct CupidVideo *video = (struct CupidVideo *)context;
+    struct CupidGBA *gba = video->gba;
 
     /**
      * Schedule _startHdraw after VIDEO_HBLANK_LENGTH.
      * Relative scheduling uses the event's original timestamp.
      */
     video->event.callback = _startHdraw;
-    cupid_timing_schedule(timing, &video->event,
-                          VIDEO_HBLANK_LENGTH);
+    cupid_timing_schedule(timing, &video->event, VIDEO_HBLANK_LENGTH);
 
     /** Set HBlank flag in DISPSTAT. */
     video->dispstat |= 0x0002;
@@ -179,20 +181,19 @@ static void _startHblank(struct CupidTiming* timing, void* context, uint32_t cyc
 /**
  * @brief HBlank ended and a new Hdraw scanline started.
  */
-static void _startHdraw(struct CupidTiming* timing, void* context, uint32_t cyclesLate) {
-    struct CupidVideo* video = (struct CupidVideo*)context;
-    struct CupidGBA*   gba   = video->gba;
+static void _startHdraw(struct CupidTiming *timing, void *context, uint32_t cyclesLate) {
+    struct CupidVideo *video = (struct CupidVideo *)context;
+    struct CupidGBA *gba = video->gba;
 
     cupid_video_sync(video);
 
     /** Schedule _startHblank after VIDEO_HDRAW_LENGTH. */
     video->event.callback = _startHblank;
-    cupid_timing_schedule(timing, &video->event,
-                          VIDEO_HDRAW_LENGTH);
+    cupid_timing_schedule(timing, &video->event, VIDEO_HDRAW_LENGTH);
 
     /* The display request mode is latched during the blanking interval. */
     if (video->vcount == 162) {
-        struct CupidDMA* dma = &gba->memory.dma[3];
+        struct CupidDMA *dma = &gba->memory.dma[3];
         video->displayDmaLatched = dma->enable && dma->timing == DMA_TIMING_CUSTOM;
     }
 
@@ -220,7 +221,7 @@ static void _startHdraw(struct CupidTiming* timing, void* context, uint32_t cycl
     /** Per-scanline actions. */
     if (video->vcount == VIDEO_VDRAW_LINES) {
         /** Entering VBlank at vcount 160. */
-        video->dispstat |= 0x0001;  /** InVblank flag. */
+        video->dispstat |= 0x0001; /** InVblank flag. */
 
         /** Run VBlank DMA. */
         cupid_dma_run_vblank(gba, -(int32_t)cyclesLate);
@@ -242,57 +243,60 @@ static void _startHdraw(struct CupidTiming* timing, void* context, uint32_t cycl
     /** Write updated DISPSTAT back to IO mirror. */
     gba->memory.io[REG_DISPSTAT >> 1] = video->dispstat;
     if (video->vcount == VIDEO_VDRAW_LINES && video->frameCallback)
-        video->frameCallback(video->frameContext, video->outputBuffer, cupid_timing_global_time(timing));
+        video->frameCallback(video->frameContext, video->outputBuffer,
+                             cupid_timing_global_time(timing));
     cupid_pixel_begin_line(video, 0);
     if (video->vcount < VIDEO_VDRAW_LINES || video->vcount >= 225)
         cupid_timing_schedule(timing, &video->latchEvent, 40);
 }
 
-static void _latchDisplay(struct CupidTiming* timing, void* context, uint32_t cyclesLate) {
+static void _latchDisplay(struct CupidTiming *timing, void *context, uint32_t cyclesLate) {
     (void)timing;
     (void)cyclesLate;
-    struct CupidVideo* video = context;
+    struct CupidVideo *video = context;
     cupid_video_sync(video);
     cupid_pixel_latch(video);
 }
 
-void cupid_video_update_match(struct CupidVideo* video) {
+void cupid_video_update_match(struct CupidVideo *video) {
     bool previous = (video->dispstat & 4) != 0;
     bool match = video->vcount == (video->dispstat >> 8);
     video->dispstat = (video->dispstat & ~4u) | (match ? 4 : 0);
     video->gba->memory.io[REG_DISPSTAT >> 1] = video->dispstat;
     if (match && !previous && (video->dispstat & 0x20)) {
         cupid_raise_irq_at(video->gba, IRQ_VCOUNT,
-            cupid_timing_global_time(&video->gba->timing) + 1);
+                           cupid_timing_global_time(&video->gba->timing) + 1);
     }
 }
 
-static void _updateMatch(struct CupidTiming* timing, void* context, uint32_t cyclesLate) {
+static void _updateMatch(struct CupidTiming *timing, void *context, uint32_t cyclesLate) {
     (void)timing;
     (void)cyclesLate;
     cupid_video_update_match(context);
 }
 
-static void _requestDisplay(struct CupidTiming* timing, void* context, uint32_t cyclesLate) {
+static void _requestDisplay(struct CupidTiming *timing, void *context, uint32_t cyclesLate) {
     (void)timing;
     (void)cyclesLate;
-    struct CupidVideo* video = context;
+    struct CupidVideo *video = context;
     cupid_dma_run_display(video->gba);
 }
 
-void cupid_video_write_palette(struct CupidVideo* video, uint32_t offset, uint16_t val) {
+void cupid_video_write_palette(struct CupidVideo *video, uint32_t offset, uint16_t val) {
     cupid_video_sync(video);
     if (offset < 512) {
         video->palette[offset] = val;
     }
 }
 
-void cupid_video_write_vram(struct CupidVideo* video, uint32_t offset, uint16_t val) {
+void cupid_video_write_vram(struct CupidVideo *video, uint32_t offset, uint16_t val) {
     cupid_video_sync(video);
-    if (offset < GBA_SIZE_VRAM / 2) video->vram[offset] = val;
+    if (offset < GBA_SIZE_VRAM / 2)
+        video->vram[offset] = val;
 }
 
-void cupid_video_write_oam(struct CupidVideo* video, uint32_t offset, uint16_t val) {
+void cupid_video_write_oam(struct CupidVideo *video, uint32_t offset, uint16_t val) {
     cupid_video_sync(video);
-    if (offset < 512) video->oam.raw[offset] = val;
+    if (offset < 512)
+        video->oam.raw[offset] = val;
 }

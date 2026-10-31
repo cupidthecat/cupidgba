@@ -31,6 +31,7 @@ set(CUPID_USER_BANK_PROBE_DIR "" CACHE PATH "Directory containing checksum-verif
 set(CUPID_SAVED_STATUS_PROBE_DIR "" CACHE PATH "Directory containing the checksum-verified saved-status cartridge")
 set(CUPID_FIRMWARE_IRQ_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified firmware IRQ return cartridges")
 set(CUPID_AUDIO_TEST_ROM "" CACHE FILEPATH "Locally built audio signal cartridge ROM")
+set(CUPID_BUS_FEEDBACK_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified bus feedback cartridges")
 set(CUPID_FIFO_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified FIFO DMA cartridges")
 set(CUPID_FIFO_SOURCE_ROM "" CACHE FILEPATH "Checksum-verified FIFO base cartridge rebuilt from its pinned source")
 set(CUPID_EEPROM_PROBE_ROM "" CACHE FILEPATH "Checksum-verified local EEPROM polling software probe")
@@ -57,7 +58,7 @@ endif()
 add_library(cupid_core STATIC
     src/arm/arm.c src/arm/isa-arm.c src/arm/isa-thumb.c
     src/core/timing.c src/core/file.c src/platform/context.c
-    src/gba/gba.c src/gba/memory.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
+    src/gba/gba.c src/gba/memory.c src/gba/memory/feedback.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
     src/gba/audio.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c
     src/gba/hle-bios.c src/gba/bios/file.c src/gba/savedata.c src/gba/save/file.c
     src/gba/save/programming.c
@@ -590,6 +591,34 @@ if(BUILD_TESTING)
     foreach(group first patterns switches)
         add_test(NAME gba.wave-bank-${group} COMMAND test_wave_bank ${group})
         set_tests_properties(gba.wave-bank-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
+    add_test(NAME runner.bus-feedback-protocol COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_bus_feedback_protocol.py)
+    set_tests_properties(runner.bus-feedback-protocol PROPERTIES TIMEOUT 10)
+
+    if(CUPID_BUS_FEEDBACK_PROBE_DIR)
+        foreach(case cpu iwram oam protected signed-halfword unmapped)
+            add_test(NAME rom.bus-feedback-${case} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_bus_feedback.py
+                --directory ${CUPID_BUS_FEEDBACK_PROBE_DIR}
+                --runner $<TARGET_FILE:cupidgba-headless> --test ${case})
+            set_tests_properties(rom.bus-feedback-${case} PROPERTIES TIMEOUT 100)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.bus-feedback-${case}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_bus_feedback.py
+                    --directory ${CUPID_BUS_FEEDBACK_PROBE_DIR}
+                    --runner $<TARGET_FILE:cupidgba-headless> --test ${case} --bios ${CUPID_TEST_BIOS})
+                set_tests_properties(rom.bus-feedback-${case}-external PROPERTIES TIMEOUT 100)
+            endif()
+        endforeach()
+    endif()
+
+    add_executable(test_memory_feedback tests/gba/memory/test_feedback.c)
+    target_link_libraries(test_memory_feedback PRIVATE cupid_core)
+    foreach(group handover ownership bios)
+        add_test(NAME gba.memory-feedback-${group} COMMAND test_memory_feedback ${group})
+        set_tests_properties(gba.memory-feedback-${group} PROPERTIES TIMEOUT 10)
     endforeach()
 
     add_executable(test_fifo_power tests/gba/audio/test_fifo_power.c)

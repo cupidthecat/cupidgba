@@ -2,14 +2,14 @@
 #ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L
 #endif
-#include "cupid/gba.h"
 #include "../../test.h"
+#include "cupid/gba.h"
 #include <errno.h>
 #include <sys/stat.h>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
-#include <windows.h>
 #include <direct.h>
+#include <windows.h>
 #else
 #include <signal.h>
 #include <sys/resource.h>
@@ -23,23 +23,26 @@ static uint8_t pattern(size_t i, unsigned revision) {
     return (uint8_t)(i * 13 + (i >> 9) * 7 + 31 + revision * 83);
 }
 
-static void seed(const char* path, size_t size, unsigned revision) {
-    FILE* file = fopen(path, "wb");
+static void seed(const char *path, size_t size, unsigned revision) {
+    FILE *file = fopen(path, "wb");
     CHECK(file);
-    for (size_t i = 0; i < size; i++) CHECK(fputc(pattern(i, revision), file) != EOF);
+    for (size_t i = 0; i < size; i++)
+        CHECK(fputc(pattern(i, revision), file) != EOF);
     CHECK(fclose(file) == 0);
 }
 
-static void verify(const char* path, size_t size, unsigned revision) {
-    FILE* file = fopen(path, "rb");
+static void verify(const char *path, size_t size, unsigned revision) {
+    FILE *file = fopen(path, "rb");
     CHECK(file);
-    for (size_t i = 0; i < size; i++) CHECK(fgetc(file) == pattern(i, revision));
+    for (size_t i = 0; i < size; i++)
+        CHECK(fgetc(file) == pattern(i, revision));
     CHECK(fgetc(file) == EOF && !ferror(file));
     CHECK(fclose(file) == 0);
 }
 
-static void fill(struct CupidSavedata* save, unsigned revision) {
-    for (size_t i = 0; i < save->size; i++) save->data[i] = pattern(i, revision);
+static void fill(struct CupidSavedata *save, unsigned revision) {
+    for (size_t i = 0; i < save->size; i++)
+        save->data[i] = pattern(i, revision);
     save->dirty = true;
 }
 
@@ -63,8 +66,9 @@ static void exclusive_staging_preserves_an_existing_companion(void) {
 }
 
 static void every_save_capacity_round_trips_complete_replacements(void) {
-    const enum CupidSaveType types[] = {SAVE_EEPROM512, SAVE_EEPROM, SAVE_SRAM,
-                                       SAVE_SRAM512, SAVE_FLASH512, SAVE_FLASH1M};
+    const enum CupidSaveType types[] = {SAVE_EEPROM512, SAVE_EEPROM,   SAVE_SRAM,
+                                        SAVE_SRAM512,   SAVE_FLASH512, SAVE_FLASH1M};
+
     const size_t sizes[] = {512, 8192, 32768, 65536, 65536, 131072};
     for (unsigned test = 0; test < 6; test++) {
         struct CupidSavedata save, reload;
@@ -88,7 +92,9 @@ static void every_save_capacity_round_trips_complete_replacements(void) {
 
 static void inferred_capacities_expand_and_flash_bank_pointers_follow(void) {
     const size_t sizes[] = {8192, 65536, 131072};
+
     const enum CupidSaveType types[] = {SAVE_EEPROM, SAVE_SRAM512, SAVE_FLASH1M};
+
     for (unsigned test = 0; test < 3; test++) {
         struct CupidSavedata save;
         cupid_savedata_init(&save);
@@ -96,13 +102,18 @@ static void inferred_capacities_expand_and_flash_bank_pointers_follow(void) {
             uint8_t rom[512] = {0};
             memcpy(rom + 256, "EEPROM_V", 8);
             cupid_savedata_detect_type(&save, rom, sizeof(rom));
-        } else if (test == 1) cupid_savedata_init_sram(&save);
-        else { save.type = SAVE_FLASH512; cupid_savedata_init_flash(&save); }
+        } else if (test == 1)
+            cupid_savedata_init_sram(&save);
+        else {
+            save.type = SAVE_FLASH512;
+            cupid_savedata_init_flash(&save);
+        }
         CHECK(!save.typeForced);
         seed(input, sizes[test], test);
         CHECK(cupid_savedata_load_file(&save, input));
         CHECK(save.type == types[test] && save.size == sizes[test]);
-        for (size_t i = 0; i < sizes[test]; i++) CHECK(save.data[i] == pattern(i, test));
+        for (size_t i = 0; i < sizes[test]; i++)
+            CHECK(save.data[i] == pattern(i, test));
         CHECK(save.currentBank == save.data);
         if (test == 2) {
             save.flashBank = 1;
@@ -128,7 +139,8 @@ static void invalid_input_preserves_active_state_and_explicit_choices(void) {
         memcpy(&before, &save, sizeof(before));
         CHECK(!cupid_savedata_load_file(&save, input) && errno == EINVAL);
         CHECK(!memcmp(&before, &save, sizeof(save)));
-        for (size_t i = 0; i < save.size; i++) CHECK(save.data[i] == pattern(i, 2));
+        for (size_t i = 0; i < save.size; i++)
+            CHECK(save.data[i] == pattern(i, 2));
     }
     char missing[1100];
     CHECK(snprintf(missing, sizeof(missing), "%s/missing.sav", directory) > 0);
@@ -151,7 +163,8 @@ static void smaller_related_files_fill_unused_capacity_with_erased_bytes(void) {
     seed(input, 512, 1);
     CHECK(cupid_savedata_load_file(&save, input));
     CHECK(save.type == SAVE_EEPROM && save.size == 8192 && save.typeForced);
-    for (size_t i = 0; i < 8192; i++) CHECK(save.data[i] == (i < 512 ? pattern(i, 1) : 0xFF));
+    for (size_t i = 0; i < 8192; i++)
+        CHECK(save.data[i] == (i < 512 ? pattern(i, 1) : 0xFF));
     cupid_savedata_deinit(&save);
     cupid_savedata_init(&save);
     seed(input, 8192, 2);
@@ -175,8 +188,8 @@ static void protected_destinations_keep_the_previous_save_and_dirty_state(void) 
     verify(output, 512, 0);
 #ifdef _WIN32
     CHECK(SetFileAttributesA(output, FILE_ATTRIBUTE_NORMAL));
-    HANDLE held = CreateFileA(output, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                              NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE held = CreateFileA(output, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+                              OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     CHECK(held != INVALID_HANDLE_VALUE);
     CHECK(!cupid_savedata_save_file(&save, output) && save.dirty);
     CHECK(errno == EBUSY || errno == EACCES);
@@ -186,10 +199,11 @@ static void protected_destinations_keep_the_previous_save_and_dirty_state(void) 
     CHECK(chmod(output, 0640) == 0);
     struct stat previousInfo;
     CHECK(stat(output, &previousInfo) == 0);
-    FILE* held = fopen(output, "rb");
+    FILE *held = fopen(output, "rb");
     CHECK(held);
     CHECK(cupid_savedata_save_file(&save, output));
-    for (size_t i = 0; i < 512; i++) CHECK(fgetc(held) == pattern(i, 0));
+    for (size_t i = 0; i < 512; i++)
+        CHECK(fgetc(held) == pattern(i, 0));
     CHECK(fclose(held) == 0);
     struct stat info;
     CHECK(stat(output, &info) == 0 && (info.st_mode & 0777) == (previousInfo.st_mode & 0777));
@@ -239,7 +253,8 @@ static void non_regular_input_is_rejected_without_waiting_for_a_writer(void) {
     fill(&save, 3);
     CHECK(!cupid_savedata_load_file(&save, fifo) && errno == EINVAL);
     CHECK(save.dirty && save.size == 512);
-    for (size_t i = 0; i < save.size; i++) CHECK(save.data[i] == pattern(i, 3));
+    for (size_t i = 0; i < save.size; i++)
+        CHECK(save.data[i] == pattern(i, 3));
     CHECK(remove(fifo) == 0);
     CHECK(rmdir(fifoDirectory) == 0);
     cupid_savedata_deinit(&save);
@@ -255,7 +270,7 @@ static void remove_owned_fixtures(void) {
 #endif
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
     CHECK(argc == 2);
 #ifdef _WIN32
     unsigned long process = GetCurrentProcessId();
@@ -264,12 +279,15 @@ int main(int argc, char** argv) {
 #endif
     unsigned attempt;
     for (attempt = 0; attempt < 16; attempt++) {
-        int length = snprintf(directory, sizeof(directory), "%s/save-file-test.%lu.%u", argv[1], process, attempt);
+        int length = snprintf(directory, sizeof(directory), "%s/save-file-test.%lu.%u", argv[1],
+                              process, attempt);
         CHECK(length > 0 && (size_t)length < sizeof(directory));
 #ifdef _WIN32
-        if (_mkdir(directory) == 0) break;
+        if (_mkdir(directory) == 0)
+            break;
 #else
-        if (mkdir(directory, 0700) == 0) break;
+        if (mkdir(directory, 0700) == 0)
+            break;
 #endif
         CHECK(errno == EEXIST);
     }

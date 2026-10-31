@@ -15,13 +15,13 @@ struct CupidIssueExpectation {
 /* The last two expectations are the result checkpoint and terminal. Records
  * belong to the host; the callback never writes through the CPU pointer. */
 struct CupidIssueProbe {
-    const struct CupidIssueExpectation* expected;
+    const struct CupidIssueExpectation *expected;
     unsigned count, seen;
     bool failed, checkpoint, terminal;
-    FILE* output;
+    FILE *output;
 };
 
-void cupid_test_observe_issue(const struct CupidARM* cpu, void* context);
-bool cupid_test_issue_probe_passed(const struct CupidIssueProbe* probe);
+void cupid_test_observe_issue(const struct CupidARM *cpu, void *context);
+bool cupid_test_issue_probe_passed(const struct CupidIssueProbe *probe);
 
 #endif

@@ -1,5 +1,9 @@
 # Testing
 
+CPU read feedback and its pinned DMA handover probes are described in
+[read feedback](../hardware/memory/read-feedback.md). The native groups are
+`gba.memory-feedback-*`; optional cartridge groups are `rom.bus-feedback-*`.
+
 The vertical mosaic geometry matrix can be selected with:
 
 ```sh

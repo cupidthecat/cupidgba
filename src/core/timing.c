@@ -3,20 +3,19 @@
 /* Timestamps wrap modulo 2^32. Deadlines must be within INT32_MAX cycles.
  * Keep the subtraction at its use so unoptimized bus-clock work does not
  * enter another function merely to subtract two unsigned timestamps. */
-static int32_t deadline(const struct CupidTiming* timing) {
-    const struct CupidTimingEvent* first = timing->root ? timing->root : timing->reroot;
+static int32_t deadline(const struct CupidTiming *timing) {
+    const struct CupidTimingEvent *first = timing->root ? timing->root : timing->reroot;
     return first ? (int32_t)(first->when - timing->masterCycles) : INT32_MAX;
 }
 
-static void refresh_deadline(struct CupidTiming* timing) {
+static void refresh_deadline(struct CupidTiming *timing) {
     /* A CPU mode change can request a breakpoint at the current cycle. */
     if (*timing->nextEvent > *timing->relativeCycles) {
         *timing->nextEvent = deadline(timing);
     }
 }
 
-void cupid_timing_init(struct CupidTiming* timing, int32_t* relativeCycles,
-                       int32_t* nextEvent) {
+void cupid_timing_init(struct CupidTiming *timing, int32_t *relativeCycles, int32_t *nextEvent) {
     timing->relativeCycles = relativeCycles;
     timing->clockContext = NULL;
     timing->syncClock = NULL;
@@ -26,11 +25,11 @@ void cupid_timing_init(struct CupidTiming* timing, int32_t* relativeCycles,
     cupid_timing_clear(timing);
 }
 
-void cupid_timing_deinit(struct CupidTiming* timing) {
+void cupid_timing_deinit(struct CupidTiming *timing) {
     (void)timing;
 }
 
-void cupid_timing_clear(struct CupidTiming* timing) {
+void cupid_timing_clear(struct CupidTiming *timing) {
     timing->root = NULL;
     timing->reroot = NULL;
     timing->globalCycles = 0;
@@ -42,17 +41,17 @@ void cupid_timing_clear(struct CupidTiming* timing) {
     *timing->nextEvent = INT32_MAX;
 }
 
-void cupid_timing_interrupt(struct CupidTiming* timing) {
+void cupid_timing_interrupt(struct CupidTiming *timing) {
     if (timing->root) {
         timing->reroot = timing->root;
         timing->root = NULL;
     }
 }
 
-void cupid_timing_deschedule(struct CupidTiming* timing, struct CupidTimingEvent* event) {
-    struct CupidTimingEvent** lists[] = {&timing->root, &timing->reroot};
+void cupid_timing_deschedule(struct CupidTiming *timing, struct CupidTimingEvent *event) {
+    struct CupidTimingEvent **lists[] = {&timing->root, &timing->reroot};
     for (unsigned i = 0; i < 2; i++) {
-        struct CupidTimingEvent** link = lists[i];
+        struct CupidTimingEvent **link = lists[i];
         while (*link) {
             if (*link == event) {
                 *link = event->next;
@@ -65,13 +64,14 @@ void cupid_timing_deschedule(struct CupidTiming* timing, struct CupidTimingEvent
     }
 }
 
-void cupid_timing_queue_absolute(struct CupidTiming* timing, struct CupidTimingEvent* event,
+void cupid_timing_queue_absolute(struct CupidTiming *timing, struct CupidTimingEvent *event,
                                  int32_t when) {
     event->when = (uint32_t)when;
-    struct CupidTimingEvent** link = timing->reroot ? &timing->reroot : &timing->root;
+    struct CupidTimingEvent **link = timing->reroot ? &timing->reroot : &timing->root;
     while (*link) {
         int32_t delta = (int32_t)((*link)->when - event->when);
-        if (delta > 0 || (delta == 0 && (*link)->priority > event->priority)) break;
+        if (delta > 0 || (delta == 0 && (*link)->priority > event->priority))
+            break;
         link = &(*link)->next;
     }
     event->next = *link;
@@ -79,14 +79,14 @@ void cupid_timing_queue_absolute(struct CupidTiming* timing, struct CupidTimingE
     refresh_deadline(timing);
 }
 
-void cupid_timing_schedule(struct CupidTiming* timing, struct CupidTimingEvent* event,
+void cupid_timing_schedule(struct CupidTiming *timing, struct CupidTimingEvent *event,
                            int32_t when) {
     cupid_timing_deschedule(timing, event);
-    cupid_timing_queue_absolute(timing, event,
-        (int32_t)((uint32_t)cupid_timing_current_time(timing) + (uint32_t)when));
+    cupid_timing_queue_absolute(
+        timing, event, (int32_t)((uint32_t)cupid_timing_current_time(timing) + (uint32_t)when));
 }
 
-void cupid_timing_schedule_absolute(struct CupidTiming* timing, struct CupidTimingEvent* event,
+void cupid_timing_schedule_absolute(struct CupidTiming *timing, struct CupidTimingEvent *event,
                                     int32_t when) {
     /* The timestamp is already absolute. Moving the event retains cancellation
      * and deadline refresh without converting through the current CPU clock. */
@@ -94,33 +94,35 @@ void cupid_timing_schedule_absolute(struct CupidTiming* timing, struct CupidTimi
     cupid_timing_queue_absolute(timing, event, when);
 }
 
-bool cupid_timing_is_scheduled(const struct CupidTiming* timing,
-                               const struct CupidTimingEvent* event) {
-    const struct CupidTimingEvent* lists[] = {timing->root, timing->reroot};
+bool cupid_timing_is_scheduled(const struct CupidTiming *timing,
+                               const struct CupidTimingEvent *event) {
+    const struct CupidTimingEvent *lists[] = {timing->root, timing->reroot};
     for (unsigned i = 0; i < 2; i++) {
-        for (const struct CupidTimingEvent* next = lists[i]; next; next = next->next) {
-            if (next == event) return true;
+        for (const struct CupidTimingEvent *next = lists[i]; next; next = next->next) {
+            if (next == event)
+                return true;
         }
     }
     return false;
 }
 
-const struct CupidTimingEvent* cupid_timing_first_event(const struct CupidTiming* timing) {
+const struct CupidTimingEvent *cupid_timing_first_event(const struct CupidTiming *timing) {
     return timing->root ? timing->root : timing->reroot;
 }
 
-void cupid_timing_advance_clock(struct CupidTiming* timing, uint32_t cycles) {
+void cupid_timing_advance_clock(struct CupidTiming *timing, uint32_t cycles) {
     timing->masterCycles += cycles;
     timing->globalCycles += cycles;
 }
 
-bool cupid_timing_dispatch_next(struct CupidTiming* timing) {
+bool cupid_timing_dispatch_next(struct CupidTiming *timing) {
     if (!timing->root) {
         timing->root = timing->reroot;
         timing->reroot = NULL;
     }
-    struct CupidTimingEvent* next = timing->root;
-    if (!next || (int32_t)(next->when - timing->masterCycles) > 0) return false;
+    struct CupidTimingEvent *next = timing->root;
+    if (!next || (int32_t)(next->when - timing->masterCycles) > 0)
+        return false;
     timing->root = next->next;
     next->next = NULL;
     uint32_t late = timing->masterCycles - next->when;
@@ -134,19 +136,21 @@ bool cupid_timing_dispatch_next(struct CupidTiming* timing) {
     return true;
 }
 
-void cupid_timing_finish_tick(struct CupidTiming* timing) {
-    if (timing->syncClock) timing->syncClock(timing->clockContext, timing->globalCycles);
+void cupid_timing_finish_tick(struct CupidTiming *timing) {
+    if (timing->syncClock)
+        timing->syncClock(timing->clockContext, timing->globalCycles);
 }
 
-int32_t cupid_timing_tick(struct CupidTiming* timing, int32_t cycles) {
+int32_t cupid_timing_tick(struct CupidTiming *timing, int32_t cycles) {
     if (timing->synchronize)
         return timing->synchronize(timing->synchronizeContext, timing, cycles);
     cupid_timing_advance_clock(timing, (uint32_t)cycles);
     int32_t next;
     for (;;) {
-        const struct CupidTimingEvent* first = timing->root ? timing->root : timing->reroot;
+        const struct CupidTimingEvent *first = timing->root ? timing->root : timing->reroot;
         next = first ? (int32_t)(first->when - timing->masterCycles) : INT32_MAX;
-        if (next > 0) break;
+        if (next > 0)
+            break;
         cupid_timing_dispatch_next(timing);
     }
     /* The last ordinary dispatch attempt restores a deferred future queue
@@ -166,22 +170,24 @@ int32_t cupid_timing_tick(struct CupidTiming* timing, int32_t cycles) {
     return next;
 }
 
-int32_t cupid_timing_current_time(const struct CupidTiming* timing) {
-    if (timing->inCallback) return (int32_t)(uint32_t)timing->callbackCycles;
+int32_t cupid_timing_current_time(const struct CupidTiming *timing) {
+    if (timing->inCallback)
+        return (int32_t)(uint32_t)timing->callbackCycles;
     return (int32_t)(timing->masterCycles + (uint32_t)*timing->relativeCycles);
 }
 
-uint64_t cupid_timing_global_time(const struct CupidTiming* timing) {
-    if (timing->inCallback) return timing->callbackCycles;
+uint64_t cupid_timing_global_time(const struct CupidTiming *timing) {
+    if (timing->inCallback)
+        return timing->callbackCycles;
     return timing->globalCycles + (uint32_t)*timing->relativeCycles;
 }
 
-int32_t cupid_timing_next_event(struct CupidTiming* timing) {
-    const struct CupidTimingEvent* first = timing->root ? timing->root : timing->reroot;
+int32_t cupid_timing_next_event(struct CupidTiming *timing) {
+    const struct CupidTimingEvent *first = timing->root ? timing->root : timing->reroot;
     return first ? cupid_timing_until(timing, first) : INT32_MAX;
 }
 
-int32_t cupid_timing_until(const struct CupidTiming* timing, const struct CupidTimingEvent* event) {
+int32_t cupid_timing_until(const struct CupidTiming *timing, const struct CupidTimingEvent *event) {
     uint32_t now = timing->masterCycles + (uint32_t)*timing->relativeCycles;
     return (int32_t)(event->when - now);
 }

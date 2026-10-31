@@ -7,10 +7,10 @@
 struct CupidContext;
 /* Host handles are shared on the creating thread. Each successful acquisition
  * needs one destroy, after destroying that owner's child stacks. */
-struct CupidContext* cupid_context_host_create(void);
-struct CupidContext* cupid_context_create(struct CupidContext* host,
-                                         void (*entry)(void*), void* argument);
-void cupid_context_resume(struct CupidContext* context);
-void cupid_context_yield(struct CupidContext* context);
-void cupid_context_destroy(struct CupidContext* context);
+struct CupidContext *cupid_context_host_create(void);
+struct CupidContext *cupid_context_create(struct CupidContext *host, void (*entry)(void *),
+                                          void *argument);
+void cupid_context_resume(struct CupidContext *context);
+void cupid_context_yield(struct CupidContext *context);
+void cupid_context_destroy(struct CupidContext *context);
 #endif

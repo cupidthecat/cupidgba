@@ -5,19 +5,19 @@
 #include "cupid/gba.h"
 
 #define FETCH_DIRECT 0x10000u
-void cupid_pixel_begin_line(struct CupidVideo* video, unsigned initialCycle);
-void cupid_pixel_latch(struct CupidVideo* video);
-void cupid_pixel_background(struct CupidVideo* video, unsigned cycle, uint64_t time);
-void cupid_pixel_merge(struct CupidVideo* video, unsigned cycle, uint64_t time);
-void cupid_pixel_object(struct CupidVideo* video, uint64_t time);
-void cupid_pixel_object_begin(struct CupidVideo* video, uint64_t time);
-uint16_t cupid_pixel_read_background(struct CupidVideo* video, uint32_t address, uint64_t time);
+void cupid_pixel_begin_line(struct CupidVideo *video, unsigned initialCycle);
+void cupid_pixel_latch(struct CupidVideo *video);
+void cupid_pixel_background(struct CupidVideo *video, unsigned cycle, uint64_t time);
+void cupid_pixel_merge(struct CupidVideo *video, unsigned cycle, uint64_t time);
+void cupid_pixel_object(struct CupidVideo *video, uint64_t time);
+void cupid_pixel_object_begin(struct CupidVideo *video, uint64_t time);
+uint16_t cupid_pixel_read_background(struct CupidVideo *video, uint32_t address, uint64_t time);
 
-static inline uint16_t cupid_pixel_display(const struct CupidVideo* video) {
+static inline uint16_t cupid_pixel_display(const struct CupidVideo *video) {
     return video->dispcnt & video->pipeline.displayLatch[0];
 }
 
-static inline bool cupid_pixel_blank(const struct CupidVideo* video) {
+static inline bool cupid_pixel_blank(const struct CupidVideo *video) {
     return (video->dispcnt | video->pipeline.displayLatch[0]) & 0x80;
 }
 

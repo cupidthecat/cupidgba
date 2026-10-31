@@ -1,39 +1,42 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+#include "../../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
-#include "../../test.h"
 
-static const char* bios;
+static const char *bios;
 
-static struct CupidGBA* machine(bool thumb) {
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+static struct CupidGBA *machine(bool thumb) {
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba);
     cupid_gba_create(gba);
     gba->memory.rom = calloc(1, 4096);
     CHECK(gba->memory.rom);
     gba->memory.romSize = 4096;
     gba->memory.romMask = 4095;
-    if (bios) CHECK(cupid_load_bios(gba, bios));
+    if (bios)
+        CHECK(cupid_load_bios(gba, bios));
     cupid_gba_reset(gba);
     cupid_gba_skip_bios(gba);
     cupid_cartridge_enable_rtc(gba, true);
     const uint32_t arm[] = {0xE1A00000, 0xE1A00000, 0xEAFFFFFE};
     const uint16_t small[] = {0x46C0, 0x46C0, 0xE7FE};
-    memcpy(gba->memory.iwram, thumb ? (const void*)small : (const void*)arm,
+    memcpy(gba->memory.iwram, thumb ? (const void *)small : (const void *)arm,
            thumb ? sizeof(small) : sizeof(arm));
     _CupidSetMode(&gba->cpu, thumb ? MODE_THUMB : MODE_ARM);
     gba->cpu.gprs[ARM_PC] = GBA_BASE_IWRAM;
-    if (thumb) CupidThumbWritePC(&gba->cpu);
-    else CupidARMWritePC(&gba->cpu);
+    if (thumb)
+        CupidThumbWritePC(&gba->cpu);
+    else
+        CupidARMWritePC(&gba->cpu);
     return gba;
 }
 
-static void destroy(struct CupidGBA* gba) {
+static void destroy(struct CupidGBA *gba) {
     cupid_gba_destroy(gba);
     free(gba);
 }
 
-static void stop(struct CupidGBA* gba, uint16_t ie, bool ime) {
+static void stop(struct CupidGBA *gba, uint16_t ie, bool ime) {
     cupid_irq_write(gba, REG_IE, ie);
     cupid_irq_write(gba, REG_IME, ime);
     gba->cpu.cycles += 8;
@@ -42,7 +45,7 @@ static void stop(struct CupidGBA* gba, uint16_t ie, bool ime) {
     CHECK(!gba->irq.pendingIF && !gba->irqf);
 }
 
-static void frequency(struct CupidGBA* gba, uint16_t mask, uint32_t fraction) {
+static void frequency(struct CupidGBA *gba, uint16_t mask, uint32_t fraction) {
     cupid_rtc_write_interrupt_parameters(&gba->cartridge.rtc, mask);
     gba->cartridge.rtc.fraction = fraction;
     cupid_rtc_write_control(&gba->cartridge.rtc, 0x42);
@@ -50,7 +53,7 @@ static void frequency(struct CupidGBA* gba, uint16_t mask, uint32_t fraction) {
 }
 
 static void calendar_advances_while_system_peripherals_and_deadlines_are_frozen(void) {
-    struct CupidGBA* gba = machine(false);
+    struct CupidGBA *gba = machine(false);
     cupid_io_write(gba, REG_TM0CNT_L, 0x8000);
     cupid_io_write(gba, REG_TM0CNT_H, 0x80);
     cupid_io_write(gba, REG_SIOCNT, 0x4081);
@@ -64,7 +67,8 @@ static void calendar_advances_while_system_peripherals_and_deadlines_are_frozen(
     const int samples = gba->audio.sampleWritePos;
     const unsigned remaining = gba->serial.remaining;
     const int32_t pc = gba->cpu.gprs[ARM_PC];
-    for (unsigned i = 0; i < 20; i++) cupid_gba_step(gba);
+    for (unsigned i = 0; i < 20; i++)
+        cupid_gba_step(gba);
     CHECK(!gba->cartridge.rtc.fraction && gba->cartridge.rtc.date.second == 59);
     const uint64_t elapsed = 2 * CUPID_RTC_CLOCK_HZ + 13;
     CHECK(cupid_gba_advance_stopped_time(gba, elapsed) == elapsed);
@@ -87,7 +91,7 @@ static void each_divider_wakes_at_its_release_and_uses_the_resumed_irq_pipeline(
     for (unsigned thumb = 0; thumb < 2; thumb++)
         for (unsigned bit = 0; bit < 16; bit++)
             for (unsigned masks = 0; masks < 4; masks++) {
-                struct CupidGBA* gba = machine(thumb != 0);
+                struct CupidGBA *gba = machine(thumb != 0);
                 const bool ime = (masks & 1) != 0, masked = (masks & 2) != 0;
                 gba->cpu.cpsr.i = masked;
                 gba->cpu.irqDisableLatch = masked;
@@ -100,8 +104,10 @@ static void each_divider_wakes_at_its_release_and_uses_the_resumed_irq_pipeline(
                 CHECK(cupid_gba_advance_stopped_time(gba, CUPID_RTC_CLOCK_HZ) == 1);
                 CHECK(!gba->stopped && !gba->cartridge.rtc.interruptLow && gba->cpu.halted);
                 CHECK(cupid_timing_global_time(&gba->timing) == clock);
-                CHECK(gba->irq.pendingIF == IRQ_GAMEPAK && !gba->irqf && !gba->irq.available && !gba->irq.line);
-                CHECK(cupid_timing_until(&gba->timing, &gba->cartridge.rtcInterruptEvent) == (int32_t)half);
+                CHECK(gba->irq.pendingIF == IRQ_GAMEPAK && !gba->irqf && !gba->irq.available &&
+                      !gba->irq.line);
+                CHECK(cupid_timing_until(&gba->timing, &gba->cartridge.rtcInterruptEvent) ==
+                      (int32_t)half);
                 cupid_timing_tick(&gba->timing, 1);
                 CHECK(gba->irqf == IRQ_GAMEPAK && !gba->irq.available && !gba->irq.line);
                 cupid_timing_tick(&gba->timing, 1);
@@ -118,7 +124,7 @@ static void each_divider_wakes_at_its_release_and_uses_the_resumed_irq_pipeline(
 }
 
 static void disabled_wake_latches_one_pending_request_and_handles_large_elapsed_time(void) {
-    struct CupidGBA* gba = machine(false);
+    struct CupidGBA *gba = machine(false);
     stop(gba, IRQ_KEYPAD, false);
     frequency(gba, 1, 251);
     CHECK(cupid_gba_advance_stopped_time(gba, 5) == 5);
@@ -143,7 +149,7 @@ static void disabled_wake_latches_one_pending_request_and_handles_large_elapsed_
 
 static void minute_and_alarm_latches_remain_asleep_until_a_release(void) {
     for (unsigned mode = 0; mode < 3; mode++) {
-        struct CupidGBA* gba = machine(false);
+        struct CupidGBA *gba = machine(false);
         stop(gba, IRQ_GAMEPAK, false);
         const struct CupidRTCDateTime date = {26, 10, 13, 2, 12, 33, 59};
         CHECK(cupid_rtc_set_datetime(&gba->cartridge.rtc, &date));
@@ -180,7 +186,7 @@ static void external_clock_anchor_wrap_and_absent_device_preserve_ownership(void
     cupid_rtc_sync(&rtc, 0);
     cupid_rtc_sync(&rtc, CUPID_RTC_CLOCK_HZ);
     CHECK(rtc.fraction == 12 && rtc.date.second == 2);
-    struct CupidGBA* gba = machine(false);
+    struct CupidGBA *gba = machine(false);
     CHECK(cupid_gba_advance_stopped_time(gba, 100) == 0);
     stop(gba, 0, false);
     frequency(gba, 1, 251);
@@ -193,7 +199,7 @@ static void external_clock_anchor_wrap_and_absent_device_preserve_ownership(void
 }
 
 static void paced_intervals_resume_with_only_the_remaining_system_clocks(void) {
-    struct CupidGBA* gba = machine(false);
+    struct CupidGBA *gba = machine(false);
     stop(gba, IRQ_GAMEPAK, false);
     frequency(gba, 1, 246);
     const uint64_t clock = cupid_timing_global_time(&gba->timing);
@@ -210,29 +216,34 @@ static void paced_intervals_resume_with_only_the_remaining_system_clocks(void) {
 
 static void stop_swi_returns_in_both_instruction_sets_and_bios_paths(void) {
     for (unsigned thumb = 0; thumb < 2; thumb++) {
-        struct CupidGBA* gba = machine(thumb != 0);
+        struct CupidGBA *gba = machine(thumb != 0);
         const uint32_t arm[] = {0xEF030000, 0xE3A0402A, 0xEAFFFFFE};
         const uint16_t small[] = {0xDF03, 0x242A, 0xE7FE};
-        memcpy(gba->memory.iwram, thumb ? (const void*)small : (const void*)arm,
+        memcpy(gba->memory.iwram, thumb ? (const void *)small : (const void *)arm,
                thumb ? sizeof(small) : sizeof(arm));
         gba->cpu.gprs[ARM_PC] = GBA_BASE_IWRAM;
-        if (thumb) CupidThumbWritePC(&gba->cpu);
-        else CupidARMWritePC(&gba->cpu);
+        if (thumb)
+            CupidThumbWritePC(&gba->cpu);
+        else
+            CupidARMWritePC(&gba->cpu);
         cupid_irq_write(gba, REG_IE, IRQ_GAMEPAK);
-        for (unsigned steps = 0; !gba->stopped && steps < 1000; steps++) cupid_gba_step(gba);
+        for (unsigned steps = 0; !gba->stopped && steps < 1000; steps++)
+            cupid_gba_step(gba);
         CHECK(gba->stopped);
         frequency(gba, 0x8000, (uint32_t)(CUPID_RTC_CLOCK_HZ / 2 - 12));
         CHECK(cupid_gba_advance_stopped_time(gba, CUPID_RTC_CLOCK_HZ) == 12);
-        for (unsigned steps = 0; gba->cpu.gprs[4] != 42 && steps < 1000; steps++) cupid_gba_step(gba);
+        for (unsigned steps = 0; gba->cpu.gprs[4] != 42 && steps < 1000; steps++)
+            cupid_gba_step(gba);
         CHECK(gba->cpu.gprs[4] == 42 && !gba->stopped && !gba->cpu.halted);
-        CHECK(gba->cpu.privilegeMode == MODE_SYS && gba->cpu.executionMode == (thumb ? MODE_THUMB : MODE_ARM));
+        CHECK(gba->cpu.privilegeMode == MODE_SYS &&
+              gba->cpu.executionMode == (thumb ? MODE_THUMB : MODE_ARM));
         destroy(gba);
     }
 }
 
 static void chunked_intervals_preserve_execution_and_do_not_accumulate_overshoot(void) {
-    struct CupidGBA* bulk = machine(false);
-    struct CupidGBA* chunks = machine(false);
+    struct CupidGBA *bulk = machine(false);
+    struct CupidGBA *chunks = machine(false);
     stop(bulk, IRQ_GAMEPAK, false);
     stop(chunks, IRQ_GAMEPAK, false);
     frequency(bulk, 0x800A, 0x800A * 256u - 12);
@@ -248,7 +259,8 @@ static void chunked_intervals_preserve_execution_and_do_not_accumulate_overshoot
     }
     CHECK(!bulk->stopped && !chunks->stopped);
     CHECK(cupid_timing_global_time(&bulk->timing) == cupid_timing_global_time(&chunks->timing));
-    CHECK(cupid_timing_global_time(&bulk->timing) - clock == interval - 12 + bulk->intervalOvershoot);
+    CHECK(cupid_timing_global_time(&bulk->timing) - clock ==
+          interval - 12 + bulk->intervalOvershoot);
     CHECK(bulk->intervalOvershoot == chunks->intervalOvershoot);
     CHECK(!memcmp(bulk->cpu.gprs, chunks->cpu.gprs, sizeof(bulk->cpu.gprs)));
     cupid_cartridge_rtc_sync(bulk);
@@ -262,7 +274,7 @@ static void chunked_intervals_preserve_execution_and_do_not_accumulate_overshoot
 }
 
 static void stopped_release_reschedules_across_system_clock_wrap(void) {
-    struct CupidGBA* gba = machine(false);
+    struct CupidGBA *gba = machine(false);
     cupid_timing_clear(&gba->timing);
     gba->timing.globalCycles = UINT32_MAX - 12;
     gba->timing.masterCycles = (uint32_t)gba->timing.globalCycles;
@@ -281,9 +293,11 @@ static void stopped_release_reschedules_across_system_clock_wrap(void) {
     destroy(gba);
 }
 
-int main(int argc, char** argv) {
-    if (argc == 2) bios = argv[1];
-    else CHECK(argc == 1);
+int main(int argc, char **argv) {
+    if (argc == 2)
+        bios = argv[1];
+    else
+        CHECK(argc == 1);
     RUN(calendar_advances_while_system_peripherals_and_deadlines_are_frozen);
     RUN(each_divider_wakes_at_its_release_and_uses_the_resumed_irq_pipeline);
     RUN(disabled_wake_latches_one_pending_request_and_handles_large_elapsed_time);

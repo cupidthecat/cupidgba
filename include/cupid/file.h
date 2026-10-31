@@ -5,6 +5,6 @@
 
 /* Stage and flush complete bytes before replacing a writable regular file.
  * On failure, preserve the existing destination and report errno. */
-bool cupid_file_replace(const char* path, const void* data, size_t size);
-bool cupid_file_read_exact(const char* path, void* data, size_t size);
+bool cupid_file_replace(const char *path, const void *data, size_t size);
+bool cupid_file_read_exact(const char *path, void *data, size_t size);
 #endif

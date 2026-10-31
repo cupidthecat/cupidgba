@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+#include "../test.h"
 #include "cupid/gba.h"
 #include "cupid/platform/rtc.h"
-#include "../test.h"
 #include <errno.h>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -12,8 +12,8 @@
 
 static char path[1100];
 
-static struct CupidGBA* machine(void) {
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+static struct CupidGBA *machine(void) {
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba);
     cupid_gba_create(gba);
     cupid_gba_reset(gba);
@@ -21,23 +21,25 @@ static struct CupidGBA* machine(void) {
     return gba;
 }
 
-static void destroy(struct CupidGBA* gba) {
+static void destroy(struct CupidGBA *gba) {
     cupid_gba_destroy(gba);
     free(gba);
 }
 
 static void first_launch_and_explicit_seed_are_deterministic(void) {
-    struct CupidGBA* gba = machine();
+    struct CupidGBA *gba = machine();
     struct CupidPlatformRTC config = {.path = path};
     CHECK(cupid_platform_rtc_load(gba, &config, NULL, 987654321));
-    CHECK(gba->cartridge.rtc.date.year == 0 && gba->cartridge.rtc.date.weekday == 6 && config.hostAnchor == 0);
+    CHECK(gba->cartridge.rtc.date.year == 0 && gba->cartridge.rtc.date.weekday == 6 &&
+          config.hostAnchor == 0);
     const struct CupidRTCDateTime seed = {26, 10, 13, 5, 23, 59, 59};
     config.seed = &seed;
     CHECK(cupid_platform_rtc_load(gba, &config, NULL, 987654321));
     CHECK(!memcmp(&seed, &gba->cartridge.rtc.date, sizeof(seed)));
     cupid_timing_tick(&gba->timing, CUPID_RTC_CLOCK_HZ / 2);
     CHECK(cupid_platform_rtc_save(gba, &config, 987654321));
-    destroy(gba); gba = machine();
+    destroy(gba);
+    gba = machine();
     config.seed = NULL;
     CHECK(cupid_platform_rtc_load(gba, &config, NULL, UINT64_MAX));
     CHECK(!memcmp(&seed, &gba->cartridge.rtc.date, sizeof(seed)));
@@ -47,20 +49,22 @@ static void first_launch_and_explicit_seed_are_deterministic(void) {
 }
 
 static void offline_elapsed_time_keeps_game_clock_offset_and_weekday(void) {
-    struct CupidGBA* gba = machine();
+    struct CupidGBA *gba = machine();
     const struct CupidRTCDateTime seed = {26, 10, 13, 5, 23, 59, 59};
     struct CupidPlatformRTC config = {.path = path, .offlineWall = true};
     CHECK(cupid_platform_rtc_load(gba, &config, &seed, 1000));
     CHECK(config.hostAnchor == 1000);
     cupid_timing_tick(&gba->timing, CUPID_RTC_CLOCK_HZ / 2);
     CHECK(cupid_platform_rtc_save(gba, &config, 1000));
-    destroy(gba); gba = machine();
+    destroy(gba);
+    gba = machine();
     CHECK(cupid_platform_rtc_load(gba, &config, NULL, 1002));
     CHECK(gba->cartridge.rtc.date.day == 14 && gba->cartridge.rtc.date.weekday == 6);
     CHECK(gba->cartridge.rtc.date.hour == 0 && gba->cartridge.rtc.date.second == 1);
     CHECK(gba->cartridge.rtc.fraction == CUPID_RTC_CLOCK_HZ / 2);
     CHECK(cupid_platform_rtc_save(gba, &config, 1002));
-    destroy(gba); gba = machine();
+    destroy(gba);
+    gba = machine();
     CHECK(cupid_platform_rtc_load(gba, &config, NULL, 900));
     CHECK(gba->cartridge.rtc.date.second == 1 && config.hostAnchor == 1002);
     CHECK(cupid_platform_rtc_save(gba, &config, 901));
@@ -68,8 +72,10 @@ static void offline_elapsed_time_keeps_game_clock_offset_and_weekday(void) {
     CHECK(cupid_cartridge_load_rtc(gba, path, &stamp) && stamp == 1002);
     config.seed = &seed;
     CHECK(cupid_platform_rtc_load(gba, &config, NULL, 5000));
-    CHECK(!memcmp(&seed, &gba->cartridge.rtc.date, sizeof(seed)) && gba->cartridge.rtc.fraction == 0);
-    config.seed = NULL; config.offlineWall = false;
+    CHECK(!memcmp(&seed, &gba->cartridge.rtc.date, sizeof(seed)) &&
+          gba->cartridge.rtc.fraction == 0);
+    config.seed = NULL;
+    config.offlineWall = false;
     CHECK(cupid_platform_rtc_save(gba, &config, 5000));
     config.offlineWall = true;
     CHECK(cupid_platform_rtc_load(gba, &config, NULL, UINT64_MAX));
@@ -79,28 +85,30 @@ static void offline_elapsed_time_keeps_game_clock_offset_and_weekday(void) {
 }
 
 static void invalid_input_preserves_state_and_disabled_hardware_has_no_file_io(void) {
-    struct CupidGBA* gba = machine();
+    struct CupidGBA *gba = machine();
     const struct CupidRTCDateTime seed = {26, 2, 30, 5, 0, 0, 0};
     struct CupidPlatformRTC config = {.path = path, .seed = &seed};
     const struct CupidCartridge before = gba->cartridge;
     CHECK(!cupid_platform_rtc_load(gba, &config, NULL, 0) && errno == EINVAL);
     CHECK(!memcmp(&before, &gba->cartridge, sizeof(before)));
     config.seed = NULL;
-    FILE* file = fopen(path, "wb");
+    FILE *file = fopen(path, "wb");
     CHECK(file && fputs("invalid clock", file) >= 0 && fclose(file) == 0);
     CHECK(!cupid_platform_rtc_load(gba, &config, NULL, 0) && errno == EINVAL);
     CHECK(!memcmp(&before, &gba->cartridge, sizeof(before)));
     cupid_cartridge_enable_rtc(gba, false);
     CHECK(cupid_platform_rtc_load(gba, &config, NULL, 0));
     CHECK(cupid_platform_rtc_save(gba, &config, 0));
-    char actual[14] = {0}; file = fopen(path, "rb");
+    char actual[14] = {0};
+    file = fopen(path, "rb");
     CHECK(file && fread(actual, 1, 13, file) == 13 && fclose(file) == 0);
     CHECK(!strcmp(actual, "invalid clock"));
-    destroy(gba); CHECK(remove(path) == 0);
+    destroy(gba);
+    CHECK(remove(path) == 0);
 }
 
 static void offline_output_transitions_do_not_replay_console_interrupts(void) {
-    struct CupidGBA* gba = machine();
+    struct CupidGBA *gba = machine();
     const struct CupidRTCDateTime seed = {26, 10, 13, 2, 0, 0, 29};
     struct CupidPlatformRTC config = {.path = path, .offlineWall = true};
     CHECK(cupid_platform_rtc_load(gba, &config, &seed, 1000));
@@ -121,13 +129,14 @@ static void offline_output_transitions_do_not_replay_console_interrupts(void) {
 
 static void offline_alarm_and_frequency_state_resume_without_past_requests(void) {
     for (unsigned frequency = 0; frequency < 2; frequency++) {
-        struct CupidGBA* gba = machine();
+        struct CupidGBA *gba = machine();
         const struct CupidRTCDateTime seed = {26, 10, 13, 2, 11, 59, 59};
         struct CupidPlatformRTC config = {.path = path, .offlineWall = true};
         CHECK(cupid_platform_rtc_load(gba, &config, &seed, 1000));
         cupid_rtc_write_interrupt_parameters(&gba->cartridge.rtc, frequency ? 0x8000 : 0x0092);
         cupid_rtc_write_control(&gba->cartridge.rtc, frequency ? 0x42 : 0x60);
-        if (frequency) gba->cartridge.rtc.fraction = CUPID_RTC_CLOCK_HZ / 2 - 12;
+        if (frequency)
+            gba->cartridge.rtc.fraction = CUPID_RTC_CLOCK_HZ / 2 - 12;
         CHECK(cupid_platform_rtc_save(gba, &config, 1000));
         destroy(gba);
         gba = machine();
@@ -135,7 +144,8 @@ static void offline_alarm_and_frequency_state_resume_without_past_requests(void)
         CHECK(gba->cartridge.rtc.date.hour == 12 && gba->cartridge.rtc.date.minute == 59);
         CHECK(gba->cartridge.rtc.date.second == 59 && gba->cartridge.rtc.interruptLow);
         CHECK(!gba->irq.pendingIF && !gba->irqf);
-        CHECK(cupid_timing_is_scheduled(&gba->timing, &gba->cartridge.rtcInterruptEvent) == (frequency != 0));
+        CHECK(cupid_timing_is_scheduled(&gba->timing, &gba->cartridge.rtcInterruptEvent) ==
+              (frequency != 0));
         if (frequency) {
             CHECK(cupid_timing_until(&gba->timing, &gba->cartridge.rtcInterruptEvent) == 12);
             cupid_timing_tick(&gba->timing, 12);
@@ -146,7 +156,7 @@ static void offline_alarm_and_frequency_state_resume_without_past_requests(void)
     }
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
     CHECK(argc == 2);
 #ifdef _WIN32
     unsigned long process = GetCurrentProcessId();
@@ -155,7 +165,7 @@ int main(int argc, char** argv) {
 #endif
     int size = snprintf(path, sizeof(path), "%s/rtc-config-%lu.rtc", argv[1], process);
     CHECK(size > 0 && (size_t)size < sizeof(path));
-    FILE* previous = fopen(path, "rb");
+    FILE *previous = fopen(path, "rb");
     CHECK(!previous && errno == ENOENT);
     RUN(first_launch_and_explicit_seed_are_deterministic);
     RUN(offline_elapsed_time_keeps_game_clock_offset_and_weekday);

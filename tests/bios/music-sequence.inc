@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Independent captures of the owned song, wave and input sequence. */
-struct MusicExpected { uint64_t clocks, signature; };
+struct MusicExpected {
+    uint64_t clocks, signature;
+};
 static const struct MusicExpected musicSequenceExpected[18] = {
     {UINT64_C(308), UINT64_C(0x090F72C46D562D07)},
     {UINT64_C(320), UINT64_C(0x30BEEE5E23A574F7)},

@@ -7,13 +7,13 @@
  */
 
 #include "cupid/platform.h"
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
 
 /**
  * @brief Requested host output sample rate.
  */
-#define CUPID_HOST_SAMPLE_RATE   48000
+#define CUPID_HOST_SAMPLE_RATE 48000
 
 /**
  * @brief Ring-buffer helpers.
@@ -31,7 +31,7 @@ static inline int ring_available(int writePos, int readPos) {
 /**
  * @brief Peek a sample in the ring buffer at a stereo-frame offset.
  */
-static inline int16_t ring_peek(const int16_t* buf, int readPos, int frame, int channel) {
+static inline int16_t ring_peek(const int16_t *buf, int readPos, int frame, int channel) {
     int cap = GBA_AUDIO_SAMPLES * 2;
     int idx = (readPos + frame * 2 + channel) % cap;
     return buf[idx];
@@ -44,24 +44,24 @@ static inline int16_t ring_peek(const int16_t* buf, int readPos, int frame, int 
  * interpolation of the emulator sample ring buffer.
  */
 
-void cupid_platform_audio_callback(void* userdata, uint8_t* stream, int len) {
-    struct CupidPlatformAudio* pa = (struct CupidPlatformAudio*)userdata;
-    struct CupidAudio* audio = pa->audio;
+void cupid_platform_audio_callback(void *userdata, uint8_t *stream, int len) {
+    struct CupidPlatformAudio *pa = (struct CupidPlatformAudio *)userdata;
+    struct CupidAudio *audio = pa->audio;
     if (pa->sampleOverruns != audio->sampleOverruns) {
         pa->sampleOverruns = audio->sampleOverruns;
         pa->resamplePos = 0;
     }
-    int16_t* out = (int16_t*)stream;
-    int outSamples = len / (int)sizeof(int16_t);         /** total int16 values */
-    int outFrames  = outSamples / 2;                      /** stereo frames */
+    int16_t *out = (int16_t *)stream;
+    int outSamples = len / (int)sizeof(int16_t); /** total int16 values */
+    int outFrames = outSamples / 2;              /** stereo frames */
 
     double step = (double)GBA_CLOCK_FREQ / (double)pa->hostRate;
-    pa->resampleStep  = step;
-    double srcPos     = pa->resamplePos;    /** fractional position in source */
+    pa->resampleStep = step;
+    double srcPos = pa->resamplePos; /** fractional position in source */
 
     int readPos = audio->sampleReadPos;
     int avail = ring_available(audio->sampleWritePos, readPos);
-    int availFrames = avail / 2;   /** stereo frames available */
+    int availFrames = avail / 2; /** stereo frames available */
 
     int framesWritten = 0;
     int16_t lastL = pa->lastSampleL;
@@ -72,13 +72,16 @@ void cupid_platform_audio_callback(void* userdata, uint8_t* stream, int len) {
         while (availFrames > 1) {
             int next = (readPos + 2) % (GBA_AUDIO_SAMPLES * 2);
             duration = audio->sampleClocks[next / 2];
-            if (duration <= 0) duration = audio->sampleInterval > 0 ? audio->sampleInterval : 512;
-            if (srcPos < duration) break;
+            if (duration <= 0)
+                duration = audio->sampleInterval > 0 ? audio->sampleInterval : 512;
+            if (srcPos < duration)
+                break;
             srcPos -= duration;
             readPos = next;
             --availFrames;
         }
-        if (availFrames < 2) break;
+        if (availFrames < 2)
+            break;
         double frac = srcPos / duration;
 
         for (int ch = 0; ch < 2; ch++) {
@@ -87,8 +90,10 @@ void cupid_platform_audio_callback(void* userdata, uint8_t* stream, int len) {
             /** Linear interpolation. */
             double v = s0 + (s1 - s0) * frac;
             int32_t clamped = (int32_t)v;
-            if (clamped >  32767) clamped =  32767;
-            if (clamped < -32768) clamped = -32768;
+            if (clamped > 32767)
+                clamped = 32767;
+            if (clamped < -32768)
+                clamped = -32768;
             out[i * 2 + ch] = (int16_t)clamped;
         }
 
@@ -108,7 +113,7 @@ void cupid_platform_audio_callback(void* userdata, uint8_t* stream, int len) {
             /** Exponential decay: multiply by 255/256 each sample. */
             lastL = (int16_t)((int32_t)lastL * 255 / 256);
             lastR = (int16_t)((int32_t)lastR * 255 / 256);
-            out[(framesWritten + i) * 2]     = lastL;
+            out[(framesWritten + i) * 2] = lastL;
             out[(framesWritten + i) * 2 + 1] = lastR;
         }
     }
@@ -118,29 +123,30 @@ void cupid_platform_audio_callback(void* userdata, uint8_t* stream, int len) {
 
     audio->sampleReadPos = readPos;
     pa->resamplePos = srcPos;
-    if (pa->outputSink) pa->outputSink(pa->outputSinkContext, out, outFrames, framesWritten);
+    if (pa->outputSink)
+        pa->outputSink(pa->outputSinkContext, out, outFrames, framesWritten);
 }
 
 /**
  * @brief Initialize and deinitialize platform audio output.
  */
 
-bool cupid_platform_init_audio(struct CupidPlatform* plat, struct CupidGBA* gba) {
-    struct CupidPlatformAudio* pa = &plat->platformAudio;
+bool cupid_platform_init_audio(struct CupidPlatform *plat, struct CupidGBA *gba) {
+    struct CupidPlatformAudio *pa = &plat->platformAudio;
     memset(pa, 0, sizeof(*pa));
     pa->audio = &gba->audio;
 
     SDL_AudioSpec want, have;
     memset(&want, 0, sizeof(want));
-    want.freq     = CUPID_HOST_SAMPLE_RATE;
-    want.format   = AUDIO_S16SYS;
+    want.freq = CUPID_HOST_SAMPLE_RATE;
+    want.format = AUDIO_S16SYS;
     want.channels = 2;
-    want.samples  = 1024;
+    want.samples = 1024;
     want.callback = cupid_platform_audio_callback;
     want.userdata = pa;
 
-    plat->audioDevice = SDL_OpenAudioDevice(
-        NULL, 0, &want, &have, SDL_AUDIO_ALLOW_FREQUENCY_CHANGE);
+    plat->audioDevice =
+        SDL_OpenAudioDevice(NULL, 0, &want, &have, SDL_AUDIO_ALLOW_FREQUENCY_CHANGE);
     if (plat->audioDevice == 0) {
         fprintf(stderr, "SDL_OpenAudioDevice failed: %s\n", SDL_GetError());
         return false;
@@ -148,39 +154,45 @@ bool cupid_platform_init_audio(struct CupidPlatform* plat, struct CupidGBA* gba)
 
     pa->hostRate = have.freq;
     pa->resampleStep = (double)GBA_CLOCK_FREQ / (double)have.freq;
-    pa->resamplePos  = 0.0;
+    pa->resamplePos = 0.0;
 
-    printf("CUPID: Audio opened — host %d Hz, %.6f clocks per output frame\n",
-           have.freq, pa->resampleStep);
+    printf("CUPID: Audio opened — host %d Hz, %.6f clocks per output frame\n", have.freq,
+           pa->resampleStep);
 
     /** Start playback. */
     SDL_PauseAudioDevice(plat->audioDevice, 0);
     return true;
 }
 
-void cupid_platform_audio_mix_callback(void* userdata, uint8_t* stream, int len) {
-    struct CupidPlatformAudioMix* mix = userdata;
-    if (len <= 0) return;
+void cupid_platform_audio_mix_callback(void *userdata, uint8_t *stream, int len) {
+    struct CupidPlatformAudioMix *mix = userdata;
+    if (len <= 0)
+        return;
     memset(stream, 0, (size_t)len);
-    int16_t* output = (int16_t*)stream;
+    int16_t *output = (int16_t *)stream;
     const int samples = len / (int)(2 * sizeof(*output)) * 2;
     for (int offset = 0; offset < samples;) {
         int count = samples - offset;
-        if (count > 512) count = 512;
+        if (count > 512)
+            count = 512;
         int32_t sum[512] = {0};
         for (unsigned source = 0; source < mix->count; ++source) {
             int16_t pcm[512];
-            cupid_platform_audio_callback(&mix->sources[source], (uint8_t*)pcm, count * (int)sizeof(*pcm));
-            for (int i = 0; i < count; ++i) sum[i] += pcm[i];
+            cupid_platform_audio_callback(&mix->sources[source], (uint8_t *)pcm,
+                                          count * (int)sizeof(*pcm));
+            for (int i = 0; i < count; ++i)
+                sum[i] += pcm[i];
         }
-        for (int i = 0; i < count; ++i) output[offset + i] = mix->count ? (int16_t)(sum[i] / (int32_t)mix->count) : 0;
+        for (int i = 0; i < count; ++i)
+            output[offset + i] = mix->count ? (int16_t)(sum[i] / (int32_t)mix->count) : 0;
         offset += count;
     }
 }
 
-bool cupid_platform_init_audio_mix(struct CupidPlatform* plat, struct CupidPlatformAudioMix* mix,
-                                   struct CupidGBA* const cores[], unsigned count) {
-    if (!mix || !cores || count < 2 || count > 4) return false;
+bool cupid_platform_init_audio_mix(struct CupidPlatform *plat, struct CupidPlatformAudioMix *mix,
+                                   struct CupidGBA *const cores[], unsigned count) {
+    if (!mix || !cores || count < 2 || count > 4)
+        return false;
     memset(mix, 0, sizeof(*mix));
     mix->count = count;
     SDL_AudioSpec want = {0}, have;
@@ -190,8 +202,10 @@ bool cupid_platform_init_audio_mix(struct CupidPlatform* plat, struct CupidPlatf
     want.samples = 1024;
     want.callback = cupid_platform_audio_mix_callback;
     want.userdata = mix;
-    plat->audioDevice = SDL_OpenAudioDevice(NULL, 0, &want, &have, SDL_AUDIO_ALLOW_FREQUENCY_CHANGE);
-    if (!plat->audioDevice) return false;
+    plat->audioDevice =
+        SDL_OpenAudioDevice(NULL, 0, &want, &have, SDL_AUDIO_ALLOW_FREQUENCY_CHANGE);
+    if (!plat->audioDevice)
+        return false;
     for (unsigned i = 0; i < count; ++i) {
         mix->sources[i].audio = &cores[i]->audio;
         mix->sources[i].hostRate = have.freq;

@@ -1,17 +1,22 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-#include "cupid/gba.h"
 #include "../../test.h"
+#include "cupid/gba.h"
 
-struct MotorTrace { bool active[1024]; uint64_t clock[1024]; unsigned count; };
-static void motor(void* context, bool active, uint64_t clock) {
-    struct MotorTrace* trace = context;
+struct MotorTrace {
+    bool active[1024];
+    uint64_t clock[1024];
+    unsigned count;
+};
+
+static void motor(void *context, bool active, uint64_t clock) {
+    struct MotorTrace *trace = context;
     CHECK(trace->count < 1024);
     trace->active[trace->count] = active;
     trace->clock[trace->count++] = clock;
 }
 
-static struct CupidGBA* machine(void) {
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+static struct CupidGBA *machine(void) {
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba);
     cupid_gba_create(gba);
     gba->memory.rom = calloc(1, 0x4000);
@@ -21,10 +26,14 @@ static struct CupidGBA* machine(void) {
     cupid_gba_reset(gba);
     return gba;
 }
-static void destroy(struct CupidGBA* gba) { cupid_gba_destroy(gba); free(gba); }
+
+static void destroy(struct CupidGBA *gba) {
+    cupid_gba_destroy(gba);
+    free(gba);
+}
 
 static void port_directions_repeated_writes_and_read_control(void) {
-    struct CupidGBA* gba = machine();
+    struct CupidGBA *gba = machine();
     struct MotorTrace trace = {0};
     cupid_cartridge_enable_rumble(gba, true);
     cupid_cartridge_set_rumble_output(gba, motor, &trace);
@@ -45,7 +54,8 @@ static void port_directions_repeated_writes_and_read_control(void) {
                 cupid_memory_store8(&gba->cpu, 0x080000C4, 0, NULL);
                 CHECK(trace.count == previous + (wasActive ? 1u : 0u));
                 CHECK(!gba->cartridge.rumbleActive && !trace.active[trace.count - 1]);
-                if (wasActive) CHECK(trace.clock[trace.count - 1] == cupid_timing_global_time(&gba->timing));
+                if (wasActive)
+                    CHECK(trace.clock[trace.count - 1] == cupid_timing_global_time(&gba->timing));
             }
         }
     }
@@ -60,7 +70,7 @@ static void port_directions_repeated_writes_and_read_control(void) {
 }
 
 static void reset_replacement_subscription_and_destroy_stop_output(void) {
-    struct CupidGBA* gba = machine();
+    struct CupidGBA *gba = machine();
     struct MotorTrace first = {0}, second = {0};
     cupid_cartridge_set_rumble_output(gba, motor, &first);
     cupid_cartridge_enable_rumble(gba, true);
@@ -92,16 +102,18 @@ static void reset_replacement_subscription_and_destroy_stop_output(void) {
 }
 
 static void documented_board_detection_and_bounds(void) {
-    const char* solar[] = {"U3IJ", "U3IE", "U3IP", "U32J", "U32E", "U32P", "U33J"};
-    const char* rumble[] = {"V49J", "V49E", "V49P", "2GBP", "RZWJ", "RZWE", "RZWP"};
-    struct CupidGBA* gba = machine();
+    const char *solar[] = {"U3IJ", "U3IE", "U3IP", "U32J", "U32E", "U32P", "U33J"};
+    const char *rumble[] = {"V49J", "V49E", "V49P", "2GBP", "RZWJ", "RZWE", "RZWP"};
+    struct CupidGBA *gba = machine();
     for (unsigned i = 0; i < 7; i++) {
         memcpy(gba->memory.rom + 0xAC, solar[i], 4);
         cupid_cartridge_attach(gba, gba->memory.rom, gba->memory.romSize);
-        CHECK(gba->cartridge.solarPresent && gba->cartridge.rtcPresent && !gba->cartridge.rumblePresent);
+        CHECK(gba->cartridge.solarPresent && gba->cartridge.rtcPresent &&
+              !gba->cartridge.rumblePresent);
         memcpy(gba->memory.rom + 0xAC, rumble[i], 4);
         cupid_cartridge_attach(gba, gba->memory.rom, gba->memory.romSize);
-        CHECK(gba->cartridge.rumblePresent && !gba->cartridge.solarPresent && !gba->cartridge.rtcPresent);
+        CHECK(gba->cartridge.rumblePresent && !gba->cartridge.solarPresent &&
+              !gba->cartridge.rtcPresent);
     }
     memcpy(gba->memory.rom + 0xAC, "U33E", 4);
     cupid_cartridge_attach(gba, gba->memory.rom, gba->memory.romSize);
@@ -117,7 +129,7 @@ static void documented_board_detection_and_bounds(void) {
 static void timed_word_and_dma_motor_transitions(void) {
     for (unsigned dma = 0; dma < 2; dma++) {
         for (unsigned wrap = 0; wrap < 2; wrap++) {
-            struct CupidGBA* gba = machine();
+            struct CupidGBA *gba = machine();
             struct MotorTrace trace = {0};
             cupid_cartridge_enable_rumble(gba, true);
             cupid_cartridge_set_rumble_output(gba, motor, &trace);
@@ -151,15 +163,18 @@ static void timed_word_and_dma_motor_transitions(void) {
     }
 }
 
-static void failed_load_preserves_cartridge_and_success_rebinds_cache(const char* directory) {
+static void failed_load_preserves_cartridge_and_success_rebinds_cache(const char *directory) {
     char emptyPath[1024], validPath[1024], missingPath[1024];
-    const int emptySize = snprintf(emptyPath, sizeof(emptyPath), "%s/rumble-empty.generated.gba", directory);
-    const int validSize = snprintf(validPath, sizeof(validPath), "%s/rumble-valid.generated.gba", directory);
-    const int missingSize = snprintf(missingPath, sizeof(missingPath), "%s/rumble-absent.generated.gba", directory);
+    const int emptySize =
+        snprintf(emptyPath, sizeof(emptyPath), "%s/rumble-empty.generated.gba", directory);
+    const int validSize =
+        snprintf(validPath, sizeof(validPath), "%s/rumble-valid.generated.gba", directory);
+    const int missingSize =
+        snprintf(missingPath, sizeof(missingPath), "%s/rumble-absent.generated.gba", directory);
     CHECK(emptySize > 0 && (size_t)emptySize < sizeof(emptyPath));
     CHECK(validSize > 0 && (size_t)validSize < sizeof(validPath));
     CHECK(missingSize > 0 && (size_t)missingSize < sizeof(missingPath));
-    FILE* file = fopen(emptyPath, "wb");
+    FILE *file = fopen(emptyPath, "wb");
     CHECK(file && fclose(file) == 0);
     uint8_t image[1024] = {0};
     memcpy(image + 0xAC, "V49E", 4);
@@ -167,7 +182,7 @@ static void failed_load_preserves_cartridge_and_success_rebinds_cache(const char
     memcpy(image + 0x200, &nop, sizeof(nop));
     file = fopen(validPath, "wb");
     CHECK(file && fwrite(image, 1, sizeof(image), file) == sizeof(image) && fclose(file) == 0);
-    struct CupidGBA* gba = machine();
+    struct CupidGBA *gba = machine();
     struct MotorTrace trace = {0};
     cupid_cartridge_enable_rumble(gba, true);
     cupid_cartridge_set_rumble_output(gba, motor, &trace);
@@ -179,21 +194,23 @@ static void failed_load_preserves_cartridge_and_success_rebinds_cache(const char
     gba->memory.savedata.dirty = true;
     gba->cpu.gprs[ARM_PC] = 0x08000200;
     gba->cpu.memory.setActiveRegion(&gba->cpu, 0x08000200);
-    const uint8_t* previous = gba->memory.rom;
+    const uint8_t *previous = gba->memory.rom;
     const uintptr_t previousAddress = (uintptr_t)previous;
-    const uint32_t* active = gba->cpu.memory.activeRegion;
+    const uint32_t *active = gba->cpu.memory.activeRegion;
     const uint64_t identity = gba->cartridge.identity;
     const unsigned count = trace.count;
     CHECK(!cupid_load_rom(gba, emptyPath));
-    CHECK(gba->memory.rom && gba->memory.rom == previous && gba->memory.romSize == 0x4000 && gba->memory.romMask == 0x3FFF);
+    CHECK(gba->memory.rom && gba->memory.rom == previous && gba->memory.romSize == 0x4000 &&
+          gba->memory.romMask == 0x3FFF);
     CHECK(gba->cpu.memory.activeRegion == active && gba->cartridge.identity == identity);
     CHECK(trace.count == count && gba->cartridge.rumbleActive && gba->cartridge.direction == 8);
     CHECK(gba->memory.savedata.data[7] == 31 && gba->memory.savedata.dirty);
     CHECK(!cupid_load_rom(gba, missingPath));
     CHECK(gba->memory.rom == previous && trace.count == count && gba->cartridge.rumbleActive);
     CHECK(cupid_load_rom(gba, validPath));
-    CHECK((uintptr_t)gba->memory.rom != previousAddress && gba->memory.romSize == sizeof(image) && gba->memory.romMask == 1023);
-    CHECK(gba->cpu.memory.activeRegion == (const uint32_t*)gba->memory.rom);
+    CHECK((uintptr_t)gba->memory.rom != previousAddress && gba->memory.romSize == sizeof(image) &&
+          gba->memory.romMask == 1023);
+    CHECK(gba->cpu.memory.activeRegion == (const uint32_t *)gba->memory.rom);
     CHECK(cupid_memory_load32(&gba->cpu, 0x08000200, NULL) == nop);
     CHECK(trace.count == count + 1 && !trace.active[count] && !gba->cartridge.rumbleActive);
     CHECK(gba->cartridge.rumblePresent && gba->cartridge.rumbleChanged == motor);
@@ -203,8 +220,9 @@ static void failed_load_preserves_cartridge_and_success_rebinds_cache(const char
     puts("PASS failed_load_preserves_cartridge_and_success_rebinds_cache");
 }
 
-int main(int argc, char** argv) {
-    if (argc != 2) return 2;
+int main(int argc, char **argv) {
+    if (argc != 2)
+        return 2;
     RUN(port_directions_repeated_writes_and_read_control);
     RUN(reset_replacement_subscription_and_destroy_stop_output);
     RUN(documented_board_detection_and_bounds);

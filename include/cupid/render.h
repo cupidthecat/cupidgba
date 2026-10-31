@@ -16,7 +16,8 @@ static inline unsigned cupid_color_component(uint32_t color, unsigned channel) {
 }
 
 static inline uint32_t cupid_color_pack_component(unsigned value, unsigned channel) {
-    if (channel == 1) value /= 2;
+    if (channel == 1)
+        value /= 2;
     return value << (channel * 5);
 }
 
@@ -48,10 +49,12 @@ static inline uint32_t cupid_color_mix(int eva, uint32_t colorA, int evb, uint32
     const unsigned first = cupid_color_factor(eva), second = cupid_color_factor(evb);
     uint32_t result = 0;
     for (unsigned channel = 0; channel < 3; channel++) {
-        unsigned value = (cupid_color_component(colorA, channel) * first
-            + cupid_color_component(colorB, channel) * second + 8) / 16;
+        unsigned value = (cupid_color_component(colorA, channel) * first +
+                          cupid_color_component(colorB, channel) * second + 8) /
+                         16;
         const unsigned maximum = channel == 1 ? 63 : 31;
-        if (value > maximum) value = maximum;
+        if (value > maximum)
+            value = maximum;
         result |= cupid_color_pack_component(value, channel);
     }
     return result;

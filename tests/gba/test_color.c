@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-#include "cupid/render.h"
 #include "../test.h"
+#include "cupid/render.h"
 
 static void fractional_vectors_keep_green_precision_and_round_once(void) {
     CHECK(cupid_brighten(0, 1) == 0x0842);
@@ -43,16 +43,17 @@ static void complete_color_endpoints_and_coefficient_saturation(void) {
 static void red_and_blue_have_identical_effect_precision(void) {
     for (unsigned first = 0; first < 32; first++) {
         for (unsigned factor = 0; factor < 32; factor++) {
-            CHECK((cupid_brighten(first, (int)factor) & 31)
-                == ((cupid_brighten(first << 10, (int)factor) >> 10) & 31));
-            CHECK((cupid_darken(first, (int)factor) & 31)
-                == ((cupid_darken(first << 10, (int)factor) >> 10) & 31));
+            CHECK((cupid_brighten(first, (int)factor) & 31) ==
+                  ((cupid_brighten(first << 10, (int)factor) >> 10) & 31));
+            CHECK((cupid_darken(first, (int)factor) & 31) ==
+                  ((cupid_darken(first << 10, (int)factor) >> 10) & 31));
         }
         for (unsigned second = 0; second < 32; second++) {
             for (unsigned eva = 0; eva < 32; eva++) {
                 for (unsigned evb = 0; evb < 32; evb++) {
-                    CHECK((cupid_color_mix((int)eva, first, (int)evb, second) & 31)
-                        == ((cupid_color_mix((int)eva, first << 10, (int)evb, second << 10) >> 10) & 31));
+                    CHECK((cupid_color_mix((int)eva, first, (int)evb, second) & 31) ==
+                          ((cupid_color_mix((int)eva, first << 10, (int)evb, second << 10) >> 10) &
+                           31));
                 }
             }
         }

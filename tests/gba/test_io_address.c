@@ -1,10 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+#include "../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
-#include "../test.h"
 
-static struct CupidGBA* machine(void) {
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+static struct CupidGBA *machine(void) {
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba);
     cupid_gba_create(gba);
     cupid_gba_reset(gba);
@@ -16,13 +16,13 @@ static struct CupidGBA* machine(void) {
     return gba;
 }
 
-static void destroy(struct CupidGBA* gba) {
+static void destroy(struct CupidGBA *gba) {
     cupid_gba_destroy(gba);
     free(gba);
 }
 
 static void bank_zero_readback(void) {
-    struct CupidGBA* gba = machine();
+    struct CupidGBA *gba = machine();
     CHECK(cupid_memory_load8(&gba->cpu, GBA_BASE_IO, NULL) == 0x68);
     CHECK(cupid_memory_load8(&gba->cpu, GBA_BASE_IO + 1, NULL) == 0x24);
     CHECK(cupid_memory_load8(&gba->cpu, GBA_BASE_IO + 2, NULL) == 1);
@@ -31,7 +31,7 @@ static void bank_zero_readback(void) {
 }
 
 static void upper_banks_keep_their_address(void) {
-    struct CupidGBA* gba = machine();
+    struct CupidGBA *gba = machine();
     unsigned scenes = 0;
     for (unsigned dma = 0; dma < 2; dma++) {
         for (unsigned bank = 1; bank < 256; bank++) {
@@ -44,9 +44,11 @@ static void upper_banks_keep_their_address(void) {
                 uint32_t byte = expected >> ((address & 3) * 8) & 255;
                 CHECK(cupid_memory_load8(&gba->cpu, address, NULL) == byte);
                 CHECK(cupid_memory_load8(&gba->cpu, address, NULL) ==
-                    (cupid_memory_load16(&gba->cpu, address & ~1u, NULL) >> ((address & 1) * 8) & 255));
+                      (cupid_memory_load16(&gba->cpu, address & ~1u, NULL) >> ((address & 1) * 8) &
+                       255));
                 CHECK(cupid_memory_load8(&gba->cpu, address, NULL) ==
-                    (cupid_memory_load32(&gba->cpu, address & ~3u, NULL) >> ((address & 3) * 8) & 255));
+                      (cupid_memory_load32(&gba->cpu, address & ~3u, NULL) >> ((address & 3) * 8) &
+                       255));
                 scenes++;
             }
         }
@@ -57,8 +59,9 @@ static void upper_banks_keep_their_address(void) {
 }
 
 static void cpu_byte_loads_keep_their_address(void) {
-    struct CupidGBA* gba = machine();
-    static const unsigned offsets[] = {0, 1, 2, 3, REG_BG0CNT, REG_KEYINPUT, REG_WAITCNT, REG_POSTFLG};
+    struct CupidGBA *gba = machine();
+    static const unsigned offsets[] = {0,           1,          2, 3, REG_BG0CNT, REG_KEYINPUT,
+                                       REG_WAITCNT, REG_POSTFLG};
     unsigned scenes = 0;
     for (unsigned timed = 0; timed < 2; timed++) {
         for (unsigned thumb = 0; thumb < 2; thumb++) {
@@ -66,7 +69,8 @@ static void cpu_byte_loads_keep_their_address(void) {
                 for (unsigned i = 0; i < sizeof(offsets) / sizeof(*offsets); i++) {
                     uint32_t address = GBA_BASE_IO + (bank << 16) + offsets[i];
                     const uint32_t data = 0xA55AA55A;
-                    for (unsigned w = 0; w < 4; w++) memcpy(gba->memory.iwram + w * 4, &data, 4);
+                    for (unsigned w = 0; w < 4; w++)
+                        memcpy(gba->memory.iwram + w * 4, &data, 4);
                     const uint32_t opcode = thumb ? 0x7801 : 0xE5D01000; /* LDRB r1, [r0] */
                     memcpy(gba->memory.iwram, &opcode, thumb ? 2 : 4);
                     gba->cpu.memory.timed = timed != 0;
@@ -93,11 +97,15 @@ static void cpu_byte_loads_keep_their_address(void) {
     destroy(gba);
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
     CHECK(argc == 2);
-    if (!strcmp(argv[1], "base")) RUN(bank_zero_readback);
-    else if (!strcmp(argv[1], "banks")) RUN(upper_banks_keep_their_address);
-    else if (!strcmp(argv[1], "cpu")) RUN(cpu_byte_loads_keep_their_address);
-    else CHECK(false);
+    if (!strcmp(argv[1], "base"))
+        RUN(bank_zero_readback);
+    else if (!strcmp(argv[1], "banks"))
+        RUN(upper_banks_keep_their_address);
+    else if (!strcmp(argv[1], "cpu"))
+        RUN(cpu_byte_loads_keep_their_address);
+    else
+        CHECK(false);
     return 0;
 }

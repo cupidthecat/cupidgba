@@ -1,16 +1,15 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-#include "cupid/gba.h"
 #include "../test.h"
+#include "cupid/gba.h"
 
 /* Explicit host encodings keep this oracle independent of the converter. */
 static uint32_t expected_color(uint16_t color) {
-    static const uint8_t component[32] = {
-        0, 8, 16, 24, 33, 41, 49, 57, 66, 74, 82, 90, 99, 107, 115, 123,
-        132, 140, 148, 156, 165, 173, 181, 189, 198, 206, 214, 222, 231, 239, 247, 255
-    };
-    return UINT32_C(0xFF000000) | component[color & 31]
-        | (uint32_t)component[(color >> 5) & 31] << 8
-        | (uint32_t)component[(color >> 10) & 31] << 16;
+    static const uint8_t component[32] = {0,   8,   16,  24,  33,  41,  49,  57,  66,  74,  82,
+                                          90,  99,  107, 115, 123, 132, 140, 148, 156, 165, 173,
+                                          181, 189, 198, 206, 214, 222, 231, 239, 247, 255};
+    return UINT32_C(0xFF000000) | component[color & 31] |
+           (uint32_t)component[(color >> 5) & 31] << 8 |
+           (uint32_t)component[(color >> 10) & 31] << 16;
 }
 
 static void every_input_keeps_channels_opaque_alpha_and_full_intensity(void) {
@@ -29,8 +28,8 @@ static void every_input_keeps_channels_opaque_alpha_and_full_intensity(void) {
     }
 }
 
-static struct CupidGBA* machine(void) {
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+static struct CupidGBA *machine(void) {
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba);
     cupid_gba_create(gba);
     cupid_gba_reset(gba);
@@ -41,7 +40,7 @@ static struct CupidGBA* machine(void) {
 
 static void complete_bitmap_frames_cover_every_color_and_unused_high_bit(void) {
     for (unsigned high = 0; high < 2; ++high) {
-        struct CupidGBA* gba = machine();
+        struct CupidGBA *gba = machine();
         for (unsigned pixel = 0; pixel < GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT; ++pixel)
             gba->video.vram[pixel] = (uint16_t)((pixel & 0x7FFF) | (high << 15));
         cupid_io_write(gba, REG_DISPCNT, 0x0403);
@@ -57,7 +56,7 @@ static void complete_bitmap_frames_cover_every_color_and_unused_high_bit(void) {
 }
 
 static void forced_blank_publishes_opaque_full_white(void) {
-    struct CupidGBA* gba = machine();
+    struct CupidGBA *gba = machine();
     cupid_io_write(gba, REG_DISPCNT, 0x0080);
     cupid_timing_tick(&gba->timing, 2 * VIDEO_TOTAL_LENGTH);
     CHECK(cupid_timing_global_time(&gba->timing) == 2 * VIDEO_TOTAL_LENGTH);
@@ -67,11 +66,16 @@ static void forced_blank_publishes_opaque_full_white(void) {
     free(gba);
 }
 
-int main(int argc, char** argv) {
-    if (argc != 2) return 2;
-    if (!strcmp(argv[1], "unit")) RUN(every_input_keeps_channels_opaque_alpha_and_full_intensity);
-    else if (!strcmp(argv[1], "bitmap")) RUN(complete_bitmap_frames_cover_every_color_and_unused_high_bit);
-    else if (!strcmp(argv[1], "blank")) RUN(forced_blank_publishes_opaque_full_white);
-    else return 2;
+int main(int argc, char **argv) {
+    if (argc != 2)
+        return 2;
+    if (!strcmp(argv[1], "unit"))
+        RUN(every_input_keeps_channels_opaque_alpha_and_full_intensity);
+    else if (!strcmp(argv[1], "bitmap"))
+        RUN(complete_bitmap_frames_cover_every_color_and_unused_high_bit);
+    else if (!strcmp(argv[1], "blank"))
+        RUN(forced_blank_publishes_opaque_full_white);
+    else
+        return 2;
     return 0;
 }

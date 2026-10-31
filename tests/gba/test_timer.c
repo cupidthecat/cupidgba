@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-#include "cupid/gba.h"
 #include "../test.h"
+#include "cupid/gba.h"
 
-static struct CupidGBA* machine(uint64_t clock) {
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+static struct CupidGBA *machine(uint64_t clock) {
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba);
     cupid_gba_create(gba);
     cupid_gba_reset(gba);
@@ -18,23 +18,23 @@ static struct CupidGBA* machine(uint64_t clock) {
     return gba;
 }
 
-static void destroy(struct CupidGBA* gba) {
+static void destroy(struct CupidGBA *gba) {
     cupid_gba_destroy(gba);
     free(gba);
 }
 
-static void tick(struct CupidGBA* gba, int cycles) {
+static void tick(struct CupidGBA *gba, int cycles) {
     CHECK(gba->cpu.cycles == 0);
     cupid_timing_tick(&gba->timing, cycles);
 }
 
-static void configure(struct CupidGBA* gba, int ch, uint16_t reload, uint16_t control) {
+static void configure(struct CupidGBA *gba, int ch, uint16_t reload, uint16_t control) {
     cupid_io_write(gba, REG_TMCNT_LO(ch), reload);
     cupid_io_write(gba, REG_TMCNT_LO(ch) + 2, control);
 }
 
 static void register_latency_and_frozen_counter(void) {
-    struct CupidGBA* gba = machine(0);
+    struct CupidGBA *gba = machine(0);
     configure(gba, 0, 0x1234, 0x80);
     CHECK(cupid_io_read(gba, REG_TM0CNT_H) == 0);
     CHECK(cupid_io_read(gba, REG_TM0CNT_L) == 0);
@@ -58,7 +58,7 @@ static void register_latency_and_frozen_counter(void) {
 }
 
 static void byte_latch_and_control_masks(void) {
-    struct CupidGBA* gba = machine(0);
+    struct CupidGBA *gba = machine(0);
     for (int ch = 0; ch < 4; ch++) {
         uint32_t address = GBA_BASE_IO + REG_TMCNT_LO(ch);
         cupid_memory_store16(&gba->cpu, address, 0x1234, NULL);
@@ -83,7 +83,7 @@ static void global_prescaler_phase_and_live_changes(void) {
     const unsigned periods[] = {1, 64, 256, 1024};
     for (unsigned selector = 0; selector < 4; selector++) {
         unsigned period = periods[selector];
-        struct CupidGBA* gba = machine(period + 5);
+        struct CupidGBA *gba = machine(period + 5);
         configure(gba, 0, 0x1000, 0x80 | selector);
         tick(gba, 2);
         uint64_t next = ((gba->timing.globalCycles - 1) / period + 1) * period + 1;
@@ -102,7 +102,7 @@ static void global_prescaler_phase_and_live_changes(void) {
 }
 
 static void coincident_reload_and_stop(void) {
-    struct CupidGBA* gba = machine(0);
+    struct CupidGBA *gba = machine(0);
     configure(gba, 0, 0xFFFE, 0xC0);
     tick(gba, 3);
     CHECK(cupid_io_read(gba, REG_TM0CNT_L) == 0xFFFF);
@@ -122,12 +122,14 @@ static void coincident_reload_and_stop(void) {
 }
 
 static void cascade_chain_and_late_overflows(void) {
-    struct CupidGBA* gba = machine(0);
+    struct CupidGBA *gba = machine(0);
     configure(gba, 0, 0xFFFE, 0xC0);
-    for (int ch = 1; ch < 4; ch++) configure(gba, ch, 0xFFFE, 0xC4);
+    for (int ch = 1; ch < 4; ch++)
+        configure(gba, ch, 0xFFFE, 0xC4);
     tick(gba, 18); /* Eight timer-0 overflows; cascades receive 8, 4 and 2 ticks. */
     CHECK(gba->irq.pendingIF == (IRQ_TIMER0 | IRQ_TIMER1 | IRQ_TIMER2 | IRQ_TIMER3));
-    for (int ch = 0; ch < 4; ch++) CHECK(cupid_io_read(gba, REG_TMCNT_LO(ch)) == 0xFFFE);
+    for (int ch = 0; ch < 4; ch++)
+        CHECK(cupid_io_read(gba, REG_TMCNT_LO(ch)) == 0xFFFE);
     tick(gba, 2);
     CHECK(gba->irqf == (IRQ_TIMER0 | IRQ_TIMER1 | IRQ_TIMER2 | IRQ_TIMER3));
     CHECK(cupid_io_read(gba, REG_TM1CNT_L) == 0xFFFF);
@@ -141,10 +143,9 @@ static void cascade_chain_and_late_overflows(void) {
 }
 
 static void clock_wrap_and_long_sessions(void) {
-    const uint64_t origins[] = {0, INT32_MAX - 4u, UINT32_MAX - 4u,
-                               UINT64_C(0x300000000) - 4};
+    const uint64_t origins[] = {0, INT32_MAX - 4u, UINT32_MAX - 4u, UINT64_C(0x300000000) - 4};
     for (unsigned i = 0; i < sizeof(origins) / sizeof(*origins); i++) {
-        struct CupidGBA* gba = machine(origins[i]);
+        struct CupidGBA *gba = machine(origins[i]);
         configure(gba, 0, 0xFFF0, 0xC0);
         configure(gba, 1, 0, 0x84);
         tick(gba, 1602);
@@ -157,11 +158,13 @@ static void clock_wrap_and_long_sessions(void) {
 }
 
 static void independent_channels_and_clock_source_changes(void) {
-    struct CupidGBA* gba = machine(UINT32_MAX - 4u);
-    for (int ch = 0; ch < 4; ch++) configure(gba, ch, 0xFFFC, 0xC0);
+    struct CupidGBA *gba = machine(UINT32_MAX - 4u);
+    for (int ch = 0; ch < 4; ch++)
+        configure(gba, ch, 0xFFFC, 0xC0);
     tick(gba, 6);
     CHECK(gba->irq.pendingIF == (IRQ_TIMER0 | IRQ_TIMER1 | IRQ_TIMER2 | IRQ_TIMER3));
-    for (int ch = 0; ch < 4; ch++) CHECK(cupid_io_read(gba, REG_TMCNT_LO(ch)) == 0xFFFC);
+    for (int ch = 0; ch < 4; ch++)
+        CHECK(cupid_io_read(gba, REG_TMCNT_LO(ch)) == 0xFFFC);
     tick(gba, 1);
     CHECK(gba->irqf == (IRQ_TIMER0 | IRQ_TIMER1 | IRQ_TIMER2 | IRQ_TIMER3));
     destroy(gba);
@@ -180,8 +183,8 @@ static void independent_channels_and_clock_source_changes(void) {
     destroy(gba);
 }
 
-static struct CupidGBA* fifo_machine(uint64_t clock) {
-    struct CupidGBA* gba = machine(clock);
+static struct CupidGBA *fifo_machine(uint64_t clock) {
+    struct CupidGBA *gba = machine(clock);
     gba->audio.enable = true;
     gba->audio.chALeft = true;
     gba->audio.volumeChA = true;
@@ -189,8 +192,8 @@ static struct CupidGBA* fifo_machine(uint64_t clock) {
     gba->audio.lastSample = clock;
     for (unsigned i = 0; i < 7; i++) {
         uint32_t byte = 4 * i + 1;
-        cupid_audio_fifo_write(&gba->audio.chA, byte | ((byte + 1) << 8) |
-            ((byte + 2) << 16) | ((byte + 3) << 24));
+        cupid_audio_fifo_write(&gba->audio.chA,
+                               byte | ((byte + 1) << 8) | ((byte + 2) << 16) | ((byte + 3) << 24));
     }
     cupid_timing_schedule(&gba->timing, &gba->audio.sampleEvent, 1024);
     configure(gba, 0, (uint16_t)(0x10000 - 130), 0x80);
@@ -198,9 +201,10 @@ static struct CupidGBA* fifo_machine(uint64_t clock) {
 }
 
 static void fifo_late_dispatch_matches_each_cycle(void) {
-    struct CupidGBA* punctual = fifo_machine(0);
-    struct CupidGBA* late = fifo_machine(0);
-    for (int i = 0; i < 3072; i++) tick(punctual, 1);
+    struct CupidGBA *punctual = fifo_machine(0);
+    struct CupidGBA *late = fifo_machine(0);
+    for (int i = 0; i < 3072; i++)
+        tick(punctual, 1);
     tick(late, 3072);
     CHECK(punctual->audio.sampleWritePos == 12);
     CHECK(punctual->audio.sampleBuffer[0] == 3 * 192);
@@ -216,10 +220,10 @@ static void fifo_late_dispatch_matches_each_cycle(void) {
 
 static void fifo_and_psg_clock_wrap(void) {
     const uint64_t origins[] = {INT32_MAX - 4u, UINT32_MAX - 4u, UINT64_C(0x300000000) - 4};
-    struct CupidGBA* baseline = fifo_machine(0);
+    struct CupidGBA *baseline = fifo_machine(0);
     tick(baseline, 3072);
     for (unsigned i = 0; i < sizeof(origins) / sizeof(*origins); i++) {
-        struct CupidGBA* gba = fifo_machine(origins[i]);
+        struct CupidGBA *gba = fifo_machine(origins[i]);
         tick(gba, 3072);
         CHECK(!memcmp(gba->audio.sampleBuffer, baseline->audio.sampleBuffer,
                       sizeof(gba->audio.sampleBuffer)));
@@ -231,7 +235,7 @@ static void fifo_and_psg_clock_wrap(void) {
     const uint64_t clocks[] = {0, INT32_MAX - 16u, UINT32_MAX - 16u, UINT64_C(0x300000000)};
     struct CupidAudioPSG reference = {0};
     for (unsigned i = 0; i < sizeof(clocks) / sizeof(*clocks); i++) {
-        struct CupidGBA* gba = machine(clocks[i]);
+        struct CupidGBA *gba = machine(clocks[i]);
         gba->audio.lastSample = clocks[i];
         cupid_io_write(gba, REG_SOUNDCNT_X, 0x80);
         cupid_io_write(gba, REG_SOUND1CNT_H, 0xF080);
@@ -244,7 +248,8 @@ static void fifo_and_psg_clock_wrap(void) {
         cupid_io_write(gba, REG_SOUND4CNT_L, 0xF000);
         cupid_io_write(gba, REG_SOUND4CNT_H, 0x8008);
         cupid_audio_psg_run(&gba->audio.psg, clocks[i] + 600, 15);
-        if (!i) reference = gba->audio.psg;
+        if (!i)
+            reference = gba->audio.psg;
         CHECK(gba->audio.psg.ch1.index == reference.ch1.index);
         CHECK(gba->audio.psg.ch2.index == reference.ch2.index);
         CHECK(gba->audio.psg.ch1.lastUpdate - clocks[i] == reference.ch1.lastUpdate);
@@ -256,7 +261,7 @@ static void fifo_and_psg_clock_wrap(void) {
 }
 
 static void fifo_dma_latency_cancellation_and_irq(void) {
-    struct CupidGBA* gba = machine(0);
+    struct CupidGBA *gba = machine(0);
     gba->audio.enable = true;
     gba->audio.chBTimer = true;
     for (unsigned i = 0; i < 4; i++) {
@@ -276,7 +281,8 @@ static void fifo_dma_latency_cancellation_and_irq(void) {
     CHECK(gba->audio.chA.latchedSample == 0);
     CHECK(gba->memory.dma[1].requestEvent.when == 6);
     tick(gba, 1);
-    CHECK(gba->memory.dma[1].requestEvent.when == 6); /* Repeated requests keep the first deadline. */
+    CHECK(gba->memory.dma[1].requestEvent.when ==
+          6); /* Repeated requests keep the first deadline. */
     tick(gba, 1);
     CHECK(gba->memory.dma[1].nextSource == GBA_BASE_IWRAM);
     CHECK(gba->memory.dma[1].nextCount == 4 && !gba->memory.dmaRunning);
@@ -331,7 +337,7 @@ static void fifo_dma_latency_cancellation_and_irq(void) {
 }
 
 static void fifo_sample_at_mixer_boundary_is_carried_forward(void) {
-    struct CupidGBA* gba = machine(0);
+    struct CupidGBA *gba = machine(0);
     gba->audio.enable = true;
     gba->audio.chALeft = true;
     gba->audio.volumeChA = true;

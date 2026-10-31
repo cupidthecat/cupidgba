@@ -34,3 +34,18 @@ For a core build without a windowing dependency, add
 `-DCUPID_BUILD_FRONTEND=OFF`. See [testing.md](testing.md) for regression checks
 and sanitizer builds. Supported CI builds cover Linux GCC, Linux Clang with
 address and undefined behavior sanitizers, and Windows GCC with SDL2.
+
+## C formatting
+
+The repository's `.clang-format` sets four-space indentation, LF line endings,
+a 100-column limit and right-aligned pointer declarations. Use clang-format
+23.1.3, the same version checked by CI:
+
+```sh
+python3 -m venv .local-research/format-tools
+.local-research/format-tools/bin/python -m pip install clang-format==23.1.3
+CLANG_FORMAT=.local-research/format-tools/bin/clang-format python3 tests/platform/check_format.py
+```
+
+Format project C files, headers and C fixture includes, not private reference
+checkouts, assembly includes or generated build directories. Keep comments consistent with the behavior they describe.

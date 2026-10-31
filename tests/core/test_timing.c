@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-#include "cupid/timing.h"
 #include "../test.h"
+#include "cupid/timing.h"
 
 struct Fixture {
     struct CupidTiming timing;
@@ -15,15 +15,15 @@ struct Fixture {
 };
 
 struct Context {
-    struct Fixture* fixture;
+    struct Fixture *fixture;
     unsigned id;
-    struct CupidTimingEvent* reschedule;
+    struct CupidTimingEvent *reschedule;
     bool interrupt;
 };
 
-static void callback(struct CupidTiming* timing, void* opaque, uint32_t late) {
-    struct Context* context = opaque;
-    struct Fixture* fixture = context->fixture;
+static void callback(struct CupidTiming *timing, void *opaque, uint32_t late) {
+    struct Context *context = opaque;
+    struct Fixture *fixture = context->fixture;
     CHECK(fixture->count < 16);
     fixture->order[fixture->count] = context->id;
     fixture->late[fixture->count] = late;
@@ -37,12 +37,12 @@ static void callback(struct CupidTiming* timing, void* opaque, uint32_t late) {
     }
 }
 
-static void init(struct Fixture* fixture) {
+static void init(struct Fixture *fixture) {
     memset(fixture, 0, sizeof(*fixture));
     cupid_timing_init(&fixture->timing, &fixture->cycles, &fixture->next);
 }
 
-static struct CupidTimingEvent event(struct Context* context, unsigned priority) {
+static struct CupidTimingEvent event(struct Context *context, unsigned priority) {
     struct CupidTimingEvent result = {0};
     result.context = context;
     result.callback = callback;
@@ -54,8 +54,10 @@ static void priority_and_lateness(void) {
     struct Fixture f;
     init(&f);
     struct Context contexts[] = {{&f, 0, NULL, false}, {&f, 1, NULL, false}, {&f, 2, NULL, false}};
-    struct CupidTimingEvent events[] = {event(&contexts[0], 8), event(&contexts[1], 1), event(&contexts[2], 1)};
-    for (unsigned i = 0; i < 3; i++) cupid_timing_schedule(&f.timing, &events[i], 10);
+    struct CupidTimingEvent events[] = {event(&contexts[0], 8), event(&contexts[1], 1),
+                                        event(&contexts[2], 1)};
+    for (unsigned i = 0; i < 3; i++)
+        cupid_timing_schedule(&f.timing, &events[i], 10);
     CHECK(cupid_timing_tick(&f.timing, 13) == INT32_MAX);
     CHECK(f.count == 3);
     CHECK(f.order[0] == 1 && f.order[1] == 2 && f.order[2] == 0);
@@ -146,8 +148,8 @@ static void clear_resets_deadlines(void) {
     CHECK(cupid_timing_global_time(&f.timing) == 0);
 }
 
-static void observe_clock(void* context, uint64_t time) {
-    struct Fixture* f = context;
+static void observe_clock(void *context, uint64_t time) {
+    struct Fixture *f = context;
     f->syncCount++;
     f->syncTime = time;
     f->syncEvents = f->count;
@@ -171,14 +173,14 @@ static void clock_observer_runs_after_due_callbacks_without_a_deadline(void) {
 }
 
 struct QueuedContext {
-    struct Fixture* fixture;
-    struct CupidTimingEvent* event;
+    struct Fixture *fixture;
+    struct CupidTimingEvent *event;
     bool requeued;
 };
 
-static void queued_callback(struct CupidTiming* timing, void* opaque, uint32_t late) {
-    struct QueuedContext* context = opaque;
-    struct Fixture* fixture = context->fixture;
+static void queued_callback(struct CupidTiming *timing, void *opaque, uint32_t late) {
+    struct QueuedContext *context = opaque;
+    struct Fixture *fixture = context->fixture;
     CHECK(fixture->count < 16);
     fixture->order[fixture->count] = 0;
     fixture->late[fixture->count] = late;
@@ -190,13 +192,13 @@ static void queued_callback(struct CupidTiming* timing, void* opaque, uint32_t l
          * callback queue is deferred and both deadlines are already late. */
         cupid_timing_interrupt(timing);
         cupid_timing_queue_absolute(timing, context->event,
-            (int32_t)(uint32_t)(cupid_timing_global_time(timing) + 2));
+                                    (int32_t)(uint32_t)(cupid_timing_global_time(timing) + 2));
     }
 }
 
 static void queue_absolute_ownership(void) {
-    const uint64_t epochs[] = {0, (uint32_t)INT32_MAX - 1,
-                               (uint64_t)UINT32_MAX - 1, UINT64_MAX - 1};
+    const uint64_t epochs[] = {0, (uint32_t)INT32_MAX - 1, (uint64_t)UINT32_MAX - 1,
+                               UINT64_MAX - 1};
     for (unsigned i = 0; i < sizeof(epochs) / sizeof(epochs[0]); ++i) {
         struct Fixture f;
         init(&f);
@@ -212,7 +214,8 @@ static void queue_absolute_ownership(void) {
         CHECK(f.next == 2);
         CHECK(cupid_timing_tick(&f.timing, 5) == INT32_MAX);
         CHECK(f.count == 3 && f.order[0] == 0 && f.order[1] == 1 && f.order[2] == 0);
-        CHECK(f.time[0] == epochs[i] + 2 && f.time[1] == epochs[i] + 2 && f.time[2] == epochs[i] + 4);
+        CHECK(f.time[0] == epochs[i] + 2 && f.time[1] == epochs[i] + 2 &&
+              f.time[2] == epochs[i] + 4);
         CHECK(f.late[0] == 3 && f.late[1] == 3 && f.late[2] == 1);
         CHECK(f.timing.root == NULL && f.timing.reroot == NULL && !f.timing.inCallback);
         CHECK(cupid_timing_global_time(&f.timing) == epochs[i] + 5);
@@ -220,42 +223,42 @@ static void queue_absolute_ownership(void) {
 }
 
 struct ObserverQueue {
-    struct Fixture* fixture;
-    struct CupidTimingEvent* first;
-    struct CupidTimingEvent* second;
+    struct Fixture *fixture;
+    struct CupidTimingEvent *first;
+    struct CupidTimingEvent *second;
     unsigned calls;
 };
 
-static void observer_changes_queue(void* opaque, uint64_t time) {
-    struct ObserverQueue* observer = opaque;
-    struct Fixture* f = observer->fixture;
+static void observer_changes_queue(void *opaque, uint64_t time) {
+    struct ObserverQueue *observer = opaque;
+    struct Fixture *f = observer->fixture;
     CHECK(time == f->timing.globalCycles && !f->timing.inCallback);
     CHECK(f->timing.reroot == NULL);
     switch (observer->calls++) {
-    case 0:
-        CHECK(f->count == 0 && f->timing.root == observer->first);
-        cupid_timing_deschedule(&f->timing, observer->first);
-        cupid_timing_schedule(&f->timing, observer->second, 4);
-        cupid_timing_interrupt(&f->timing);
-        break;
-    case 1:
-        CHECK(f->count == 0 && f->timing.root == observer->second);
-        cupid_timing_deschedule(&f->timing, observer->second);
-        cupid_timing_schedule(&f->timing, observer->first, 0);
-        cupid_timing_interrupt(&f->timing);
-        break;
-    case 2:
-        CHECK(f->count == 1 && f->timing.root == NULL);
-        cupid_timing_schedule(&f->timing, observer->second, 2);
-        break;
-    default:
-        CHECK(false);
+        case 0:
+            CHECK(f->count == 0 && f->timing.root == observer->first);
+            cupid_timing_deschedule(&f->timing, observer->first);
+            cupid_timing_schedule(&f->timing, observer->second, 4);
+            cupid_timing_interrupt(&f->timing);
+            break;
+        case 1:
+            CHECK(f->count == 0 && f->timing.root == observer->second);
+            cupid_timing_deschedule(&f->timing, observer->second);
+            cupid_timing_schedule(&f->timing, observer->first, 0);
+            cupid_timing_interrupt(&f->timing);
+            break;
+        case 2:
+            CHECK(f->count == 1 && f->timing.root == NULL);
+            cupid_timing_schedule(&f->timing, observer->second, 2);
+            break;
+        default:
+            CHECK(false);
     }
 }
 
 static void clock_observer_changes_update_next_deadline(void) {
-    const uint64_t epochs[] = {0, (uint32_t)INT32_MAX - 1,
-                               (uint64_t)UINT32_MAX - 1, UINT64_MAX - 1};
+    const uint64_t epochs[] = {0, (uint32_t)INT32_MAX - 1, (uint64_t)UINT32_MAX - 1,
+                               UINT64_MAX - 1};
     for (unsigned i = 0; i < sizeof(epochs) / sizeof(epochs[0]); ++i) {
         struct Fixture f;
         init(&f);
