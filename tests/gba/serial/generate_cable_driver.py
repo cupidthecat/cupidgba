@@ -13,8 +13,8 @@ if len(image) != 512 or any(image[offset:offset + 4] != bytes.fromhex('feffffea'
     raise SystemExit('Cable driver size or terminal differs')
 lines = ['/* Generated from cable-driver.s; see the local connection documentation. */',
          'static const uint8_t cableDriver[] = {']
-for offset in range(0, len(image), 12):
-    lines.append('    ' + ', '.join(f'0x{value:02X}' for value in image[offset:offset + 12]) + ',')
+for offset in range(0, len(image), 16):
+    lines.append('    ' + ', '.join(f'0x{value:02X}' for value in image[offset:offset + 16]) + ',')
 lines.append('};')
 expected = ('\n'.join(lines) + '\n').encode()
 target = Path(__file__).with_name('cable-driver.inc')

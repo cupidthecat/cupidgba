@@ -12,8 +12,8 @@ if len(image) != 512 or image[0xFC:0x100] != bytes.fromhex("feffffea") or image[
     raise SystemExit("JOY driver size or terminal differs")
 rows = ["/* Generated from joybus-driver.s; see the serial documentation. */",
         "static const uint8_t joybusDriver[] = {"]
-for offset in range(0, len(image), 12):
-    rows.append("    " + ", ".join(f"0x{value:02X}" for value in image[offset:offset + 12]) + ",")
+for offset in range(0, len(image), 16):
+    rows.append("    " + ", ".join(f"0x{value:02X}" for value in image[offset:offset + 16]) + ",")
 rows.append("};")
 expected = ("\n".join(rows) + "\n").encode()
 target = Path(__file__).with_name("joybus-driver.inc")

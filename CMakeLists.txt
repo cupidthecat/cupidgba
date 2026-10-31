@@ -593,6 +593,10 @@ if(BUILD_TESTING)
         set_tests_properties(gba.wave-bank-${group} PROPERTIES TIMEOUT 10)
     endforeach()
 
+    add_test(NAME runner.generated-fixtures COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/test_generated_fixtures.py)
+    set_tests_properties(runner.generated-fixtures PROPERTIES TIMEOUT 10)
+
     add_test(NAME runner.bus-feedback-protocol COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_bus_feedback_protocol.py)
     set_tests_properties(runner.bus-feedback-protocol PROPERTIES TIMEOUT 10)

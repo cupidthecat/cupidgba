@@ -49,3 +49,6 @@ CLANG_FORMAT=.local-research/format-tools/bin/clang-format python3 tests/platfor
 
 Format project C files, headers and C fixture includes, not private reference
 checkouts, assembly includes or generated build directories. Keep comments consistent with the behavior they describe.
+
+See [C source style](code-style.md) for comments, documentation blocks and
+subsystem organization.

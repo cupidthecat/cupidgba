@@ -18,22 +18,22 @@
  * conditionLut[cond] & (1 << flags) → whether condition passes.
  */
 static const uint16_t conditionLut[16] = {
-    0xF0F0, // EQ  Z set
-    0x0F0F, // NE  Z clear
-    0xCCCC, // CS  C set
-    0x3333, // CC  C clear
-    0xFF00, // MI  N set
-    0x00FF, // PL  N clear
-    0xAAAA, // VS  V set
-    0x5555, // VC  V clear
-    0x0C0C, // HI  C set and Z clear
-    0xF3F3, // LS  C clear or Z set
-    0xAA55, // GE  N == V
-    0x55AA, // LT  N != V
-    0x0A05, // GT  Z clear && N == V
-    0xF5FA, // LE  Z set || N != V
-    0xFFFF, // AL  always
-    0x0000  // NV  never
+    0xF0F0, /* EQ  Z set */
+    0x0F0F, /* NE  Z clear */
+    0xCCCC, /* CS  C set */
+    0x3333, /* CC  C clear */
+    0xFF00, /* MI  N set */
+    0x00FF, /* PL  N clear */
+    0xAAAA, /* VS  V set */
+    0x5555, /* VC  V clear */
+    0x0C0C, /* HI  C set and Z clear */
+    0xF3F3, /* LS  C clear or Z set */
+    0xAA55, /* GE  N == V */
+    0x55AA, /* LT  N != V */
+    0x0A05, /* GT  Z clear && N == V */
+    0xF5FA, /* LE  Z set || N != V */
+    0xFFFF, /* AL  always */
+    0x0000  /* NV  never */
 };
 
 /** Prefetch-cycle cost for a no-op (failed condition or idle fetch) */
