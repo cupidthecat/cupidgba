@@ -14,10 +14,19 @@ The halfword path distinguishes these ports:
 - BIOS reads preserve the existing read-protection policy.
 - Unmapped reads do not drive a new value.
 
-A later DMA read supersedes the retained CPU input. The next completed opcode
-fetch returns to the existing instruction-fetch feedback path. Untimed observer
+A later DMA read supersedes the retained CPU input. A Thumb opcode fetch from
+IWRAM replaces only its addressed halfword bank. Data in the other bank survives
+until a transfer drives that bank. ARM fetches replace the complete word. BIOS
+and OAM supply their full aligned word for either instruction width. Other
+fetch regions retain the existing pipeline reconstruction. Untimed observer
 reads do not change either the CPU input or the IWRAM bank history. Reset clears
 both, and separate emulator instances own separate state.
+
+Opcode publication follows the actual sample, including untimed pipeline
+refills before timed execution. It does not guess an opcode before the memory
+read. Timed IRQ entry also samples its discarded fetch without executing the
+opcode or adding a cycle. This keeps explicit pipeline setup and ordinary
+execution consistent.
 
 The implementation lives in `src/gba/memory/feedback.c`. Bus timing, transfer
 activation, interrupt deadlines and instruction expectations are unchanged.
@@ -31,6 +40,18 @@ CPU read, then checks the complete captured word, destination memory and bus
 release. Ownership checks cover untimed observers, unmapped reads, the next
 fetch, reset and separate instances. Another 32 scenes retain BIOS protection
 through both execution regions, all address lanes and four clock epochs.
+
+Opcode checks add 640 scenes across five execution regions, ARM/Thumb mode,
+alignment, clock epochs and timed/untimed initial refills. They include RAM/OAM
+mirrors and wrap boundaries, all three cartridge windows and the BIOS end. Another 64 complete
+instruction pairs check data retained after halfword and word loads, including
+unaligned word rotation. Thirty-two DMA cases retain the other IWRAM bank after
+a transfer, then check the next fetched opcode, loaded value, destination word,
+address progress and bus release. Removing opcode publication makes the BIOS,
+OAM, retained-load and DMA groups fail without changing their expectations.
+Eighty IRQ-entry scenes require the discarded sample followed by both vector
+samples, while preserving entry clocks, return address, status and pipeline
+contents. Omitting the discarded read fails this group.
 
 Six pinned original cartridges check CPU/DMA interaction, IWRAM, OAM, protected
 sources, odd signed-halfword loads and unmapped reads. The runner requires each
@@ -54,5 +75,7 @@ The cartridges retain a 360-frame, 150-million-step and 90-second process limit.
 This work covers halfword data-read feedback and the word transfers that seed
 IWRAM history. It does not establish a complete physical bus model. Byte and
 word CPU input feedback, register-specific I/O feedback, narrow IWRAM writes,
-instruction-fetch bank history and other partially driven buses need separate
-qualification. Broader CPU, DMA and display timing requirements remain open.
+cross-region input history and other partially driven buses need separate
+qualification. The fast-RAM and BIOS/OAM fetch rules follow the documented
+[GBA unused-memory behavior](https://problemkaputt.de/gbatek.htm#gbaunpredictablethings);
+the checks here are software regressions, not new physical hardware captures. Broader CPU, DMA and display timing requirements remain open.

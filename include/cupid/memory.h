@@ -321,12 +321,14 @@ struct CupidMemory {
     bool prefetch;             /**< WAITCNT bit 14: prefetch enable */
     uint32_t lastPrefetchedPc; /**< Last PC that triggered a prefetch */
 
-    uint32_t openBus;  /**< Retained CPU data input before rotation */
-    bool dataBusValid; /**< A data read followed the last opcode fetch */
-    uint32_t iwramBus; /**< Retained pair of internal RAM bank values */
+    uint32_t openBus;   /**< Retained CPU data input before rotation */
+    bool inputBusValid; /**< A physical CPU input overrides pipeline reconstruction */
+    uint32_t iwramBus;  /**< Retained pair of internal RAM bank values */
 };
 
 /** @name API */
+void cupid_memory_capture_opcode(struct CupidARM *cpu, uint32_t address, unsigned width,
+                                 uint32_t value);
 void cupid_memory_capture_halfword(struct CupidGBA *gba, uint32_t address, uint16_t value);
 void cupid_memory_init(struct CupidGBA *gba);
 void cupid_memory_reset(struct CupidGBA *gba);

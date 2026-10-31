@@ -620,7 +620,7 @@ if(BUILD_TESTING)
 
     add_executable(test_memory_feedback tests/gba/memory/test_feedback.c)
     target_link_libraries(test_memory_feedback PRIVATE cupid_core)
-    foreach(group handover ownership bios)
+    foreach(group handover ownership bios fetch-0 fetch-1 fetch-2 fetch-3 fetch-4 fetch-history fetch-dma fetch-irq)
         add_test(NAME gba.memory-feedback-${group} COMMAND test_memory_feedback ${group})
         set_tests_properties(gba.memory-feedback-${group} PROPERTIES TIMEOUT 10)
     endforeach()

@@ -150,8 +150,8 @@ void cupid_bus_fetch(struct CupidARM *cpu, uint32_t address, unsigned width, boo
         cupid_memory_refresh_vram_fetch(cpu, address);
     /* The caller reads the opcode before releasing ownership of the bus. */
     gba->memory.lastWasDMA = false;
-    /* A completed opcode fetch replaces the previous data-read input. */
-    gba->memory.dataBusValid = false;
+    /* The caller publishes the sampled opcode before releasing ownership. */
+    gba->memory.inputBusValid = false;
 }
 
 void cupid_bus_finish(struct CupidARM *cpu) {

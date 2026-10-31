@@ -181,6 +181,7 @@ void cupid_memory_init(struct CupidGBA *gba) {
     cpu->memory.storeMultiple = cupid_memory_store_multiple;
     cpu->memory.setActiveRegion = cupid_memory_set_active_region;
     cpu->memory.fetch = cupid_bus_fetch;
+    cpu->memory.captureOpcode = cupid_memory_capture_opcode;
     cpu->memory.finish = cupid_bus_finish;
     cpu->memory.lock = cupid_bus_lock;
     cpu->memory.timed = false;
@@ -232,7 +233,7 @@ void cupid_memory_reset(struct CupidGBA *gba) {
     mem->displayBeatReady = mem->displayFinal = false;
     mem->lastPrefetchedPc = 0;
     mem->openBus = 0;
-    mem->dataBusValid = false;
+    mem->inputBusValid = false;
     mem->iwramBus = 0;
     mem->busBusy = false;
     mem->busLocked = false;
@@ -355,17 +356,19 @@ static uint8_t _deadbeef[4] = {0x10, 0xB7, 0x10, 0xE7};
 /**
  * @brief Return open-bus data for invalid or protected reads.
  *
- * Returns the prefetch pipeline value, swizzled for Thumb mode.
- * A completed CPU halfword read retains its physical input word until the
- * next opcode fetch. DMA can sample that word when it takes over the bus.
- * A later DMA read takes precedence over the retained CPU input.
+ * Uses retained physical input when available, then falls back to the
+ * prefetch pipeline, swizzled for Thumb mode. Halfword reads and sampled
+ * opcodes can publish physical input.
+ * Fast-RAM fetches update one Thumb bank; BIOS/OAM provide their aligned word.
+ * Other fetch regions keep the pipeline reconstruction below. A later DMA
+ * read takes precedence over retained CPU input.
  */
 uint32_t cupid_memory_open_bus(struct CupidARM *cpu) {
     struct CupidGBA *gba = cpu->master;
     uint32_t value = 0;
     if (gba->memory.lastWasDMA)
         return gba->memory.dmaBus;
-    if (gba->memory.dataBusValid)
+    if (gba->memory.inputBusValid)
         return gba->memory.openBus;
     value = cpu->prefetch[1];
     if (cpu->executionMode == MODE_THUMB) {
@@ -543,7 +546,7 @@ uint32_t cupid_memory_load32(struct CupidARM *cpu, uint32_t address, int *cycleC
             break;
         case GBA_REGION_IWRAM:
             LOAD_32(value, address & (GBA_SIZE_IWRAM - 4), memory->iwram);
-            if (timedCounter || gba->performingDMA)
+            if (timedCounter || cycleCounter || gba->performingDMA)
                 memory->iwramBus = value;
             break;
         case GBA_REGION_IO:
@@ -726,7 +729,7 @@ uint32_t cupid_memory_load16(struct CupidARM *cpu, uint32_t address, int *cycleC
     uint16_t port;
     if (cupid_cartridge_gpio_read(gba, address & ~1u, &port))
         value = port;
-    if (timedCounter)
+    if (timedCounter || cycleCounter)
         cupid_memory_capture_halfword(gba, address, (uint16_t)value);
     end_data_access(cpu, timedCounter, true);
     int rotate = (address & 1) << 3;
@@ -920,7 +923,7 @@ void cupid_memory_store32(struct CupidARM *cpu, uint32_t address, int32_t value,
             break;
         case GBA_REGION_IWRAM:
             STORE_32(value, address & (GBA_SIZE_IWRAM - 4), memory->iwram);
-            if (timedCounter || gba->performingDMA)
+            if (timedCounter || cycleCounter || gba->performingDMA)
                 memory->iwramBus = value;
             break;
         case GBA_REGION_IO:

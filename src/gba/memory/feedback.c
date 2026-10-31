@@ -31,5 +31,36 @@ void cupid_memory_capture_halfword(struct CupidGBA *gba, uint32_t address, uint1
         return;
     }
     memory->openBus = input;
-    memory->dataBusValid = true;
+    memory->inputBusValid = true;
+}
+
+/* Fast RAM fetches update one sixteen-bit bank in Thumb state. Its other
+ * bank can still contain an earlier data access, not the preceding opcode.
+ * BIOS and OAM instead present their complete aligned word on either fetch.
+ * Other regions keep the existing pipeline reconstruction until qualified. */
+void cupid_memory_capture_opcode(struct CupidARM *cpu, uint32_t address, unsigned width,
+                                 uint32_t value) {
+    struct CupidGBA *gba = cpu->master;
+    struct CupidMemory *memory = &gba->memory;
+    const unsigned region = address >> GBA_BASE_OFFSET;
+    uint32_t input;
+    memory->inputBusValid = false;
+    if (region == GBA_REGION_IWRAM) {
+        if (width == 4) {
+            input = value;
+        } else {
+            const uint32_t half = value;
+            const unsigned shift = (address & 2) * 8;
+            input = (memory->iwramBus & ~(UINT32_C(0xFFFF) << shift)) | half << shift;
+        }
+        memory->iwramBus = input;
+    } else if (region == GBA_REGION_OAM) {
+        LOAD_32(input, address & (GBA_SIZE_OAM - 4), gba->video.oam.raw);
+    } else if (region == GBA_REGION_BIOS && address < GBA_SIZE_BIOS) {
+        LOAD_32(input, address & ~3u, memory->bios);
+    } else {
+        return;
+    }
+    memory->openBus = input;
+    memory->inputBusValid = true;
 }

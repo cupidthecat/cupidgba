@@ -136,6 +136,8 @@ struct CupidARMMemory {
     bool timed; /**< CPU execution advances individual bus phases */
     bool dataSequential;
     bool (*readOpcode)(struct CupidARM *cpu, uint32_t address, unsigned width, uint32_t *value);
+    /** Publish sampled opcode input, including untimed pipeline refills. */
+    void (*captureOpcode)(struct CupidARM *cpu, uint32_t address, unsigned width, uint32_t value);
 
     /** Current access source for timing/debug */
     enum CupidAccessSource accessSource;

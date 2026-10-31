@@ -75,12 +75,14 @@
 
 static inline uint32_t CupidReadOpcode(struct CupidARM *cpu, uint32_t address, unsigned width) {
     uint32_t value;
-    if (cpu->memory.readOpcode && cpu->memory.readOpcode(cpu, address, width, &value))
-        return value;
-    if (width == WORD_SIZE_ARM)
-        LOAD_32(value, address & cpu->memory.activeMask, cpu->memory.activeRegion);
-    else
-        LOAD_16(value, address & cpu->memory.activeMask, cpu->memory.activeRegion);
+    if (!(cpu->memory.readOpcode && cpu->memory.readOpcode(cpu, address, width, &value))) {
+        if (width == WORD_SIZE_ARM)
+            LOAD_32(value, address & cpu->memory.activeMask, cpu->memory.activeRegion);
+        else
+            LOAD_16(value, address & cpu->memory.activeMask, cpu->memory.activeRegion);
+    }
+    if (cpu->memory.captureOpcode)
+        cpu->memory.captureOpcode(cpu, address, width, value);
     return value;
 }
 

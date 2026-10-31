@@ -197,7 +197,10 @@ void cupid_arm_take_irq(struct CupidARM *cpu) {
     /* IRQ entry discards one instruction fetch before refilling the vector. */
     if (cpu->memory.timed) {
         unsigned width = cpu->executionMode == MODE_ARM ? WORD_SIZE_ARM : WORD_SIZE_THUMB;
-        cpu->memory.fetch(cpu, (uint32_t)cpu->gprs[ARM_PC] + width, width, true);
+        uint32_t address = (uint32_t)cpu->gprs[ARM_PC] + width;
+        cpu->memory.fetch(cpu, address, width, true);
+        /* Discard execution, not the physical input sampled by this fetch. */
+        (void)CupidReadOpcode(cpu, address, width);
         cpu->memory.finish(cpu);
     } else {
         cpu->cycles += 1 + (cpu->executionMode == MODE_ARM ? cpu->memory.activeSeqCycles32
