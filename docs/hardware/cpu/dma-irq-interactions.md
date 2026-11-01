@@ -26,23 +26,19 @@ case passes its original return-address and `0x87` timer comparisons,
 pre-display result and issued terminal with both firmware paths. Frame and
 interval returns can suspend this fetch without issuing another instruction.
 
-The HALT/OAM variant additionally requires display-memory arbitration. The
-CPU/bus-only profile still reads `0xDB` instead of `0xDD` and passes thirty of
-the thirty-two interaction runs. With the pixel pipeline and display-bus owner
-integrated, all thirty-two runs pass, including the OAM case's original `0x74`
-return address and `0xDD` timer comparison with both firmware paths. Original
-inputs, comparison observers and limits remain unchanged. These covered
-interactions do not establish every power-on register, timer-divider phase or
-physical IRQ sampling edge. See [display bus waits](display-irq.md) for the
-shared request owner and CPU-ready waveform coverage.
+The HALT/OAM variant additionally requires display-memory arbitration. Before
+that integration, the CPU/bus-only profile read `0xDB` instead of `0xDD` and
+passed thirty of the thirty-two runs. An earlier combined Windows profile
+passed the OAM comparison but retained `0x88` instead of `0x87` in the separate
+DMA/HALT case. These are historical outcomes, not current acceptance results.
 
-With the pixel pipeline and display-bus owner integrated, the HALT/OAM case
-passes its original `0x74` return-address and `0xDD` timer comparisons,
-pre-display result and terminal with both firmware paths. The combined Windows
-profile passes thirty of the thirty-two interaction runs, including fifteen
-externally. The separate `0x88` versus `0x87` DMA/HALT timer comparison remains
-failed with both paths. See [display bus waits](display-irq.md) for the shared
-request owner and its CPU-ready waveform coverage.
+The integrated core now passes all thirty-two unchanged input/firmware runs.
+This includes the ordinary case's `0x87` timer value and the OAM case's original
+`0x74` return address and `0xDD` timer value. Every run still requires all
+encoded comparisons, the pre-display result and a completed terminal. These
+cases do not establish every power-on register, timer-divider phase or physical
+IRQ sampling edge. See [display bus waits](display-irq.md) for the shared
+request owner and CPU-ready waveform coverage.
 
 The CPU samples its synchronized IRQ input at instruction boundaries. Its
 synchronizer keeps two CPU-clock stages after register acceptance. DMA bus

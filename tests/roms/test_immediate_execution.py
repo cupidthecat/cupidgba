@@ -8,7 +8,7 @@ import struct
 import subprocess
 import tempfile
 
-from protocols.immediate import require_result, verify_input
+from protocols.comparisons import require_result, verify_input
 
 
 def cartridge(value, skip, mode, result_register):

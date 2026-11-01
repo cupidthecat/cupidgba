@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 import subprocess
 from fetch_inputs import download_verified
-from protocols.immediate import require_result, verify_input
+from protocols.comparisons import require_result, verify_input
 
 
 def fetch_cases(manifest, cases, directory):

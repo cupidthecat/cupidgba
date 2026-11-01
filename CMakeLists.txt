@@ -671,6 +671,14 @@ if(BUILD_TESTING)
     set_tests_properties(runner.immediate-comparison-protocol runner.immediate-comparison-execution
         runner.fifo-source-builder PROPERTIES TIMEOUT 10)
 
+    add_test(NAME runner.dma-comparison-protocol COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_dma_comparisons.py)
+    add_test(NAME runner.dma-comparison-execution COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_dma_execution.py
+        --runner $<TARGET_FILE:cupidgba-headless>)
+    set_tests_properties(runner.dma-comparison-protocol runner.dma-comparison-execution
+        PROPERTIES TIMEOUT 10)
+
     if(CUPID_BUS_FEEDBACK_PROBE_DIR)
         foreach(case cpu iwram oam protected signed-halfword unmapped)
             add_test(NAME rom.bus-feedback-${case} COMMAND ${Python3_EXECUTABLE}

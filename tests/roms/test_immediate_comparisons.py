@@ -13,7 +13,7 @@ from unittest.mock import patch, call
 import check_serial_probe as probe
 import check_object_tail_probe as object_probe
 
-from protocols.immediate import require_result, verify_input
+from protocols.comparisons import require_result, verify_input
 
 
 def comparison_image(original):

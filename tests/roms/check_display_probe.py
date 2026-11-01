@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 
 from fetch_inputs import download_verified
-from protocols.immediate import require_result, result_register, verify_input
+from protocols.comparisons import require_result, result_register, verify_input
 
 
 def input_path(directory, name):

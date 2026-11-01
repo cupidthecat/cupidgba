@@ -21,7 +21,7 @@ points. The normal object case complements the existing
 
 ## Comparison and result guards
 
-`tests/roms/protocols/immediate.py` verifies the complete input digest, encoded
+`tests/roms/protocols/comparisons.py` verifies the complete input digest, encoded
 comparisons, the nine-instruction VBlank wait and the original result-register
 selection and restoration of r0-r12. It accepts the comparison forms used here: Thumb immediate CMP,
 and unconditional ARM CMP with an unrotated eight-bit immediate. PC operands
