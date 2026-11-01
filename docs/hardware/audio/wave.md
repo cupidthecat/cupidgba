@@ -44,3 +44,29 @@ The volume timeline oracle also selects the programmed bank's DAC tap.
 These checks qualify the selected held-output model. Trigger startup delay,
 physical register acceptance, CPU-window clock phase and analog output calibration
 remain open in [issue 1](https://github.com/cupidthecat/cupidgba/issues/1).
+
+## Bounded wave-clock advancement
+
+Elapsed wave clocks retain the same pending deadline, sample order and output
+scaling. Complete 32- or 64-sample rotations restore the waveform bytes, so the
+audio engine reduces the storage rotation to the remainder of that cycle. It still
+captures the last elapsed sample and advances the deadline by the full elapsed
+interval. An exact number of complete cycles must update the held sample even
+though every stored byte returns to its initial position.
+
+Single-edge observations keep their inline word path; small rotations use the
+same operation. Larger rotations use a temporary
+copy of the selected storage and a single byte pass. Work is bounded by the
+waveform capacity rather than the number of elapsed sample edges. The helper
+is isolated in `src/gba/audio/wave.c`; register handling and clock scheduling
+remain with the audio engine. This changes neither the existing startup delay
+nor the selected bank and volume behavior.
+
+Four additional native groups compare complete PSG state across 26,944 scenes.
+They cover every rotation through 257 steps, both banks and lengths, eight
+volume codes, seven frequencies, four clock origins, repeated observations,
+partitioned advances and mid-period rate/bank changes. Large-interval cases
+cover more than a trillion elapsed steps without iterating over each step.
+A separate scalar nibble-shift oracle checks every waveform byte, held sample,
+scaled output and next deadline. These are equivalence and execution-bound
+checks, not new physical timing measurements.

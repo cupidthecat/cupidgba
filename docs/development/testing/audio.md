@@ -84,3 +84,18 @@ right values (`<Qhh`, 12 bytes). The sink records frames independently of host
 queue overflow. It fails the run on file write or close errors. See
 [audio registers](../../hardware/audio/registers.md) and
 [audio timing](../../hardware/audio/timing.md) for coverage and qualification limits.
+
+## Wave-clock batching
+
+The four `gba.wave-advance-*` groups exercise the ordinary public PSG update
+path. `rotations` and `clocks` compare complete channel state against a scalar
+nibble-shift model; `partitions` compares bulk observation with clock-by-clock
+observation across register-state changes. `large` retains full elapsed-clock
+arithmetic while checking storage after many complete cycles. Each group keeps
+a ten-second deadline. No original wave-output, bank, audio-signal or firmware
+playback expectation changes.
+
+Performance comparisons must retain complete waveform bytes, held/scaled
+samples and the next deadline. An isolated high-frequency wave benchmark is
+not a whole-emulator speed result; game qualification also compares complete
+images, memory exports, timestamped PCM and execution endpoints.

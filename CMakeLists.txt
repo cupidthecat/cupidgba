@@ -62,7 +62,7 @@ add_library(cupid_core STATIC
     src/arm/arm.c src/arm/isa-arm.c src/arm/isa-thumb.c
     src/core/timing.c src/core/file.c src/platform/context.c
     src/gba/gba.c src/gba/memory.c src/gba/memory/feedback.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
-    src/gba/audio.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c
+    src/gba/audio.c src/gba/audio/wave.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c
     src/gba/hle-bios.c src/gba/bios/file.c src/gba/savedata.c src/gba/save/file.c
     src/gba/save/programming.c
     src/gba/serial/serial.c src/gba/serial/joybus.c src/gba/serial/uart.c
@@ -668,6 +668,12 @@ if(BUILD_TESTING)
         set_tests_properties(gba.wave-output-${group} PROPERTIES TIMEOUT 10)
     endforeach()
 
+    add_executable(test_wave_advance tests/gba/audio/test_wave_advance.c)
+    target_link_libraries(test_wave_advance PRIVATE cupid_core)
+    foreach(group rotations clocks large partitions)
+        add_test(NAME gba.wave-advance-${group} COMMAND test_wave_advance ${group})
+        set_tests_properties(gba.wave-advance-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
     add_executable(test_wave_bank tests/gba/audio/test_wave_bank.c)
     target_link_libraries(test_wave_bank PRIVATE cupid_core)
     foreach(group first patterns switches)

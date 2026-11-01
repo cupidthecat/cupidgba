@@ -11,6 +11,7 @@
  *   - FIFO bytes latch on timer overflow and hold between overflows
  *   - A 512 Hz frame sequencer updates length, envelope, and sweep state
  */
+#include "audio/wave.h"
 #include "cupid/gba.h"
 #include <stdarg.h>
 #include <string.h>
@@ -305,44 +306,10 @@ void cupid_audio_psg_run(struct CupidAudioPSG *psg, uint64_t timestamp, int chan
                 if (timestamp >= ch3->nextUpdate) {
                     uint64_t steps = diff / cycles + 1;
 
-                    /** GBA mode: rotate through wavedata. */
-                    int start, end;
-                    if (ch3->size) {
-                        /** 64-sample mode: all 8 words. */
-                        start = 0;
-                        end = 8;
-                    } else if (ch3->bank) {
-                        /** Bank 1: words 4-7. */
-                        start = 4;
-                        end = 8;
-                    } else {
-                        /** Bank 0: words 0-3. */
-                        start = 0;
-                        end = 4;
-                    }
-
-                    int8_t sample = 0;
-                    for (uint64_t s = 0; s < steps; s++) {
-                        /* The selected front bank feeds the DAC in both modes.
-                         * A 64-sample shift rotates both banks past this tap. */
-                        sample = (int8_t)(ch3->wavedata8[ch3->bank ? 16 : 0] >> 4);
-                        /**
-                         * Rotate nibbles through the wavedata array.
-                         * The first byte's high nibble is read first. Its
-                         * value wraps into the final byte's low nibble.
-                         */
-                        uint32_t bitsCarry = ch3->wavedata32[start] & 0xF0;
-                        uint32_t old;
-
-                        for (int j = end - 1; j >= start; j--) {
-                            old = ch3->wavedata32[j];
-                            ch3->wavedata32[j] = ((old & 0x0F0F0F0F) << 4) |
-                                                 ((old & 0xF0F0F000) >> 12) | (bitsCarry << 20);
-                            bitsCarry = old & 0xF0;
-                        }
-                    }
-
-                    ch3->rawSample = (uint8_t)sample;
+                    if (steps == 1)
+                        cupid_audio_wave_step(ch3);
+                    else
+                        cupid_audio_wave_advance(ch3, steps);
                     _updateWaveSample(ch3);
                     ch3->nextUpdate = timestamp + cycles - (diff % cycles);
                     ch3->readable = true;
