@@ -168,6 +168,14 @@ uint64_t cupid_gba_run_steps(struct CupidGBA *gba, uint64_t limit,
                              bool (*boundary)(struct CupidGBA *, uint64_t steps, void *),
                              void *context);
 
+/* Suspend an active bounded-step run from a scheduled peripheral callback, without
+ * completing the current CPU instruction or counting another step. The next
+ * execution call resumes at this point; reset/destroy instead cancel it.
+ * Returns true after resumption, or false without suspending outside an event
+ * callback in a local run_steps call. Interval runs retain their clock contract.
+ * The callback and its context must remain valid until resumed or cancelled. */
+bool cupid_gba_yield_steps(struct CupidGBA *gba);
+
 /** Process events (video, audio, timers, DMA, IRQ) after CPU steps */
 void cupid_gba_process_events(struct CupidGBA *gba);
 

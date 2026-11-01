@@ -990,9 +990,13 @@ and output paths:
 complete backup images, capacity inference, retained Flash selection and rejected
 inputs. It uses owned cartridges and the existing ten-second group deadline.
 
-The headless screenshot is the native 240x160 framebuffer, written as a binary
-PPM file. Step and emulated-cycle
-budgets bound execution; `--expect-loop-register` reports the result register
+The headless screenshot is the last completed native 240x160 image, written as a
+binary PPM file. The runner counts every video presentation and can stop inside
+a DMA-held instruction; it does not count the ready flag once per CPU return.
+Frame-indexed input is delivered at those presentation boundaries. See
+[frame boundaries and capture checks](frame-boundaries.md) for the suspension
+contract and owned regression cartridge. Step and emulated-cycle budgets bound
+execution; `--expect-loop-register` reports the result register
 at an ARM branch to itself. `--terminal-address` restricts that observation to
 a specific instruction address.
 

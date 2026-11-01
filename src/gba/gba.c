@@ -207,6 +207,10 @@ void cupid_gba_create(struct CupidGBA *gba) {
  */
 void cupid_gba_reset(struct CupidGBA *gba) {
     release_execution(gba);
+    /* The cancelled instruction may own a timed DMA-held fetch. Refill the
+     * reset vector without entering that old bus wait; the platform reset
+     * below discards its DMA and IRQ-clock state together. */
+    gba->cpu.memory.timed = false;
     /** Ensure master pointer is valid. */
     gba->cpu.master = gba;
 
@@ -552,6 +556,15 @@ uint64_t cupid_gba_run_steps(struct CupidGBA *gba, uint64_t limit,
     execution->boundary = NULL;
     execution->boundaryContext = NULL;
     return execution->steps;
+}
+
+bool cupid_gba_yield_steps(struct CupidGBA *gba) {
+    struct CupidExecution *execution = gba->execution;
+    if (gba->externalExecution || !execution || !execution->inside || !gba->timing.inCallback ||
+        execution->request != EXECUTE_STEPS)
+        return false;
+    cupid_context_yield(execution->context);
+    return true;
 }
 
 /**

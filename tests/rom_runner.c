@@ -12,13 +12,13 @@ static bool number(const char *text, uint64_t *value) {
     return !errno && text[0] && text[0] != '-' && !*end;
 }
 
-static bool screenshot(const struct CupidGBA *gba, const char *path) {
+static bool screenshot(const uint32_t *pixels, const char *path) {
     FILE *file = fopen(path, "wb");
     if (!file)
         return false;
     fprintf(file, "P6\n240 160\n255\n");
     for (unsigned i = 0; i < 240 * 160; i++) {
-        uint32_t pixel = gba->video.outputBuffer[i];
+        uint32_t pixel = pixels[i];
         uint8_t rgb[] = {pixel & 255, (pixel >> 8) & 255, (pixel >> 16) & 255};
         if (fwrite(rgb, 1, sizeof(rgb), file) != sizeof(rgb)) {
             fclose(file);
@@ -44,6 +44,8 @@ struct KeyEvent {
 };
 
 struct RunState {
+    struct CupidGBA *gba;
+    uint32_t *pixels;
     uint64_t frames, cycleLimit, stepLimit, terminalAddress, checkpointAddress;
     uint64_t completed, steps, stoppedClocks;
     int expectedRegister;
@@ -53,15 +55,26 @@ struct RunState {
     unsigned keyEventCount, nextKeyEvent;
 };
 
+static void frame_output(void *context, const uint32_t *pixels, uint64_t clock) {
+    struct RunState *run = context;
+    (void)clock;
+    ++run->completed;
+    if (run->pixels)
+        memcpy(run->pixels, pixels, sizeof(run->gba->video.outputBuffer));
+    run->gba->frameReady = false;
+    /* A single DMA-held instruction can cross several VBlanks. Observe each
+     * presentation, and return before a deadline or frame-indexed input can
+     * be lost inside that instruction. Its unfinished bus work stays intact. */
+    if (run->completed >= run->frames ||
+        (run->nextKeyEvent < run->keyEventCount &&
+         run->keyEvents[run->nextKeyEvent].frame <= run->completed))
+        cupid_gba_yield_steps(run->gba);
+}
+
 static bool run_boundary(struct CupidGBA *gba, uint64_t completedSteps, void *context) {
     struct RunState *run = context;
-    if (completedSteps) {
+    if (completedSteps)
         ++run->steps;
-        if (gba->frameReady) {
-            ++run->completed;
-            gba->frameReady = false;
-        }
-    }
     /* These are the original loop guards and observation order. A halted
      * peripheral return counts exactly as an individual step call does. */
     if (run->completed >= run->frames || run->steps >= run->stepLimit ||
@@ -343,6 +356,7 @@ int main(int argc, char **argv) {
         return 2;
     cupid_gba_create(gba);
     int result = 2;
+    uint32_t *pixels = NULL;
     if (!cupid_load_rom(gba, rom) || (bios && !cupid_load_bios(gba, bios)))
         goto cleanup;
     if (sstFlash) {
@@ -388,7 +402,15 @@ int main(int argc, char **argv) {
         gba->audio.sampleSink = audio_sample;
         gba->audio.sampleSinkContext = &audioTrace;
     }
-    struct RunState run = {.frames = frames,
+    if (output) {
+        pixels = malloc(sizeof(gba->video.outputBuffer));
+        if (!pixels)
+            goto cleanup;
+        memcpy(pixels, gba->video.outputBuffer, sizeof(gba->video.outputBuffer));
+    }
+    struct RunState run = {.gba = gba,
+                           .pixels = pixels,
+                           .frames = frames,
                            .cycleLimit = cycleLimit,
                            .stepLimit = stepLimit,
                            .terminalAddress = terminalAddress,
@@ -396,6 +418,7 @@ int main(int argc, char **argv) {
                            .expectedRegister = expectedRegister,
                            .keyEvents = keyEvents,
                            .keyEventCount = keyEventCount};
+    cupid_video_set_frame_callback(&gba->video, frame_output, &run);
     observations.run = &run;
     if (observations.count || expectedRegister >= 0) {
         gba->cpu.instructionObserver = observe_instruction;
@@ -418,10 +441,6 @@ int main(int argc, char **argv) {
             run.stoppedClocks += cupid_gba_advance_stopped_time(gba, clocks);
         }
         ++run.steps;
-        if (gba->frameReady) {
-            ++run.completed;
-            gba->frameReady = false;
-        }
     }
     const uint64_t completed = run.completed, steps = run.steps, stoppedClocks = run.stoppedClocks;
     const bool terminal = run.terminal, checkpoint = run.checkpoint;
@@ -457,7 +476,7 @@ int main(int argc, char **argv) {
         if (failed || observations.next != observations.count)
             result = 1;
     }
-    if (output && !screenshot(gba, output)) {
+    if (output && !screenshot(pixels, output)) {
         perror(output);
         result = 2;
     }
@@ -485,12 +504,14 @@ int main(int argc, char **argv) {
             result = 2;
     }
 cleanup:
+    cupid_video_set_frame_callback(&gba->video, NULL, NULL);
     cupid_cartridge_set_rumble_output(gba, NULL, NULL);
     if (motorTrace.file && (fclose(motorTrace.file) != 0 || motorTrace.failed))
         result = 2;
     if (audioTrace.file && (fclose(audioTrace.file) != 0 || audioTrace.failed))
         result = 2;
     cupid_gba_destroy(gba);
+    free(pixels);
     free(gba);
     return result;
 }

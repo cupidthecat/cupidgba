@@ -397,6 +397,12 @@ if(BUILD_TESTING)
         add_test(NAME gba.execution-${group} COMMAND test_execution ${group})
         set_tests_properties(gba.execution-${group} PROPERTIES TIMEOUT 5)
     endforeach()
+    add_executable(test_execution_yield tests/gba/test_execution_yield.c)
+    target_link_libraries(test_execution_yield PRIVATE cupid_core)
+    foreach(group paired restrictions lifetime)
+        add_test(NAME gba.execution-yield-${group} COMMAND test_execution_yield ${group})
+        set_tests_properties(gba.execution-yield-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
     set_tests_properties(gba.system PROPERTIES TIMEOUT 10)
 
     add_executable(test_reset_entry tests/arm/test_reset_entry.c)
@@ -478,6 +484,10 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_runner_observations.py
         --runner $<TARGET_FILE:cupidgba-headless>)
     set_tests_properties(runner.observations PROPERTIES TIMEOUT 10)
+    add_test(NAME runner.frame-boundaries COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_runner_frames.py
+        --runner $<TARGET_FILE:cupidgba-headless>)
+    set_tests_properties(runner.frame-boundaries PROPERTIES TIMEOUT 30)
     add_executable(test_runner_terminal tests/platform/test_runner_terminal.c src/platform/peripherals.c)
     target_link_libraries(test_runner_terminal PRIVATE cupid_core)
     foreach(group issued arbitration suspended)

@@ -84,6 +84,13 @@ This keeps instruction and input observations between the same steps while
 avoiding a host-stack switch after each one. The callback cannot run, reset or
 destroy cores or advance emulated time.
 
+A scheduled peripheral callback can explicitly suspend a bounded-step request
+with `cupid_gba_yield_steps`. The incomplete instruction is not counted again.
+The next execution call resumes its retained callback and bus work; reset or
+destruction cancels both. Other request types reject this yield. The headless
+runner uses it for exact [frame and input boundaries](../development/frame-boundaries.md)
+during long DMA waits.
+
 Timed MMIO reads and writes dispatch due peripheral events after the data-bus
 cycle. Loads retain their final internal cycle. Untimed observer accesses do
 not advance the CPU. Timer interrupts keep their original overflow timestamps
