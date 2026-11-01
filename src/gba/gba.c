@@ -222,6 +222,7 @@ void cupid_gba_reset(struct CupidGBA *gba) {
     cupid_timing_clear(&gba->timing);
     cupid_rtc_rebase(&gba->cartridge.rtc, 0);
     cupid_cartridge_reset_bus(gba);
+    cupid_paged_rom_reset(&gba->memory.pagedROM, gba->memory.rom);
 
     /**
      * Reset the CPU into masked ARM Supervisor mode and refill the reset vector.

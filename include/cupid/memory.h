@@ -6,6 +6,7 @@
 #define CUPID_MEMORY_H
 
 #include "cupid/arm.h"
+#include "cupid/paged-rom.h"
 #include "cupid/timing.h"
 #include "cupid/types.h"
 
@@ -278,6 +279,7 @@ struct CupidMemory {
     uint8_t *iwram;   /**< 32 KiB internal work RAM */
     uint16_t io[512]; /**< IO registers (1 KiB as uint16 array) */
     uint8_t *rom;     /**< Game Pak ROM */
+    struct CupidPagedROM pagedROM;
     size_t romSize;
     size_t romImageSize; /**< Original image bytes, before mapping padding */
     uint32_t romMask;
@@ -393,6 +395,9 @@ void cupid_memory_update_waitstates(struct CupidGBA *gba, uint16_t waitcnt);
 void cupid_memory_update_ewram_waitstates(struct CupidGBA *gba, uint16_t parameters);
 
 /** @name ROM Loading */
+/* Load an image atomically at an idle CPU/bus boundary. Flush the previous
+ * battery first: successful replacement creates fresh cartridge-owned storage.
+ * Reset the console before executing the newly attached image. */
 bool cupid_load_rom(struct CupidGBA *gba, const char *path);
 bool cupid_load_bios(struct CupidGBA *gba, const char *path);
 

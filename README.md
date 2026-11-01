@@ -1,7 +1,9 @@
 # CupidGBA
 
 CupidGBA is a Game Boy Advance emulator written in C11 with SDL2 for video,
-audio, and input. Hardware accuracy and compatibility are under active work.
+audio, and input. Hardware accuracy and compatibility are under active work. See the
+[accuracy status](docs/development/accuracy-status.md) for implemented behavior
+and remaining gaps.
 
 ## Build and run
 

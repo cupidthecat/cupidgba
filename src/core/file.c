@@ -35,7 +35,7 @@ static int windows_error(void) {
 }
 #endif
 
-bool cupid_file_read_exact(const char *path, void *data, size_t size) {
+bool cupid_file_is_regular(const char *path) {
 #ifdef _WIN32
     DWORD attributes = GetFileAttributesA(path);
     if (attributes == INVALID_FILE_ATTRIBUTES) {
@@ -55,6 +55,12 @@ bool cupid_file_read_exact(const char *path, void *data, size_t size) {
         return false;
     }
 #endif
+    return true;
+}
+
+bool cupid_file_read_exact(const char *path, void *data, size_t size) {
+    if (!cupid_file_is_regular(path))
+        return false;
     FILE *file = fopen(path, "rb");
     if (!file)
         return false;

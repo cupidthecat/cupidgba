@@ -73,8 +73,26 @@ propagation and partial-register effects unqualified.
 ## Image mapping and peripherals
 
 The `gba.cartridge-image-*` groups cover EEPROM address selection, complete
-DMA3 serial frames, original image size and replacement ownership. They retain
+DMA3 serial frames, original image size, replacement ownership and injected
+allocation/file failures. The five `gba.cartridge-ownership-*` groups check all
+49 detected and 49 explicit-device transitions, marker boundaries, pending-event cancellation and
+rebinding, busy/nonregular input, output-callback ordering and sensor ownership.
+Failure injection compiles the production transaction with wrapped host
+operations; it does not substitute an alternate loader. They retain
 the ten-second deadlines; see [cartridge image mapping](../../hardware/cartridge/image-mapping.md).
+
+The seven `gba.paged-rom-*` groups cover the larger cartridge controller,
+complete remapped windows, source immutability, register lanes and masks,
+ARM/Thumb execution, DMA publication/release/IRQ edges, reset, loader ownership
+and twenty-four injected file/allocation failures. They use owned generated
+images and retain twenty-second deadlines. See
+[paged ROM behavior](../../hardware/cartridge/paged-rom.md).
+
+`rom.paged-cartridge` executes the owned paged-image drawing program, retaining
+its complete guest record, VRAM and framebuffer. `CUPID_TEST_BIOS` adds the
+external-firmware variant with the same explicit entry. Both require
+four presentations within 1.5 million steps and a twenty-second process guard;
+the CTest deadline is thirty seconds.
 
 Cartridge peripheral checks include `gba.solar-*`, `gba.cartridge-rumble`,
 `gba.gyro`, `platform.cartridge-peripherals`, `rom.cartridge-gyro` and
