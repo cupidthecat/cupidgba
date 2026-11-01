@@ -5,7 +5,6 @@
  * DECLARE_THUMB_EMITTER_BLOCK(EMITTER) expands to 1024 comma-separated
  * function pointers indexed by opcode >> 6.
  */
-
 #ifndef CUPID_EMITTER_THUMB_H
 #define CUPID_EMITTER_THUMB_H
 

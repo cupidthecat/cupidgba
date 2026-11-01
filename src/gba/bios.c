@@ -2,7 +2,6 @@
  * @file bios.c
  * @brief SWI exception entry for the built-in BIOS.
  */
-
 #include "cupid/gba.h"
 #include <stdlib.h>
 

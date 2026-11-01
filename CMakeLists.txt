@@ -614,6 +614,12 @@ if(BUILD_TESTING)
         set_tests_properties(gba.wave-bank-${group} PROPERTIES TIMEOUT 10)
     endforeach()
 
+    add_test(NAME runner.comment-spacing COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_comment_spacing.py)
+    add_test(NAME runner.comment-spacing-parser COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/test_comment_spacing.py)
+    set_tests_properties(runner.comment-spacing runner.comment-spacing-parser PROPERTIES TIMEOUT 10)
+
     add_test(NAME runner.generated-fixtures COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/test_generated_fixtures.py)
     set_tests_properties(runner.generated-fixtures PROPERTIES TIMEOUT 10)

@@ -2,7 +2,6 @@
  * @file io.h
  * @brief GBA IO register addresses and dispatch.
  */
-
 #ifndef CUPID_IO_H
 #define CUPID_IO_H
 
@@ -11,7 +10,6 @@
 struct CupidGBA;
 
 /** @name IO Register Offsets (from 0x04000000) */
-
 /** @name Display */
 #define REG_DISPCNT 0x000
 #define REG_GREENSWAP 0x002

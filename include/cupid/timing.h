@@ -7,7 +7,6 @@
  * that function fires all due callbacks in order and returns the next
  * deadline.
  */
-
 #ifndef CUPID_TIMING_H
 #define CUPID_TIMING_H
 
@@ -53,7 +52,6 @@ struct CupidTiming {
 };
 
 /** @name API */
-
 /** Initialise: wires the scheduler to the CPU's cycle counters. */
 void cupid_timing_init(struct CupidTiming *timing, int32_t *relativeCycles, int32_t *nextEvent);
 

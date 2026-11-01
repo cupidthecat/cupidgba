@@ -2,7 +2,6 @@
  * @file savedata.c
  * @brief Save data types: SRAM, SRAM512, Flash 512/1M, EEPROM 512B/8K.
  */
-
 #include "cupid/gba.h"
 #include <errno.h>
 #include <stdio.h>
@@ -12,7 +11,6 @@
 /**
  * @brief Initialize, reset, and deinitialize savedata state.
  */
-
 void cupid_savedata_init(struct CupidSavedata *savedata) {
     memset(savedata, 0, sizeof(*savedata));
     savedata->type = SAVE_AUTODETECT;
@@ -51,7 +49,6 @@ void cupid_savedata_deinit(struct CupidSavedata *savedata) {
 /**
  * @brief Force a concrete savedata type.
  */
-
 void cupid_savedata_force_type(struct CupidSavedata *savedata, enum CupidSaveType type) {
     if (savedata->type == type) {
         savedata->typeForced = type != SAVE_AUTODETECT;
@@ -93,7 +90,6 @@ void cupid_savedata_force_type(struct CupidSavedata *savedata, enum CupidSaveTyp
 /**
  * @brief Type-specific savedata initialization helpers.
  */
-
 void cupid_savedata_init_sram(struct CupidSavedata *savedata) {
     if (savedata->data && savedata->type == SAVE_SRAM)
         return;
@@ -160,7 +156,6 @@ void cupid_savedata_init_eeprom(struct CupidSavedata *savedata) {
 /**
  * @brief Flash helpers.
  */
-
 static void _flashSwitchBank(struct CupidSavedata *savedata, int bank) {
     if (bank > 0 && savedata->type == SAVE_FLASH512) {
         /** Auto-upgrade 512K to 1M on bank switch. */
@@ -192,7 +187,6 @@ static void _flashEraseSector(struct CupidSavedata *savedata, uint16_t sectorSta
 /**
  * @brief Read a byte from flash save memory.
  */
-
 uint8_t cupid_savedata_read_flash(struct CupidSavedata *savedata, uint16_t address) {
     uint32_t offset = (uint32_t)savedata->flashBank * 0x10000u + address;
     if (savedata->programming && (savedata->flashProfile == FLASH_PROFILE_SST39VF512 ||
@@ -225,7 +219,6 @@ uint8_t cupid_savedata_read_flash(struct CupidSavedata *savedata, uint16_t addre
 /**
  * @brief Flash write state machine.
  */
-
 void cupid_savedata_write_flash(struct CupidSavedata *savedata, uint16_t address, uint8_t value) {
     /* Accepted self-timed operations own the chip until their ready edge. */
     if (savedata->programming)
@@ -321,7 +314,6 @@ void cupid_savedata_write_flash(struct CupidSavedata *savedata, uint16_t address
 /**
  * @brief EEPROM helpers.
  */
-
 /**
  * @brief Infer an unforced EEPROM capacity from a complete DMA command.
  */
@@ -347,7 +339,6 @@ static void _selectEepromCapacity(struct CupidSavedata *savedata, uint32_t remai
  *
  * writeSize is the number of bits remaining in the DMA transfer.
  */
-
 void cupid_savedata_write_eeprom(struct CupidSavedata *savedata, uint16_t value,
                                  uint32_t writeSize) {
     if (savedata->programming)
@@ -421,7 +412,6 @@ void cupid_savedata_write_eeprom(struct CupidSavedata *savedata, uint16_t value,
 /**
  * @brief Read one EEPROM bit from the command state machine.
  */
-
 uint16_t cupid_savedata_read_eeprom(struct CupidSavedata *savedata) {
     if (savedata->programming)
         return 0;
@@ -445,7 +435,6 @@ uint16_t cupid_savedata_read_eeprom(struct CupidSavedata *savedata) {
 /**
  * @brief Auto-detect save type from ROM identifier strings.
  */
-
 void cupid_savedata_detect_type(struct CupidSavedata *savedata, const uint8_t *rom,
                                 size_t romSize) {
     if (!rom || romSize < 0xC0)

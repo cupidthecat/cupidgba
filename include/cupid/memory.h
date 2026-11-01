@@ -2,7 +2,6 @@
  * @file memory.h
  * @brief GBA memory map and bus definitions.
  */
-
 #ifndef CUPID_MEMORY_H
 #define CUPID_MEMORY_H
 
@@ -163,7 +162,6 @@ struct CupidDMA {
 /**
  * @name Save Data
  */
-
 enum CupidSaveType {
     SAVE_AUTODETECT = -1,
     SAVE_NONE = 0,

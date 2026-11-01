@@ -2,7 +2,6 @@
  * @file gba.c
  * @brief Top-level GBA system: create, reset, destroy, main frame loop.
  */
-
 #include "cupid/gba.h"
 #include "../platform/context.h"
 #include "cupid/isa-inlines.h"
@@ -604,7 +603,6 @@ void cupid_gba_run_interval(struct CupidGBA *gba, uint32_t clocks) {
 /**
  * @brief IRQ handler callbacks wired into cpu->irqh.
  */
-
 /**
  * @brief Process timing events when cpu->cycles reaches cpu->nextEvent.
  */

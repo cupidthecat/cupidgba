@@ -2,7 +2,6 @@
  * @file platform.h
  * @brief SDL2 platform layer: window, input, audio output.
  */
-
 #ifndef CUPID_PLATFORM_H
 #define CUPID_PLATFORM_H
 

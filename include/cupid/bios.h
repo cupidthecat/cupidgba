@@ -3,7 +3,6 @@
  * @brief GBA BIOS SWI (software interrupt) handling.
  *
  */
-
 #ifndef CUPID_BIOS_H
 #define CUPID_BIOS_H
 

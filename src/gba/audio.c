@@ -11,13 +11,11 @@
  *   - FIFO bytes latch on timer overflow and hold between overflows
  *   - A 512 Hz frame sequencer updates length, envelope, and sweep state
  */
-
 #include "cupid/gba.h"
 #include <stdarg.h>
 #include <string.h>
 
 /** @section audio_constants Constants */
-
 /** @brief Square-wave duty table indexed by duty mode and phase. */
 static const int8_t _squareChannelDuty[4][8] = {
     {0, 0, 0, 0, 0, 0, 0, 1}, /* 12.5% */
@@ -797,7 +795,6 @@ static void _frameCallback(struct CupidTiming *timing, void *context, uint32_t c
 }
 
 /** @section audio_psg_helpers PSG helpers */
-
 /** @brief Scale the held wave nibble without reading or rotating wave RAM. */
 static void _updateWaveSample(struct CupidAudioWaveChannel *ch) {
     int8_t sample = (int8_t)ch->rawSample;
@@ -1032,7 +1029,6 @@ static void _resetSweep(struct CupidAudioSweep *sweep) {
 }
 
 /** @section audio_psg_reg_writes NRxx PSG register write helpers */
-
 /**
  * @brief Handle a write to `NR10` / `SOUND1CNT_L`.
  *

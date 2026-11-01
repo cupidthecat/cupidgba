@@ -7,7 +7,6 @@
  * DECLARE_ARM_EMITTER_BLOCK macro from emitter-arm.h, indexed by
  *   ((opcode >> 16) & 0xFF0) | ((opcode >> 4) & 0x00F)
  */
-
 #include "cupid/emitter-arm.h"
 #include "cupid/isa-inlines.h"
 #include "cupid/registers.h"
@@ -18,7 +17,6 @@
  *
  * Each function writes cpu->shifterOperand and cpu->shifterCarryOut.
  */
-
 static inline void _shiftLSL(struct CupidARM *cpu, uint32_t opcode) {
     int rm = opcode & 0xF;
     if (opcode & 0x00000010) {
@@ -172,7 +170,6 @@ static inline void _immediate(struct CupidARM *cpu, uint32_t opcode) {
 }
 
 /** @name Flag-Setting Helpers */
-
 ATTRIBUTE_NOINLINE static void _additionS(struct CupidARM *cpu, int32_t m, int32_t n, int32_t d) {
     cpu->cpsr.flags = 0;
     cpu->cpsr.n = ARM_SIGN(d);
@@ -236,7 +233,6 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM *cpu, int32_t d) {
     cpu->cpsr.z = !((DHI) | (DLO));
 
 /** @name Addressing Mode 2 — Load/Store Word/Byte Helpers */
-
 #define ADDR_MODE_2_I_TEST (opcode & 0x00000F80)
 #define ADDR_MODE_2_I ((opcode & 0x00000F80) >> 7)
 #define ADDR_MODE_2_ADDRESS (address)
@@ -302,7 +298,6 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM *cpu, int32_t d) {
  * Base macro for all instructions.
  * Generates: static void _CupidInstruction##NAME(struct CupidARM* cpu, uint32_t opcode)
  */
-
 #define DEFINE_INSTRUCTION_ARM(NAME, BODY)                                                         \
     static void _CupidInstruction##NAME(struct CupidARM *cpu, uint32_t opcode) {                   \
         int currentCycles = ARM_PREFETCH_CYCLES;                                                   \
@@ -311,7 +306,6 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM *cpu, int32_t d) {
     }
 
 /** @name ALU Macro Hierarchy */
-
 #define DEFINE_ALU_INSTRUCTION_EX_ARM(NAME, S_BODY, SHIFTER, BODY, DO_WRITE)                       \
     DEFINE_INSTRUCTION_ARM(                                                                        \
         NAME, SHIFTER(cpu, opcode); int rd = (opcode >> 12) & 0xF; int rn = (opcode >> 16) & 0xF;  \
@@ -351,7 +345,6 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM *cpu, int32_t d) {
     DEFINE_ALU_INSTRUCTION_EX_ARM(NAME##I, S_BODY, _immediate, BODY, 0)
 
 /** @name Multiply Macro Hierarchy */
-
 #define DEFINE_MULTIPLY_INSTRUCTION_EX_ARM(NAME, BODY, S_BODY, SIGNED)                             \
     DEFINE_INSTRUCTION_ARM(                                                                        \
         NAME, int rd = (opcode >> 16) & 0xF; int rs = (opcode >> 8) & 0xF; int rm = opcode & 0xF;  \
@@ -394,7 +387,6 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM *cpu, int32_t d) {
     DEFINE_MULTIPLY_INSTRUCTION_2_EX_ARM(NAME##S, BODY, S_BODY, SIGNED, WAIT)
 
 /** @name Load/Store Macro Hierarchy */
-
 #define DEFINE_LOAD_STORE_INSTRUCTION_EX_ARM(NAME, ADDRESS, WRITEBACK, LS, BODY)                   \
     DEFINE_INSTRUCTION_ARM(                                                                        \
         NAME, uint32_t address; int rn = (opcode >> 16) & 0xF; int rd = (opcode >> 12) & 0xF;      \
@@ -491,7 +483,6 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM *cpu, int32_t d) {
         ADDR_MODE_2_WRITEBACK(ADDR_MODE_2_INDEX(+, ADDR_MODE_2_IMMEDIATE)), LS, BODY)
 
 /** @name Block Transfer (LDM/STM) Macro Hierarchy */
-
 #define ARM_MS_PRE_store                                                                           \
     enum CupidPrivMode privilegeMode = cpu->privilegeMode;                                         \
     cupid_arm_set_priv_mode(cpu, MODE_SYS);
@@ -568,9 +559,7 @@ ATTRIBUTE_NOINLINE static void _neutralS(struct CupidARM *cpu, int32_t d) {
  *
  * Each macro invocation generates the static handler function(s).
  */
-
 /** @name ALU */
-
 DEFINE_ALU_INSTRUCTION_ARM(ADD, ARM_ADDITION_S(n, cpu->shifterOperand, cpu->gprs[rd]),
                            CupidWriteRegister(cpu, rd,
                                               (uint32_t)n + (uint32_t)cpu->shifterOperand);)
@@ -626,7 +615,6 @@ DEFINE_ALU_INSTRUCTION_S_ONLY_ARM(TST, ARM_NEUTRAL_S(n, cpu->shifterOperand, alu
                                   int32_t aluOut = n & cpu->shifterOperand;)
 
 /** @name Multiply */
-
 DEFINE_MULTIPLY_INSTRUCTION_ARM(MUL,
                                 CupidWriteRegister(cpu, rd, (uint32_t)rmValue *(uint32_t)rsValue);
                                 , ARM_NEUTRAL_S(rmValue, rsValue, cpu->gprs[rd]), S)
@@ -660,7 +648,6 @@ DEFINE_MULTIPLY_INSTRUCTION_2_ARM(SMLAL, int64_t d = ((int64_t)rmValue) * ((int6
                                   , ARM_NEUTRAL_HI_S(cpu->gprs[rd], dHi), S, 2)
 
 /** @name Load/Store Word/Byte */
-
 DEFINE_LOAD_STORE_INSTRUCTION_ARM(
     LDR, LOAD, CupidWriteRegister(cpu, rd, cpu->memory.load32(cpu, address, &currentCycles));
     ARM_LOAD_POST_BODY;)
@@ -701,7 +688,6 @@ DEFINE_LOAD_STORE_T_INSTRUCTION_ARM(STRBT, STORE, enum CupidPrivMode priv = cpu-
                                     cupid_arm_set_priv_mode(cpu, priv); ARM_STORE_POST_BODY;)
 
 /** @name Halfword / Signed Load/Store */
-
 DEFINE_LOAD_STORE_MODE_3_INSTRUCTION_ARM(
     LDRH, LOAD, CupidWriteRegister(cpu, rd, cpu->memory.load16(cpu, address, &currentCycles));
     ARM_LOAD_POST_BODY;)
@@ -724,7 +710,6 @@ DEFINE_LOAD_STORE_MODE_3_INSTRUCTION_ARM(STRH, STORE,
                                          ARM_STORE_POST_BODY;)
 
 /** @name Block Transfer (LDM/STM) */
-
 DEFINE_LOAD_STORE_MULTIPLE_INSTRUCTION_ARM(
     LDM, load,
     currentCycles +=
@@ -743,7 +728,6 @@ DEFINE_LOAD_STORE_MULTIPLE_INSTRUCTION_ARM(
 DEFINE_LOAD_STORE_MULTIPLE_INSTRUCTION_ARM(STM, store, ARM_STORE_POST_BODY;)
 
 /** @name Swap */
-
 DEFINE_INSTRUCTION_ARM(
     SWP, int rm = opcode & 0xF; int rd = (opcode >> 12) & 0xF; int rn = (opcode >> 16) & 0xF;
     uint32_t address = CupidReadRegister(cpu, rn);
@@ -770,7 +754,6 @@ DEFINE_INSTRUCTION_ARM(
     } CupidWriteRegister(cpu, rd, d);)
 
 /** @name Branches */
-
 DEFINE_INSTRUCTION_ARM(B, int32_t offset = opcode << 8; offset >>= 6;
                        CupidWriteRegister(cpu, ARM_PC, CupidReadRegister(cpu, ARM_PC) + (offset));
                        CupidFlushCycles(cpu, &currentCycles);
@@ -794,7 +777,6 @@ DEFINE_INSTRUCTION_ARM(
     })
 
 /** @name PSR Transfer */
-
 /* User and System modes have no saved-status bank. Their SPSR read alias is
  * the live CPSR; writing that alias must not change CPSR or an exception bank. */
 static inline bool _hasSavedStatusBank(const struct CupidARM *cpu) {
@@ -867,7 +849,6 @@ DEFINE_INSTRUCTION_ARM(
     })
 
 /** @name Coprocessor Register Transfers */
-
 DEFINE_INSTRUCTION_ARM(
     MRC, if (((opcode >> 8) & 15) != 14) { ARM_ILL; } else {
         /* The disabled GBA debug channel samples the completed opcode fetch. */
@@ -892,7 +873,6 @@ DEFINE_INSTRUCTION_ARM(
     })
 
 /** @name Miscellaneous */
-
 DEFINE_INSTRUCTION_ARM(BKPT,
                        /* Retain the instruction fetch cost even when a host handles the hook. */
                        cpu->irqh.bkpt32(cpu, ((opcode >> 4) & 0xFFF0) | (opcode & 0xF));)
@@ -905,5 +885,4 @@ DEFINE_INSTRUCTION_ARM(SWI, cpu->irqh.swi32(cpu, opcode & 0xFFFFFF))
  *
  * 4096 entries, populated at compile time via DECLARE_ARM_EMITTER_BLOCK.
  */
-
 const CupidARMInstruction cupid_arm_table[4096] = {DECLARE_ARM_EMITTER_BLOCK(_CupidInstruction)};

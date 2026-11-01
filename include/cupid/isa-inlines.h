@@ -2,14 +2,12 @@
  * @file isa-inlines.h
  * @brief Shared inline helpers and macros for ARM/Thumb ISA implementations.
  */
-
 #ifndef CUPID_ISA_INLINES_H
 #define CUPID_ISA_INLINES_H
 
 #include "cupid/arm.h"
 
 /** @name Compiler / Portability Helpers */
-
 #ifndef UNLIKELY
 #define UNLIKELY(X) __builtin_expect(!!(X), 0)
 #endif
@@ -27,13 +25,11 @@
 #endif
 
 /** @name PSR Constants */
-
 #define PSR_USER_MASK 0xF0000000
 #define PSR_PRIV_MASK 0x000000CF
 #define PSR_STATE_MASK 0x00000020
 
 /** @name Condition Code Macros */
-
 #define ARM_COND_EQ (cpu->cpsr.z)
 #define ARM_COND_NE (!cpu->cpsr.z)
 #define ARM_COND_CS (cpu->cpsr.c)
@@ -51,14 +47,12 @@
 #define ARM_COND_AL 1
 
 /** @name Bit / Sign Helpers */
-
 #define ARM_SIGN(I) ((uint32_t)(I) >> 31)
 #define ARM_SXT_8(I) ((int32_t)(int8_t)(I))
 #define ARM_SXT_16(I) ((int32_t)(int16_t)(I))
 #define ARM_UXT_64(I) (uint64_t)(uint32_t)(I)
 
 /** @name Flag Computation Helpers */
-
 #define ARM_CARRY_FROM(M, N, D)                                                                    \
     (((uint32_t)(M) >> 31) + ((uint32_t)(N) >> 31) > ((uint32_t)(D) >> 31))
 #define ARM_BORROW_FROM(M, N, D) (((uint32_t)(M)) >= ((uint32_t)(N)))
@@ -67,12 +61,10 @@
 #define ARM_V_SUBTRACTION(M, N, D) ((ARM_SIGN((M) ^ (N))) && (ARM_SIGN((M) ^ (D))))
 
 /** @name Exception Macros */
-
 #define ARM_ILL cpu->irqh.hitIllegal(cpu, opcode)
 #define ARM_STUB cpu->irqh.hitStub(cpu, opcode)
 
 /** @name PC Write Helpers */
-
 static inline uint32_t CupidReadOpcode(struct CupidARM *cpu, uint32_t address, unsigned width) {
     uint32_t value;
     if (!(cpu->memory.readOpcode && cpu->memory.readOpcode(cpu, address, width, &value))) {
@@ -142,7 +134,6 @@ static inline void CupidFlushCycles(struct CupidARM *cpu, int *cycles) {
 }
 
 /** @name Mode Helpers */
-
 static inline int _CupidModeHasSPSR(unsigned mode) {
     return mode != MODE_SYS && mode != MODE_USR;
 }
@@ -168,7 +159,6 @@ static inline void _CupidReadCPSR(struct CupidARM *cpu) {
 }
 
 /** @name Multiply Wait Macros */
-
 #define ARM_WAIT_SMUL(R, WAIT)                                                                     \
     {                                                                                              \
         int32_t wait = WAIT;                                                                       \

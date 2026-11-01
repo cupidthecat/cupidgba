@@ -5,7 +5,6 @@
  * Provides exception dispatch, waits, math, affine conversion, data utilities, bias ramps, reset,
  * sleep, and checksum reads.
  */
-
 #include "cupid/bios.h"
 #include "cupid/memory.h"
 

@@ -2,7 +2,6 @@
  * @file main.c
  * @brief SDL2 entry point, CLI parsing, initialization, and main loop.
  */
-
 #include "cupid/gba.h"
 #include "cupid/platform.h"
 #include "cupid/platform/peripherals.h"
@@ -55,7 +54,6 @@ static bool derive_save_path(const char *romPath, char *out, size_t outSize) {
 /**
  * @brief Print CLI usage.
  */
-
 static void printUsage(const char *progname) {
     fprintf(stderr, "Usage: %s rom.gba [-b bios.bin] [-s scale] [-S savetype] [--frames count]\n",
             progname);
@@ -86,7 +84,6 @@ static void printUsage(const char *progname) {
 /**
  * @brief Program entry point.
  */
-
 int main(int argc, char *argv[]) {
     const char *romPath = NULL;
     const char *biosPath = NULL;
@@ -205,7 +202,6 @@ int main(int argc, char *argv[]) {
     }
 
     /** GBA path. */
-
     /** Derive save-file path (.sav alongside the ROM). */
     char savePath[512];
     if (!derive_save_path(romPath, savePath, sizeof(savePath))) {

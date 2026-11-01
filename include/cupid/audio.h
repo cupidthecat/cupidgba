@@ -15,7 +15,6 @@
  *   - Each output frame retains its elapsed clocks for host resampling
  *   - Frame sequencer at 512 Hz updates length, envelope, sweep
  */
-
 #ifndef CUPID_AUDIO_H
 #define CUPID_AUDIO_H
 
@@ -47,7 +46,6 @@ struct CupidStereoSample {
 };
 
 /** @name PSG Sub-structures */
-
 /** Volume envelope — ch1, ch2, ch4 */
 struct CupidAudioEnvelope {
     int length;        /**< Sound length value from NRx1 */
@@ -218,7 +216,6 @@ struct CupidAudio {
 };
 
 /** @name API */
-
 void cupid_audio_init(struct CupidAudio *audio, struct CupidGBA *gba);
 void cupid_audio_reset(struct CupidAudio *audio);
 void cupid_audio_tick(struct CupidAudio *audio, int32_t cycles);

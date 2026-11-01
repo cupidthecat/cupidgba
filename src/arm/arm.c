@@ -9,7 +9,6 @@
  *   - ARMWritePC / ThumbWritePC refill the pipeline on branches & exceptions
  *   - Mode switch sets nextEvent = cycles → forces loop exit
  */
-
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
 
@@ -50,7 +49,6 @@ static const uint16_t conditionLut[16] = {
  *   bankedRegisters[bank][5] = R11
  *   bankedRegisters[bank][6] = R12
  */
-
 static inline enum CupidRegisterBank _selectBank(enum CupidPrivMode mode) {
     switch (mode) {
         case MODE_USR:
@@ -107,7 +105,6 @@ void cupid_arm_set_priv_mode(struct CupidARM *cpu, enum CupidPrivMode mode) {
 }
 
 /** @name Init / Reset */
-
 void cupid_arm_init(struct CupidARM *cpu) {
     memset(cpu->gprs, 0, sizeof(cpu->gprs));
     memset(cpu->bankedRegisters, 0, sizeof(cpu->bankedRegisters));
@@ -185,7 +182,6 @@ void cupid_arm_reset(struct CupidARM *cpu) {
  *   8. Restore saved CPSR into SPSR
  *   9. Disable IRQ (cpsr.i = 1)
  */
-
 void cupid_arm_raise_irq(struct CupidARM *cpu) {
     if (cpu->cpsr.i) {
         return;
@@ -274,7 +270,6 @@ void cupid_arm_raise_undefined(struct CupidARM *cpu) {
  *
  * Fast-path: condition 0xE (AL) skips the LUT check entirely.
  */
-
 static inline void cupid_arm_step_inline(struct CupidARM *cpu) {
     uint32_t opcode = cpu->prefetch[0];
     cpu->prefetch[0] = cpu->prefetch[1];
@@ -311,7 +306,6 @@ static inline void cupid_arm_step_inline(struct CupidARM *cpu) {
  * Thumb instructions are unconditional (no condition field).
  * Bus callbacks handle fetch/data clocks; the handler adds internal cycles.
  */
-
 static inline void cupid_thumb_step_inline(struct CupidARM *cpu) {
     uint32_t opcode = cpu->prefetch[0];
     cpu->prefetch[0] = cpu->prefetch[1];
@@ -327,7 +321,6 @@ static inline void cupid_thumb_step_inline(struct CupidARM *cpu) {
 }
 
 /** @name Public Step Functions */
-
 void cupid_arm_step(struct CupidARM *cpu) {
     if (cpu->instructionObserver)
         cpu->instructionObserver(cpu, cpu->instructionObserverContext);
@@ -361,7 +354,6 @@ void cupid_thumb_step(struct CupidARM *cpu) {
  *   2. Execute one instruction
  *   3. Process any new events triggered by that instruction
  */
-
 void cupid_arm_run(struct CupidARM *cpu) {
     while (cpu->cycles >= cpu->nextEvent) {
         cpu->irqh.processEvents(cpu);
@@ -385,7 +377,6 @@ void cupid_arm_run(struct CupidARM *cpu) {
  * nextEvent = cycles, which naturally breaks the loop. The next
  * call to ARMRunLoop (or processEvents) will recheck the mode.
  */
-
 void cupid_arm_run_loop(struct CupidARM *cpu) {
     if (cpu->executionMode == MODE_THUMB) {
         while (cpu->cycles < cpu->nextEvent) {
@@ -403,7 +394,6 @@ void cupid_arm_run_loop(struct CupidARM *cpu) {
  *
  * ARMRunFake — inject an opcode into the pipeline (debug/test).
  */
-
 void cupid_arm_run_fake(struct CupidARM *cpu, uint32_t opcode) {
     if (cpu->executionMode == MODE_ARM) {
         cpu->gprs[ARM_PC] -= WORD_SIZE_ARM;

@@ -245,7 +245,6 @@ static inline void _cupidReadCPSR(struct CupidARM *cpu) {
 }
 
 /** @name Public API */
-
 void cupid_arm_init(struct CupidARM *cpu);
 void cupid_arm_reset(struct CupidARM *cpu);
 void cupid_arm_run(struct CupidARM *cpu);

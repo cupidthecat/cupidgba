@@ -6,7 +6,6 @@
 /**
  * @brief Platform implementation.
  */
-
 bool cupid_platform_init(struct CupidPlatform *plat, int scale) {
     memset(plat, 0, sizeof(*plat));
     plat->scale = scale;

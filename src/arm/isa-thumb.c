@@ -8,12 +8,10 @@
  * DECLARE_THUMB_EMITTER_BLOCK macro from emitter-thumb.h, indexed by
  *   opcode >> 6
  */
-
 #include "cupid/emitter-thumb.h"
 #include "cupid/isa-inlines.h"
 
 /** @name Thumb-Specific Flag Macros */
-
 #define THUMB_ADDITION_S(M, N, D)                                                                  \
     cpu->cpsr.flags = 0;                                                                           \
     cpu->cpsr.n = ARM_SIGN(D);                                                                     \
@@ -51,7 +49,6 @@
     THUMB_SUBTRACTION_S(m, n, D)
 
 /** @name Cycle-Timing Macros */
-
 #define THUMB_PREFETCH_CYCLES (cpu->memory.timed ? 0 : 1 + (int)cpu->memory.activeSeqCycles16)
 
 #define THUMB_LOAD_POST_BODY                                                                       \
@@ -65,7 +62,6 @@
                                              (int)cpu->memory.activeSeqCycles16;
 
 /** @name Base Instruction Definition Macro */
-
 #define DEFINE_INSTRUCTION_THUMB(NAME, BODY)                                                       \
     static void _CupidThumbInstruction##NAME(struct CupidARM *cpu, uint16_t opcode) {              \
         int currentCycles = THUMB_PREFETCH_CYCLES;                                                 \
@@ -77,7 +73,6 @@
  *
  * Encoding: 000xxiiiiisssddd  (index bits 0x000–0x05F)
  */
-
 #define DEFINE_IMMEDIATE_5_INSTRUCTION_THUMB(NAME, BODY)                                           \
     DEFINE_INSTRUCTION_THUMB(NAME, int immediate = (opcode >> 6) & 0x001F;                         \
                              int rd = opcode & 0x0007; int rm = (opcode >> 3) & 0x0007; BODY;)
@@ -116,7 +111,6 @@ DEFINE_IMMEDIATE_5_INSTRUCTION_THUMB(
  *
  * Encoding: 011BLiiiiibbbddd  (index bits 0x180–0x1FF)
  */
-
 DEFINE_IMMEDIATE_5_INSTRUCTION_THUMB(
     LDR1, cpu->gprs[rd] = cpu->memory.load32(cpu, (uint32_t)cpu->gprs[rm] + (uint32_t)immediate * 4,
                                              &currentCycles);
@@ -151,7 +145,6 @@ DEFINE_IMMEDIATE_5_INSTRUCTION_THUMB(STRH1, cpu->memory.store16(cpu,
  *
  * Encoding: 000110onnnsssddd / 000111oiiisssddd
  */
-
 #define DEFINE_DATA_FORM_1_INSTRUCTION_THUMB(NAME, BODY)                                           \
     DEFINE_INSTRUCTION_THUMB(NAME, int rm = (opcode >> 6) & 0x0007; int rd = opcode & 0x0007;      \
                              int rn = (opcode >> 3) & 0x0007; BODY;)
@@ -173,7 +166,6 @@ DEFINE_DATA_FORM_2_INSTRUCTION_THUMB(SUB1,
  *
  * Encoding: 001oorrriiiiiiii  (index bits 0x080–0x0FF)
  */
-
 #define DEFINE_DATA_FORM_3_INSTRUCTION_THUMB(NAME, BODY)                                           \
     DEFINE_INSTRUCTION_THUMB(NAME, int rd = (opcode >> 8) & 0x0007;                                \
                              int immediate = opcode & 0x00FF; BODY;)
@@ -191,7 +183,6 @@ DEFINE_DATA_FORM_3_INSTRUCTION_THUMB(SUB2,
  *
  * Encoding: 010000oooorrrDDD  (index bits 0x100–0x10F)
  */
-
 #define DEFINE_DATA_FORM_5_INSTRUCTION_THUMB(NAME, BODY)                                           \
     DEFINE_INSTRUCTION_THUMB(NAME, int rd = opcode & 0x0007; int rn = (opcode >> 3) & 0x0007; BODY;)
 
@@ -304,7 +295,6 @@ DEFINE_DATA_FORM_5_INSTRUCTION_THUMB(MVN, cpu->gprs[rd] = ~cpu->gprs[rn];
  *
  * Encoding: 010001oohHsssddd  (index bits 0x110–0x11F)
  */
-
 #define DEFINE_INSTRUCTION_WITH_HIGH_EX_THUMB(NAME, H1, H2, BODY)                                  \
     DEFINE_INSTRUCTION_THUMB(NAME, int rd = (opcode & 0x0007) | H1;                                \
                              int rm = ((opcode >> 3) & 0x0007) | H2; BODY;)
@@ -335,7 +325,6 @@ DEFINE_INSTRUCTION_WITH_HIGH_THUMB(
  *
  * Encoding: 01001dddiiiiiiii  (index bits 0x120–0x13F)
  */
-
 #define DEFINE_IMMEDIATE_WITH_REGISTER_THUMB(NAME, BODY)                                           \
     DEFINE_INSTRUCTION_THUMB(NAME, int rd = (opcode >> 8) & 0x0007;                                \
                              int immediate = (opcode & 0x00FF) << 2; BODY;)
@@ -349,7 +338,6 @@ DEFINE_IMMEDIATE_WITH_REGISTER_THUMB(
  *
  * Encoding: 1001Ldddiiiiiiii  (index bits 0x240–0x27F)
  */
-
 DEFINE_IMMEDIATE_WITH_REGISTER_THUMB(
     LDR4, cpu->gprs[rd] = cpu->memory.load32(cpu, (uint32_t)cpu->gprs[ARM_SP] + (uint32_t)immediate,
                                              &currentCycles);
@@ -364,7 +352,6 @@ DEFINE_IMMEDIATE_WITH_REGISTER_THUMB(STR3, cpu->memory.store32(cpu,
  *
  * Encoding: 1010Sdddiiiiiiii  (index bits 0x280–0x2BF)
  */
-
 DEFINE_IMMEDIATE_WITH_REGISTER_THUMB(ADD5,
                                      cpu->gprs[rd] = (cpu->gprs[ARM_PC] & 0xFFFFFFFC) + immediate)
 DEFINE_IMMEDIATE_WITH_REGISTER_THUMB(ADD6, cpu->gprs[rd] = (uint32_t)cpu->gprs[ARM_SP] +
@@ -374,7 +361,6 @@ DEFINE_IMMEDIATE_WITH_REGISTER_THUMB(ADD6, cpu->gprs[rd] = (uint32_t)cpu->gprs[A
  *
  * Encoding: 0101LB0ooobbbddd / 0101HS1ooobbbddd  (index bits 0x140–0x17F)
  */
-
 #define DEFINE_LOAD_STORE_WITH_REGISTER_THUMB(NAME, BODY)                                          \
     DEFINE_INSTRUCTION_THUMB(NAME, int rm = (opcode >> 6) & 0x0007; int rd = opcode & 0x0007;      \
                              int rn = (opcode >> 3) & 0x0007; BODY;)
@@ -419,7 +405,6 @@ DEFINE_LOAD_STORE_WITH_REGISTER_THUMB(STRH2, cpu->memory.store16(cpu,
                                       THUMB_STORE_POST_BODY;)
 
 /** @name Formats 14/15 — Load/Store Multiple (PUSH, POP, LDMIA, STMIA) */
-
 #define DEFINE_LOAD_STORE_MULTIPLE_THUMB(NAME, RN, LS, DIRECTION, PRE_BODY, WRITEBACK)             \
     DEFINE_INSTRUCTION_THUMB(                                                                      \
         NAME, int rn = RN; UNUSED(rn); int rs = opcode & 0xFF; int32_t address = cpu->gprs[RN];    \
@@ -463,7 +448,6 @@ DEFINE_LOAD_STORE_MULTIPLE_THUMB(PUSHR, ARM_SP, store, DB, rs |= 1 << ARM_LR, TH
  *
  * Encoding: 1101ccccoooooooo  (index bits 0x350–0x38F)
  */
-
 #define DEFINE_CONDITIONAL_BRANCH_THUMB(COND)                                                      \
     DEFINE_INSTRUCTION_THUMB(                                                                      \
         B##COND, if (ARM_COND_##COND) {                                                            \
@@ -492,7 +476,6 @@ DEFINE_CONDITIONAL_BRANCH_THUMB(LE)
  *
  * Encoding: 10110000Siiiiiiii  (index bits 0x2C0–0x2C3)
  */
-
 DEFINE_INSTRUCTION_THUMB(ADD7,
                          cpu->gprs[ARM_SP] = (uint32_t)cpu->gprs[ARM_SP] + ((opcode & 0x7Fu) << 2))
 
@@ -500,7 +483,6 @@ DEFINE_INSTRUCTION_THUMB(SUB4,
                          cpu->gprs[ARM_SP] = (uint32_t)cpu->gprs[ARM_SP] - ((opcode & 0x7Fu) << 2))
 
 /** @name Illegal / Breakpoint / SWI */
-
 DEFINE_INSTRUCTION_THUMB(ILL, ARM_ILL)
 
 DEFINE_INSTRUCTION_THUMB(BKPT,
@@ -513,7 +495,6 @@ DEFINE_INSTRUCTION_THUMB(SWI, cpu->irqh.swi16(cpu, opcode & 0xFF))
  *
  * Encoding: 11100ooooooooooo  (index bits 0x380–0x39F)
  */
-
 DEFINE_INSTRUCTION_THUMB(B, int16_t immediate = (opcode & 0x07FF) << 5;
                          cpu->gprs[ARM_PC] = (uint32_t)cpu->gprs[ARM_PC] +
                                              (uint32_t)(((int32_t)immediate) >> 4);
@@ -526,7 +507,6 @@ DEFINE_INSTRUCTION_THUMB(B, int16_t immediate = (opcode & 0x07FF) << 5;
  * BL1 (H=0): LR = PC + (sign-extended offset << 12)
  * BL2 (H=1): PC = LR + (offset << 1), LR = old_PC - 1
  */
-
 DEFINE_INSTRUCTION_THUMB(BL1, int16_t immediate = (opcode & 0x07FF) << 5;
                          cpu->gprs[ARM_LR] = (uint32_t)cpu->gprs[ARM_PC] +
                                              (uint32_t)((int32_t)immediate * 128);)
@@ -541,7 +521,6 @@ DEFINE_INSTRUCTION_THUMB(BL2, uint16_t immediate = (opcode & 0x07FF) << 1;
  *
  * Encoding: 01000111xssssddd  (index bits 0x11C–0x11F)
  */
-
 DEFINE_INSTRUCTION_THUMB(
     BX, int rm = (opcode >> 3) & 0xF; _CupidSetMode(cpu, cpu->gprs[rm] & 0x00000001);
     cpu->gprs[ARM_PC] = cpu->gprs[rm] & 0xFFFFFFFE; if (cpu->executionMode == MODE_THUMB) {
@@ -556,6 +535,5 @@ DEFINE_INSTRUCTION_THUMB(
  *
  * 1024 entries, indexed by opcode >> 6.
  */
-
 const CupidThumbInstruction cupid_thumb_table[1024] = {
     DECLARE_THUMB_EMITTER_BLOCK(_CupidThumbInstruction)};

@@ -7,7 +7,6 @@
  * bit 4 = Right, 5 = Left, 6 = Up, 7 = Down,
  * bit 8 = R, 9 = L.
  */
-
 #include "cupid/platform.h"
 #include <stdio.h>
 
@@ -111,7 +110,6 @@ static void open_controller(struct CupidPlatform *plat, int index) {
 /**
  * @brief Poll SDL events and update key state.
  */
-
 static void peripheral_key(struct CupidGBA *gba, SDL_Scancode code, bool local) {
     /* F9 owns the local connection; F11 resets its selected gyroscope. */
     const SDL_Scancode gyroReset = local ? SDL_SCANCODE_F11 : SDL_SCANCODE_F9;

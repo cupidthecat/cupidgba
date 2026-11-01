@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 import subprocess
 
+from check_comment_spacing import check_files
+
 
 def main():
     root = Path(__file__).resolve().parents[2]
@@ -17,6 +19,10 @@ def main():
     ]
     if not files:
         raise SystemExit("No tracked C files found")
+    try:
+        check_files(root, files)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
     formatter = os.environ.get("CLANG_FORMAT", "clang-format")
     subprocess.run([formatter, "--dry-run", "--Werror", *files], cwd=root, check=True)
     print(f"PASS clang-format: {len(files)} tracked C source, header and fixture files")

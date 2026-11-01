@@ -2,7 +2,6 @@
  * @file types.h
  * @brief Common types and macros used throughout the emulator.
  */
-
 #ifndef CUPID_TYPES_H
 #define CUPID_TYPES_H
 
@@ -14,7 +13,6 @@
 #include <string.h>
 
 /** @name Helper Macros */
-
 #define LOAD_32(DEST, OFFSET, SRC) memcpy(&(DEST), (const uint8_t *)(SRC) + (OFFSET), 4)
 
 #define LOAD_16(DEST, OFFSET, SRC)                                                                 \
@@ -38,7 +36,6 @@ static inline uint32_t cupid_ror32(uint32_t val, unsigned shift) {
 #define ROR(VAL, SHIFT) cupid_ror32((VAL), (SHIFT))
 
 /** GBA screen dimensions are in video.h */
-
 /** GBA clock = 2^24 Hz (16.78 MHz) */
 #define GBA_CLOCK_FREQ 0x1000000u
 

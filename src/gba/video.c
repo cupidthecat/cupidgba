@@ -13,7 +13,6 @@
  * - VBlank lines: 160-227
  * - Total per frame: 228 * 1232 = 280896 cycles
  */
-
 #include "cupid/gba.h"
 #include "render/pipeline.h"
 
@@ -53,7 +52,6 @@ void cupid_video_init(struct CupidVideo *video, struct CupidGBA *gba) {
     if (!video->vram)
         video->vram = calloc(GBA_SIZE_VRAM / 2, sizeof(uint16_t));
     /** Palette and outputBuffer are inline arrays zeroed by reset. */
-
     /** Wire the timing event fields that remain constant. */
     video->event.name = "GBA Video";
     video->event.context = video;
@@ -144,7 +142,6 @@ void cupid_video_set_frame_callback(struct CupidVideo *video,
 /**
  * @brief Event-driven video timing state machine.
  */
-
 /**
  * @brief Hdraw ended and HBlank started.
  */

@@ -2,7 +2,6 @@
  * @file video.h
  * @brief GBA video subsystem: timing, palette, VRAM, OAM, renderer interface.
  */
-
 #ifndef CUPID_VIDEO_H
 #define CUPID_VIDEO_H
 
@@ -40,7 +39,6 @@ struct CupidGBA;
 #define GBA_SIZE_OAM 0x00000400     /**< 1 KiB = 128 OBJ + 32 matrices */
 
 /** @name Enums */
-
 /** OBJ rendering modes (Attr0 bits 10-11) */
 enum CupidObjMode {
     OBJ_MODE_NORMAL = 0,
@@ -70,7 +68,6 @@ enum CupidVideoLayer {
 /**
  * @name OBJ Attribute Bitfield Extraction Macros
  */
-
 /** Attr 0 (a) */
 #define OBJ_ATTR0_Y(a) ((a) & 0xFF)
 #define OBJ_ATTR0_TRANSFORMED(a) (((a) >> 8) & 1)
@@ -155,7 +152,6 @@ enum CupidVideoLayer {
 #define WINCTRL_BLEND_ENABLE(v) (((v) >> 5) & 1)
 
 /** @name OAM Structures */
-
 /**
  * Single 8-byte OAM entry (4 x uint16).
  * Fields are extracted through the OBJ_ATTR macros above.

@@ -2,7 +2,6 @@
  * @file memory.c
  * @brief GBA memory bus, region switching, ROM loading and BIOS buffer setup.
  */
-
 #include "cupid/gba.h"
 #include "cupid/registers.h"
 #include <errno.h>
@@ -146,7 +145,6 @@ const char GBA_ROM_WAITSTATES_SEQ[6] = {2, 1, 4, 1, 8, 1};
 /**
  * @brief Initialize memory subsystem buffers and CPU memory bus callbacks.
  */
-
 void cupid_memory_init(struct CupidGBA *gba) {
     struct CupidMemory *mem = &gba->memory;
 
@@ -490,7 +488,6 @@ void cupid_memory_set_active_region(struct CupidARM *cpu, uint32_t address) {
  * Handles per-region dispatch, alignment behavior, wait-state penalties,
  * BIOS protection, VRAM mirroring, SRAM 8-bit bus behavior, and open bus.
  */
-
 /**
  * @brief Load 32-bit value from memory bus.
  */
@@ -1149,7 +1146,6 @@ void cupid_memory_store8(struct CupidARM *cpu, uint32_t address, int8_t value, i
 /**
  * @brief Helpers.
  */
-
 /**
  * @brief Round up to next power of two.
  */
@@ -1273,7 +1269,6 @@ bool cupid_load_rom(struct CupidGBA *gba, const char *path) {
  *
  * Uses existing load32/store32 paths per register for correctness.
  */
-
 static inline int popcount16(int mask) {
     int c = 0;
     for (int i = 0; i < 16; i++) {

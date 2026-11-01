@@ -3,7 +3,6 @@
  * @brief Top-level GBA system struct and main emulation loop.
  *
  */
-
 #ifndef CUPID_GBA_H
 #define CUPID_GBA_H
 

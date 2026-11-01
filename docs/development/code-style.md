@@ -11,6 +11,17 @@ Use block comments consistently:
   existing `@file`, `@brief`, `@param` and related tags with their definitions.
 - `/**< ... */` documents a structure member beside its declaration.
 
+Put a standalone comment directly above the declaration or statement it describes.
+Do not leave a blank line between the comment and the code. When a section needs
+separation, put the blank line before its comment instead. A trailing comment
+stays attached to the statement on its own line; it does not describe the next
+statement.
+
+`python3 tests/platform/check_comment_spacing.py` checks C and Python comments.
+Use `--fix` to remove existing gaps, then run the normal formatter. The check
+preserves comment text, string contents and continued C macro/comment lines.
+CI runs it alongside the formatter and as part of the regression suite.
+
 For longer comments, use a leading `*` on each continuation line. Write complete
 sentences when explaining behavior. Short labels beside constants can remain
 phrases. Explain timing, ownership and hardware constraints rather than

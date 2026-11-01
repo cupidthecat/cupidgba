@@ -2,7 +2,6 @@
  * @file timer.h
  * @brief GBA hardware timers (4 channels), event-driven via CupidTiming.
  */
-
 #ifndef CUPID_TIMER_H
 #define CUPID_TIMER_H
 

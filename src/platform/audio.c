@@ -5,7 +5,6 @@
  * Outputs stereo S16 audio at the host rate. Captured frame durations preserve
  * the emulated timeline when the sound sampling resolution changes.
  */
-
 #include "cupid/platform.h"
 #include <stdio.h>
 #include <string.h>
@@ -22,7 +21,6 @@
  * audio->sampleBuffer[0 .. GBA_AUDIO_SAMPLES*2 - 1]
  * with a clock duration for each captured frame.
  */
-
 static inline int ring_available(int writePos, int readPos) {
     int cap = GBA_AUDIO_SAMPLES * 2;
     return (writePos - readPos + cap) % cap;
@@ -43,7 +41,6 @@ static inline int16_t ring_peek(const int16_t *buf, int readPos, int frame, int 
  * Produces `len` bytes of stereo S16 output at the host rate by linear
  * interpolation of the emulator sample ring buffer.
  */
-
 void cupid_platform_audio_callback(void *userdata, uint8_t *stream, int len) {
     struct CupidPlatformAudio *pa = (struct CupidPlatformAudio *)userdata;
     struct CupidAudio *audio = pa->audio;
@@ -130,7 +127,6 @@ void cupid_platform_audio_callback(void *userdata, uint8_t *stream, int len) {
 /**
  * @brief Initialize and deinitialize platform audio output.
  */
-
 bool cupid_platform_init_audio(struct CupidPlatform *plat, struct CupidGBA *gba) {
     struct CupidPlatformAudio *pa = &plat->platformAudio;
     memset(pa, 0, sizeof(*pa));

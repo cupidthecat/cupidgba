@@ -8,7 +8,6 @@
  * then the (possibly modified) value is stored into the IO array. The internal
  * memory timing port has a separate high-halfword latch outside this array.
  */
-
 #include "cupid/gba.h"
 
 /* Each accepted FIFO port access appends one complete storage word. Narrow
