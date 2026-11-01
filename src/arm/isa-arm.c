@@ -873,6 +873,9 @@ DEFINE_INSTRUCTION_ARM(
         /* The disabled GBA debug channel samples the completed opcode fetch. */
         unsigned rd = (opcode >> 12) & 15;
         uint32_t value = cpu->prefetch[1];
+        /* One coprocessor transfer cycle and one register-load cycle follow
+         * the sampled opcode. Neither requests another memory word. */
+        currentCycles += cpu->memory.stall ? cpu->memory.stall(cpu, 2) : 2;
         if (rd == ARM_PC) {
             cpu->cpsr.packed =
                 (int32_t)(((uint32_t)cpu->cpsr.packed & 0x0FFFFFFFu) | (value & 0xF0000000u));
@@ -883,8 +886,10 @@ DEFINE_INSTRUCTION_ARM(
 
 DEFINE_INSTRUCTION_ARM(
     MCR,
-    /* Writes to the disabled GBA debug channel have no effect. */
-    if (((opcode >> 8) & 15) != 14) { ARM_ILL; })
+    /* The disabled debug channel discards the transferred value. */
+    if (((opcode >> 8) & 15) != 14) { ARM_ILL; } else {
+        currentCycles += cpu->memory.stall ? cpu->memory.stall(cpu, 1) : 1;
+    })
 
 /** @name Miscellaneous */
 

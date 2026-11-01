@@ -97,23 +97,23 @@ static void motor_output(void *context, bool active, uint64_t clock) {
         trace->failed = true;
 }
 
-enum { MAX_REGISTER_OBSERVATIONS = 128 };
+enum { MAX_INSTRUCTION_OBSERVATIONS = 128 };
 
-struct RegisterObservation {
-    uint32_t address, expected, secondExpected;
+struct InstructionObservation {
+    uint32_t address, expected, secondExpected, statusMask;
     unsigned reg, secondReg;
     bool pair;
 };
 
-struct RegisterObservations {
-    struct RegisterObservation entries[MAX_REGISTER_OBSERVATIONS];
+struct InstructionObservations {
+    struct InstructionObservation entries[MAX_INSTRUCTION_OBSERVATIONS];
     unsigned count, next;
     bool failed, orderFailed;
     struct RunState *run;
 };
 
 static void observe_instruction(const struct CupidARM *cpu, void *context) {
-    struct RegisterObservations *observations = context;
+    struct InstructionObservations *observations = context;
     const bool thumb = cpu->executionMode == MODE_THUMB;
     const uint32_t pc = cupid_arm_instruction_address(cpu);
     struct RunState *run = observations->run;
@@ -150,15 +150,21 @@ static void observe_instruction(const struct CupidARM *cpu, void *context) {
         observations->orderFailed = true;
         return;
     }
-    const struct RegisterObservation *observation = &observations->entries[observations->next];
-    const uint32_t value = (uint32_t)cpu->gprs[observation->reg];
+    const struct InstructionObservation *observation = &observations->entries[observations->next];
+    const uint32_t value = observation->statusMask
+                               ? (uint32_t)cpu->cpsr.packed & observation->statusMask
+                               : (uint32_t)cpu->gprs[observation->reg];
     const uint32_t second = (uint32_t)cpu->gprs[observation->secondReg];
     const bool passed = value == observation->expected &&
                         (!observation->pair || second == observation->secondExpected);
-    printf("observation=%u pc=%08" PRIx32 " mode=%s opcode=%08" PRIx32 " r%u=%08" PRIx32
-           " expected=%08" PRIx32,
-           observations->next, pc, thumb ? "thumb" : "arm", cpu->prefetch[0], observation->reg,
-           value, observation->expected);
+    printf("observation=%u pc=%08" PRIx32 " mode=%s opcode=%08" PRIx32, observations->next, pc,
+           thumb ? "thumb" : "arm", cpu->prefetch[0]);
+    if (observation->statusMask)
+        printf(" masked-cpsr=%08" PRIx32 " mask=%08" PRIx32 " expected=%08" PRIx32, value,
+               observation->statusMask, observation->expected);
+    else
+        printf(" r%u=%08" PRIx32 " expected=%08" PRIx32, observation->reg, value,
+               observation->expected);
     if (observation->pair)
         printf(" r%u=%08" PRIx32 " expected=%08" PRIx32, observation->secondReg, second,
                observation->secondExpected);
@@ -184,7 +190,7 @@ static void audio_sample(void *context, uint64_t clock, int16_t left, int16_t ri
 int main(int argc, char **argv) {
     struct KeyEvent keyEvents[64];
     unsigned keyEventCount = 0;
-    struct RegisterObservations observations = {0};
+    struct InstructionObservations observations = {0};
     const char *rom = NULL;
     const char *bios = NULL;
     const char *output = NULL;
@@ -253,29 +259,40 @@ int main(int argc, char **argv) {
             if (!number(argv[++i], &checkpointAddress) || !checkpointAddress ||
                 checkpointAddress > UINT32_MAX)
                 return 2;
+        } else if (!strcmp(argv[i], "--expect-status-at") && i + 3 < argc) {
+            uint64_t address, mask, expected;
+            if (observations.count == MAX_INSTRUCTION_OBSERVATIONS ||
+                !number(argv[++i], &address) || address > UINT32_MAX || !number(argv[++i], &mask) ||
+                !mask || mask > UINT32_MAX || !number(argv[++i], &expected) ||
+                expected > UINT32_MAX || (expected & ~mask))
+                return 2;
+            observations.entries[observations.count++] =
+                (struct InstructionObservation){.address = (uint32_t)address,
+                                                .expected = (uint32_t)expected,
+                                                .statusMask = (uint32_t)mask};
         } else if (!strcmp(argv[i], "--expect-register-at") && i + 3 < argc) {
             uint64_t address, reg, expected;
-            if (observations.count == MAX_REGISTER_OBSERVATIONS || !number(argv[++i], &address) ||
-                address > UINT32_MAX || !number(argv[++i], &reg) || reg > 15 ||
-                !number(argv[++i], &expected) || expected > UINT32_MAX)
+            if (observations.count == MAX_INSTRUCTION_OBSERVATIONS ||
+                !number(argv[++i], &address) || address > UINT32_MAX || !number(argv[++i], &reg) ||
+                reg > 15 || !number(argv[++i], &expected) || expected > UINT32_MAX)
                 return 2;
-            observations.entries[observations.count++] = (struct RegisterObservation){
+            observations.entries[observations.count++] = (struct InstructionObservation){
                 .address = (uint32_t)address, .expected = (uint32_t)expected, .reg = (unsigned)reg};
         } else if (!strcmp(argv[i], "--expect-register-pair-at") && i + 5 < argc) {
             uint64_t address, reg, expected, secondReg, secondExpected;
-            if (observations.count == MAX_REGISTER_OBSERVATIONS || !number(argv[++i], &address) ||
-                address > UINT32_MAX || !number(argv[++i], &reg) || reg > 15 ||
-                !number(argv[++i], &expected) || expected > UINT32_MAX ||
+            if (observations.count == MAX_INSTRUCTION_OBSERVATIONS ||
+                !number(argv[++i], &address) || address > UINT32_MAX || !number(argv[++i], &reg) ||
+                reg > 15 || !number(argv[++i], &expected) || expected > UINT32_MAX ||
                 !number(argv[++i], &secondReg) || secondReg > 15 ||
                 !number(argv[++i], &secondExpected) || secondExpected > UINT32_MAX)
                 return 2;
             observations.entries[observations.count++] =
-                (struct RegisterObservation){.address = (uint32_t)address,
-                                             .expected = (uint32_t)expected,
-                                             .reg = (unsigned)reg,
-                                             .secondExpected = (uint32_t)secondExpected,
-                                             .secondReg = (unsigned)secondReg,
-                                             .pair = true};
+                (struct InstructionObservation){.address = (uint32_t)address,
+                                                .expected = (uint32_t)expected,
+                                                .reg = (unsigned)reg,
+                                                .secondExpected = (uint32_t)secondExpected,
+                                                .secondReg = (unsigned)secondReg,
+                                                .pair = true};
         } else if (!strcmp(argv[i], "--start-address") && i + 1 < argc) {
             if (!number(argv[++i], &startAddress) || startAddress < GBA_BASE_ROM0 ||
                 startAddress >= GBA_BASE_SRAM || (startAddress & 3))
@@ -310,7 +327,8 @@ int main(int argc, char **argv) {
                 "auto|on|off] [--gyro auto|on|off] [--gyro-sample 0..4095] [--tilt auto|on|off] "
                 "[--tilt-x 0..4095] [--tilt-y 0..4095] [--start-address ADDRESS] "
                 "[--expect-loop-register N] [--terminal-address ADDRESS] [--checkpoint-address "
-                "ADDRESS] [--expect-register-at ADDRESS REGISTER VALUE] [--expect-register-pair-at "
+                "ADDRESS] [--expect-status-at ADDRESS MASK VALUE] [--expect-register-at ADDRESS "
+                "REGISTER VALUE] [--expect-register-pair-at "
                 "ADDRESS REGISTER VALUE REGISTER VALUE]\n",
                 argv[0]);
             return 2;

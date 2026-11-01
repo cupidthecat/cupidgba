@@ -1,5 +1,10 @@
 # Testing
 
+CP14 register-transfer timing and original cartridge comparisons are covered in
+[CP14 transfers](../hardware/cpu/cp14.md). Run `arm.cp14-*`,
+`runner.cp14-probe-protocol`, `runner.status-observations` and `rom.cp14-transfer*`
+for the native timing matrix and the original comparison guards.
+
 The serial and HALT cartridge checks retain their original 24 encoded
 comparisons, result-display entry and completed terminal. Run their owned
 protocol and execution controls with `ctest -R '^runner[.]serial-probe-'`.

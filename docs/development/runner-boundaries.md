@@ -42,3 +42,18 @@ terminal opcodes as final register observations. Their existing caller,
 comparison, checkpoint, input-digest and execution guards remain checked.
 The extra completed idle branch consumes normal emulated bus clocks; it does
 not change any original timer expectation or emulator timing constant.
+
+## Masked status observations
+
+`--expect-status-at ADDRESS MASK VALUE` checks CPSR bits at actual instruction
+issue, in the same ordered stream as register observations. The mask must be
+nonzero and the expected value must contain no bits outside it. Output reports
+`masked-cpsr`, the mask and the expected value, together with the issued address,
+CPU mode and opcode. Missing, extra or reordered visits fail the run even when
+the guest leaves zero at its result boundaries. Reading status has no emulated
+side effects.
+
+Owned controls cover every NZCV combination, selected flag and control masks,
+wrong values with zero guest results, mixed register/status ordering, absent
+visits and invalid argument bounds. The CP14 cartridge uses this observation
+to check its original negative-flag guard after a register transfer to r15.

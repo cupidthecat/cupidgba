@@ -14,7 +14,7 @@ enum { TERMINAL = GBA_BASE_ROM0 + 0x100 };
 
 struct Fixture {
     struct RunState run;
-    struct RegisterObservations observations;
+    struct InstructionObservations observations;
     unsigned issues;
 };
 

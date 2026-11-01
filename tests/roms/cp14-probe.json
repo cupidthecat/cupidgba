@@ -1,0 +1,19 @@
+{
+  "revision": "66f5f1d60cd7030b600606886c76f5c821ecaf9d",
+  "license_sha256": "b59a9ed235d76752c977f04116bc72155a14af48176bdbf50d7e5c29fca35aa7",
+  "path": "arm/Coprocessor_14.gba",
+  "sha256": "64ba61d620ebec9b4f90f38dea26d9628b28458b032467208b38ed07f25533ec",
+  "checkpoint": "0x08000204",
+  "terminal": "0x0800037c",
+  "observations": [
+    {"address": "0x080001a4", "instruction": "0xe3530075", "register": 3, "value": "0x75"},
+    {"address": "0x080001ac", "instruction": "0xe1500001", "register": 0,
+     "second_register": 1, "value": "0xe20330ff", "literal": "0x08000178",
+     "sample_address": "0x080001a0"},
+    {"address": "0x080001b8", "instruction": "0xe1500002", "register": 0,
+     "second_register": 2, "value": "0x1a000008", "literal": "0x0800017c",
+     "sample_address": "0x080001bc"},
+    {"address": "0x080001c4", "instruction": "0x5a000008", "mask": "0x80000000",
+     "value": "0x80000000", "sample_address": "0x080001c8"}
+  ]
+}

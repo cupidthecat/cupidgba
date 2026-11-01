@@ -276,6 +276,53 @@ static void dma_completion_supplies_the_fetched_value_across_clock_wrap(void) {
     CHECK(observations == 6);
 }
 
+/* With no external coprocessor busy loop, register reads consume one
+ * transfer clock and one internal load clock; writes omit the load clock.
+ * Neither phase issues another memory request or changes a failed predicate. */
+static void transfer_clocks(void) {
+    const uint64_t clocks[] = {0, INT32_MAX - 2u, UINT32_MAX - 2u, UINT64_C(0x300000000)};
+    for (unsigned epoch = 0; epoch < 4; epoch++)
+        for (unsigned a = 0; a < sizeof(addresses) / sizeof(*addresses); a++)
+            for (unsigned read = 0; read < 2; read++)
+                for (unsigned destination = 0; destination < 2; destination++)
+                    for (unsigned executed = 0; executed < 2; executed++)
+                        for (unsigned prefetch = 0; prefetch < 2; prefetch++) {
+                            struct CupidGBA *gba = machine(clocks[epoch]);
+                            cupid_io_write(gba, REG_WAITCNT, prefetch ? 0x4014 : 0);
+                            cupid_io_write(gba, REG_TM0CNT_L, 0);
+                            cupid_io_write(gba, REG_TM0CNT_H, 0x80);
+                            cupid_timing_tick(&gba->timing, 2);
+                            const unsigned rd = destination ? ARM_PC : 0;
+                            uint32_t opcode = instruction(read != 0, epoch * 17 + a, rd);
+                            if (!executed)
+                                opcode &= 0x0FFFFFFF; /* EQ with Z clear. */
+                            const uint32_t value = 0xA005005A;
+                            prepare(gba, addresses[a], opcode, value, MODE_SYS, 0, 2);
+                            int32_t before[15];
+                            memcpy(before, gba->cpu.gprs, sizeof(before));
+                            uint32_t status = (uint32_t)gba->cpu.cpsr.packed;
+                            if (executed && read && rd == ARM_PC)
+                                status = (status & 0x0FFFFFFF) | (value & 0xF0000000);
+                            const unsigned expected = 1 + gba->cpu.memory.activeSeqCycles32 +
+                                                      (executed ? (read ? 2 : 1) : 0);
+                            const uint64_t start = cupid_timing_global_time(&gba->timing);
+                            const uint16_t timer = cupid_timer_read_counter(gba, 0);
+                            cupid_gba_step(gba);
+                            CHECK(cupid_timing_global_time(&gba->timing) - start == expected);
+                            CHECK((uint16_t)(cupid_timer_read_counter(gba, 0) - timer) == expected);
+                            CHECK(gba->memory.fetchNonseq == (executed != 0));
+                            CHECK(gba->cpu.prefetch[0] == 0xE3A0705A &&
+                                  gba->cpu.prefetch[1] == value);
+                            normal_state(gba, addresses[a], before, status,
+                                         executed && read ? rd : 16);
+                            if (executed && read && rd != ARM_PC)
+                                CHECK((uint32_t)gba->cpu.gprs[rd] == value);
+                            destroy(gba);
+                            observations++;
+                        }
+    CHECK(observations == 576);
+}
+
 int main(int argc, char **argv) {
     CHECK(argc == 2);
     if (!strcmp(argv[1], "read"))
@@ -290,6 +337,8 @@ int main(int argc, char **argv) {
         RUN(unavailable_coprocessors_still_take_the_exception);
     else if (!strcmp(argv[1], "pipeline"))
         RUN(dma_completion_supplies_the_fetched_value_across_clock_wrap);
+    else if (!strcmp(argv[1], "timing"))
+        RUN(transfer_clocks);
     else
         CHECK(false);
     printf("CP14 observations: %u\n", observations);

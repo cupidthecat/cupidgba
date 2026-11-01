@@ -21,6 +21,7 @@ set(CUPID_BIOS_MATH_SUITE_ROM "" CACHE FILEPATH "Locally built BIOS math registe
 set(CUPID_IO_SUITE_ROM "" CACHE FILEPATH "Locally built I/O register-read suite ROM")
 set(CUPID_SERIAL_SUITE_ROM "" CACHE FILEPATH "Locally built serial timing and register suite ROM")
 set(CUPID_RTC_STATE_ROM "" CACHE FILEPATH "Checksum-verified local RTC state corpus with RAM result transport")
+set(CUPID_CP14_PROBE_DIR "" CACHE PATH "Root containing the checksum-verified CP14 timing cartridge")
 set(CUPID_SERIAL_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified serial cartridge probes")
 set(CUPID_HALT_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified firmware HALT and IRQ probes")
 set(CUPID_PREFETCH_PROBE_DIR "" CACHE PATH "Root containing checksum-verified prefetcher and timing cartridge probes")
@@ -403,9 +404,29 @@ if(BUILD_TESTING)
         set_tests_properties(arm.reset-entry-${group} PROPERTIES TIMEOUT 10)
     endforeach()
 
+    add_test(NAME runner.cp14-probe-protocol COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_cp14_probe_protocol.py)
+    add_test(NAME runner.status-observations COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_runner_status.py
+        --runner $<TARGET_FILE:cupidgba-headless>)
+    set_tests_properties(runner.cp14-probe-protocol runner.status-observations PROPERTIES TIMEOUT 10)
+    if(CUPID_CP14_PROBE_DIR)
+        add_test(NAME rom.cp14-transfer COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_cp14_probe.py
+            --directory ${CUPID_CP14_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless>)
+        set_tests_properties(rom.cp14-transfer PROPERTIES TIMEOUT 100)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME rom.cp14-transfer-external COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_cp14_probe.py
+                --directory ${CUPID_CP14_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless>
+                --bios ${CUPID_TEST_BIOS})
+            set_tests_properties(rom.cp14-transfer-external PROPERTIES TIMEOUT 100)
+        endif()
+    endif()
+
     add_executable(test_cp14 tests/arm/test_cp14.c)
     target_link_libraries(test_cp14 PRIVATE cupid_core)
-    foreach(group read write flags conditions undefined pipeline)
+    foreach(group read write flags conditions undefined pipeline timing)
         add_test(NAME arm.cp14-${group} COMMAND test_cp14 ${group})
         set_tests_properties(arm.cp14-${group} PROPERTIES TIMEOUT 10)
     endforeach()
