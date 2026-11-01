@@ -171,3 +171,49 @@ The example explicitly allows at most one instruction per emulated clock for
 can stop a valid long run when prefetch permits more instructions per frame.
 This changes the observation budget; it does not change emulation timing or
 any hardware test expectation.
+
+## Deterministic RTC input and snapshots
+
+Headless runs keep a fresh, deterministic clock unless an RTC input is supplied.
+`--rtc auto|on|off` selects the device, using the same cartridge detection as the
+frontend. `--rtc-time YYYY-MM-DDTHH:MM:SS` seeds a valid calendar from 2000
+through 2099. The seed is applied before guest execution, including an external
+BIOS startup; that startup therefore counts as elapsed RTC time.
+
+```sh
+./build/cupidgba-headless clock-game.gba --rtc-time 2024-02-29T12:34:56 \
+  --frames 600 --steps 168537600 --dump-rtc .local-research/first.rtc
+./build/cupidgba-headless clock-game.gba --load-rtc .local-research/first.rtc \
+  --frames 600 --steps 168537600 --dump-rtc .local-research/next.rtc
+```
+
+`--load-rtc FILE` reads the existing cartridge-bound battery format. A seed
+supplied in the same command overrides its calendar and fractional second,
+while retaining control and interrupt-parameter settings. Argument order does
+not change that precedence. Loaded host timestamps never add offline time;
+headless execution advances the clock only through emulated console and STOP
+battery clocks. `--dump-rtc FILE` writes an atomic battery snapshot with a zero
+host-time anchor. It reports write failures through a nonzero exit status.
+
+These options do not imply `--rtc on`. An explicit seed, load or snapshot with
+no enabled RTC fails before guest execution or output creation. Use an RTC
+cartridge or select `--rtc on` for an owned fixture. Invalid files and calendar
+arguments also stop startup. Runs never discover or write an adjacent `.rtc`
+file implicitly. Keep input and output paths separate when preserving a seed.
+The snapshot retains battery state, not the CPU, display or a partial GPIO
+transaction. See [RTC battery formats](../../hardware/cartridge/rtc.md).
+
+`runner.rtc-input` checks 62 short startup/replay trials under a ten-second
+CTest deadline and three-second process guards. Owned ARM and Thumb guests
+read all seven calendar bytes through GPIO, record the transfer count and
+output pointer, and reach an observed, completed terminal. Checks compare the
+entire EWRAM image and every battery byte, including fingerprint, fractions,
+control, parameters, carry flags, host anchor and checksum. They cover all
+three battery versions, both hour formats, retained invalid seconds, explicit
+presence, calendar precedence, independent
+process reloads, two expected STOP/frame-deadline results, rejected inputs and
+failed atomic replacement. STOP snapshots must retain every elapsed battery
+clock, including the existing 300-frame startup allowance in the secondary
+elapsed-clock guard, without turning an incomplete video run into a pass. Existing files
+must survive startup failures. `CUPID_TEST_BIOS` adds the same explicit-entry
+profile with that image mapped; it does not qualify firmware startup.

@@ -390,3 +390,20 @@ Electrical contention, floating inputs, invalid wire timing and physical
 partial-register effects remain unqualified. The complete-frame, fixed-word
 and ordinary bus policies above provide deterministic behavior for these
 source-selected boundaries.
+
+## Headless replay controls
+
+The headless runner accepts the frontend's `--rtc auto|on|off` selection and
+`--rtc-time YYYY-MM-DDTHH:MM:SS` calendar format. `--load-rtc FILE` and
+`--dump-rtc FILE` provide explicit battery input and output. Input is validated
+before execution or output creation. A seed overrides a loaded calendar while
+retaining its control and parameter settings. A replay never applies the
+stored host-time anchor, and its exported anchor is zero. No companion file is
+loaded or saved automatically.
+
+A requested seed or battery file requires an enabled RTC. Disabling the device
+while requesting RTC input or output is an error rather than a silent no-op.
+Both raw save memory and RTC batteries can be supplied to the same run, with
+separate files and validation. See [headless RTC checks and commands](../../development/testing/runtime.md#deterministic-rtc-input-and-snapshots)
+for complete guest readback, reload and failure controls. The device's calendar,
+serial protocol and physical qualification limits are unchanged.

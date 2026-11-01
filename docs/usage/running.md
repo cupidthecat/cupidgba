@@ -60,3 +60,14 @@ held until all sources release it. Removing the selected controller selects
 the next available one. Window focus loss releases keyboard holds. See
 [input handling](../hardware/input.md) for device ownership and regression
 coverage.
+
+## Headless RTC replays
+
+`cupidgba-headless` also accepts `--rtc auto|on|off` and `--rtc-time`.
+Use `--load-rtc FILE` to read a cartridge-bound battery and `--dump-rtc FILE`
+to write the resulting battery explicitly. Headless runs do not load adjacent
+RTC files or advance a loaded clock from host wall time. A supplied date takes
+precedence over the loaded calendar. These options require an enabled RTC;
+use `--rtc on` when testing a cartridge without automatic RTC detection.
+See [reproducible RTC runs](../development/testing/runtime.md#deterministic-rtc-input-and-snapshots)
+for commands, validation and the distinction between batteries and save states.

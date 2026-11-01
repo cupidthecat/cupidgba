@@ -29,7 +29,9 @@ and physical-clock fingerprints of both controls.
 
 The unchanged external-firmware HALT/OAM cartridge also passes both original
 comparisons, its pre-display result and terminal when the CPU and pixel models
-are combined. This establishes that covered interaction. The separate DMA/HALT
-timer comparison, built-in entry phase, remaining bus cases and broader pixel
-pipeline acceptance remain unfinished. The CPU and PPU drafts remain separate
-delivery steps; this PPU draft depends on the CPU branch.
+are combined. This establishes that covered interaction. The integrated CPU/DMA/IRQ profile now passes all thirty-two original
+input/firmware runs, including the separate DMA/HALT timer comparison. Broader
+bus and pixel-pipeline acceptance remains open. The separate IRQ corpus still
+retains its documented `0xF4` versus `0xF5` failure; see
+[CPU/DMA/IRQ interactions](dma-irq-interactions.md). The PPU draft depends on
+the CPU branch.

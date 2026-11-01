@@ -212,6 +212,8 @@ int main(int argc, char **argv) {
     const char *ewramOutput = NULL;
     const char *saveInput = NULL;
     const char *saveOutput = NULL;
+    const char *rtcInput = NULL;
+    const char *rtcOutput = NULL;
     const char *audioOutput = NULL;
     const char *motorOutput = NULL;
     struct AudioTrace audioTrace = {0};
@@ -222,6 +224,9 @@ int main(int argc, char **argv) {
     uint64_t startAddress = 0;
     int expectedRegister = -1;
     bool sstFlash = false;
+    int rtcPresence = -1;
+    bool rtcSeedSet = false;
+    struct CupidRTCDateTime rtcSeed = {0};
     struct CupidPlatformPeripherals peripherals = CUPID_PLATFORM_PERIPHERALS_DEFAULT;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--bios") && i + 1 < argc)
@@ -230,9 +235,20 @@ int main(int argc, char **argv) {
             if (strcmp(argv[++i], "sst39vf512"))
                 return 2;
             sstFlash = true;
-        } else if ((!strcmp(argv[i], "--solar") || !strcmp(argv[i], "--rumble") ||
-                    !strcmp(argv[i], "--gyro") || !strcmp(argv[i], "--tilt")) &&
-                   i + 1 < argc) {
+        } else if (!strcmp(argv[i], "--rtc") && i + 1 < argc) {
+            if (!cupid_platform_peripheral_mode(argv[++i], &rtcPresence))
+                return 2;
+        } else if (!strcmp(argv[i], "--rtc-time") && i + 1 < argc) {
+            if (!cupid_rtc_parse_datetime(argv[++i], &rtcSeed))
+                return 2;
+            rtcSeedSet = true;
+        } else if (!strcmp(argv[i], "--load-rtc") && i + 1 < argc)
+            rtcInput = argv[++i];
+        else if (!strcmp(argv[i], "--dump-rtc") && i + 1 < argc)
+            rtcOutput = argv[++i];
+        else if ((!strcmp(argv[i], "--solar") || !strcmp(argv[i], "--rumble") ||
+                  !strcmp(argv[i], "--gyro") || !strcmp(argv[i], "--tilt")) &&
+                 i + 1 < argc) {
             int *presence = !strcmp(argv[i], "--solar")    ? &peripherals.solarPresence
                             : !strcmp(argv[i], "--rumble") ? &peripherals.rumblePresence
                             : !strcmp(argv[i], "--gyro")   ? &peripherals.gyroPresence
@@ -335,7 +351,9 @@ int main(int argc, char **argv) {
                 stderr,
                 "Usage: %s ROM [--bios FILE] [--flash-profile sst39vf512] [--frames N] [--steps N] "
                 "[--key-event FRAME MASK] [--screenshot FILE.ppm] [--dump-vram FILE] [--dump-io "
-                "FILE] [--dump-ewram FILE] [--load-save FILE] [--dump-save FILE] [--dump-audio "
+                "FILE] [--dump-ewram FILE] [--load-save FILE] [--dump-save FILE] "
+                "[--rtc auto|on|off] [--rtc-time YYYY-MM-DDTHH:MM:SS] [--load-rtc FILE] "
+                "[--dump-rtc FILE] [--dump-audio "
                 "FILE] [--dump-rumble FILE] [--solar auto|on|off] [--sunlight 0..255] [--rumble "
                 "auto|on|off] [--gyro auto|on|off] [--gyro-sample 0..4095] [--tilt auto|on|off] "
                 "[--tilt-x 0..4095] [--tilt-y 0..4095] [--start-address ADDRESS] "
@@ -365,6 +383,8 @@ int main(int argc, char **argv) {
             goto cleanup;
     }
     cupid_platform_peripherals_configure(gba, &peripherals);
+    if (rtcPresence >= 0)
+        cupid_cartridge_enable_rtc(gba, rtcPresence != 0);
     cupid_gba_reset(gba);
     /* Match frontend startup: restore battery bytes after reset, before guest
      * execution or output creation. An explicit input must load successfully;
@@ -372,6 +392,23 @@ int main(int argc, char **argv) {
     if (saveInput && !cupid_savedata_load_file(&gba->memory.savedata, saveInput)) {
         perror(saveInput);
         goto cleanup;
+    }
+    /* Explicit RTC inputs are read-only and must be usable before any output
+     * is opened. Host timestamps never advance a deterministic replay. */
+    if ((rtcInput || rtcOutput || rtcSeedSet) && !gba->cartridge.rtcPresent) {
+        fprintf(stderr, "Requested RTC state requires an enabled RTC; use --rtc on\n");
+        goto cleanup;
+    }
+    if (rtcInput && !cupid_cartridge_load_rtc(gba, rtcInput, NULL)) {
+        perror(rtcInput);
+        goto cleanup;
+    }
+    if (rtcSeedSet) {
+        /* A seed overrides the loaded calendar, retaining its control and
+         * parameter settings. Recompute any output deadline from that date. */
+        if (!cupid_rtc_set_datetime(&gba->cartridge.rtc, &rtcSeed))
+            goto cleanup;
+        cupid_cartridge_rtc_reschedule(gba);
     }
     /* An explicit probe entry exercises guest code with the selected BIOS
      * mapped. It does not execute or qualify the BIOS boot sequence. */
@@ -478,6 +515,12 @@ int main(int argc, char **argv) {
     }
     if (output && !screenshot(pixels, output)) {
         perror(output);
+        result = 2;
+    }
+    /* A snapshot is explicit, atomic and independent of raw save memory.
+     * A zero host anchor prevents later runs from adding offline wall time. */
+    if (rtcOutput && !cupid_cartridge_save_rtc(gba, rtcOutput, 0)) {
+        perror(rtcOutput);
         result = 2;
     }
     const char *dumpPaths[] = {vramOutput, ioOutput, ewramOutput, saveOutput};
