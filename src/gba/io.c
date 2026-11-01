@@ -5,10 +5,34 @@
  * The IO array (gba->memory.io) is a flat uint16_t[0x400/2] addressed as
  * io[byte_offset >> 1]. Subsystem structs shadow the registers they care
  * about; writes dispatch through the switch into the appropriate subsystem,
- * then the (possibly modified) value is stored into the IO array.
+ * then the (possibly modified) value is stored into the IO array. The internal
+ * memory timing port has a separate high-halfword latch outside this array.
  */
-
 #include "cupid/gba.h"
+
+/* Each accepted FIFO port access appends one complete storage word. Narrow
+ * accesses replace only their addressed lanes in the next write slot. */
+static void fifo_store(struct CupidGBA *gba, uint32_t addr, uint32_t value, unsigned width) {
+    if (!gba->audio.enable)
+        return;
+    const uint32_t base = addr & ~3u;
+    struct CupidAudioFIFO *fifo = base == REG_FIFO_A_LO ? &gba->audio.chA : &gba->audio.chB;
+    unsigned shift = (addr & 3u) * 8;
+    uint32_t mask = width == 4 ? UINT32_MAX : ((UINT32_C(1) << (width * 8)) - 1) << shift;
+    uint32_t word = (fifo->fifo[fifo->fifoWrite] & ~mask) | ((value << shift) & mask);
+    cupid_audio_fifo_write(fifo, word);
+    /* These write-only backing latches describe the next storage slot.
+     * CPU reads still use the existing open-bus path. */
+    uint32_t next = fifo->fifo[fifo->fifoWrite];
+    gba->memory.io[base >> 1] = (uint16_t)next;
+    gba->memory.io[(base >> 1) + 1] = (uint16_t)(next >> 16);
+}
+
+/* The EWRAM timing halfword is the exceptional I/O decode repeated in
+ * every 64 KiB bank. The ordinary 1 KiB register array has no such aliases. */
+static bool ewram_wait_port(uint32_t address) {
+    return address < 0x01000000 && (address & 0xFFFEu) == REG_MEMCNT_HI;
+}
 
 static int32_t affine_high(int32_t previous, uint16_t high) {
     uint32_t raw = ((uint32_t)previous & 0xFFFFu) | ((uint32_t)(high & 0x0FFFu) << 16);
@@ -18,18 +42,18 @@ static int32_t affine_high(int32_t previous, uint16_t high) {
 /**
  * @brief Initialize IO registers and shadow state.
  */
-void cupid_io_init(struct CupidGBA* gba) {
+void cupid_io_init(struct CupidGBA *gba) {
     memset(gba->memory.io, 0, sizeof(gba->memory.io));
 
     /** Default register values. */
-    gba->memory.io[REG_DISPCNT   >> 1] = 0x0080;  /** forced blank */
-    gba->memory.io[REG_KEYINPUT  >> 1] = 0x03FF;  /** all keys released */
+    gba->memory.io[REG_DISPCNT >> 1] = 0x0080;  /** forced blank */
+    gba->memory.io[REG_KEYINPUT >> 1] = 0x03FF; /** all keys released */
     gba->memory.io[REG_SOUNDBIAS >> 1] = 0x0200;
-    gba->memory.io[REG_BG2PA     >> 1] = 0x0100;
-    gba->memory.io[REG_BG2PD     >> 1] = 0x0100;
-    gba->memory.io[REG_BG3PA     >> 1] = 0x0100;
-    gba->memory.io[REG_BG3PD     >> 1] = 0x0100;
-    gba->memory.io[REG_RCNT      >> 1] = 0x8000;  /** RCNT_INITIAL */
+    gba->memory.io[REG_BG2PA >> 1] = 0x0100;
+    gba->memory.io[REG_BG2PD >> 1] = 0x0100;
+    gba->memory.io[REG_BG3PA >> 1] = 0x0100;
+    gba->memory.io[REG_BG3PD >> 1] = 0x0100;
+    gba->memory.io[REG_RCNT >> 1] = 0x8000; /** RCNT_INITIAL */
 
     /** Mirror to subsystem structs. */
     gba->video.dispcnt = 0x0080;
@@ -59,341 +83,457 @@ void cupid_io_init(struct CupidGBA* gba) {
  * (masking write-only bits, etc.). `break` stores to io[], `return` skips
  * storage for read-only or self-managed registers.
  */
-void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
-    if (addr >= GBA_SIZE_IO) return;
+void cupid_io_write(struct CupidGBA *gba, uint32_t addr, uint16_t value) {
+    if (ewram_wait_port(addr)) {
+        cupid_memory_update_ewram_waitstates(gba, value);
+        return;
+    }
+    if (addr >= GBA_SIZE_IO)
+        return;
     addr &= ~1u;
 
+    if (addr <= REG_BLDY)
+        cupid_video_sync(&gba->video);
+
     switch (addr) {
-    /** VIDEO 0x000-0x056. */
-    case REG_DISPCNT:
-        gba->video.dispcnt = value;
-        break;
+        /** VIDEO 0x000-0x056. */
+        case REG_DISPCNT:
+            gba->video.dispcnt = value;
+            break;
 
-    case REG_GREENSWAP:
-        /** Rarely used; just store. */
-        break;
+        case REG_GREENSWAP:
+            value &= 1;
+            break;
 
-    case REG_DISPSTAT:
+        case REG_DISPSTAT:
+            /**
+             * IRQ enables and the VCOUNT target are writable; bits 6-7 are unused.
+             * Bits 0-2 (VBlank/HBlank/VCount flags) are read-only.
+             */
+            value = (gba->video.dispstat & 0x0007) | (value & 0xFF38);
+            gba->video.dispstat = value;
+            cupid_video_update_match(&gba->video);
+            return;
+
+        case REG_VCOUNT:
+            /** Read-only; ignore writes. */
+            return;
+
+        case REG_BG0CNT:
+            value &= 0xDFFF;
+            gba->video.bg[0].cnt = value;
+            break;
+        case REG_BG1CNT:
+            value &= 0xDFFF;
+            gba->video.bg[1].cnt = value;
+            break;
+        case REG_BG2CNT:
+            gba->video.bg[2].cnt = value;
+            break;
+        case REG_BG3CNT:
+            gba->video.bg[3].cnt = value;
+            break;
+
+        /** BG scroll (write-only, 9-bit). */
+        case REG_BG0HOFS:
+            gba->video.bg[0].hofs = value & 0x1FF;
+            break;
+        case REG_BG0VOFS:
+            gba->video.bg[0].vofs = value & 0x1FF;
+            break;
+        case REG_BG1HOFS:
+            gba->video.bg[1].hofs = value & 0x1FF;
+            break;
+        case REG_BG1VOFS:
+            gba->video.bg[1].vofs = value & 0x1FF;
+            break;
+        case REG_BG2HOFS:
+            gba->video.bg[2].hofs = value & 0x1FF;
+            break;
+        case REG_BG2VOFS:
+            gba->video.bg[2].vofs = value & 0x1FF;
+            break;
+        case REG_BG3HOFS:
+            gba->video.bg[3].hofs = value & 0x1FF;
+            break;
+        case REG_BG3VOFS:
+            gba->video.bg[3].vofs = value & 0x1FF;
+            break;
+
+        /** BG2 affine. */
+        case REG_BG2PA:
+            gba->video.bg[2].pa = (int16_t)value;
+            break;
+        case REG_BG2PB:
+            gba->video.bg[2].pb = (int16_t)value;
+            break;
+        case REG_BG2PC:
+            gba->video.bg[2].pc = (int16_t)value;
+            break;
+        case REG_BG2PD:
+            gba->video.bg[2].pd = (int16_t)value;
+            break;
+        case REG_BG2X_LO:
+            gba->video.bg[2].refx = (gba->video.bg[2].refx & 0xFFFF0000) | value;
+            gba->video.bg[2].sx = gba->video.bg[2].refx;
+            gba->video.pipeline.affine[0].writtenX = true;
+            break;
+        case REG_BG2X_HI:
+            gba->video.bg[2].refx = affine_high(gba->video.bg[2].refx, value);
+            gba->video.bg[2].sx = gba->video.bg[2].refx;
+            gba->video.pipeline.affine[0].writtenX = true;
+            break;
+        case REG_BG2Y_LO:
+            gba->video.bg[2].refy = (gba->video.bg[2].refy & 0xFFFF0000) | value;
+            gba->video.bg[2].sy = gba->video.bg[2].refy;
+            gba->video.pipeline.affine[0].writtenY = true;
+            break;
+        case REG_BG2Y_HI:
+            gba->video.bg[2].refy = affine_high(gba->video.bg[2].refy, value);
+            gba->video.bg[2].sy = gba->video.bg[2].refy;
+            gba->video.pipeline.affine[0].writtenY = true;
+            break;
+
+        /** BG3 affine. */
+        case REG_BG3PA:
+            gba->video.bg[3].pa = (int16_t)value;
+            break;
+        case REG_BG3PB:
+            gba->video.bg[3].pb = (int16_t)value;
+            break;
+        case REG_BG3PC:
+            gba->video.bg[3].pc = (int16_t)value;
+            break;
+        case REG_BG3PD:
+            gba->video.bg[3].pd = (int16_t)value;
+            break;
+        case REG_BG3X_LO:
+            gba->video.bg[3].refx = (gba->video.bg[3].refx & 0xFFFF0000) | value;
+            gba->video.bg[3].sx = gba->video.bg[3].refx;
+            gba->video.pipeline.affine[1].writtenX = true;
+            break;
+        case REG_BG3X_HI:
+            gba->video.bg[3].refx = affine_high(gba->video.bg[3].refx, value);
+            gba->video.bg[3].sx = gba->video.bg[3].refx;
+            gba->video.pipeline.affine[1].writtenX = true;
+            break;
+        case REG_BG3Y_LO:
+            gba->video.bg[3].refy = (gba->video.bg[3].refy & 0xFFFF0000) | value;
+            gba->video.bg[3].sy = gba->video.bg[3].refy;
+            gba->video.pipeline.affine[1].writtenY = true;
+            break;
+        case REG_BG3Y_HI:
+            gba->video.bg[3].refy = affine_high(gba->video.bg[3].refy, value);
+            gba->video.bg[3].sy = gba->video.bg[3].refy;
+            gba->video.pipeline.affine[1].writtenY = true;
+            break;
+
+        /** Windows. */
+        case REG_WIN0H:
+            gba->video.win.h[0][0] = value >> 8;
+            gba->video.win.h[0][1] = value & 0xFF;
+            break;
+        case REG_WIN1H:
+            gba->video.win.h[1][0] = value >> 8;
+            gba->video.win.h[1][1] = value & 0xFF;
+            break;
+        case REG_WIN0V:
+            gba->video.win.v[0][0] = value >> 8;
+            gba->video.win.v[0][1] = value & 0xFF;
+            break;
+        case REG_WIN1V:
+            gba->video.win.v[1][0] = value >> 8;
+            gba->video.win.v[1][1] = value & 0xFF;
+            break;
+        case REG_WININ:
+            value &= 0x3F3F;
+            gba->video.win.winin = value;
+            break;
+        case REG_WINOUT:
+            value &= 0x3F3F;
+            gba->video.win.winout = value;
+            break;
+
+        /** Mosaic (write-only). */
+        case REG_MOSAIC:
+            gba->video.mosaic = value;
+            break;
+
+        /** Blending. */
+        case REG_BLDCNT:
+            value &= 0x3FFF;
+            gba->video.blend.bldcnt = value;
+            break;
+        case REG_BLDALPHA:
+            value &= 0x1F1F;
+            gba->video.blend.bldalpha = value;
+            break;
+        case REG_BLDY:
+            gba->video.blend.bldy = value;
+            break;
+
+        /** AUDIO 0x060-0x0A6. */
+        case REG_SOUND1CNT_L:
+        case REG_SOUND1CNT_H:
+        case REG_SOUND1CNT_X:
+        case REG_SOUND2CNT_L:
+        case REG_SOUND2CNT_H:
+        case REG_SOUND3CNT_L:
+        case REG_SOUND3CNT_H:
+        case REG_SOUND3CNT_X:
+        case REG_SOUND4CNT_L:
+        case REG_SOUND4CNT_H:
+        case REG_SOUNDCNT_L:
+        case REG_SOUNDCNT_H:
+        case REG_SOUNDCNT_X:
+        case REG_SOUNDBIAS:
+            cupid_audio_write_register(&gba->audio, addr, value);
+            return;
+
+        /** Wave RAM; store raw and let audio handle it. */
+        case REG_WAVE_RAM0_LO:
+        case REG_WAVE_RAM0_HI:
+        case REG_WAVE_RAM1_LO:
+        case REG_WAVE_RAM1_HI:
+        case REG_WAVE_RAM2_LO:
+        case REG_WAVE_RAM2_HI:
+        case REG_WAVE_RAM3_LO:
+        case REG_WAVE_RAM3_HI:
+            cupid_audio_write_register(&gba->audio, addr, value);
+            break;
+
+        /* Halfword stores append independently. Complete word requests use the
+         * 32-bit dispatcher below, which appends once at the same bus deadline. */
+        case REG_FIFO_A_LO:
+        case REG_FIFO_A_HI:
+        case REG_FIFO_B_LO:
+        case REG_FIFO_B_HI:
+            fifo_store(gba, addr, value, 2);
+            return;
+
         /**
-         * IRQ enables and the VCOUNT target are writable; bits 6-7 are unused.
-         * Bits 0-2 (VBlank/HBlank/VCount flags) are read-only.
+         * DMA 0x0B0-0x0DE.
+         * SAD and DAD are write-only 32-bit assembled from two 16-bit writes.
+         * Each halfword write assembles the full 32-bit and routes through
+         * cupid_dma_write_sad/dad which apply per-channel address masks.
+         * CNT_LO routes through cupid_dma_write_cnt_lo (normalizes count).
          */
-        value = (gba->video.dispstat & 0x0007) | (value & 0xFF38);
-        gba->video.dispstat = value;
-        cupid_video_update_match(&gba->video);
-        return;
+        case REG_DMA0SAD_LO:
+            gba->memory.io[REG_DMA0SAD_LO >> 1] = value;
+            cupid_dma_write_sad(
+                gba, 0, (uint32_t)value | ((uint32_t)gba->memory.io[REG_DMA0SAD_HI >> 1] << 16));
+            return;
+        case REG_DMA0SAD_HI:
+            gba->memory.io[REG_DMA0SAD_HI >> 1] = value;
+            cupid_dma_write_sad(
+                gba, 0, (uint32_t)gba->memory.io[REG_DMA0SAD_LO >> 1] | ((uint32_t)value << 16));
+            return;
+        case REG_DMA0DAD_LO:
+            gba->memory.io[REG_DMA0DAD_LO >> 1] = value;
+            cupid_dma_write_dad(
+                gba, 0, (uint32_t)value | ((uint32_t)gba->memory.io[REG_DMA0DAD_HI >> 1] << 16));
+            return;
+        case REG_DMA0DAD_HI:
+            gba->memory.io[REG_DMA0DAD_HI >> 1] = value;
+            cupid_dma_write_dad(
+                gba, 0, (uint32_t)gba->memory.io[REG_DMA0DAD_LO >> 1] | ((uint32_t)value << 16));
+            return;
+        case REG_DMA0CNT_LO:
+            cupid_dma_write_cnt_lo(gba, 0, value & 0x3FFF);
+            return;
+        case REG_DMA0CNT_HI:
+            cupid_dma_write_cnt(gba, 0, value);
+            return;
 
-    case REG_VCOUNT:
-        /** Read-only; ignore writes. */
-        return;
+        case REG_DMA1SAD_LO:
+            gba->memory.io[REG_DMA1SAD_LO >> 1] = value;
+            cupid_dma_write_sad(
+                gba, 1, (uint32_t)value | ((uint32_t)gba->memory.io[REG_DMA1SAD_HI >> 1] << 16));
+            return;
+        case REG_DMA1SAD_HI:
+            gba->memory.io[REG_DMA1SAD_HI >> 1] = value;
+            cupid_dma_write_sad(
+                gba, 1, (uint32_t)gba->memory.io[REG_DMA1SAD_LO >> 1] | ((uint32_t)value << 16));
+            return;
+        case REG_DMA1DAD_LO:
+            gba->memory.io[REG_DMA1DAD_LO >> 1] = value;
+            cupid_dma_write_dad(
+                gba, 1, (uint32_t)value | ((uint32_t)gba->memory.io[REG_DMA1DAD_HI >> 1] << 16));
+            return;
+        case REG_DMA1DAD_HI:
+            gba->memory.io[REG_DMA1DAD_HI >> 1] = value;
+            cupid_dma_write_dad(
+                gba, 1, (uint32_t)gba->memory.io[REG_DMA1DAD_LO >> 1] | ((uint32_t)value << 16));
+            return;
+        case REG_DMA1CNT_LO:
+            cupid_dma_write_cnt_lo(gba, 1, value & 0x3FFF);
+            return;
+        case REG_DMA1CNT_HI:
+            cupid_dma_write_cnt(gba, 1, value);
+            return;
 
-    case REG_BG0CNT: value &= 0xDFFF; gba->video.bg[0].cnt = value; break;
-    case REG_BG1CNT: value &= 0xDFFF; gba->video.bg[1].cnt = value; break;
-    case REG_BG2CNT: gba->video.bg[2].cnt = value; break;
-    case REG_BG3CNT: gba->video.bg[3].cnt = value; break;
+        case REG_DMA2SAD_LO:
+            gba->memory.io[REG_DMA2SAD_LO >> 1] = value;
+            cupid_dma_write_sad(
+                gba, 2, (uint32_t)value | ((uint32_t)gba->memory.io[REG_DMA2SAD_HI >> 1] << 16));
+            return;
+        case REG_DMA2SAD_HI:
+            gba->memory.io[REG_DMA2SAD_HI >> 1] = value;
+            cupid_dma_write_sad(
+                gba, 2, (uint32_t)gba->memory.io[REG_DMA2SAD_LO >> 1] | ((uint32_t)value << 16));
+            return;
+        case REG_DMA2DAD_LO:
+            gba->memory.io[REG_DMA2DAD_LO >> 1] = value;
+            cupid_dma_write_dad(
+                gba, 2, (uint32_t)value | ((uint32_t)gba->memory.io[REG_DMA2DAD_HI >> 1] << 16));
+            return;
+        case REG_DMA2DAD_HI:
+            gba->memory.io[REG_DMA2DAD_HI >> 1] = value;
+            cupid_dma_write_dad(
+                gba, 2, (uint32_t)gba->memory.io[REG_DMA2DAD_LO >> 1] | ((uint32_t)value << 16));
+            return;
+        case REG_DMA2CNT_LO:
+            cupid_dma_write_cnt_lo(gba, 2, value & 0x3FFF);
+            return;
+        case REG_DMA2CNT_HI:
+            cupid_dma_write_cnt(gba, 2, value);
+            return;
 
-    /** BG scroll (write-only, 9-bit). */
-    case REG_BG0HOFS: gba->video.bg[0].hofs = value & 0x1FF; break;
-    case REG_BG0VOFS: gba->video.bg[0].vofs = value & 0x1FF; break;
-    case REG_BG1HOFS: gba->video.bg[1].hofs = value & 0x1FF; break;
-    case REG_BG1VOFS: gba->video.bg[1].vofs = value & 0x1FF; break;
-    case REG_BG2HOFS: gba->video.bg[2].hofs = value & 0x1FF; break;
-    case REG_BG2VOFS: gba->video.bg[2].vofs = value & 0x1FF; break;
-    case REG_BG3HOFS: gba->video.bg[3].hofs = value & 0x1FF; break;
-    case REG_BG3VOFS: gba->video.bg[3].vofs = value & 0x1FF; break;
+        case REG_DMA3SAD_LO:
+            gba->memory.io[REG_DMA3SAD_LO >> 1] = value;
+            cupid_dma_write_sad(
+                gba, 3, (uint32_t)value | ((uint32_t)gba->memory.io[REG_DMA3SAD_HI >> 1] << 16));
+            return;
+        case REG_DMA3SAD_HI:
+            gba->memory.io[REG_DMA3SAD_HI >> 1] = value;
+            cupid_dma_write_sad(
+                gba, 3, (uint32_t)gba->memory.io[REG_DMA3SAD_LO >> 1] | ((uint32_t)value << 16));
+            return;
+        case REG_DMA3DAD_LO:
+            gba->memory.io[REG_DMA3DAD_LO >> 1] = value;
+            cupid_dma_write_dad(
+                gba, 3, (uint32_t)value | ((uint32_t)gba->memory.io[REG_DMA3DAD_HI >> 1] << 16));
+            return;
+        case REG_DMA3DAD_HI:
+            gba->memory.io[REG_DMA3DAD_HI >> 1] = value;
+            cupid_dma_write_dad(
+                gba, 3, (uint32_t)gba->memory.io[REG_DMA3DAD_LO >> 1] | ((uint32_t)value << 16));
+            return;
+        case REG_DMA3CNT_LO:
+            cupid_dma_write_cnt_lo(gba, 3, value);
+            return; /** DMA3: 16-bit, no mask */
+        case REG_DMA3CNT_HI:
+            cupid_dma_write_cnt(gba, 3, value);
+            return;
 
-    /** BG2 affine. */
-    case REG_BG2PA: gba->video.bg[2].pa = (int16_t)value; break;
-    case REG_BG2PB: gba->video.bg[2].pb = (int16_t)value; break;
-    case REG_BG2PC: gba->video.bg[2].pc = (int16_t)value; break;
-    case REG_BG2PD: gba->video.bg[2].pd = (int16_t)value; break;
-    case REG_BG2X_LO:
-        gba->video.bg[2].refx = (gba->video.bg[2].refx & 0xFFFF0000) | value;
-        gba->video.bg[2].sx = gba->video.bg[2].refx;
-        break;
-    case REG_BG2X_HI:
-        gba->video.bg[2].refx = affine_high(gba->video.bg[2].refx, value);
-        gba->video.bg[2].sx = gba->video.bg[2].refx;
-        break;
-    case REG_BG2Y_LO:
-        gba->video.bg[2].refy = (gba->video.bg[2].refy & 0xFFFF0000) | value;
-        gba->video.bg[2].sy = gba->video.bg[2].refy;
-        break;
-    case REG_BG2Y_HI:
-        gba->video.bg[2].refy = affine_high(gba->video.bg[2].refy, value);
-        gba->video.bg[2].sy = gba->video.bg[2].refy;
-        break;
+        /** TIMERS 0x100-0x10E. */
+        case REG_TM0CNT_L:
+            cupid_timer_write_reload(gba, 0, value);
+            return;
+        case REG_TM1CNT_L:
+            cupid_timer_write_reload(gba, 1, value);
+            return;
+        case REG_TM2CNT_L:
+            cupid_timer_write_reload(gba, 2, value);
+            return;
+        case REG_TM3CNT_L:
+            cupid_timer_write_reload(gba, 3, value);
+            return;
 
-    /** BG3 affine. */
-    case REG_BG3PA: gba->video.bg[3].pa = (int16_t)value; break;
-    case REG_BG3PB: gba->video.bg[3].pb = (int16_t)value; break;
-    case REG_BG3PC: gba->video.bg[3].pc = (int16_t)value; break;
-    case REG_BG3PD: gba->video.bg[3].pd = (int16_t)value; break;
-    case REG_BG3X_LO:
-        gba->video.bg[3].refx = (gba->video.bg[3].refx & 0xFFFF0000) | value;
-        gba->video.bg[3].sx = gba->video.bg[3].refx;
-        break;
-    case REG_BG3X_HI:
-        gba->video.bg[3].refx = affine_high(gba->video.bg[3].refx, value);
-        gba->video.bg[3].sx = gba->video.bg[3].refx;
-        break;
-    case REG_BG3Y_LO:
-        gba->video.bg[3].refy = (gba->video.bg[3].refy & 0xFFFF0000) | value;
-        gba->video.bg[3].sy = gba->video.bg[3].refy;
-        break;
-    case REG_BG3Y_HI:
-        gba->video.bg[3].refy = affine_high(gba->video.bg[3].refy, value);
-        gba->video.bg[3].sy = gba->video.bg[3].refy;
-        break;
+        case REG_TM0CNT_H:
+            cupid_timer_write_control(gba, 0, value);
+            return;
+        case REG_TM1CNT_H:
+            cupid_timer_write_control(gba, 1, value);
+            return;
+        case REG_TM2CNT_H:
+            cupid_timer_write_control(gba, 2, value);
+            return;
+        case REG_TM3CNT_H:
+            cupid_timer_write_control(gba, 3, value);
+            return;
 
-    /** Windows. */
-    case REG_WIN0H:
-        gba->video.win.h[0][0] = value >> 8;
-        gba->video.win.h[0][1] = value & 0xFF;
-        break;
-    case REG_WIN1H:
-        gba->video.win.h[1][0] = value >> 8;
-        gba->video.win.h[1][1] = value & 0xFF;
-        break;
-    case REG_WIN0V:
-        gba->video.win.v[0][0] = value >> 8;
-        gba->video.win.v[0][1] = value & 0xFF;
-        break;
-    case REG_WIN1V:
-        gba->video.win.v[1][0] = value >> 8;
-        gba->video.win.v[1][1] = value & 0xFF;
-        break;
-    case REG_WININ:  value &= 0x3F3F; gba->video.win.winin = value;  break;
-    case REG_WINOUT: value &= 0x3F3F; gba->video.win.winout = value; break;
+        /** SIO 0x120-0x15A. */
+        case REG_SIOCNT:
+        case REG_RCNT:
+        case REG_SIODATA32_LO:
+        case REG_SIODATA32_HI:
+        case REG_SIOMULTI2:
+        case REG_SIOMULTI3:
+        case REG_SIOMLT_SEND:
+        case REG_JOYCNT:
+        case REG_JOY_RECV_LO:
+        case REG_JOY_RECV_HI:
+        case REG_JOY_TRANS_LO:
+        case REG_JOY_TRANS_HI:
+        case REG_JOYSTAT:
+            cupid_serial_write(&gba->serial, addr, value);
+            return;
 
-    /** Mosaic (write-only). */
-    case REG_MOSAIC:
-        break;
+        /** INPUT 0x130-0x132. */
+        case REG_KEYINPUT:
+            /** Read-only; ignore writes. */
+            return;
 
-    /** Blending. */
-    case REG_BLDCNT:   value &= 0x3FFF; gba->video.blend.bldcnt = value;   break;
-    case REG_BLDALPHA: value &= 0x1F1F; gba->video.blend.bldalpha = value;  break;
-    case REG_BLDY:     gba->video.blend.bldy = value;      break;
-
-    /** AUDIO 0x060-0x0A6. */
-    case REG_SOUND1CNT_L: case REG_SOUND1CNT_H: case REG_SOUND1CNT_X:
-    case REG_SOUND2CNT_L: case REG_SOUND2CNT_H:
-    case REG_SOUND3CNT_L: case REG_SOUND3CNT_H: case REG_SOUND3CNT_X:
-    case REG_SOUND4CNT_L: case REG_SOUND4CNT_H:
-    case REG_SOUNDCNT_L:  case REG_SOUNDCNT_H:  case REG_SOUNDCNT_X:
-    case REG_SOUNDBIAS:
-        cupid_audio_write_register(&gba->audio, addr, value);
-        return;
-
-    /** Wave RAM; store raw and let audio handle it. */
-    case REG_WAVE_RAM0_LO: case REG_WAVE_RAM0_HI:
-    case REG_WAVE_RAM1_LO: case REG_WAVE_RAM1_HI:
-    case REG_WAVE_RAM2_LO: case REG_WAVE_RAM2_HI:
-    case REG_WAVE_RAM3_LO: case REG_WAVE_RAM3_HI:
-        cupid_audio_write_register(&gba->audio, addr, value);
-        break;
-
-    /**
-     * FIFO writes: store32 splits into two 16-bit writes (LO then HI).
-     * Buffer the LO half, push the full 32-bit word on the HI write.
-     * This avoids double-pushing each DMA word.
-     */
-    case REG_FIFO_A_LO:
-        gba->memory.io[addr >> 1] = value;
-        return;
-    case REG_FIFO_A_HI:
-        cupid_audio_fifo_write(&gba->audio.chA,
-            (uint32_t)gba->memory.io[REG_FIFO_A_LO >> 1] | ((uint32_t)value << 16));
-        return;
-    case REG_FIFO_B_LO:
-        gba->memory.io[addr >> 1] = value;
-        return;
-    case REG_FIFO_B_HI:
-        cupid_audio_fifo_write(&gba->audio.chB,
-            (uint32_t)gba->memory.io[REG_FIFO_B_LO >> 1] | ((uint32_t)value << 16));
-        return;
-
-    /**
-     * DMA 0x0B0-0x0DE.
-     * SAD and DAD are write-only 32-bit assembled from two 16-bit writes.
-     * Each halfword write assembles the full 32-bit and routes through
-     * cupid_dma_write_sad/dad which apply per-channel address masks.
-     * CNT_LO routes through cupid_dma_write_cnt_lo (normalizes count).
-     */
-    case REG_DMA0SAD_LO:
-        gba->memory.io[REG_DMA0SAD_LO >> 1] = value;
-        cupid_dma_write_sad(gba, 0, (uint32_t)value | ((uint32_t)gba->memory.io[REG_DMA0SAD_HI >> 1] << 16));
-        return;
-    case REG_DMA0SAD_HI:
-        gba->memory.io[REG_DMA0SAD_HI >> 1] = value;
-        cupid_dma_write_sad(gba, 0, (uint32_t)gba->memory.io[REG_DMA0SAD_LO >> 1] | ((uint32_t)value << 16));
-        return;
-    case REG_DMA0DAD_LO:
-        gba->memory.io[REG_DMA0DAD_LO >> 1] = value;
-        cupid_dma_write_dad(gba, 0, (uint32_t)value | ((uint32_t)gba->memory.io[REG_DMA0DAD_HI >> 1] << 16));
-        return;
-    case REG_DMA0DAD_HI:
-        gba->memory.io[REG_DMA0DAD_HI >> 1] = value;
-        cupid_dma_write_dad(gba, 0, (uint32_t)gba->memory.io[REG_DMA0DAD_LO >> 1] | ((uint32_t)value << 16));
-        return;
-    case REG_DMA0CNT_LO: cupid_dma_write_cnt_lo(gba, 0, value & 0x3FFF); return;
-    case REG_DMA0CNT_HI: cupid_dma_write_cnt(gba, 0, value); return;
-
-    case REG_DMA1SAD_LO:
-        gba->memory.io[REG_DMA1SAD_LO >> 1] = value;
-        cupid_dma_write_sad(gba, 1, (uint32_t)value | ((uint32_t)gba->memory.io[REG_DMA1SAD_HI >> 1] << 16));
-        return;
-    case REG_DMA1SAD_HI:
-        gba->memory.io[REG_DMA1SAD_HI >> 1] = value;
-        cupid_dma_write_sad(gba, 1, (uint32_t)gba->memory.io[REG_DMA1SAD_LO >> 1] | ((uint32_t)value << 16));
-        return;
-    case REG_DMA1DAD_LO:
-        gba->memory.io[REG_DMA1DAD_LO >> 1] = value;
-        cupid_dma_write_dad(gba, 1, (uint32_t)value | ((uint32_t)gba->memory.io[REG_DMA1DAD_HI >> 1] << 16));
-        return;
-    case REG_DMA1DAD_HI:
-        gba->memory.io[REG_DMA1DAD_HI >> 1] = value;
-        cupid_dma_write_dad(gba, 1, (uint32_t)gba->memory.io[REG_DMA1DAD_LO >> 1] | ((uint32_t)value << 16));
-        return;
-    case REG_DMA1CNT_LO: cupid_dma_write_cnt_lo(gba, 1, value & 0x3FFF); return;
-    case REG_DMA1CNT_HI: cupid_dma_write_cnt(gba, 1, value); return;
-
-    case REG_DMA2SAD_LO:
-        gba->memory.io[REG_DMA2SAD_LO >> 1] = value;
-        cupid_dma_write_sad(gba, 2, (uint32_t)value | ((uint32_t)gba->memory.io[REG_DMA2SAD_HI >> 1] << 16));
-        return;
-    case REG_DMA2SAD_HI:
-        gba->memory.io[REG_DMA2SAD_HI >> 1] = value;
-        cupid_dma_write_sad(gba, 2, (uint32_t)gba->memory.io[REG_DMA2SAD_LO >> 1] | ((uint32_t)value << 16));
-        return;
-    case REG_DMA2DAD_LO:
-        gba->memory.io[REG_DMA2DAD_LO >> 1] = value;
-        cupid_dma_write_dad(gba, 2, (uint32_t)value | ((uint32_t)gba->memory.io[REG_DMA2DAD_HI >> 1] << 16));
-        return;
-    case REG_DMA2DAD_HI:
-        gba->memory.io[REG_DMA2DAD_HI >> 1] = value;
-        cupid_dma_write_dad(gba, 2, (uint32_t)gba->memory.io[REG_DMA2DAD_LO >> 1] | ((uint32_t)value << 16));
-        return;
-    case REG_DMA2CNT_LO: cupid_dma_write_cnt_lo(gba, 2, value & 0x3FFF); return;
-    case REG_DMA2CNT_HI: cupid_dma_write_cnt(gba, 2, value); return;
-
-    case REG_DMA3SAD_LO:
-        gba->memory.io[REG_DMA3SAD_LO >> 1] = value;
-        cupid_dma_write_sad(gba, 3, (uint32_t)value | ((uint32_t)gba->memory.io[REG_DMA3SAD_HI >> 1] << 16));
-        return;
-    case REG_DMA3SAD_HI:
-        gba->memory.io[REG_DMA3SAD_HI >> 1] = value;
-        cupid_dma_write_sad(gba, 3, (uint32_t)gba->memory.io[REG_DMA3SAD_LO >> 1] | ((uint32_t)value << 16));
-        return;
-    case REG_DMA3DAD_LO:
-        gba->memory.io[REG_DMA3DAD_LO >> 1] = value;
-        cupid_dma_write_dad(gba, 3, (uint32_t)value | ((uint32_t)gba->memory.io[REG_DMA3DAD_HI >> 1] << 16));
-        return;
-    case REG_DMA3DAD_HI:
-        gba->memory.io[REG_DMA3DAD_HI >> 1] = value;
-        cupid_dma_write_dad(gba, 3, (uint32_t)gba->memory.io[REG_DMA3DAD_LO >> 1] | ((uint32_t)value << 16));
-        return;
-    case REG_DMA3CNT_LO: cupid_dma_write_cnt_lo(gba, 3, value); return;  /** DMA3: 16-bit, no mask */
-    case REG_DMA3CNT_HI: cupid_dma_write_cnt(gba, 3, value); return;
-
-    /** TIMERS 0x100-0x10E. */
-    case REG_TM0CNT_L: cupid_timer_write_reload(gba, 0, value); return;
-    case REG_TM1CNT_L: cupid_timer_write_reload(gba, 1, value); return;
-    case REG_TM2CNT_L: cupid_timer_write_reload(gba, 2, value); return;
-    case REG_TM3CNT_L: cupid_timer_write_reload(gba, 3, value); return;
-
-    case REG_TM0CNT_H:
-        cupid_timer_write_control(gba, 0, value);
-        return;
-    case REG_TM1CNT_H:
-        cupid_timer_write_control(gba, 1, value);
-        return;
-    case REG_TM2CNT_H:
-        cupid_timer_write_control(gba, 2, value);
-        return;
-    case REG_TM3CNT_H:
-        cupid_timer_write_control(gba, 3, value);
-        return;
-
-    /** SIO 0x120-0x15A. */
-    case REG_SIOCNT:
-    case REG_RCNT:
-    case REG_SIODATA32_LO:
-    case REG_SIODATA32_HI:
-    case REG_SIOMULTI2:
-    case REG_SIOMULTI3:
-    case REG_SIOMLT_SEND:
-    case REG_JOYCNT:
-    case REG_JOY_RECV_LO:
-    case REG_JOY_RECV_HI:
-    case REG_JOY_TRANS_LO:
-    case REG_JOY_TRANS_HI:
-    case REG_JOYSTAT:
-        cupid_serial_write(&gba->serial, addr, value);
-        return;
-
-    /** INPUT 0x130-0x132. */
-    case REG_KEYINPUT:
-        /** Read-only; ignore writes. */
-        return;
-
-    case REG_KEYCNT:
-        value &= 0xC3FF;
-        /* Newly selected buttons have not contributed to a previous AND
-         * request. Keep the unmatched sentinel and the other held history
-         * so enabling a condition can observe buttons already pressed. */
-        if (gba->keysLast < 0x400) {
-            uint16_t newlySelected = value & ~gba->memory.io[REG_KEYCNT >> 1] & 0x3FF;
-            gba->keysLast &= ~newlySelected;
-        }
-        gba->memory.io[REG_KEYCNT >> 1] = value;
-        cupid_gba_test_keypad_irq(gba);
-        return;  /** already stored */
-
-    /** INTERRUPTS and SYSTEM 0x200-0x301. */
-    case REG_IE: case REG_IF: case REG_IME:
-        cupid_irq_write(gba, addr, value);
-        return;
-
-    case REG_WAITCNT:
-        value &= 0x5FFF;
-        cupid_memory_update_waitstates(gba, value);
-        break;
-
-    case REG_MAX:
-        /** Some bad interrupt libraries write here; ignore silently. */
-        break;
-
-    case REG_POSTFLG:
-        /**
-         * Only writable from the BIOS region on a real GBA.
-         * HALTCNT (0x301) is handled separately in cupid_io_write8.
-         */
-        if (gba->memory.activeRegion == 0x00) {  /** BIOS region */
-            if (gba->memory.io[addr >> 1]) {
-                if (value & 0x8000) {
-                    /** Stop (deep halt). */
-                    cupid_gba_stop(gba);
-                } else {
-                    cupid_gba_halt(gba);
-                }
+        case REG_KEYCNT:
+            value &= 0xC3FF;
+            /* Newly selected buttons have not contributed to a previous AND
+             * request. Keep the unmatched sentinel and the other held history
+             * so enabling a condition can observe buttons already pressed. */
+            if (gba->keysLast < 0x400) {
+                uint16_t newlySelected = value & ~gba->memory.io[REG_KEYCNT >> 1] & 0x3FF;
+                gba->keysLast &= ~newlySelected;
             }
-            value &= ~0x8000;
-        } else {
-            /** Writes from outside BIOS are ignored. */
-            return;
-        }
-        break;
+            gba->memory.io[REG_KEYCNT >> 1] = value;
+            cupid_gba_test_keypad_irq(gba);
+            return; /** already stored */
 
-    default:
-        /**
-         * Unknown or unused register; store anyway for compatibility,
-         * but only if it is below REG_MAX.
-         */
-        if (addr >= REG_MAX) {
+        /** INTERRUPTS and SYSTEM 0x200-0x301. */
+        case REG_IE:
+        case REG_IF:
+        case REG_IME:
+            cupid_irq_write(gba, addr, value);
             return;
-        }
-        break;
+
+        case REG_WAITCNT:
+            value &= 0x5FFF;
+            cupid_memory_update_waitstates(gba, value);
+            break;
+
+        case REG_MAX:
+            /** Some bad interrupt libraries write here; ignore silently. */
+            break;
+
+        case REG_POSTFLG:
+            /**
+             * Only writable from the BIOS region on a real GBA.
+             * HALTCNT (0x301) is handled separately in cupid_io_write8.
+             */
+            if (gba->memory.activeRegion == 0x00) { /** BIOS region */
+                if (gba->memory.io[addr >> 1]) {
+                    if (value & 0x8000) {
+                        /** Stop (deep halt). */
+                        cupid_gba_stop(gba);
+                    } else {
+                        cupid_gba_halt(gba);
+                    }
+                }
+                value &= ~0x8000;
+            } else {
+                /** Writes from outside BIOS are ignored. */
+                return;
+            }
+            break;
+
+        default:
+            /**
+             * Unknown or unused register; store anyway for compatibility,
+             * but only if it is below REG_MAX.
+             */
+            if (addr >= REG_MAX) {
+                return;
+            }
+            break;
     }
 
     /** Store the possibly modified value into the IO array. */
@@ -407,8 +547,34 @@ void cupid_io_write(struct CupidGBA* gba, uint32_t addr, uint16_t value) {
  * not repeat side effects. Other writes merge into their register halfword.
  * HALTCNT at 0x301 is byte-only.
  */
-void cupid_io_write8(struct CupidGBA* gba, uint32_t addr, uint8_t value) {
-    if (addr >= GBA_SIZE_IO) return;
+void cupid_io_write32(struct CupidGBA *gba, uint32_t addr, uint32_t value) {
+    if (addr < 0x01000000 && (addr & 0xFFFCu) == REG_MEMCNT_LO) {
+        cupid_io_write(gba, (addr & ~3u) + 2, (uint16_t)(value >> 16));
+        return;
+    }
+    if (addr >= GBA_SIZE_IO)
+        return;
+    addr &= ~3u;
+    if (addr == REG_FIFO_A_LO || addr == REG_FIFO_B_LO) {
+        fifo_store(gba, addr, value, 4);
+        return;
+    }
+    cupid_io_write(gba, addr, (uint16_t)value);
+    cupid_io_write(gba, addr + 2, (uint16_t)(value >> 16));
+}
+
+void cupid_io_write8(struct CupidGBA *gba, uint32_t addr, uint8_t value) {
+    if (ewram_wait_port(addr)) {
+        if (addr & 1)
+            cupid_memory_update_ewram_waitstates(gba, (uint16_t)value << 8);
+        return;
+    }
+    if (addr >= GBA_SIZE_IO)
+        return;
+    if (addr >= REG_FIFO_A_LO && addr <= REG_FIFO_B_HI + 1) {
+        fifo_store(gba, addr, value, 1);
+        return;
+    }
     if ((addr >= REG_SOUND1CNT_L && addr <= REG_SOUNDBIAS + 1) ||
         (addr >= REG_WAVE_RAM0_LO && addr <= REG_WAVE_RAM3_HI + 1)) {
         cupid_audio_write_register8(&gba->audio, addr, value);
@@ -440,18 +606,17 @@ void cupid_io_write8(struct CupidGBA* gba, uint32_t addr, uint8_t value) {
 
     /** HALTCNT is at odd byte 0x301; entering halt or stop. */
     if (addr == (REG_HALTCNT & 0x3FF)) {
-        if (gba->memory.activeRegion != GBA_REGION_BIOS) return;
+        if (gba->memory.activeRegion != GBA_REGION_BIOS)
+            return;
         if (value & 0x80) {
             cupid_gba_stop(gba);
         } else {
-            cupid_gba_halt(gba);
             if (gba->cpu.memory.timed) {
-                /* HALT accepts one internal clock after the register strobe.
-                 * Retain the IRQ sample from before that acceptance clock. */
-                gba->haltIRQSample = gba->irq.line;
-                gba->haltIRQSampleValid = true;
-                cupid_bus_advance(&gba->cpu, 1, false);
-            }
+                /* The next CPU fetch can complete before HALT freezes the
+                 * following bus request, including a branch's target refill. */
+                cupid_gba_request_halt(gba);
+            } else
+                cupid_gba_halt(gba);
         }
         return;
     }
@@ -470,141 +635,225 @@ void cupid_io_write8(struct CupidGBA* gba, uint32_t addr, uint8_t value) {
 /**
  * @brief Read a 16-bit IO register.
  */
-uint16_t cupid_io_read(struct CupidGBA* gba, uint32_t addr) {
+uint16_t cupid_io_read(struct CupidGBA *gba, uint32_t addr) {
+    /* Normal RAM mapping has low control value 0020h. Disable/remapping
+     * writes retain their existing unsupported behavior. */
+    if (addr < 0x01000000 && (addr & 0xFFFCu) == REG_MEMCNT_LO)
+        return (addr & 2) ? gba->memory.ewramWaitControl : 0x0020;
     if (addr >= GBA_SIZE_IO) {
         return (uint16_t)(cupid_memory_open_bus(&gba->cpu) >> ((addr & 2) * 8));
     }
     addr &= ~1u;
 
     switch (addr) {
-    /** Video. */
-    case REG_DISPCNT:   return gba->memory.io[addr >> 1];
-    case REG_GREENSWAP: return gba->memory.io[addr >> 1];
-    case REG_DISPSTAT:  return gba->video.dispstat;
-    case REG_VCOUNT:    return gba->video.vcount;
+        /** Video. */
+        case REG_DISPCNT:
+            return gba->memory.io[addr >> 1];
+        case REG_GREENSWAP:
+            return gba->memory.io[addr >> 1];
+        case REG_DISPSTAT:
+            return gba->video.dispstat;
+        case REG_VCOUNT:
+            return gba->video.vcount;
 
-    case REG_BG0CNT:    return gba->video.bg[0].cnt;
-    case REG_BG1CNT:    return gba->video.bg[1].cnt;
-    case REG_BG2CNT:    return gba->video.bg[2].cnt;
-    case REG_BG3CNT:    return gba->video.bg[3].cnt;
+        case REG_BG0CNT:
+            return gba->video.bg[0].cnt;
+        case REG_BG1CNT:
+            return gba->video.bg[1].cnt;
+        case REG_BG2CNT:
+            return gba->video.bg[2].cnt;
+        case REG_BG3CNT:
+            return gba->video.bg[3].cnt;
 
-    /** Write-only video registers expose the last value on the bus. */
-    case REG_BG0HOFS: case REG_BG0VOFS:
-    case REG_BG1HOFS: case REG_BG1VOFS:
-    case REG_BG2HOFS: case REG_BG2VOFS:
-    case REG_BG3HOFS: case REG_BG3VOFS:
-    case REG_BG2PA: case REG_BG2PB: case REG_BG2PC: case REG_BG2PD:
-    case REG_BG2X_LO: case REG_BG2X_HI: case REG_BG2Y_LO: case REG_BG2Y_HI:
-    case REG_BG3PA: case REG_BG3PB: case REG_BG3PC: case REG_BG3PD:
-    case REG_BG3X_LO: case REG_BG3X_HI: case REG_BG3Y_LO: case REG_BG3Y_HI:
-    case REG_WIN0H: case REG_WIN1H: case REG_WIN0V: case REG_WIN1V:
-    case REG_MOSAIC:
-    case REG_BLDY:
-        return (uint16_t)(cupid_memory_open_bus(&gba->cpu) >> ((addr & 2) * 8));
+        /** Write-only video registers expose the last value on the bus. */
+        case REG_BG0HOFS:
+        case REG_BG0VOFS:
+        case REG_BG1HOFS:
+        case REG_BG1VOFS:
+        case REG_BG2HOFS:
+        case REG_BG2VOFS:
+        case REG_BG3HOFS:
+        case REG_BG3VOFS:
+        case REG_BG2PA:
+        case REG_BG2PB:
+        case REG_BG2PC:
+        case REG_BG2PD:
+        case REG_BG2X_LO:
+        case REG_BG2X_HI:
+        case REG_BG2Y_LO:
+        case REG_BG2Y_HI:
+        case REG_BG3PA:
+        case REG_BG3PB:
+        case REG_BG3PC:
+        case REG_BG3PD:
+        case REG_BG3X_LO:
+        case REG_BG3X_HI:
+        case REG_BG3Y_LO:
+        case REG_BG3Y_HI:
+        case REG_WIN0H:
+        case REG_WIN1H:
+        case REG_WIN0V:
+        case REG_WIN1V:
+        case REG_MOSAIC:
+        case REG_BLDY:
+            return (uint16_t)(cupid_memory_open_bus(&gba->cpu) >> ((addr & 2) * 8));
 
-    case REG_WININ:    return gba->memory.io[addr >> 1];
-    case REG_WINOUT:   return gba->memory.io[addr >> 1];
-    case REG_BLDCNT:   return gba->memory.io[addr >> 1];
-    case REG_BLDALPHA: return gba->memory.io[addr >> 1];
+        case REG_WININ:
+            return gba->memory.io[addr >> 1];
+        case REG_WINOUT:
+            return gba->memory.io[addr >> 1];
+        case REG_BLDCNT:
+            return gba->memory.io[addr >> 1];
+        case REG_BLDALPHA:
+            return gba->memory.io[addr >> 1];
 
-    /** Audio. */
-    case REG_SOUND1CNT_L: case REG_SOUND1CNT_H: case REG_SOUND1CNT_X:
-    case REG_SOUND2CNT_L: case REG_SOUND2CNT_H:
-    case REG_SOUND3CNT_L: case REG_SOUND3CNT_H: case REG_SOUND3CNT_X:
-    case REG_SOUND4CNT_L: case REG_SOUND4CNT_H:
-    case REG_SOUNDCNT_L: case REG_SOUNDCNT_H: case REG_SOUNDCNT_X:
-    case REG_SOUNDBIAS:
-        return cupid_audio_read_register(&gba->audio, addr);
+        /** Audio. */
+        case REG_SOUND1CNT_L:
+        case REG_SOUND1CNT_H:
+        case REG_SOUND1CNT_X:
+        case REG_SOUND2CNT_L:
+        case REG_SOUND2CNT_H:
+        case REG_SOUND3CNT_L:
+        case REG_SOUND3CNT_H:
+        case REG_SOUND3CNT_X:
+        case REG_SOUND4CNT_L:
+        case REG_SOUND4CNT_H:
+        case REG_SOUNDCNT_L:
+        case REG_SOUNDCNT_H:
+        case REG_SOUNDCNT_X:
+        case REG_SOUNDBIAS:
+            return cupid_audio_read_register(&gba->audio, addr);
 
-    /** Wave RAM. */
-    case REG_WAVE_RAM0_LO: case REG_WAVE_RAM0_HI:
-    case REG_WAVE_RAM1_LO: case REG_WAVE_RAM1_HI:
-    case REG_WAVE_RAM2_LO: case REG_WAVE_RAM2_HI:
-    case REG_WAVE_RAM3_LO: case REG_WAVE_RAM3_HI:
-        return cupid_audio_read_register(&gba->audio, addr);
+        /** Wave RAM. */
+        case REG_WAVE_RAM0_LO:
+        case REG_WAVE_RAM0_HI:
+        case REG_WAVE_RAM1_LO:
+        case REG_WAVE_RAM1_HI:
+        case REG_WAVE_RAM2_LO:
+        case REG_WAVE_RAM2_HI:
+        case REG_WAVE_RAM3_LO:
+        case REG_WAVE_RAM3_HI:
+            return cupid_audio_read_register(&gba->audio, addr);
 
-    /** FIFO is write-only and exposes the existing bus value. */
-    case REG_FIFO_A_LO: case REG_FIFO_A_HI:
-    case REG_FIFO_B_LO: case REG_FIFO_B_HI:
-        return (uint16_t)(cupid_memory_open_bus(&gba->cpu) >> ((addr & 2) * 8));
+        /** FIFO is write-only and exposes the existing bus value. */
+        case REG_FIFO_A_LO:
+        case REG_FIFO_A_HI:
+        case REG_FIFO_B_LO:
+        case REG_FIFO_B_HI:
+            return (uint16_t)(cupid_memory_open_bus(&gba->cpu) >> ((addr & 2) * 8));
 
-    /** DMA. */
-    /** DMA SAD/DAD are write-only. */
-    case REG_DMA0SAD_LO: case REG_DMA0SAD_HI:
-    case REG_DMA0DAD_LO: case REG_DMA0DAD_HI:
-    case REG_DMA1SAD_LO: case REG_DMA1SAD_HI:
-    case REG_DMA1DAD_LO: case REG_DMA1DAD_HI:
-    case REG_DMA2SAD_LO: case REG_DMA2SAD_HI:
-    case REG_DMA2DAD_LO: case REG_DMA2DAD_HI:
-    case REG_DMA3SAD_LO: case REG_DMA3SAD_HI:
-    case REG_DMA3DAD_LO: case REG_DMA3DAD_HI:
-        return (uint16_t)(cupid_memory_open_bus(&gba->cpu) >> ((addr & 2) * 8));
+        /** DMA. */
+        /** DMA SAD/DAD are write-only. */
+        case REG_DMA0SAD_LO:
+        case REG_DMA0SAD_HI:
+        case REG_DMA0DAD_LO:
+        case REG_DMA0DAD_HI:
+        case REG_DMA1SAD_LO:
+        case REG_DMA1SAD_HI:
+        case REG_DMA1DAD_LO:
+        case REG_DMA1DAD_HI:
+        case REG_DMA2SAD_LO:
+        case REG_DMA2SAD_HI:
+        case REG_DMA2DAD_LO:
+        case REG_DMA2DAD_HI:
+        case REG_DMA3SAD_LO:
+        case REG_DMA3SAD_HI:
+        case REG_DMA3DAD_LO:
+        case REG_DMA3DAD_HI:
+            return (uint16_t)(cupid_memory_open_bus(&gba->cpu) >> ((addr & 2) * 8));
 
-    /** DMA CNT_LO is write-only; reads return 0. */
-    case REG_DMA0CNT_LO: case REG_DMA1CNT_LO:
-    case REG_DMA2CNT_LO: case REG_DMA3CNT_LO:
-        return 0;
+        /** DMA CNT_LO is write-only; reads return 0. */
+        case REG_DMA0CNT_LO:
+        case REG_DMA1CNT_LO:
+        case REG_DMA2CNT_LO:
+        case REG_DMA3CNT_LO:
+            return 0;
 
-    /** DMA CNT_HI is readable (enable bit, etc.). */
-    case REG_DMA0CNT_HI: case REG_DMA1CNT_HI:
-    case REG_DMA2CNT_HI: case REG_DMA3CNT_HI:
-        return gba->memory.io[addr >> 1];
+        /** DMA CNT_HI is readable (enable bit, etc.). */
+        case REG_DMA0CNT_HI:
+        case REG_DMA1CNT_HI:
+        case REG_DMA2CNT_HI:
+        case REG_DMA3CNT_HI:
+            return gba->memory.io[addr >> 1];
 
-    /** Timers. */
-    case REG_TM0CNT_L: return cupid_timer_read_counter(gba, 0);
-    case REG_TM1CNT_L: return cupid_timer_read_counter(gba, 1);
-    case REG_TM2CNT_L: return cupid_timer_read_counter(gba, 2);
-    case REG_TM3CNT_L: return cupid_timer_read_counter(gba, 3);
-    case REG_TM0CNT_H: case REG_TM1CNT_H:
-    case REG_TM2CNT_H: case REG_TM3CNT_H:
-        return gba->memory.io[addr >> 1];
+        /** Timers. */
+        case REG_TM0CNT_L:
+            return cupid_timer_read_counter(gba, 0);
+        case REG_TM1CNT_L:
+            return cupid_timer_read_counter(gba, 1);
+        case REG_TM2CNT_L:
+            return cupid_timer_read_counter(gba, 2);
+        case REG_TM3CNT_L:
+            return cupid_timer_read_counter(gba, 3);
+        case REG_TM0CNT_H:
+        case REG_TM1CNT_H:
+        case REG_TM2CNT_H:
+        case REG_TM3CNT_H:
+            return gba->memory.io[addr >> 1];
 
-    /** SIO. */
-    case REG_SIOCNT:
-    case REG_RCNT:
-    case REG_SIODATA32_LO: case REG_SIODATA32_HI:
-    case REG_SIOMULTI2: case REG_SIOMULTI3:
-    case REG_SIOMLT_SEND:
-    case REG_JOYCNT:
-    case REG_JOY_RECV_LO: case REG_JOY_RECV_HI:
-    case REG_JOY_TRANS_LO: case REG_JOY_TRANS_HI:
-    case REG_JOYSTAT:
-        return cupid_serial_read(&gba->serial, addr);
+        /** SIO. */
+        case REG_SIOCNT:
+        case REG_RCNT:
+        case REG_SIODATA32_LO:
+        case REG_SIODATA32_HI:
+        case REG_SIOMULTI2:
+        case REG_SIOMULTI3:
+        case REG_SIOMLT_SEND:
+        case REG_JOYCNT:
+        case REG_JOY_RECV_LO:
+        case REG_JOY_RECV_HI:
+        case REG_JOY_TRANS_LO:
+        case REG_JOY_TRANS_HI:
+        case REG_JOYSTAT:
+            return cupid_serial_read(&gba->serial, addr);
 
-    /** Input. */
-    case REG_KEYINPUT: {
-        /**
-         * Return active-low key state (bit=0 means pressed).
-         * gba->keysActive holds pressed keys as set bits.
-         * GBA hardware returns ~pressed & 0x3FF.
-         */
-        gba->memory.io[REG_KEYINPUT >> 1] = 0x03FF ^ gba->keysActive;
-        return gba->memory.io[REG_KEYINPUT >> 1];
-    }
-    case REG_KEYCNT:
-        return gba->memory.io[addr >> 1];
+        /** Input. */
+        case REG_KEYINPUT: {
+            /**
+             * Return active-low key state (bit=0 means pressed).
+             * gba->keysActive holds pressed keys as set bits.
+             * GBA hardware returns ~pressed & 0x3FF.
+             */
+            gba->memory.io[REG_KEYINPUT >> 1] = 0x03FF ^ gba->keysActive;
+            return gba->memory.io[REG_KEYINPUT >> 1];
+        }
+        case REG_KEYCNT:
+            return gba->memory.io[addr >> 1];
 
-    /** Interrupts and system. */
-    case REG_IE:       return gba->ie;
-    case REG_IF:       return gba->irqf;
-    case REG_IME:      return gba->ime;
-    case REG_WAITCNT:  return gba->memory.io[addr >> 1];
-    case REG_POSTFLG:  return gba->memory.io[addr >> 1];
+        /** Interrupts and system. */
+        case REG_IE:
+            return gba->ie;
+        case REG_IF:
+            return gba->irqf;
+        case REG_IME:
+            return gba->ime;
+        case REG_WAITCNT:
+            return gba->memory.io[addr >> 1];
+        case REG_POSTFLG:
+            return gba->memory.io[addr >> 1];
 
-    case REG_MAX:
-        /** Some bad interrupt libraries read here; return 0. */
-        return 0;
+        case REG_MAX:
+            /** Some bad interrupt libraries read here; return 0. */
+            return 0;
 
-    /** Unused registers within the IO range. */
-    case 0x066: case 0x06A: case 0x06E:
-    case 0x076: case 0x07A: case 0x07E:
-    case 0x086: case 0x08A:
-    case 0x136: case 0x142: case 0x15A:
-    case 0x206: case 0x302:
-        return 0;
+        /** Unused registers within the IO range. */
+        case 0x066:
+        case 0x06A:
+        case 0x06E:
+        case 0x076:
+        case 0x07A:
+        case 0x07E:
+        case 0x086:
+        case 0x08A:
+        case 0x136:
+        case 0x142:
+        case 0x15A:
+        case 0x206:
+        case 0x302:
+            return 0;
 
-    default:
-        /** Unmapped I/O does not drive the bus. */
-        return (uint16_t)(cupid_memory_open_bus(&gba->cpu) >> ((addr & 2) * 8));
+        default:
+            /** Unmapped I/O does not drive the bus. */
+            return (uint16_t)(cupid_memory_open_bus(&gba->cpu) >> ((addr & 2) * 8));
     }
 }

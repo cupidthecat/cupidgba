@@ -57,7 +57,7 @@ def main():
         with tempfile.TemporaryDirectory(prefix="cupidgba-rom-") as directory:
             vram, io = [Path(directory) / name for name in ("vram.bin", "io.bin")]
             # An external BIOS executes its startup animation before the test.
-            frames = 400 if args.bios else 20
+            frames = case.get("external_frames", 400) if args.bios else case.get("frames", 20)
             command = [str(args.runner.resolve()), str(path.resolve()), "--frames", str(frames),
                        "--dump-vram", str(vram), "--dump-io", str(io)]
             if args.bios:

@@ -1,0 +1,289 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "name": "halt-dma-irq",
+      "path": "Interactions/Halt_DMA_IRQ.gba",
+      "sha256": "188cf803a33a13e729528e0b99b7b3eba3b98bab538642f6585321a2f7a4e73d",
+      "checkpoint": "0x8000220",
+      "terminal": "0x8000398",
+      "observations": [
+        {
+          "address": "0x80001f8",
+          "instruction": "0xe3550074",
+          "mode": "arm",
+          "register": 5,
+          "value": "0x74"
+        },
+        {
+          "address": "0x8000200",
+          "instruction": "0xe3580087",
+          "mode": "arm",
+          "register": 8,
+          "value": "0x87"
+        }
+      ]
+    },
+    {
+      "name": "halt-dma-irq-read-oam",
+      "path": "Interactions/Halt_DMA_IRQ_Read_OAM.gba",
+      "sha256": "bdf35d0553187f8cfc676020d1381b322fa8c91ebe545bd71107dc6175215218",
+      "checkpoint": "0x8000288",
+      "terminal": "0x8000400",
+      "observations": [
+        {
+          "address": "0x8000254",
+          "instruction": "0xe3550074",
+          "mode": "arm",
+          "register": 5,
+          "value": "0x74"
+        },
+        {
+          "address": "0x8000268",
+          "instruction": "0xe35800dd",
+          "mode": "arm",
+          "register": 8,
+          "value": "0xdd"
+        }
+      ]
+    },
+    {
+      "name": "halt-irq",
+      "path": "Interactions/Halt_IRQ.gba",
+      "sha256": "25aa90cf62e3d8c338f62380e596b91f8b9a2442cf907d37344323166c4c024c",
+      "checkpoint": "0x8000210",
+      "terminal": "0x8000388",
+      "observations": [
+        {
+          "address": "0x80001e8",
+          "instruction": "0xe3550074",
+          "mode": "arm",
+          "register": 5,
+          "value": "0x74"
+        },
+        {
+          "address": "0x80001f0",
+          "instruction": "0xe3580055",
+          "mode": "arm",
+          "register": 8,
+          "value": "0x55"
+        }
+      ]
+    },
+    {
+      "name": "internal-cycle-dma-irq",
+      "path": "Interactions/Internal_Cycle_DMA_IRQ.gba",
+      "sha256": "00b52268c8cd6f56de2fa1c19935ba848950d6cc5a867253c9c9ce46494e1d78",
+      "checkpoint": "0x8000224",
+      "terminal": "0x800039c",
+      "observations": [
+        {
+          "address": "0x800020a",
+          "instruction": "0x2d0a",
+          "mode": "thumb",
+          "register": 5,
+          "value": "0xa"
+        }
+      ]
+    },
+    {
+      "name": "internal-cycle-dma-irq-7",
+      "path": "Interactions/Internal_Cycle_DMA_IRQ_7.gba",
+      "sha256": "95a6457fd52c96c00165f8b4584128b0c39040f599178bc580505db254880762",
+      "checkpoint": "0x8000224",
+      "terminal": "0x800039c",
+      "observations": [
+        {
+          "address": "0x800020a",
+          "instruction": "0x2d08",
+          "mode": "thumb",
+          "register": 5,
+          "value": "0x8"
+        }
+      ]
+    },
+    {
+      "name": "internal-cycle-dma-irq-br",
+      "path": "Interactions/Internal_Cycle_DMA_IRQ_br.gba",
+      "sha256": "c00e7d5890e33b85b20f460e215c73b85ea318304b6fe5fb6bbe47c5add40b1a",
+      "checkpoint": "0x8000230",
+      "terminal": "0x80003a8",
+      "observations": [
+        {
+          "address": "0x8000218",
+          "instruction": "0x2d16",
+          "mode": "thumb",
+          "register": 5,
+          "value": "0x16"
+        }
+      ]
+    },
+    {
+      "name": "internal-cycle-dma-irq-br1-iwram",
+      "path": "Interactions/Internal_Cycle_DMA_IRQ_br1_IWRAM.gba",
+      "sha256": "4912674bc2c93e4b47b6c65cc9f80b24e3d6a65ee6da05c95a8eee77102c3d20",
+      "checkpoint": "0x8000278",
+      "terminal": "0x80003f0",
+      "observations": [
+        {
+          "address": "0x800025e",
+          "instruction": "0x2d26",
+          "mode": "thumb",
+          "register": 5,
+          "value": "0x26"
+        }
+      ]
+    },
+    {
+      "name": "internal-cycle-dma-irq-br-pre",
+      "path": "Interactions/Internal_Cycle_DMA_IRQ_Br_pre.gba",
+      "sha256": "9ee7494d7a31638f936af8be187065751c8c53bf2c41e92836ae4e38ecb912d9",
+      "checkpoint": "0x8000238",
+      "terminal": "0x80003b0",
+      "observations": [
+        {
+          "address": "0x800021e",
+          "instruction": "0x2d1e",
+          "mode": "thumb",
+          "register": 5,
+          "value": "0x1e"
+        }
+      ]
+    },
+    {
+      "name": "internal-cycle-dma-irq-br-pre-tim",
+      "path": "Interactions/Internal_Cycle_DMA_IRQ_Br_pre_tim.gba",
+      "sha256": "05ba316acbaa534cb54cb3d84260a67391652e5b429d497ce8e369b8d2130f2f",
+      "checkpoint": "0x8000238",
+      "terminal": "0x80003b0",
+      "observations": [
+        {
+          "address": "0x8000220",
+          "instruction": "0x2d17",
+          "mode": "thumb",
+          "register": 5,
+          "value": "0x17"
+        }
+      ]
+    },
+    {
+      "name": "internal-cycle-dma-irq-ldr-iwram",
+      "path": "Interactions/Internal_Cycle_DMA_IRQ_ldr_IWRAM.gba",
+      "sha256": "0209597835f5300311907077771ba8760d2dcc86382f72df88f767534087b6f6",
+      "checkpoint": "0x800027c",
+      "terminal": "0x80003f4",
+      "observations": [
+        {
+          "address": "0x8000262",
+          "instruction": "0x2d22",
+          "mode": "thumb",
+          "register": 5,
+          "value": "0x22"
+        }
+      ]
+    },
+    {
+      "name": "internal-cycle-dma-irq-nop-iwram",
+      "path": "Interactions/Internal_Cycle_DMA_IRQ_nop_IWRAM.gba",
+      "sha256": "7e572312fe72168d28aa4de479c3d1e93286818d1115ad9b597baed528bd48f0",
+      "checkpoint": "0x800027c",
+      "terminal": "0x80003f4",
+      "observations": [
+        {
+          "address": "0x8000262",
+          "instruction": "0x2d28",
+          "mode": "thumb",
+          "register": 5,
+          "value": "0x28"
+        }
+      ]
+    },
+    {
+      "name": "internal-cycle-dma-irq-st",
+      "path": "Interactions/Internal_Cycle_DMA_IRQ_ST.gba",
+      "sha256": "f59f160f3719aae6fc23ae2c2c8de5c96f97842e28a571d52752972c1d8be693",
+      "checkpoint": "0x8000224",
+      "terminal": "0x800039c",
+      "observations": [
+        {
+          "address": "0x800020a",
+          "instruction": "0x2d0a",
+          "mode": "thumb",
+          "register": 5,
+          "value": "0xa"
+        }
+      ]
+    },
+    {
+      "name": "internal-cycle-dma-irq-st-p3",
+      "path": "Interactions/Internal_Cycle_DMA_IRQ_ST_p3.gba",
+      "sha256": "4392cbc46cf22ccac2eae0314fc04c2cee053600fea01a4ca80465a92e6b8fe4",
+      "checkpoint": "0x8000224",
+      "terminal": "0x800039c",
+      "observations": [
+        {
+          "address": "0x800020a",
+          "instruction": "0x2d0a",
+          "mode": "thumb",
+          "register": 5,
+          "value": "0xa"
+        }
+      ]
+    },
+    {
+      "name": "internal-cycle-dma-mul",
+      "path": "Interactions/Internal_Cycle_DMA_Mul.gba",
+      "sha256": "09d4bc954ed6448827c1cc40e52b48f4b3c4a8f83b5a3227ceea5568f12922aa",
+      "checkpoint": "0x8000208",
+      "terminal": "0x8000380",
+      "observations": [
+        {
+          "address": "0x80001e0",
+          "instruction": "0xe3500026",
+          "mode": "arm",
+          "register": 0,
+          "value": "0x26"
+        }
+      ]
+    },
+    {
+      "name": "internal-cycle-dma-mul-irq",
+      "path": "Interactions/Internal_Cycle_DMA_MUL_IRQ.gba",
+      "sha256": "2f4500e26eb416b4ca40dc3e6320ff7e2a159432d97571ec7ee84ea487112feb",
+      "checkpoint": "0x8000244",
+      "terminal": "0x80003bc",
+      "observations": [
+        {
+          "address": "0x8000220",
+          "instruction": "0x2d16",
+          "mode": "thumb",
+          "register": 5,
+          "value": "0x16"
+        },
+        {
+          "address": "0x8000226",
+          "instruction": "0x29bc",
+          "mode": "thumb",
+          "register": 1,
+          "value": "0xbc"
+        }
+      ]
+    },
+    {
+      "name": "internal-cycle-dma-tim-br-pre",
+      "path": "Interactions/Internal_Cycle_DMA_TIM_Br_pre.gba",
+      "sha256": "05ba316acbaa534cb54cb3d84260a67391652e5b429d497ce8e369b8d2130f2f",
+      "checkpoint": "0x8000238",
+      "terminal": "0x80003b0",
+      "observations": [
+        {
+          "address": "0x8000220",
+          "instruction": "0x2d17",
+          "mode": "thumb",
+          "register": 5,
+          "value": "0x17"
+        }
+      ]
+    }
+  ]
+}

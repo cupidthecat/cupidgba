@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #define SDL_MAIN_HANDLED
+#include "../test.h"
 #include "cupid/platform.h"
 #include "cupid/platform/peripherals.h"
-#include "../test.h"
 
 static void configuration_and_strict_input_parsing(void) {
     int mode = 9;
@@ -11,7 +11,8 @@ static void configuration_and_strict_input_parsing(void) {
     CHECK(cupid_platform_peripheral_mode("off", &mode) && mode == 0);
     CHECK(!cupid_platform_peripheral_mode("ON", &mode) && mode == 0);
     uint8_t level = 19;
-    const char* invalid[] = {"", "-1", "+1", "256", "1.5", " 1", "1 ", "0x40", "999999999999999999999"};
+    const char *invalid[] = {
+        "", "-1", "+1", "256", "1.5", " 1", "1 ", "0x40", "999999999999999999999"};
     for (unsigned i = 0; i < sizeof(invalid) / sizeof(*invalid); i++) {
         CHECK(!cupid_platform_solar_level(invalid[i], &level) && level == 19);
     }
@@ -20,7 +21,7 @@ static void configuration_and_strict_input_parsing(void) {
         snprintf(text, sizeof(text), "%u", value);
         CHECK(cupid_platform_solar_level(text, &level) && level == value);
     }
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba);
     cupid_gba_create(gba);
     cupid_cartridge_enable_rtc(gba, true);
@@ -31,26 +32,30 @@ static void configuration_and_strict_input_parsing(void) {
     CHECK(gba->cartridge.solar.threshold == 182);
     CHECK(gba->cartridge.gyroPresent && gba->cartridge.gyro.sample == 0xABC);
     CHECK(gba->cartridge.tiltPresent && gba->cartridge.tilt.inputX == 0x123 &&
-        gba->cartridge.tilt.inputY == 0xDEF);
-    const struct CupidPlatformPeripherals automatic = {-1, -1, 255, -1, CUPID_GYRO_NEUTRAL,
-        -1, CUPID_TILT_NEUTRAL, CUPID_TILT_NEUTRAL};
+          gba->cartridge.tilt.inputY == 0xDEF);
+    const struct CupidPlatformPeripherals automatic = {
+        -1, -1, 255, -1, CUPID_GYRO_NEUTRAL, -1, CUPID_TILT_NEUTRAL, CUPID_TILT_NEUTRAL};
     cupid_platform_peripherals_configure(gba, &automatic);
-    CHECK(gba->cartridge.solarPresent && gba->cartridge.rumblePresent && !gba->cartridge.solar.threshold);
+    CHECK(gba->cartridge.solarPresent && gba->cartridge.rumblePresent &&
+          !gba->cartridge.solar.threshold);
     CHECK(gba->cartridge.gyroPresent && gba->cartridge.gyro.sample == CUPID_GYRO_NEUTRAL);
     CHECK(gba->cartridge.tiltPresent && gba->cartridge.tilt.inputX == CUPID_TILT_NEUTRAL &&
-        gba->cartridge.tilt.inputY == CUPID_TILT_NEUTRAL);
+          gba->cartridge.tilt.inputY == CUPID_TILT_NEUTRAL);
     const struct CupidPlatformPeripherals disabled = {0, 0, 0, 0, 0, 0, 0, 0};
     cupid_platform_peripherals_configure(gba, &disabled);
-    CHECK(!gba->cartridge.solarPresent && !gba->cartridge.rumblePresent && gba->cartridge.rtcPresent);
+    CHECK(!gba->cartridge.solarPresent && !gba->cartridge.rumblePresent &&
+          gba->cartridge.rtcPresent);
     CHECK(!gba->cartridge.gyroPresent && !gba->cartridge.gyro.sample);
-    CHECK(!gba->cartridge.tiltPresent && !gba->cartridge.tilt.inputX && !gba->cartridge.tilt.inputY);
+    CHECK(!gba->cartridge.tiltPresent && !gba->cartridge.tilt.inputX &&
+          !gba->cartridge.tilt.inputY);
     cupid_gba_destroy(gba);
     free(gba);
 }
 
 static void gyro_input_parsing_and_live_controls(void) {
     uint16_t sample = 19;
-    const char* invalid[] = {"", "-1", "+1", "4096", "1.5", " 1", "1 ", "0x6c0", "999999999999999999999"};
+    const char *invalid[] = {
+        "", "-1", "+1", "4096", "1.5", " 1", "1 ", "0x6c0", "999999999999999999999"};
     for (unsigned i = 0; i < sizeof(invalid) / sizeof(*invalid); i++)
         CHECK(!cupid_platform_gyro_sample(invalid[i], &sample) && sample == 19);
     for (unsigned value = 0; value < 4096; value++) {
@@ -59,7 +64,7 @@ static void gyro_input_parsing_and_live_controls(void) {
         CHECK(cupid_platform_gyro_sample(text, &sample) && sample == value);
     }
     CHECK(SDL_Init(SDL_INIT_EVENTS) == 0);
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba);
     cupid_gba_create(gba);
     struct CupidPlatform plat = {.controllerIndex = -1, .running = true};
@@ -98,7 +103,7 @@ static void gyro_input_parsing_and_live_controls(void) {
 
 static void tilt_live_controls_preserve_the_snapshot_and_other_axis(void) {
     CHECK(SDL_Init(SDL_INIT_EVENTS) == 0);
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba);
     cupid_gba_create(gba);
     struct CupidPlatform plat = {.controllerIndex = -1, .running = true, .keyboardKeys = 1};
@@ -124,7 +129,7 @@ static void tilt_live_controls_preserve_the_snapshot_and_other_axis(void) {
     key.key.keysym.scancode = SDL_SCANCODE_F10;
     CHECK(SDL_PushEvent(&key) == 1 && cupid_platform_poll_events(&plat, gba));
     CHECK(gba->cartridge.tilt.inputX == CUPID_TILT_NEUTRAL &&
-        gba->cartridge.tilt.inputY == CUPID_TILT_NEUTRAL);
+          gba->cartridge.tilt.inputY == CUPID_TILT_NEUTRAL);
     CHECK(gba->cartridge.tilt.x == 4095 && gba->cartridge.tilt.y == 4095);
     cupid_cartridge_enable_tilt(gba, false);
     key.key.keysym.scancode = SDL_SCANCODE_F1;
@@ -135,12 +140,19 @@ static void tilt_live_controls_preserve_the_snapshot_and_other_axis(void) {
     SDL_Quit();
 }
 
-struct HostMotor { unsigned on, off; uint16_t low, high; };
-static int SDLCALL host_motor(void* context, uint16_t low, uint16_t high) {
-    struct HostMotor* motor = context;
-    motor->low = low; motor->high = high;
-    if (low || high) motor->on++;
-    else motor->off++;
+struct HostMotor {
+    unsigned on, off;
+    uint16_t low, high;
+};
+
+static int SDLCALL host_motor(void *context, uint16_t low, uint16_t high) {
+    struct HostMotor *motor = context;
+    motor->low = low;
+    motor->high = high;
+    if (low || high)
+        motor->on++;
+    else
+        motor->off++;
     return 0;
 }
 
@@ -170,7 +182,7 @@ static void virtual_controller_output_hotplug_expiry_and_shutdown(void) {
     desc.Rumble = host_motor;
     const int index = SDL_JoystickAttachVirtualEx(&desc);
     CHECK(index >= 0 && SDL_IsGameController(index));
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba);
     cupid_gba_create(gba);
     gba->memory.rom = calloc(1, 0x4000);
@@ -181,7 +193,8 @@ static void virtual_controller_output_hotplug_expiry_and_shutdown(void) {
     cupid_cartridge_enable_rumble(gba, true);
     struct CupidPlatform plat = {.controllerIndex = -1, .running = true};
     CHECK(cupid_platform_poll_events(&plat, gba) && plat.controller);
-    CHECK(plat.controllerIndex == SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(plat.controller)));
+    CHECK(plat.controllerIndex ==
+          SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(plat.controller)));
     CHECK(plat.controllerIndex != index);
     cupid_cartridge_enable_solar(gba, true);
     cupid_cartridge_set_solar_level(gba, 250);
@@ -257,7 +270,7 @@ static void an_existing_controller_inherits_active_motor_output(void) {
     desc.userdata = &first;
     const int firstIndex = SDL_JoystickAttachVirtualEx(&desc);
     CHECK(firstIndex >= 0);
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba);
     cupid_gba_create(gba);
     gba->memory.rom = calloc(1, 0x4000);

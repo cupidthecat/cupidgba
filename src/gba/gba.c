@@ -2,29 +2,137 @@
  * @file gba.c
  * @brief Top-level GBA system: create, reset, destroy, main frame loop.
  */
-
 #include "cupid/gba.h"
+#include "../platform/context.h"
 #include "cupid/isa-inlines.h"
 #include "serial/uart.h"
+
+enum ExecutionRequest { EXECUTE_STEP, EXECUTE_FRAME, EXECUTE_INTERVAL, EXECUTE_STEPS };
+
+struct CupidExecution {
+    struct CupidContext *host;
+    struct CupidContext *context;
+    enum ExecutionRequest request;
+    uint64_t start, clocks, stoppedClocks;
+    uint64_t steps, stepLimit;
+    bool (*boundary)(struct CupidGBA *, uint64_t, void *);
+    void *boundaryContext;
+    bool inside;
+};
+
+static void step_cpu(struct CupidGBA *gba);
+
+static uint64_t execution_progress(const struct CupidGBA *gba) {
+    const struct CupidExecution *execution = gba->execution;
+    return cupid_timing_global_time(&gba->timing) - execution->start + execution->stoppedClocks;
+}
+
+static bool execution_ready(struct CupidGBA *gba) {
+    struct CupidExecution *execution = gba->execution;
+    if (execution->request == EXECUTE_STEP)
+        return true;
+    if (execution->request == EXECUTE_FRAME)
+        return gba->frameReady || gba->stopped;
+    if (execution->request == EXECUTE_STEPS) {
+        /* Each visit is the return boundary of one ordinary step, including
+         * a HALT acceptance or peripheral wait inside an unfinished fetch. */
+        ++execution->steps;
+        bool proceed = !execution->boundary ||
+                       execution->boundary(gba, execution->steps, execution->boundaryContext);
+        return !proceed || gba->stopped || execution->steps == execution->stepLimit;
+    }
+    return execution_progress(gba) >= execution->clocks;
+}
+
+static void yield_execution(struct CupidGBA *gba) {
+    struct CupidExecution *execution = gba->execution;
+    if (execution && execution->inside && execution_ready(gba))
+        cupid_context_yield(execution->context);
+}
+
+static void advance_stopped_execution(struct CupidGBA *gba) {
+    struct CupidExecution *execution = gba->execution;
+    const uint64_t remaining = execution->clocks - execution_progress(gba);
+    execution->stoppedClocks += cupid_gba_advance_stopped_time(gba, remaining);
+}
+
+static void execute_cpu(void *argument) {
+    struct CupidGBA *gba = argument;
+    for (;;) {
+        if (gba->stopped) {
+            if (gba->execution->request == EXECUTE_INTERVAL)
+                advance_stopped_execution(gba);
+        } else {
+            gba->cpuInstructionPending = true;
+            step_cpu(gba);
+            gba->cpuInstructionPending = false;
+        }
+        yield_execution(gba);
+    }
+}
+
+static void release_execution(struct CupidGBA *gba) {
+    struct CupidExecution *execution = gba->execution;
+    if (!execution) {
+        gba->cpuInstructionPending = false;
+        return;
+    }
+    /* Cancellation retires the stack at its yield. No unfinished fetch, MMIO
+     * side effect or peripheral callback runs against reset/freed memory. */
+    cupid_context_destroy(execution->context);
+    cupid_context_destroy(execution->host);
+    free(execution);
+    gba->execution = NULL;
+    gba->cpuInstructionPending = false;
+}
+
+static struct CupidExecution *prepare_execution(struct CupidGBA *gba) {
+    if (!gba->execution) {
+        struct CupidExecution *execution = calloc(1, sizeof(*execution));
+        if (!execution)
+            abort();
+        execution->host = cupid_context_host_create();
+        if (!execution->host)
+            abort();
+        execution->context = cupid_context_create(execution->host, execute_cpu, gba);
+        if (!execution->context)
+            abort();
+        gba->execution = execution;
+    }
+    struct CupidExecution *execution = gba->execution;
+    if (execution->inside)
+        abort();
+    return execution;
+}
+
+static void run_execution(struct CupidGBA *gba, enum ExecutionRequest request, uint64_t clocks) {
+    struct CupidExecution *execution = prepare_execution(gba);
+    execution->request = request;
+    execution->start = cupid_timing_global_time(&gba->timing);
+    execution->clocks = clocks;
+    execution->stoppedClocks = 0;
+    execution->inside = true;
+    cupid_context_resume(execution->context);
+    execution->inside = false;
+}
 
 /**
  * @brief Forward declarations for irqh callbacks.
  */
-static void _cupidGBAReset(struct CupidARM* cpu);
-static void _cupidProcessEvents(struct CupidARM* cpu);
-static void _cupidSwi16(struct CupidARM* cpu, int immediate);
-static void _cupidSwi32(struct CupidARM* cpu, int immediate);
-static void _cupidHitIllegal(struct CupidARM* cpu, uint32_t opcode);
-static void _cupidHitStub(struct CupidARM* cpu, uint32_t opcode);
-static void _cupidBreakpoint(struct CupidARM* cpu, int immediate);
-static void _cupidCPSRChanged(struct CupidARM* cpu);
+static void _cupidGBAReset(struct CupidARM *cpu);
+static void _cupidSwi16(struct CupidARM *cpu, int immediate);
+static void _cupidSwi32(struct CupidARM *cpu, int immediate);
+static void _cupidHitIllegal(struct CupidARM *cpu, uint32_t opcode);
+static void _cupidHitStub(struct CupidARM *cpu, uint32_t opcode);
+static void _cupidBreakpoint(struct CupidARM *cpu, int immediate);
+static void _cupidCPSRChanged(struct CupidARM *cpu);
 
 /**
  * @brief Wire interrupt handler callbacks.
  */
-static void _cupidInterruptHandlerInit(struct CupidARMInterruptHandler* irqh) {
+static void _cupidInterruptHandlerInit(struct CupidARMInterruptHandler *irqh) {
     irqh->reset = _cupidGBAReset;
-    irqh->processEvents = _cupidProcessEvents;
+    irqh->processEvents = cupid_gba_process_cpu_events;
     irqh->swi16 = _cupidSwi16;
     irqh->swi32 = _cupidSwi32;
     irqh->hitIllegal = _cupidHitIllegal;
@@ -41,7 +149,7 @@ static void _cupidInterruptHandlerInit(struct CupidARMInterruptHandler* irqh) {
  * wires the interrupt handler, initialises all subsystems, and sets up the
  * timing scheduler. After this, call cupid_gba_reset() to power on.
  */
-void cupid_gba_create(struct CupidGBA* gba) {
+void cupid_gba_create(struct CupidGBA *gba) {
     memset(gba, 0, sizeof(*gba));
     gba->cpu.master = gba;
 
@@ -58,9 +166,9 @@ void cupid_gba_create(struct CupidGBA* gba) {
     cupid_timer_init(gba);
 
     /** Key input defaults: bit=1 is pressed, 0 is released. */
-    gba->keysActive = 0;       /** all keys released */
-    gba->keysLast   = 0x0400;  /** matches BIOS boot state */
-    gba->biosHLE = true;       /** default to HLE BIOS until real BIOS loaded */
+    gba->keysActive = 0;    /** all keys released */
+    gba->keysLast = 0x0400; /** matches BIOS boot state */
+    gba->biosHLE = true;    /** default to HLE BIOS until real BIOS loaded */
 
     /** DMA and flow-control. */
     gba->performingDMA = 0;
@@ -82,10 +190,12 @@ void cupid_gba_create(struct CupidGBA* gba) {
 
     /** Init timing scheduler and wire CPU cycle and next-event counters. */
     cupid_timing_init(&gba->timing, &gba->cpu.cycles, &gba->cpu.nextEvent);
+    /* Bus helpers are available before power-on reset, so their IRQ clock
+     * owner must already have valid event callbacks. */
+    cupid_irq_init(gba);
     cupid_savedata_bind_timing(&gba->memory.savedata, &gba->timing);
     cupid_cartridge_init(gba);
     cupid_serial_init(&gba->serial, gba);
-
 }
 
 /**
@@ -95,7 +205,12 @@ void cupid_gba_create(struct CupidGBA* gba) {
  * (the irqh.reset callback) to reinitialize subsystems. The selected boot path
  * supplies either reset-vector control or the built-in post-boot state.
  */
-void cupid_gba_reset(struct CupidGBA* gba) {
+void cupid_gba_reset(struct CupidGBA *gba) {
+    release_execution(gba);
+    /* The cancelled instruction may own a timed DMA-held fetch. Refill the
+     * reset vector without entering that old bus wait; the platform reset
+     * below discards its DMA and IRQ-clock state together. */
+    gba->cpu.memory.timed = false;
     /** Ensure master pointer is valid. */
     gba->cpu.master = gba;
 
@@ -132,8 +247,8 @@ void cupid_gba_reset(struct CupidGBA* gba) {
  *
  * Called from cupid_arm_reset after zeroing registers and setting mode.
  */
-static void _cupidGBAReset(struct CupidARM* cpu) {
-    struct CupidGBA* gba = cpu->master;
+static void _cupidGBAReset(struct CupidARM *cpu) {
+    struct CupidGBA *gba = cpu->master;
 
     /** Reset subsystems (memory, video, audio, IO, timers). */
     cupid_memory_reset(gba);
@@ -164,6 +279,8 @@ static void _cupidGBAReset(struct CupidARM* cpu) {
     gba->stopped = false;
     gba->haltIRQSample = false;
     gba->haltIRQSampleValid = false;
+    gba->haltTimed = false;
+    gba->haltEvent = (struct CupidTimingEvent){0};
     gba->intervalOvershoot = 0;
     gba->keysLast = 0x0400;
 
@@ -179,8 +296,8 @@ static void _cupidGBAReset(struct CupidARM* cpu) {
  * Sets System mode and stack banks, vcount = 0x7E, POSTFLG = 1 and entry PC.
  * Only acts if PC is still at the reset vector (start of BIOS).
  */
-void cupid_gba_skip_bios(struct CupidGBA* gba) {
-    struct CupidARM* cpu = &gba->cpu;
+void cupid_gba_skip_bios(struct CupidGBA *gba) {
+    struct CupidARM *cpu = &gba->cpu;
 
     /** Guard: only skip if we have not left the reset vector yet. */
     if (cpu->gprs[ARM_PC] != BASE_RESET + WORD_SIZE_ARM) {
@@ -206,8 +323,8 @@ void cupid_gba_skip_bios(struct CupidGBA* gba) {
     }
 
     /** Simulate the BIOS having run to completion. */
-    gba->memory.io[0x006 >> 1] = 0x7E;  /** REG_VCOUNT */
-    gba->memory.io[0x300 >> 1] = 1;     /** POSTFLG = 1 */
+    gba->memory.io[0x006 >> 1] = 0x7E; /** REG_VCOUNT */
+    gba->memory.io[0x300 >> 1] = 1;    /** POSTFLG = 1 */
 
     /** Reschedule video event to match post-boot timing. */
     cupid_video_skip_bios(&gba->video);
@@ -219,21 +336,67 @@ void cupid_gba_skip_bios(struct CupidGBA* gba) {
 }
 
 /**
- * @brief Halt the CPU until the next event.
+ * @brief Halt the CPU until an enabled interrupt request can wake it.
  */
-void cupid_gba_halt(struct CupidGBA* gba) {
+void cupid_gba_halt(struct CupidGBA *gba) {
     gba->haltIRQSampleValid = false;
     gba->cpu.nextEvent = gba->cpu.cycles;
     gba->cpu.halted = 1;
 }
 
-static unsigned stop_sources(struct CupidGBA* gba) {
+static void accept_halt(struct CupidTiming *timing, void *context, uint32_t late) {
+    (void)timing;
+    (void)late;
+    struct CupidGBA *gba = context;
+    cupid_gba_halt(gba);
+    gba->haltTimed = true;
+}
+
+void cupid_gba_request_halt(struct CupidGBA *gba) {
+    gba->haltEvent.callback = accept_halt;
+    gba->haltEvent.context = gba;
+    gba->haltEvent.name = "HALTCNT acceptance";
+    gba->haltEvent.priority = 3;
+    cupid_timing_schedule(&gba->timing, &gba->haltEvent, 1);
+}
+
+void cupid_gba_wait_halt(struct CupidGBA *gba) {
+    struct CupidARM *cpu = &gba->cpu;
+    /* Retain this bus request while peripheral events run. Standalone calls
+     * can return a frame/interval without completing or replaying the fetch.
+     * A cable already owns a suspended CPU stack and yields in its clock
+     * coordinator, so it does not enter a second execution context. */
+    for (;;) {
+        yield_execution(gba);
+        if (!cpu->halted || gba->irq.available)
+            break;
+        if (gba->stopped && gba->execution && gba->execution->inside) {
+            advance_stopped_execution(gba);
+            continue;
+        }
+        gba->timing.waitingForEvent = true;
+        cpu->cycles = cpu->nextEvent;
+        cpu->irqh.processEvents(cpu);
+    }
+    if (cpu->halted) {
+        cpu->halted = 0;
+        cpu->cycles += gba->haltTimed ? 2 : 1;
+        gba->haltTimed = false;
+        gba->haltIRQSampleValid = false;
+        if (cpu->cycles >= cpu->nextEvent)
+            cpu->irqh.processEvents(cpu);
+    }
+    gba->timing.waitingForEvent = false;
+}
+
+static unsigned stop_sources(struct CupidGBA *gba) {
     unsigned sources = IRQ_KEYPAD | IRQ_GAMEPAK;
-    if (cupid_serial_mode(&gba->serial) == SERIAL_GPIO) sources |= IRQ_SIO;
+    if (cupid_serial_mode(&gba->serial) == SERIAL_GPIO)
+        sources |= IRQ_SIO;
     return sources & gba->ie;
 }
 
-void cupid_gba_stop(struct CupidGBA* gba) {
+void cupid_gba_stop(struct CupidGBA *gba) {
     /* Finish the bus clocks preceding acceptance of STOP, then leave all
      * peripheral deadlines in place while the system clock is frozen. */
     gba->cpu.nextEvent = gba->cpu.cycles;
@@ -243,14 +406,14 @@ void cupid_gba_stop(struct CupidGBA* gba) {
     gba->stopped = (stop_sources(gba) & gba->irqf) == 0;
 }
 
-void cupid_gba_wake_stop(struct CupidGBA* gba, enum CupidIRQ sources) {
+void cupid_gba_wake_stop(struct CupidGBA *gba, enum CupidIRQ sources) {
     if (gba->stopped && (stop_sources(gba) & sources)) {
         gba->stopped = false;
         cupid_serial_uart_resume(&gba->serial);
     }
 }
 
-uint64_t cupid_gba_advance_stopped_time(struct CupidGBA* gba, uint64_t clocks) {
+uint64_t cupid_gba_advance_stopped_time(struct CupidGBA *gba, uint64_t clocks) {
     /* RTC output can wake STOP before the supplied interval ends. Self-timed
      * save operations consume only that same accepted cartridge interval. */
     const uint64_t elapsed = cupid_cartridge_advance_stopped_time(gba, clocks);
@@ -261,7 +424,8 @@ uint64_t cupid_gba_advance_stopped_time(struct CupidGBA* gba, uint64_t clocks) {
 /**
  * @brief Destroy a GBA instance.
  */
-void cupid_gba_destroy(struct CupidGBA* gba) {
+void cupid_gba_destroy(struct CupidGBA *gba) {
+    release_execution(gba);
     cupid_cartridge_deinit(gba);
     cupid_video_deinit(&gba->video);
     cupid_memory_deinit(gba);
@@ -271,7 +435,7 @@ void cupid_gba_destroy(struct CupidGBA* gba) {
 /**
  * @brief Flush accumulated CPU clocks and dispatch due scheduler events.
  */
-void cupid_gba_process_events(struct CupidGBA* gba) {
+void cupid_gba_process_events(struct CupidGBA *gba) {
     gba->cpu.nextEvent = gba->cpu.cycles;
     gba->cpu.irqh.processEvents(&gba->cpu);
 }
@@ -284,8 +448,8 @@ void cupid_gba_process_events(struct CupidGBA* gba) {
  * a newly selected button invalidates that history. OR mode requests on
  * every check with at least one selected button held.
  */
-void cupid_gba_test_keypad_irq(struct CupidGBA* gba) {
-    uint16_t keysLast   = gba->keysLast;
+void cupid_gba_test_keypad_irq(struct CupidGBA *gba) {
+    uint16_t keysLast = gba->keysLast;
     uint16_t keysActive = gba->keysActive;
 
     uint16_t keycnt = gba->memory.io[REG_KEYCNT >> 1];
@@ -314,10 +478,11 @@ void cupid_gba_test_keypad_irq(struct CupidGBA* gba) {
 /**
  * @brief Run a single CPU step.
  */
-void cupid_gba_step(struct CupidGBA* gba) {
-    struct CupidARM* cpu = &gba->cpu;
+static void step_cpu(struct CupidGBA *gba) {
+    struct CupidARM *cpu = &gba->cpu;
 
-    if (gba->stopped) return;
+    if (gba->stopped)
+        return;
 
     /* Sample before HALT's wake clock; a line arriving during that clock is
      * accepted after the resumed instruction, at its next boundary. */
@@ -325,8 +490,10 @@ void cupid_gba_step(struct CupidGBA* gba) {
     gba->haltIRQSampleValid = false;
     if (cpu->halted && gba->irq.available) {
         cpu->halted = 0;
-        cpu->cycles++; /* Wake-up consumes one clock before the next fetch. */
-        if (cpu->cycles >= cpu->nextEvent) cpu->irqh.processEvents(cpu);
+        cpu->cycles += gba->haltTimed ? 2 : 1;
+        gba->haltTimed = false;
+        if (cpu->cycles >= cpu->nextEvent)
+            cpu->irqh.processEvents(cpu);
     }
     if (cpu->halted) {
         gba->timing.waitingForEvent = true;
@@ -339,8 +506,10 @@ void cupid_gba_step(struct CupidGBA* gba) {
             cpu->memory.timed = false;
         }
         cpu->irqDisableLatch = cpu->cpsr.i;
-        if (cpu->executionMode == MODE_THUMB) cupid_thumb_step(cpu);
-        else cupid_arm_step(cpu);
+        if (cpu->executionMode == MODE_THUMB)
+            cupid_thumb_step(cpu);
+        else
+            cupid_arm_step(cpu);
     }
 
     if (cpu->cycles >= cpu->nextEvent || gba->timing.synchronize) {
@@ -349,18 +518,71 @@ void cupid_gba_step(struct CupidGBA* gba) {
     gba->timing.waitingForEvent = false;
 }
 
+void cupid_gba_step(struct CupidGBA *gba) {
+    if (gba->stopped)
+        return;
+    if (gba->externalExecution) {
+        gba->cpuInstructionPending = true;
+        step_cpu(gba);
+        gba->cpuInstructionPending = false;
+    } else {
+        run_execution(gba, EXECUTE_STEP, 0);
+    }
+}
+
+uint64_t cupid_gba_run_steps(struct CupidGBA *gba, uint64_t limit,
+                             bool (*boundary)(struct CupidGBA *, uint64_t, void *), void *context) {
+    if (!limit || (boundary && !boundary(gba, 0, context)) || gba->stopped)
+        return 0;
+    if (gba->externalExecution) {
+        uint64_t steps = 0;
+        do {
+            cupid_gba_step(gba);
+            ++steps;
+            bool proceed = !boundary || boundary(gba, steps, context);
+            if (!proceed || gba->stopped || steps == limit)
+                break;
+        } while (true);
+        return steps;
+    }
+    struct CupidExecution *execution = prepare_execution(gba);
+    execution->steps = 0;
+    execution->stepLimit = limit;
+    execution->boundary = boundary;
+    execution->boundaryContext = context;
+    run_execution(gba, EXECUTE_STEPS, 0);
+    /* The callback can belong to a caller's stack. Retain only CPU work after
+     * returning, never the caller's observation/input context. */
+    execution->boundary = NULL;
+    execution->boundaryContext = NULL;
+    return execution->steps;
+}
+
+bool cupid_gba_yield_steps(struct CupidGBA *gba) {
+    struct CupidExecution *execution = gba->execution;
+    if (gba->externalExecution || !execution || !execution->inside || !gba->timing.inCallback ||
+        execution->request != EXECUTE_STEPS)
+        return false;
+    cupid_context_yield(execution->context);
+    return true;
+}
+
 /**
  * @brief Run the emulator until a frame is ready.
  */
-void cupid_gba_run_frame(struct CupidGBA* gba) {
+void cupid_gba_run_frame(struct CupidGBA *gba) {
     gba->frameReady = false;
-
+    if (!gba->externalExecution) {
+        if (!gba->stopped)
+            run_execution(gba, EXECUTE_FRAME, 0);
+        return;
+    }
     while (!gba->frameReady && !gba->stopped) {
         cupid_gba_step(gba);
     }
 }
 
-void cupid_gba_run_interval(struct CupidGBA* gba, uint32_t clocks) {
+void cupid_gba_run_interval(struct CupidGBA *gba, uint32_t clocks) {
     gba->frameReady = false;
     uint64_t remaining = clocks;
     if (gba->intervalOvershoot >= remaining) {
@@ -369,6 +591,11 @@ void cupid_gba_run_interval(struct CupidGBA* gba, uint32_t clocks) {
     }
     remaining -= gba->intervalOvershoot;
     gba->intervalOvershoot = 0;
+    if (!gba->externalExecution) {
+        run_execution(gba, EXECUTE_INTERVAL, remaining);
+        gba->intervalOvershoot = execution_progress(gba) - remaining;
+        return;
+    }
     while (remaining) {
         uint64_t elapsed;
         if (gba->stopped) {
@@ -389,12 +616,11 @@ void cupid_gba_run_interval(struct CupidGBA* gba, uint32_t clocks) {
 /**
  * @brief IRQ handler callbacks wired into cpu->irqh.
  */
-
 /**
  * @brief Process timing events when cpu->cycles reaches cpu->nextEvent.
  */
-static void _cupidProcessEvents(struct CupidARM* cpu) {
-    struct CupidGBA* gba = cpu->master;
+void cupid_gba_process_cpu_events(struct CupidARM *cpu) {
+    struct CupidGBA *gba = cpu->master;
 
     /** Update open bus value from prefetch pipeline. */
     gba->bus = cpu->prefetch[1];
@@ -416,14 +642,13 @@ static void _cupidProcessEvents(struct CupidARM* cpu) {
         cpu->nextEvent = nextEvent;
     }
     gba->earlyExit = false;
-
 }
 
 /**
  * @brief SWI in Thumb mode (immediate is the 8-bit comment field).
  */
-static void _cupidSwi16(struct CupidARM* cpu, int immediate) {
-    struct CupidGBA* gba = cpu->master;
+static void _cupidSwi16(struct CupidARM *cpu, int immediate) {
+    struct CupidGBA *gba = cpu->master;
     if (gba->biosHLE) {
         cupid_bios_swi(gba, (uint8_t)immediate);
     } else {
@@ -434,14 +659,14 @@ static void _cupidSwi16(struct CupidARM* cpu, int immediate) {
 /**
  * @brief SWI in ARM mode (top 8 bits are the call number).
  */
-static void _cupidSwi32(struct CupidARM* cpu, int immediate) {
+static void _cupidSwi32(struct CupidARM *cpu, int immediate) {
     _cupidSwi16(cpu, immediate >> 16);
 }
 
 /**
  * @brief Illegal or undefined opcode handler.
  */
-static void _cupidHitIllegal(struct CupidARM* cpu, uint32_t opcode) {
+static void _cupidHitIllegal(struct CupidARM *cpu, uint32_t opcode) {
     (void)opcode;
     cupid_arm_raise_undefined(cpu);
 }
@@ -449,16 +674,16 @@ static void _cupidHitIllegal(struct CupidARM* cpu, uint32_t opcode) {
 /**
  * @brief Stub instruction handler (unimplemented coprocessor ops, etc.).
  */
-static void _cupidHitStub(struct CupidARM* cpu, uint32_t opcode) {
+static void _cupidHitStub(struct CupidARM *cpu, uint32_t opcode) {
     (void)cpu;
-    fprintf(stderr, "CUPID: Stub opcode: 0x%08X at PC=0x%08X\n",
-            opcode, cpu->gprs[ARM_PC] - (cpu->executionMode == MODE_THUMB ? 4 : 8));
+    fprintf(stderr, "CUPID: Stub opcode: 0x%08X at PC=0x%08X\n", opcode,
+            cpu->gprs[ARM_PC] - (cpu->executionMode == MODE_THUMB ? 4 : 8));
 }
 
 /**
  * @brief Handle an unsupported breakpoint encoding on the GBA CPU.
  */
-static void _cupidBreakpoint(struct CupidARM* cpu, int immediate) {
+static void _cupidBreakpoint(struct CupidARM *cpu, int immediate) {
     (void)immediate;
     /* ARM7TDMI has no BKPT instruction. An embedding debugger can replace
      * this callback; ordinary execution takes the Undefined vector. */
@@ -468,6 +693,6 @@ static void _cupidBreakpoint(struct CupidARM* cpu, int immediate) {
 /**
  * @brief CPSR changes take effect through the CPU's instruction-boundary latch.
  */
-static void _cupidCPSRChanged(struct CupidARM* cpu) {
+static void _cupidCPSRChanged(struct CupidARM *cpu) {
     (void)cpu; /* IRQ entry is handled by cupid_gba_step. */
 }

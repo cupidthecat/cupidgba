@@ -1,0 +1,44 @@
+{
+  "revision": "66f5f1d60cd7030b600606886c76f5c821ecaf9d",
+  "license_sha256": "b59a9ed235d76752c977f04116bc72155a14af48176bdbf50d7e5c29fca35aa7",
+  "cases": [
+    {
+      "name": "reserved-bit",
+      "path": "thumb/blx.gba",
+      "bytes": 1696,
+      "sha256": "6f7ae5338e8913d83e3c23d204175877211512d2921e8cfb361739c281136f67",
+      "checkpoint": "0x08000174",
+      "terminal": "0x080002EC",
+      "observations": [
+        {
+          "address": "0x08000144",
+          "mode": "thumb",
+          "instruction": "0x4780",
+          "register": 1,
+          "value": 8
+        },
+        {
+          "address": "0x08000150",
+          "mode": "arm",
+          "instruction": "0xE2411001",
+          "register": 1,
+          "value": 8
+        },
+        {
+          "address": "0x08000160",
+          "mode": "arm",
+          "instruction": "0xE3510004",
+          "register": 1,
+          "value": 4
+        },
+        {
+          "address": "0x080002EC",
+          "mode": "arm",
+          "instruction": "0xEAFFFFFE",
+          "register": 12,
+          "value": 0
+        }
+      ]
+    }
+  ]
+}

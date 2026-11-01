@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-#include "cupid/rtc.h"
 #include "../../test.h"
+#include "cupid/rtc.h"
 #include <limits.h>
 
 static uint8_t bcd(unsigned value) {
@@ -30,22 +30,26 @@ static void every_frequency_has_two_edges_per_period(void) {
 static bool selected_clocks_high(unsigned mask, unsigned phase) {
     bool high = true;
     for (unsigned bit = 0; bit < 16; bit++)
-        if (mask & (1u << bit)) high = high && ((phase >> bit) & 1);
+        if (mask & (1u << bit))
+            high = high && ((phase >> bit) & 1);
     return high;
 }
 
 static void combined_frequency_deadlines_match_the_complete_waveform(void) {
     /* Enumerate the waveform independently of the next-edge arithmetic. */
     const uint16_t masks[] = {0x000A, 0x8001, 0x5555, 0xAAAA, 0xFFFF, 0xA132};
-    uint32_t* distances = calloc(65536, sizeof(*distances));
+    uint32_t *distances = calloc(65536, sizeof(*distances));
     CHECK(distances);
     for (unsigned m = 0; m < sizeof(masks) / sizeof(*masks); m++) {
         unsigned distance = 0;
         for (int phase = 131071; phase >= 0; phase--) {
             if (selected_clocks_high(masks[m], (unsigned)phase & 65535) !=
-                selected_clocks_high(masks[m], (unsigned)(phase + 1) & 65535)) distance = 1;
-            else ++distance;
-            if (phase < 65536) distances[phase] = distance;
+                selected_clocks_high(masks[m], (unsigned)(phase + 1) & 65535))
+                distance = 1;
+            else
+                ++distance;
+            if (phase < 65536)
+                distances[phase] = distance;
         }
         struct CupidRTC rtc;
         cupid_rtc_init(&rtc, 0);
@@ -70,12 +74,14 @@ static void mode_priority_and_divider_writes_preserve_clock_phase(void) {
     for (unsigned flags = 0; flags < 8; flags++) {
         cupid_rtc_write_control(&rtc, 0x40);
         cupid_rtc_write_interrupt_parameters(&rtc, 0x0010);
-        const uint8_t value = (uint8_t)(0x40 | (flags & 1 ? 2 : 0) |
-                                      (flags & 2 ? 8 : 0) | (flags & 4 ? 0x20 : 0));
+        const uint8_t value =
+            (uint8_t)(0x40 | (flags & 1 ? 2 : 0) | (flags & 2 ? 8 : 0) | (flags & 4 ? 0x20 : 0));
         cupid_rtc_write_control(&rtc, value);
         CHECK(rtc.interruptLow == ((flags & 1) && !(flags & 2)));
-        CHECK(cupid_rtc_next_interrupt(&rtc) == (flags & 2 ? 60 * CUPID_RTC_CLOCK_HZ :
-                                               flags & 1 ? 4096 : flags & 4 ? INT32_MAX : 0));
+        CHECK(cupid_rtc_next_interrupt(&rtc) == (flags & 2   ? 60 * CUPID_RTC_CLOCK_HZ
+                                                 : flags & 1 ? 4096
+                                                 : flags & 4 ? INT32_MAX
+                                                             : 0));
     }
     cupid_rtc_write_interrupt_parameters(&rtc, 0x000A);
     cupid_rtc_write_control(&rtc, 0x42);
@@ -98,32 +104,34 @@ static void mode_priority_and_divider_writes_preserve_clock_phase(void) {
 }
 
 static void alarms_compare_every_hour_in_both_formats_and_hold_until_disabled(void) {
-    for (unsigned format = 0; format < 2; format++) for (unsigned hour = 0; hour < 24; hour++) {
-        struct CupidRTC rtc;
-        cupid_rtc_init(&rtc, 0);
-        const struct CupidRTCDateTime date = {26, 10, 13, 2, (uint8_t)hour, 17, 59};
-        CHECK(cupid_rtc_set_datetime(&rtc, &date));
-        const uint8_t control = (uint8_t)(format ? 0x60 : 0x20);
-        const uint8_t hourByte = (uint8_t)(bcd(format ? hour : hour % 12) | (hour >= 12 ? 0x80 : 0));
-        cupid_rtc_write_interrupt_parameters(&rtc, (uint16_t)(0x1800 | hourByte));
-        cupid_rtc_write_control(&rtc, control);
-        CHECK(!rtc.interruptLow && cupid_rtc_next_interrupt(&rtc) == CUPID_RTC_CLOCK_HZ);
-        cupid_rtc_sync(&rtc, CUPID_RTC_CLOCK_HZ - 1);
-        CHECK(!rtc.interruptLow && cupid_rtc_next_interrupt(&rtc) == 1);
-        cupid_rtc_sync(&rtc, CUPID_RTC_CLOCK_HZ);
-        CHECK(rtc.interruptLow && !cupid_rtc_next_interrupt(&rtc));
-        cupid_rtc_write_control(&rtc, control);
-        CHECK(rtc.interruptLow);
-        cupid_rtc_write_control(&rtc, control & (uint8_t)~0x20);
-        CHECK(!rtc.interruptLow);
-        cupid_rtc_write_control(&rtc, control);
-        CHECK(rtc.interruptLow); /* The coincidence remains true for the minute. */
-        cupid_rtc_advance_seconds(&rtc, 120);
-        CHECK(rtc.interruptLow && !cupid_rtc_next_interrupt(&rtc));
-        cupid_rtc_write_control(&rtc, control & (uint8_t)~0x20);
-        cupid_rtc_write_control(&rtc, control);
-        CHECK(!rtc.interruptLow && cupid_rtc_next_interrupt(&rtc) == INT32_MAX);
-    }
+    for (unsigned format = 0; format < 2; format++)
+        for (unsigned hour = 0; hour < 24; hour++) {
+            struct CupidRTC rtc;
+            cupid_rtc_init(&rtc, 0);
+            const struct CupidRTCDateTime date = {26, 10, 13, 2, (uint8_t)hour, 17, 59};
+            CHECK(cupid_rtc_set_datetime(&rtc, &date));
+            const uint8_t control = (uint8_t)(format ? 0x60 : 0x20);
+            const uint8_t hourByte =
+                (uint8_t)(bcd(format ? hour : hour % 12) | (hour >= 12 ? 0x80 : 0));
+            cupid_rtc_write_interrupt_parameters(&rtc, (uint16_t)(0x1800 | hourByte));
+            cupid_rtc_write_control(&rtc, control);
+            CHECK(!rtc.interruptLow && cupid_rtc_next_interrupt(&rtc) == CUPID_RTC_CLOCK_HZ);
+            cupid_rtc_sync(&rtc, CUPID_RTC_CLOCK_HZ - 1);
+            CHECK(!rtc.interruptLow && cupid_rtc_next_interrupt(&rtc) == 1);
+            cupid_rtc_sync(&rtc, CUPID_RTC_CLOCK_HZ);
+            CHECK(rtc.interruptLow && !cupid_rtc_next_interrupt(&rtc));
+            cupid_rtc_write_control(&rtc, control);
+            CHECK(rtc.interruptLow);
+            cupid_rtc_write_control(&rtc, control & (uint8_t)~0x20);
+            CHECK(!rtc.interruptLow);
+            cupid_rtc_write_control(&rtc, control);
+            CHECK(rtc.interruptLow); /* The coincidence remains true for the minute. */
+            cupid_rtc_advance_seconds(&rtc, 120);
+            CHECK(rtc.interruptLow && !cupid_rtc_next_interrupt(&rtc));
+            cupid_rtc_write_control(&rtc, control & (uint8_t)~0x20);
+            cupid_rtc_write_control(&rtc, control);
+            CHECK(!rtc.interruptLow && cupid_rtc_next_interrupt(&rtc) == INT32_MAX);
+        }
 }
 
 static void alarm_fields_and_offline_intervals_do_not_invent_matches(void) {
@@ -176,11 +184,13 @@ static void alarm_long_wait_checkpoints_and_bulk_clock_keep_the_exact_carry(void
         rtc.fraction = 193;
         const uint64_t end = rtc.lastClock + UINT64_C(43343) * CUPID_RTC_CLOCK_HZ - 193;
         CHECK(cupid_rtc_next_interrupt(&rtc) == INT32_MAX);
-        if (bulk) cupid_rtc_sync(&rtc, end - 1);
-        else while (end - rtc.lastClock > cupid_rtc_next_interrupt(&rtc)) {
-            cupid_rtc_sync(&rtc, rtc.lastClock + cupid_rtc_next_interrupt(&rtc));
-            CHECK(!rtc.interruptLow);
-        }
+        if (bulk)
+            cupid_rtc_sync(&rtc, end - 1);
+        else
+            while (end - rtc.lastClock > cupid_rtc_next_interrupt(&rtc)) {
+                cupid_rtc_sync(&rtc, rtc.lastClock + cupid_rtc_next_interrupt(&rtc));
+                CHECK(!rtc.interruptLow);
+            }
         cupid_rtc_sync(&rtc, end - 1);
         CHECK(!rtc.interruptLow && cupid_rtc_next_interrupt(&rtc) == 1);
         cupid_rtc_sync(&rtc, end);

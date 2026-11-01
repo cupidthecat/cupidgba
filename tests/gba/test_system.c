@@ -1,10 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+#include "../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
-#include "../test.h"
 
 static void reset_and_frame_clock(void) {
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba != NULL);
     cupid_gba_create(gba);
     /* An ARM branch-to-self exercises video/audio events without a ROM. */
@@ -34,7 +34,7 @@ static void reset_and_frame_clock(void) {
 }
 
 static void io_dispatch_bounds_and_halt(void) {
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba != NULL);
     cupid_gba_create(gba);
     cupid_gba_reset(gba);
@@ -56,7 +56,7 @@ static void io_dispatch_bounds_and_halt(void) {
 }
 
 static void signed_fifo_samples(void) {
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba != NULL);
     cupid_gba_create(gba);
     cupid_gba_reset(gba);
@@ -76,7 +76,7 @@ static void signed_fifo_samples(void) {
 }
 
 static void affine_sign_extension(void) {
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba != NULL);
     cupid_gba_create(gba);
     cupid_gba_reset(gba);

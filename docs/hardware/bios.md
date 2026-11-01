@@ -1,8 +1,11 @@
 # BIOS execution
 
 An external BIOS runs through the ARM/Thumb CPU and memory bus. Without one,
-CupidGBA uses its embedded replacement image and C helpers for services that
-do not yet run in firmware. The replacement assembly and embedded bytes
+CupidGBA uses its embedded replacement image. Every executed SWI enters
+Supervisor mode at vector 08h before firmware interprets the service number,
+including numbers outside the defined service table. A failed ARM condition
+does not enter the exception. See [SWI entry](bios/swi-entry.md) for caller
+state, pipeline checks and limits. The replacement assembly and embedded bytes
 are checked together; see [rebuilding the BIOS](../development/rebuilding-bios.md).
 
 External firmware receives the masked ARM Supervisor reset state. The built-in

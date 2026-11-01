@@ -2,135 +2,431 @@
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
 #include "cupid/platform/peripherals.h"
+#include "cupid/platform/save.h"
 #include <errno.h>
 #include <inttypes.h>
 
-static bool number(const char* text, uint64_t* value) {
-    char* end;
+static bool number(const char *text, uint64_t *value) {
+    /* strtoull accepts whitespace and a minus sign, including values that
+     * wrap to UINT64_MAX. Execution budgets and addresses are unsigned input. */
+    if (!text || text[0] < '0' || text[0] > '9')
+        return false;
+    char *end;
     errno = 0;
-    *value = strtoull(text, &end, 0);
-    return !errno && text[0] && text[0] != '-' && !*end;
+    uint64_t parsed = strtoull(text, &end, 0);
+    if (errno || *end)
+        return false;
+    *value = parsed;
+    return true;
 }
 
-static bool screenshot(const struct CupidGBA* gba, const char* path) {
-    FILE* file = fopen(path, "wb");
-    if (!file) return false;
+static bool screenshot(const uint32_t *pixels, const char *path) {
+    FILE *file = fopen(path, "wb");
+    if (!file)
+        return false;
     fprintf(file, "P6\n240 160\n255\n");
     for (unsigned i = 0; i < 240 * 160; i++) {
-        uint32_t pixel = gba->video.outputBuffer[i];
+        uint32_t pixel = pixels[i];
         uint8_t rgb[] = {pixel & 255, (pixel >> 8) & 255, (pixel >> 16) & 255};
-        if (fwrite(rgb, 1, sizeof(rgb), file) != sizeof(rgb)) { fclose(file); return false; }
+        if (fwrite(rgb, 1, sizeof(rgb), file) != sizeof(rgb)) {
+            fclose(file);
+            return false;
+        }
     }
     return fclose(file) == 0;
 }
 
-struct AudioTrace { FILE* file; bool failed; };
-struct MotorTrace { FILE* file; bool failed; };
+struct AudioTrace {
+    FILE *file;
+    bool failed;
+};
 
-static void motor_output(void* context, bool active, uint64_t clock) {
-    struct MotorTrace* trace = context;
-    uint8_t record[12] = {0};
-    for (unsigned i = 0; i < 8; i++) record[i] = (uint8_t)(clock >> (i * 8));
-    record[8] = active;
-    if (fwrite(record, 1, sizeof(record), trace->file) != sizeof(record)) trace->failed = true;
+struct MotorTrace {
+    FILE *file;
+    bool failed;
+};
+
+struct KeyEvent {
+    uint64_t frame;
+    uint16_t keys;
+};
+
+struct RunState {
+    struct CupidGBA *gba;
+    uint32_t *pixels;
+    uint64_t frames, cycleLimit, stepLimit, terminalAddress, checkpointAddress;
+    uint64_t completed, steps, stoppedClocks;
+    int expectedRegister;
+    bool terminal, terminalIssued, checkpoint, done;
+    uint32_t checkpointValue, terminalIssuedAddress, terminalLogicalPC;
+    const struct KeyEvent *keyEvents;
+    unsigned keyEventCount, nextKeyEvent;
+};
+
+static void frame_output(void *context, const uint32_t *pixels, uint64_t clock) {
+    struct RunState *run = context;
+    (void)clock;
+    ++run->completed;
+    if (run->pixels)
+        memcpy(run->pixels, pixels, sizeof(run->gba->video.outputBuffer));
+    run->gba->frameReady = false;
+    /* A single DMA-held instruction can cross several VBlanks. Observe each
+     * presentation, and return before a deadline or frame-indexed input can
+     * be lost inside that instruction. Its unfinished bus work stays intact. */
+    if (run->completed >= run->frames ||
+        (run->nextKeyEvent < run->keyEventCount &&
+         run->keyEvents[run->nextKeyEvent].frame <= run->completed))
+        cupid_gba_yield_steps(run->gba);
 }
 
-static void audio_sample(void* context, uint64_t clock, int16_t left, int16_t right) {
-    struct AudioTrace* trace = context;
+static bool run_boundary(struct CupidGBA *gba, uint64_t completedSteps, void *context) {
+    struct RunState *run = context;
+    if (completedSteps)
+        ++run->steps;
+    /* These are the original loop guards and observation order. A halted
+     * peripheral return counts exactly as an individual step call does. */
+    if (run->completed >= run->frames || run->steps >= run->stepLimit ||
+        cupid_timing_global_time(&gba->timing) + run->stoppedClocks >= run->cycleLimit) {
+        run->done = true;
+        return false;
+    }
+    if (run->terminalIssued && !gba->cpuInstructionPending) {
+        /* A HALT wait can return while the branch still owns an unfinished
+         * fetch. Accept only its completed return to the same idle pipeline. */
+        run->terminal = gba->cpu.executionMode == MODE_ARM &&
+                        cupid_arm_instruction_address(&gba->cpu) == run->terminalIssuedAddress &&
+                        (uint32_t)gba->cpu.gprs[ARM_PC] == run->terminalLogicalPC &&
+                        gba->cpu.prefetch[0] == UINT32_C(0xEAFFFFFE);
+        run->done = true;
+        return false;
+    }
+    while (run->nextKeyEvent < run->keyEventCount &&
+           run->keyEvents[run->nextKeyEvent].frame <= run->completed) {
+        gba->keysActive = run->keyEvents[run->nextKeyEvent++].keys;
+        cupid_gba_test_keypad_irq(gba);
+    }
+    return !gba->stopped;
+}
+
+static void motor_output(void *context, bool active, uint64_t clock) {
+    struct MotorTrace *trace = context;
+    uint8_t record[12] = {0};
+    for (unsigned i = 0; i < 8; i++)
+        record[i] = (uint8_t)(clock >> (i * 8));
+    record[8] = active;
+    if (fwrite(record, 1, sizeof(record), trace->file) != sizeof(record))
+        trace->failed = true;
+}
+
+enum { MAX_INSTRUCTION_OBSERVATIONS = 128 };
+
+struct InstructionObservation {
+    uint32_t address, expected, secondExpected, statusMask;
+    unsigned reg, secondReg;
+    bool pair;
+};
+
+struct InstructionObservations {
+    struct InstructionObservation entries[MAX_INSTRUCTION_OBSERVATIONS];
+    unsigned count, next;
+    bool failed, orderFailed;
+    struct RunState *run;
+};
+
+static void observe_instruction(const struct CupidARM *cpu, void *context) {
+    struct InstructionObservations *observations = context;
+    const bool thumb = cpu->executionMode == MODE_THUMB;
+    const uint32_t pc = cupid_arm_instruction_address(cpu);
+    struct RunState *run = observations->run;
+    if (run && !thumb) {
+        /* A prefetched address can be discarded by IRQ arbitration. Both
+         * result boundaries use the same actual-issue hook as comparisons. */
+        if (run->checkpointAddress && !run->checkpoint && pc == run->checkpointAddress) {
+            run->checkpoint = true;
+            run->checkpointValue = (uint32_t)cpu->gprs[run->expectedRegister];
+        }
+        if (run->expectedRegister >= 0 && (uint32_t)cpu->gprs[ARM_PC] >= GBA_BASE_ROM0 &&
+            (!run->terminalAddress || pc == run->terminalAddress) &&
+            cpu->prefetch[0] == UINT32_C(0xEAFFFFFE)) {
+            run->terminalIssued = true;
+            run->terminalIssuedAddress = pc;
+            run->terminalLogicalPC = (uint32_t)cpu->gprs[ARM_PC];
+        }
+    }
+    bool watched = false;
+    for (unsigned i = 0; i < observations->count; i++) {
+        if (observations->entries[i].address == pc) {
+            watched = true;
+            break;
+        }
+    }
+    if (!watched)
+        return;
+    /* Only actual instruction issue reaches this hook. A HALT poll, IRQ
+     * arbitration or discarded exception fetch cannot consume an expectation. */
+    if (observations->next == observations->count ||
+        observations->entries[observations->next].address != pc) {
+        if (!observations->orderFailed)
+            printf("observation-order=FAIL pc=%08" PRIx32 " next=%u\n", pc, observations->next);
+        observations->orderFailed = true;
+        return;
+    }
+    const struct InstructionObservation *observation = &observations->entries[observations->next];
+    const uint32_t value = observation->statusMask
+                               ? (uint32_t)cpu->cpsr.packed & observation->statusMask
+                               : (uint32_t)cpu->gprs[observation->reg];
+    const uint32_t second = (uint32_t)cpu->gprs[observation->secondReg];
+    const bool passed = value == observation->expected &&
+                        (!observation->pair || second == observation->secondExpected);
+    printf("observation=%u pc=%08" PRIx32 " mode=%s opcode=%08" PRIx32, observations->next, pc,
+           thumb ? "thumb" : "arm", cpu->prefetch[0]);
+    if (observation->statusMask)
+        printf(" masked-cpsr=%08" PRIx32 " mask=%08" PRIx32 " expected=%08" PRIx32, value,
+               observation->statusMask, observation->expected);
+    else
+        printf(" r%u=%08" PRIx32 " expected=%08" PRIx32, observation->reg, value,
+               observation->expected);
+    if (observation->pair)
+        printf(" r%u=%08" PRIx32 " expected=%08" PRIx32, observation->secondReg, second,
+               observation->secondExpected);
+    printf(" result=%s\n", passed ? "PASS" : "FAIL");
+    if (!passed)
+        observations->failed = true;
+    observations->next++;
+}
+
+static void audio_sample(void *context, uint64_t clock, int16_t left, int16_t right) {
+    struct AudioTrace *trace = context;
     uint8_t record[12];
-    for (unsigned i = 0; i < 8; i++) record[i] = (uint8_t)(clock >> (i * 8));
+    for (unsigned i = 0; i < 8; i++)
+        record[i] = (uint8_t)(clock >> (i * 8));
     record[8] = (uint8_t)left;
     record[9] = (uint8_t)((uint16_t)left >> 8);
     record[10] = (uint8_t)right;
     record[11] = (uint8_t)((uint16_t)right >> 8);
-    if (fwrite(record, 1, sizeof(record), trace->file) != sizeof(record)) trace->failed = true;
+    if (fwrite(record, 1, sizeof(record), trace->file) != sizeof(record))
+        trace->failed = true;
 }
 
-int main(int argc, char** argv) {
-    struct KeyEvent { uint64_t frame; uint16_t keys; } keyEvents[64];
-    unsigned keyEventCount = 0, nextKeyEvent = 0;
-    const char* rom = NULL;
-    const char* bios = NULL;
-    const char* output = NULL;
-    const char* vramOutput = NULL;
-    const char* ioOutput = NULL;
-    const char* ewramOutput = NULL;
-    const char* audioOutput = NULL;
-    const char* motorOutput = NULL;
+int main(int argc, char **argv) {
+    struct KeyEvent keyEvents[64];
+    unsigned keyEventCount = 0;
+    struct InstructionObservations observations = {0};
+    const char *rom = NULL;
+    const char *bios = NULL;
+    const char *output = NULL;
+    const char *vramOutput = NULL;
+    const char *ioOutput = NULL;
+    const char *ewramOutput = NULL;
+    const char *saveInput = NULL;
+    const char *saveOutput = NULL;
+    const char *rtcInput = NULL;
+    const char *rtcOutput = NULL;
+    const char *audioOutput = NULL;
+    const char *motorOutput = NULL;
     struct AudioTrace audioTrace = {0};
     struct MotorTrace motorTrace = {0};
     uint64_t frames = 120, cycleLimit = UINT64_C(280896) * 120, stepLimit = 50000000;
     uint64_t terminalAddress = 0;
+    uint64_t checkpointAddress = 0;
     uint64_t startAddress = 0;
     int expectedRegister = -1;
     bool sstFlash = false;
+    struct CupidPlatformSave saveSelection = {SAVE_AUTODETECT, FLASH_PROFILE_DEFAULT};
+    int rtcPresence = -1;
+    bool rtcSeedSet = false;
+    struct CupidRTCDateTime rtcSeed = {0};
     struct CupidPlatformPeripherals peripherals = CUPID_PLATFORM_PERIPHERALS_DEFAULT;
     for (int i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "--bios") && i + 1 < argc) bios = argv[++i];
-        else if (!strcmp(argv[i], "--flash-profile") && i + 1 < argc) {
-            if (strcmp(argv[++i], "sst39vf512")) return 2;
+        if (!strcmp(argv[i], "--bios") && i + 1 < argc)
+            bios = argv[++i];
+        else if ((!strcmp(argv[i], "--save-type") || !strcmp(argv[i], "-S")) && i + 1 < argc) {
+            if (!cupid_platform_save_parse(argv[++i], &saveSelection))
+                return 2;
+        } else if (!strcmp(argv[i], "--flash-profile") && i + 1 < argc) {
+            if (strcmp(argv[++i], "sst39vf512"))
+                return 2;
             sstFlash = true;
-        }
+        } else if (!strcmp(argv[i], "--rtc") && i + 1 < argc) {
+            if (!cupid_platform_peripheral_mode(argv[++i], &rtcPresence))
+                return 2;
+        } else if (!strcmp(argv[i], "--rtc-time") && i + 1 < argc) {
+            if (!cupid_rtc_parse_datetime(argv[++i], &rtcSeed))
+                return 2;
+            rtcSeedSet = true;
+        } else if (!strcmp(argv[i], "--load-rtc") && i + 1 < argc)
+            rtcInput = argv[++i];
+        else if (!strcmp(argv[i], "--dump-rtc") && i + 1 < argc)
+            rtcOutput = argv[++i];
         else if ((!strcmp(argv[i], "--solar") || !strcmp(argv[i], "--rumble") ||
-                  !strcmp(argv[i], "--gyro") || !strcmp(argv[i], "--tilt")) && i + 1 < argc) {
-            int* presence = !strcmp(argv[i], "--solar") ? &peripherals.solarPresence :
-                !strcmp(argv[i], "--rumble") ? &peripherals.rumblePresence :
-                !strcmp(argv[i], "--gyro") ? &peripherals.gyroPresence : &peripherals.tiltPresence;
-            if (!cupid_platform_peripheral_mode(argv[++i], presence)) return 2;
+                  !strcmp(argv[i], "--gyro") || !strcmp(argv[i], "--tilt")) &&
+                 i + 1 < argc) {
+            int *presence = !strcmp(argv[i], "--solar")    ? &peripherals.solarPresence
+                            : !strcmp(argv[i], "--rumble") ? &peripherals.rumblePresence
+                            : !strcmp(argv[i], "--gyro")   ? &peripherals.gyroPresence
+                                                           : &peripherals.tiltPresence;
+            if (!cupid_platform_peripheral_mode(argv[++i], presence))
+                return 2;
         } else if (!strcmp(argv[i], "--sunlight") && i + 1 < argc) {
-            if (!cupid_platform_solar_level(argv[++i], &peripherals.solarLevel)) return 2;
+            if (!cupid_platform_solar_level(argv[++i], &peripherals.solarLevel))
+                return 2;
         } else if (!strcmp(argv[i], "--gyro-sample") && i + 1 < argc) {
-            if (!cupid_platform_gyro_sample(argv[++i], &peripherals.gyroSample)) return 2;
+            if (!cupid_platform_gyro_sample(argv[++i], &peripherals.gyroSample))
+                return 2;
         } else if ((!strcmp(argv[i], "--tilt-x") || !strcmp(argv[i], "--tilt-y")) && i + 1 < argc) {
-            uint16_t* axis = !strcmp(argv[i], "--tilt-x") ? &peripherals.tiltX : &peripherals.tiltY;
-            if (!cupid_platform_sample12(argv[++i], axis)) return 2;
-        }
-        else if (!strcmp(argv[i], "--screenshot") && i + 1 < argc) output = argv[++i];
-        else if (!strcmp(argv[i], "--dump-vram") && i + 1 < argc) vramOutput = argv[++i];
-        else if (!strcmp(argv[i], "--dump-io") && i + 1 < argc) ioOutput = argv[++i];
-        else if (!strcmp(argv[i], "--dump-ewram") && i + 1 < argc) ewramOutput = argv[++i];
-        else if (!strcmp(argv[i], "--dump-audio") && i + 1 < argc) audioOutput = argv[++i];
-        else if (!strcmp(argv[i], "--dump-rumble") && i + 1 < argc) motorOutput = argv[++i];
+            uint16_t *axis = !strcmp(argv[i], "--tilt-x") ? &peripherals.tiltX : &peripherals.tiltY;
+            if (!cupid_platform_sample12(argv[++i], axis))
+                return 2;
+        } else if (!strcmp(argv[i], "--screenshot") && i + 1 < argc)
+            output = argv[++i];
+        else if (!strcmp(argv[i], "--dump-vram") && i + 1 < argc)
+            vramOutput = argv[++i];
+        else if (!strcmp(argv[i], "--dump-io") && i + 1 < argc)
+            ioOutput = argv[++i];
+        else if (!strcmp(argv[i], "--dump-ewram") && i + 1 < argc)
+            ewramOutput = argv[++i];
+        else if (!strcmp(argv[i], "--load-save") && i + 1 < argc)
+            saveInput = argv[++i];
+        else if (!strcmp(argv[i], "--dump-save") && i + 1 < argc)
+            saveOutput = argv[++i];
+        else if (!strcmp(argv[i], "--dump-audio") && i + 1 < argc)
+            audioOutput = argv[++i];
+        else if (!strcmp(argv[i], "--dump-rumble") && i + 1 < argc)
+            motorOutput = argv[++i];
         else if (!strcmp(argv[i], "--terminal-address") && i + 1 < argc) {
-            if (!number(argv[++i], &terminalAddress) || terminalAddress > UINT32_MAX) return 2;
-        }
-        else if (!strcmp(argv[i], "--start-address") && i + 1 < argc) {
+            if (!number(argv[++i], &terminalAddress) || terminalAddress > UINT32_MAX)
+                return 2;
+        } else if (!strcmp(argv[i], "--checkpoint-address") && i + 1 < argc) {
+            if (!number(argv[++i], &checkpointAddress) || !checkpointAddress ||
+                checkpointAddress > UINT32_MAX)
+                return 2;
+        } else if (!strcmp(argv[i], "--expect-status-at") && i + 3 < argc) {
+            uint64_t address, mask, expected;
+            if (observations.count == MAX_INSTRUCTION_OBSERVATIONS ||
+                !number(argv[++i], &address) || address > UINT32_MAX || !number(argv[++i], &mask) ||
+                !mask || mask > UINT32_MAX || !number(argv[++i], &expected) ||
+                expected > UINT32_MAX || (expected & ~mask))
+                return 2;
+            observations.entries[observations.count++] =
+                (struct InstructionObservation){.address = (uint32_t)address,
+                                                .expected = (uint32_t)expected,
+                                                .statusMask = (uint32_t)mask};
+        } else if (!strcmp(argv[i], "--expect-register-at") && i + 3 < argc) {
+            uint64_t address, reg, expected;
+            if (observations.count == MAX_INSTRUCTION_OBSERVATIONS ||
+                !number(argv[++i], &address) || address > UINT32_MAX || !number(argv[++i], &reg) ||
+                reg > 15 || !number(argv[++i], &expected) || expected > UINT32_MAX)
+                return 2;
+            observations.entries[observations.count++] = (struct InstructionObservation){
+                .address = (uint32_t)address, .expected = (uint32_t)expected, .reg = (unsigned)reg};
+        } else if (!strcmp(argv[i], "--expect-register-pair-at") && i + 5 < argc) {
+            uint64_t address, reg, expected, secondReg, secondExpected;
+            if (observations.count == MAX_INSTRUCTION_OBSERVATIONS ||
+                !number(argv[++i], &address) || address > UINT32_MAX || !number(argv[++i], &reg) ||
+                reg > 15 || !number(argv[++i], &expected) || expected > UINT32_MAX ||
+                !number(argv[++i], &secondReg) || secondReg > 15 ||
+                !number(argv[++i], &secondExpected) || secondExpected > UINT32_MAX)
+                return 2;
+            observations.entries[observations.count++] =
+                (struct InstructionObservation){.address = (uint32_t)address,
+                                                .expected = (uint32_t)expected,
+                                                .reg = (unsigned)reg,
+                                                .secondExpected = (uint32_t)secondExpected,
+                                                .secondReg = (unsigned)secondReg,
+                                                .pair = true};
+        } else if (!strcmp(argv[i], "--start-address") && i + 1 < argc) {
             if (!number(argv[++i], &startAddress) || startAddress < GBA_BASE_ROM0 ||
-                startAddress >= GBA_BASE_SRAM || (startAddress & 3)) return 2;
-        }
-        else if (!strcmp(argv[i], "--key-event") && i + 2 < argc) {
+                startAddress >= GBA_BASE_SRAM || (startAddress & 3))
+                return 2;
+        } else if (!strcmp(argv[i], "--key-event") && i + 2 < argc) {
             uint64_t frame, keys;
-            if (keyEventCount == 64 || !number(argv[++i], &frame) ||
-                !number(argv[++i], &keys) || keys > 0x3FF ||
-                (keyEventCount && frame < keyEvents[keyEventCount - 1].frame)) return 2;
+            if (keyEventCount == 64 || !number(argv[++i], &frame) || !number(argv[++i], &keys) ||
+                keys > 0x3FF || (keyEventCount && frame < keyEvents[keyEventCount - 1].frame))
+                return 2;
             keyEvents[keyEventCount++] = (struct KeyEvent){frame, (uint16_t)keys};
         } else if (!strcmp(argv[i], "--frames") && i + 1 < argc) {
-            if (!number(argv[++i], &frames) || !frames || frames > 100000) return 2;
+            if (!number(argv[++i], &frames) || !frames || frames > 100000)
+                return 2;
             cycleLimit = frames * UINT64_C(280896) + UINT64_C(280896) * 300;
         } else if (!strcmp(argv[i], "--steps") && i + 1 < argc) {
-            if (!number(argv[++i], &stepLimit) || !stepLimit) return 2;
+            if (!number(argv[++i], &stepLimit) || !stepLimit)
+                return 2;
         } else if (!strcmp(argv[i], "--expect-loop-register") && i + 1 < argc) {
             uint64_t index;
-            if (!number(argv[++i], &index) || index > 14) return 2;
+            if (!number(argv[++i], &index) || index > 14)
+                return 2;
             expectedRegister = (int)index;
-        } else if (argv[i][0] != '-' && !rom) rom = argv[i];
+        } else if (argv[i][0] != '-' && !rom)
+            rom = argv[i];
         else {
-            fprintf(stderr, "Usage: %s ROM [--bios FILE] [--flash-profile sst39vf512] [--frames N] [--steps N] [--key-event FRAME MASK] [--screenshot FILE.ppm] [--dump-vram FILE] [--dump-io FILE] [--dump-ewram FILE] [--dump-audio FILE] [--dump-rumble FILE] [--solar auto|on|off] [--sunlight 0..255] [--rumble auto|on|off] [--gyro auto|on|off] [--gyro-sample 0..4095] [--tilt auto|on|off] [--tilt-x 0..4095] [--tilt-y 0..4095] [--start-address ADDRESS] [--expect-loop-register N] [--terminal-address ADDRESS]\n", argv[0]);
+            fprintf(
+                stderr,
+                "Usage: %s ROM [--bios FILE] [--flash-profile sst39vf512] [--frames N] [--steps N] "
+                "[--key-event FRAME MASK] [--screenshot FILE.ppm] [--dump-vram FILE] [--dump-io "
+                "FILE] [--dump-ewram FILE] [--save-type TYPE] [--load-save FILE] [--dump-save "
+                "FILE] "
+                "[--rtc auto|on|off] [--rtc-time YYYY-MM-DDTHH:MM:SS] [--load-rtc FILE] "
+                "[--dump-rtc FILE] [--dump-audio "
+                "FILE] [--dump-rumble FILE] [--solar auto|on|off] [--sunlight 0..255] [--rumble "
+                "auto|on|off] [--gyro auto|on|off] [--gyro-sample 0..4095] [--tilt auto|on|off] "
+                "[--tilt-x 0..4095] [--tilt-y 0..4095] [--start-address ADDRESS] "
+                "[--expect-loop-register N] [--terminal-address ADDRESS] [--checkpoint-address "
+                "ADDRESS] [--expect-status-at ADDRESS MASK VALUE] [--expect-register-at ADDRESS "
+                "REGISTER VALUE] [--expect-register-pair-at "
+                "ADDRESS REGISTER VALUE REGISTER VALUE]\n",
+                argv[0]);
             return 2;
         }
     }
-    if (!rom) return 2;
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
-    if (!gba) return 2;
+    if (!rom)
+        return 2;
+    /* The legacy profile option remains valid, but conflicting hardware
+     * selections must fail independently of command-line option order. */
+    if (sstFlash) {
+        if (saveSelection.type != SAVE_AUTODETECT && saveSelection.type != SAVE_FLASH512)
+            return 2;
+        saveSelection = (struct CupidPlatformSave){SAVE_FLASH512, FLASH_PROFILE_SST39VF512};
+    }
+    if (checkpointAddress && expectedRegister < 0)
+        return 2;
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
+    if (!gba)
+        return 2;
     cupid_gba_create(gba);
     int result = 2;
-    if (!cupid_load_rom(gba, rom) || (bios && !cupid_load_bios(gba, bios))) goto cleanup;
-    if (sstFlash) {
-        cupid_savedata_force_type(&gba->memory.savedata, SAVE_FLASH512);
-        if (!cupid_savedata_set_flash_profile(&gba->memory.savedata, FLASH_PROFILE_SST39VF512)) goto cleanup;
-    }
+    uint32_t *pixels = NULL;
+    if (!cupid_load_rom(gba, rom) || (bios && !cupid_load_bios(gba, bios)))
+        goto cleanup;
+    if (!cupid_platform_save_configure(&gba->memory.savedata, &saveSelection))
+        goto cleanup;
     cupid_platform_peripherals_configure(gba, &peripherals);
+    if (rtcPresence >= 0)
+        cupid_cartridge_enable_rtc(gba, rtcPresence != 0);
     cupid_gba_reset(gba);
+    /* Match frontend startup: restore battery bytes after reset, before guest
+     * execution or output creation. An explicit input must load successfully;
+     * ordinary runs keep their fresh, private in-memory backup. */
+    if (saveInput && !cupid_savedata_load_file(&gba->memory.savedata, saveInput)) {
+        perror(saveInput);
+        goto cleanup;
+    }
+    /* Explicit RTC inputs are read-only and must be usable before any output
+     * is opened. Host timestamps never advance a deterministic replay. */
+    if ((rtcInput || rtcOutput || rtcSeedSet) && !gba->cartridge.rtcPresent) {
+        fprintf(stderr, "Requested RTC state requires an enabled RTC; use --rtc on\n");
+        goto cleanup;
+    }
+    if (rtcInput && !cupid_cartridge_load_rtc(gba, rtcInput, NULL)) {
+        perror(rtcInput);
+        goto cleanup;
+    }
+    if (rtcSeedSet) {
+        /* A seed overrides the loaded calendar, retaining its control and
+         * parameter settings. Recompute any output deadline from that date. */
+        if (!cupid_rtc_set_datetime(&gba->cartridge.rtc, &rtcSeed))
+            goto cleanup;
+        cupid_cartridge_rtc_reschedule(gba);
+    }
     /* An explicit probe entry exercises guest code with the selected BIOS
      * mapped. It does not execute or qualify the BIOS boot sequence. */
     if (startAddress) {
@@ -141,65 +437,141 @@ int main(int argc, char** argv) {
     }
     if (motorOutput) {
         motorTrace.file = fopen(motorOutput, "wb");
-        if (!motorTrace.file) { perror(motorOutput); goto cleanup; }
-        if (fwrite("CPDRMB01", 1, 8, motorTrace.file) != 8) goto cleanup;
+        if (!motorTrace.file) {
+            perror(motorOutput);
+            goto cleanup;
+        }
+        if (fwrite("CPDRMB01", 1, 8, motorTrace.file) != 8)
+            goto cleanup;
         cupid_cartridge_set_rumble_output(gba, motor_output, &motorTrace);
     }
     if (audioOutput) {
         audioTrace.file = fopen(audioOutput, "wb");
-        if (!audioTrace.file) { perror(audioOutput); goto cleanup; }
-        if (fwrite("CPDPCM01", 1, 8, audioTrace.file) != 8) goto cleanup;
+        if (!audioTrace.file) {
+            perror(audioOutput);
+            goto cleanup;
+        }
+        if (fwrite("CPDPCM01", 1, 8, audioTrace.file) != 8)
+            goto cleanup;
         gba->audio.sampleSink = audio_sample;
         gba->audio.sampleSinkContext = &audioTrace;
     }
-    uint64_t completed = 0, steps = 0, stoppedClocks = 0;
-    bool terminal = false;
-    while (completed < frames && steps < stepLimit &&
-           cupid_timing_global_time(&gba->timing) + stoppedClocks < cycleLimit) {
-        if (expectedRegister >= 0 && gba->cpu.executionMode == MODE_ARM &&
-            (uint32_t)gba->cpu.gprs[ARM_PC] >= GBA_BASE_ROM0 &&
-            (!terminalAddress || (uint32_t)gba->cpu.gprs[ARM_PC] - 4 == terminalAddress) &&
-            gba->cpu.prefetch[0] == UINT32_C(0xEAFFFFFE)) {
-            terminal = true;
-            break;
-        }
-        while (nextKeyEvent < keyEventCount && keyEvents[nextKeyEvent].frame <= completed) {
-            gba->keysActive = keyEvents[nextKeyEvent++].keys;
-            cupid_gba_test_keypad_irq(gba);
-        }
-        if (gba->stopped) {
-            uint64_t clocks = cycleLimit - cupid_timing_global_time(&gba->timing) - stoppedClocks;
-            if (clocks > VIDEO_TOTAL_LENGTH) clocks = VIDEO_TOTAL_LENGTH;
-            stoppedClocks += cupid_gba_advance_stopped_time(gba, clocks);
-        } else cupid_gba_step(gba);
-        steps++;
-        if (gba->frameReady) { completed++; gba->frameReady = false; }
+    if (output) {
+        pixels = malloc(sizeof(gba->video.outputBuffer));
+        if (!pixels)
+            goto cleanup;
+        memcpy(pixels, gba->video.outputBuffer, sizeof(gba->video.outputBuffer));
     }
-    printf("frames=%" PRIu64 " cycles=%" PRIu64 " steps=%" PRIu64 " pc=%08" PRIx32 "\n",
-           completed, cupid_timing_global_time(&gba->timing), steps, (uint32_t)gba->cpu.gprs[ARM_PC]);
-    if (stoppedClocks) printf("stopped_cycles=%" PRIu64 "\n", stoppedClocks);
+    struct RunState run = {.gba = gba,
+                           .pixels = pixels,
+                           .frames = frames,
+                           .cycleLimit = cycleLimit,
+                           .stepLimit = stepLimit,
+                           .terminalAddress = terminalAddress,
+                           .checkpointAddress = checkpointAddress,
+                           .expectedRegister = expectedRegister,
+                           .keyEvents = keyEvents,
+                           .keyEventCount = keyEventCount};
+    cupid_video_set_frame_callback(&gba->video, frame_output, &run);
+    observations.run = &run;
+    if (observations.count || expectedRegister >= 0) {
+        gba->cpu.instructionObserver = observe_instruction;
+        gba->cpu.instructionObserverContext = &observations;
+    }
+    while (!run.done) {
+        if (run_boundary(gba, 0, &run)) {
+            cupid_gba_run_steps(gba, stepLimit - run.steps, run_boundary, &run);
+            continue;
+        }
+        if (run.done)
+            break;
+        /* STOP retains the original explicit cartridge-clock interval and
+         * one loop iteration; batching never advances frozen board clocks. */
+        if (gba->stopped) {
+            uint64_t clocks =
+                cycleLimit - cupid_timing_global_time(&gba->timing) - run.stoppedClocks;
+            if (clocks > VIDEO_TOTAL_LENGTH)
+                clocks = VIDEO_TOTAL_LENGTH;
+            run.stoppedClocks += cupid_gba_advance_stopped_time(gba, clocks);
+        }
+        ++run.steps;
+    }
+    const uint64_t completed = run.completed, steps = run.steps, stoppedClocks = run.stoppedClocks;
+    const bool terminal = run.terminal, checkpoint = run.checkpoint;
+    const uint32_t checkpointValue = run.checkpointValue;
+    printf("frames=%" PRIu64 " cycles=%" PRIu64 " steps=%" PRIu64 " pc=%08" PRIx32 "\n", completed,
+           cupid_timing_global_time(&gba->timing), steps, (uint32_t)gba->cpu.gprs[ARM_PC]);
+    if (stoppedClocks)
+        printf("stopped_cycles=%" PRIu64 "\n", stoppedClocks);
     if (expectedRegister >= 0) {
         uint32_t value = (uint32_t)gba->cpu.gprs[expectedRegister];
+        printf("terminal-issued=%s completed=%s pc=%08" PRIx32 "\n",
+               run.terminalIssued ? "yes" : "no", terminal ? "yes" : "no",
+               run.terminalIssuedAddress);
         printf("terminal=%s r%d=%" PRIu32 " result=%s\n", terminal ? "yes" : "no", expectedRegister,
-               value, terminal ? (value ? "FAIL" : "PASS") : "TIMEOUT");
-        result = terminal && !value ? 0 : 1;
-    } else result = completed == frames ? 0 : 1;
-    if (output && !screenshot(gba, output)) { perror(output); result = 2; }
-    const char* dumpPaths[] = {vramOutput, ioOutput, ewramOutput};
-    const void* dumpData[] = {gba->video.vram, gba->memory.io, gba->memory.ewram};
-    const size_t dumpSizes[] = {GBA_SIZE_VRAM, sizeof(gba->memory.io), GBA_SIZE_EWRAM};
-    for (unsigned i = 0; i < 3; i++) {
-        if (!dumpPaths[i]) continue;
-        FILE* file = fopen(dumpPaths[i], "wb");
-        if (!file) { perror(dumpPaths[i]); result = 2; continue; }
+               value,
+               terminal             ? (value ? "FAIL" : "PASS")
+               : run.terminalIssued ? "INCOMPLETE"
+                                    : "TIMEOUT");
+        if (checkpointAddress)
+            printf("checkpoint=%s r%d=%" PRIu32 " result=%s\n", checkpoint ? "yes" : "no",
+                   expectedRegister, checkpointValue,
+                   checkpoint ? (checkpointValue ? "FAIL" : "PASS") : "MISSING");
+        result =
+            terminal && !value && (!checkpointAddress || (checkpoint && !checkpointValue)) ? 0 : 1;
+    } else
+        result = completed == frames ? 0 : 1;
+    if (observations.count) {
+        const bool failed = observations.failed || observations.orderFailed;
+        printf("observations=%u/%u result=%s\n", observations.next, observations.count,
+               failed                                    ? "FAIL"
+               : observations.next != observations.count ? "MISSING"
+                                                         : "PASS");
+        if (failed || observations.next != observations.count)
+            result = 1;
+    }
+    if (output && !screenshot(pixels, output)) {
+        perror(output);
+        result = 2;
+    }
+    /* A snapshot is explicit, atomic and independent of raw save memory.
+     * A zero host anchor prevents later runs from adding offline wall time. */
+    if (rtcOutput && !cupid_cartridge_save_rtc(gba, rtcOutput, 0)) {
+        perror(rtcOutput);
+        result = 2;
+    }
+    const char *dumpPaths[] = {vramOutput, ioOutput, ewramOutput, saveOutput};
+    const void *dumpData[] = {gba->video.vram, gba->memory.io, gba->memory.ewram,
+                              gba->memory.savedata.data};
+    const size_t dumpSizes[] = {GBA_SIZE_VRAM, sizeof(gba->memory.io), GBA_SIZE_EWRAM,
+                                gba->memory.savedata.size};
+    for (unsigned i = 0; i < 4; i++) {
+        if (!dumpPaths[i])
+            continue;
+        if (!dumpData[i] || !dumpSizes[i]) {
+            fprintf(stderr, "No data for requested snapshot\n");
+            result = 2;
+            continue;
+        }
+        FILE *file = fopen(dumpPaths[i], "wb");
+        if (!file) {
+            perror(dumpPaths[i]);
+            result = 2;
+            continue;
+        }
         bool written = fwrite(dumpData[i], 1, dumpSizes[i], file) == dumpSizes[i];
-        if (fclose(file) != 0 || !written) result = 2;
+        if (fclose(file) != 0 || !written)
+            result = 2;
     }
 cleanup:
+    cupid_video_set_frame_callback(&gba->video, NULL, NULL);
     cupid_cartridge_set_rumble_output(gba, NULL, NULL);
-    if (motorTrace.file && (fclose(motorTrace.file) != 0 || motorTrace.failed)) result = 2;
-    if (audioTrace.file && (fclose(audioTrace.file) != 0 || audioTrace.failed)) result = 2;
+    if (motorTrace.file && (fclose(motorTrace.file) != 0 || motorTrace.failed))
+        result = 2;
+    if (audioTrace.file && (fclose(audioTrace.file) != 0 || audioTrace.failed))
+        result = 2;
     cupid_gba_destroy(gba);
+    free(pixels);
     free(gba);
     return result;
 }

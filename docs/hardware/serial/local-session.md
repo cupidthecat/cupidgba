@@ -79,6 +79,10 @@ events and equal-time CPU boundaries use player order. Pin changes propagate
 synchronously at that instant. A long instruction or DMA hold cannot advance
 a peer past an earlier output and then inject the output into its past.
 
+After those events, each clock that advanced updates its display to the same
+endpoint. Pixels are current when a run call returns, including while a CPU
+is HALTed or suspended inside a memory request. STOP keeps its display frozen.
+
 HALT and DMA waits are interruptible clock requests. A newly arrived peer
 event can shorten that wait; fixed-duration CPU bus phases retain their full
 intervals. STOP freezes only that console's local clock, while session time

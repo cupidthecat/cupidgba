@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-#include "cupid/gba.h"
 #include "../test.h"
+#include "cupid/gba.h"
 
-static struct CupidGBA* machine(uint64_t clock, unsigned line) {
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+static struct CupidGBA *machine(uint64_t clock, unsigned line) {
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba);
     cupid_gba_create(gba);
     cupid_gba_reset(gba);
@@ -18,18 +18,18 @@ static struct CupidGBA* machine(uint64_t clock, unsigned line) {
     return gba;
 }
 
-static void destroy(struct CupidGBA* gba) {
+static void destroy(struct CupidGBA *gba) {
     cupid_gba_destroy(gba);
     free(gba);
 }
 
-static void tick(struct CupidGBA* gba, unsigned clocks) {
+static void tick(struct CupidGBA *gba, unsigned clocks) {
     CHECK(gba->cpu.cycles == 0);
     cupid_timing_tick(&gba->timing, (int32_t)clocks);
 }
 
 static void flags_and_irqs_have_separate_deadlines(void) {
-    struct CupidGBA* gba = machine(0, 0);
+    struct CupidGBA *gba = machine(0, 0);
     cupid_io_write(gba, REG_DISPSTAT, 0x0130);
     tick(gba, 1006);
     CHECK(cupid_io_read(gba, REG_DISPSTAT) == 0x0130);
@@ -70,7 +70,7 @@ static void flags_and_irqs_have_separate_deadlines(void) {
 }
 
 static void match_writes_masks_and_frame_edges(void) {
-    struct CupidGBA* gba = machine(0, 7);
+    struct CupidGBA *gba = machine(0, 7);
     cupid_io_write(gba, REG_DISPSTAT, 0x07FF);
     CHECK(cupid_io_read(gba, REG_DISPSTAT) == 0x073C);
     tick(gba, 2);
@@ -100,7 +100,7 @@ static void match_writes_masks_and_frame_edges(void) {
 }
 
 static void display_dma_latches_before_the_next_frame_window(void) {
-    struct CupidGBA* gba = machine(0, 162);
+    struct CupidGBA *gba = machine(0, 162);
     cupid_memory_store16(&gba->cpu, GBA_BASE_IWRAM, 0x1234, NULL);
     cupid_dma_write_sad(gba, 3, GBA_BASE_IWRAM);
     cupid_dma_write_dad(gba, 3, GBA_BASE_EWRAM);
@@ -133,11 +133,11 @@ static void display_dma_latches_before_the_next_frame_window(void) {
 static void late_dispatch_matches_clock_steps_across_wrap(void) {
     const uint64_t clocks[] = {0, UINT32_MAX - 1000u, UINT64_C(0x300000000)};
     for (unsigned c = 0; c < 3; c++) {
-        struct CupidGBA* late = machine(clocks[c], 159);
-        struct CupidGBA* punctual = machine(clocks[c], 159);
-        struct CupidGBA* machines[] = {late, punctual};
+        struct CupidGBA *late = machine(clocks[c], 159);
+        struct CupidGBA *punctual = machine(clocks[c], 159);
+        struct CupidGBA *machines[] = {late, punctual};
         for (unsigned i = 0; i < 2; i++) {
-            struct CupidGBA* gba = machines[i];
+            struct CupidGBA *gba = machines[i];
             cupid_io_write(gba, REG_DISPSTAT, 0xA038);
             cupid_io_write(gba, REG_TM0CNT_L, 0xFFF0);
             cupid_io_write(gba, REG_TM0CNT_H, 0xC0);
@@ -147,7 +147,8 @@ static void late_dispatch_matches_clock_steps_across_wrap(void) {
             cupid_dma_write_cnt(gba, 0, 0xA000);
         }
         tick(late, 10000);
-        for (unsigned i = 0; i < 10000; i++) tick(punctual, 1);
+        for (unsigned i = 0; i < 10000; i++)
+            tick(punctual, 1);
         CHECK(late->video.vcount == punctual->video.vcount);
         CHECK(late->video.dispstat == punctual->video.dispstat);
         CHECK(late->video.event.when == punctual->video.event.when);
@@ -162,14 +163,14 @@ static void late_dispatch_matches_clock_steps_across_wrap(void) {
 }
 
 struct FrameCapture {
-    struct CupidGBA* gba;
+    struct CupidGBA *gba;
     uint64_t nextClock;
     unsigned calls;
     uint32_t pixels[GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT];
 };
 
-static void capture_image(void* context, const uint32_t* pixels, uint64_t clock) {
-    struct FrameCapture* frame = context;
+static void capture_image(void *context, const uint32_t *pixels, uint64_t clock) {
+    struct FrameCapture *frame = context;
     CHECK(clock == frame->nextClock && clock == cupid_timing_global_time(&frame->gba->timing));
     CHECK(frame->gba->video.vcount == VIDEO_VDRAW_LINES && frame->gba->frameReady);
     CHECK(frame->gba->memory.io[REG_VCOUNT >> 1] == VIDEO_VDRAW_LINES);
@@ -179,7 +180,7 @@ static void capture_image(void* context, const uint32_t* pixels, uint64_t clock)
     memcpy(frame->pixels, pixels, sizeof(frame->pixels));
 }
 
-static void image_is(const uint32_t* pixels, uint16_t color) {
+static void image_is(const uint32_t *pixels, uint16_t color) {
     for (unsigned i = 0; i < GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT; ++i)
         CHECK(pixels[i] == color16_to_rgba(color));
 }
@@ -187,29 +188,40 @@ static void image_is(const uint32_t* pixels, uint16_t color) {
 static void completed_images_survive_drawing_stop_late_dispatch_and_reset(void) {
     const uint64_t epochs[] = {0, UINT32_MAX - UINT64_C(512)};
     for (unsigned epoch = 0; epoch < sizeof(epochs) / sizeof(*epochs); ++epoch) {
-        struct CupidGBA* gba = machine(epochs[epoch], 0);
-        struct FrameCapture* frame = calloc(1, sizeof(*frame)); CHECK(frame);
+        struct CupidGBA *gba = machine(epochs[epoch], 225);
+        struct FrameCapture *frame = calloc(1, sizeof(*frame));
+        CHECK(frame);
         frame->gba = gba;
-        frame->nextClock = epochs[epoch] + VIDEO_VDRAW_LINES * VIDEO_HORIZONTAL_LENGTH;
+        cupid_io_write(gba, REG_DISPCNT, 0x0403);
+        for (unsigned i = 0; i < GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT; ++i)
+            gba->video.vram[i] = 0x001F;
+        /* Settle all three display latches during VBlank before asserting a
+         * uniform completed image. No visible line or frame handoff is skipped. */
+        tick(gba, 3 * VIDEO_HORIZONTAL_LENGTH);
+        CHECK(gba->video.vcount == 0);
+        frame->nextClock =
+            cupid_timing_global_time(&gba->timing) + VIDEO_VDRAW_LINES * VIDEO_HORIZONTAL_LENGTH;
         cupid_video_set_frame_callback(&gba->video, capture_image, frame);
         gba->video.frameCounter = UINT32_MAX;
-        cupid_io_write(gba, REG_DISPCNT, 0x0403);
-        for (unsigned i = 0; i < GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT; ++i) gba->video.vram[i] = 0x001F;
         tick(gba, VIDEO_TOTAL_LENGTH);
         CHECK(frame->calls == 1 && gba->video.frameCounter == 0);
         image_is(frame->pixels, 0x001F);
-        for (unsigned i = 0; i < GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT; ++i) gba->video.vram[i] = 0x03E0;
+        for (unsigned i = 0; i < GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT; ++i)
+            gba->video.vram[i] = 0x03E0;
         tick(gba, VIDEO_HORIZONTAL_LENGTH * 80);
         CHECK(frame->calls == 1);
         /* The next visible frame is a live-buffer negative control. Its top
          * has changed, while the published complete image remains intact. */
         CHECK(gba->video.outputBuffer[0] == color16_to_rgba(0x03E0));
-        CHECK(gba->video.outputBuffer[(GBA_SCREEN_HEIGHT - 1) * GBA_SCREEN_WIDTH] == color16_to_rgba(0x001F));
+        CHECK(gba->video.outputBuffer[(GBA_SCREEN_HEIGHT - 1) * GBA_SCREEN_WIDTH] ==
+              color16_to_rgba(0x001F));
         image_is(frame->pixels, 0x001F);
-        cupid_gba_stop(gba); CHECK(gba->stopped);
+        cupid_gba_stop(gba);
+        CHECK(gba->stopped);
         const uint64_t stoppedClock = cupid_timing_global_time(&gba->timing);
         cupid_gba_run_interval(gba, VIDEO_TOTAL_LENGTH);
-        CHECK(gba->stopped && cupid_timing_global_time(&gba->timing) == stoppedClock && frame->calls == 1);
+        CHECK(gba->stopped && cupid_timing_global_time(&gba->timing) == stoppedClock &&
+              frame->calls == 1);
         image_is(frame->pixels, 0x001F);
         gba->stopped = false;
         tick(gba, VIDEO_TOTAL_LENGTH);
@@ -224,19 +236,25 @@ static void completed_images_survive_drawing_stop_late_dispatch_and_reset(void) 
         gba->timing.globalCycles = epochs[epoch];
         gba->timing.masterCycles = (uint32_t)epochs[epoch];
         cupid_video_reset(&gba->video);
-        gba->memory.io[REG_VCOUNT >> 1] = 0;
-        frame->nextClock = epochs[epoch] + VIDEO_VDRAW_LINES * VIDEO_HORIZONTAL_LENGTH;
+        gba->video.vcount = 225;
+        gba->memory.io[REG_VCOUNT >> 1] = 225;
+        frame->nextClock = epochs[epoch] + (3 + VIDEO_VDRAW_LINES) * VIDEO_HORIZONTAL_LENGTH;
         cupid_io_write(gba, REG_DISPCNT, 0x0403);
-        for (unsigned i = 0; i < GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT; ++i) gba->video.vram[i] = 0x001F;
+        for (unsigned i = 0; i < GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT; ++i)
+            gba->video.vram[i] = 0x001F;
+        tick(gba, 3 * VIDEO_HORIZONTAL_LENGTH);
+        CHECK(gba->video.vcount == 0 && frame->calls == 4);
         tick(gba, VIDEO_TOTAL_LENGTH);
         CHECK(frame->calls == 5);
         image_is(frame->pixels, 0x001F);
         cupid_video_set_frame_callback(&gba->video, NULL, NULL);
-        for (unsigned i = 0; i < GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT; ++i) gba->video.vram[i] = 0x03E0;
+        for (unsigned i = 0; i < GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT; ++i)
+            gba->video.vram[i] = 0x03E0;
         tick(gba, VIDEO_TOTAL_LENGTH);
         CHECK(frame->calls == 5);
         image_is(frame->pixels, 0x001F);
-        destroy(gba); free(frame);
+        destroy(gba);
+        free(frame);
     }
 }
 

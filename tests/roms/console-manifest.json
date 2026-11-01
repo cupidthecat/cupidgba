@@ -69,6 +69,26 @@
       ]
     },
     {
+      "name": "vram-mirror",
+      "path": "ppu/vram-mirror/vram-mirror.gba",
+      "sha256": "f8eedd949da40ed544ceeb5d9f3ab0812d45c2f4fe4e9a3613ca6e4356d9642b",
+      "frames": 120,
+      "external_frames": 400,
+      "lines": [
+        "M0 10000h: PASS 0xabad1dea",
+        "M0 14000h: PASS 0x12345678",
+        "M0 18000h: PASS 0xabad1dea",
+        "M0 1C000h: PASS 0x12345678",
+        "M0 CRC32: PASS 0xd2e083ba",
+        "M3 10000h: PASS 0xabad1dea",
+        "M3 14000h: PASS 0x87654321",
+        "M3 18000h: PASS 0x0",
+        "M3 1C000h: PASS 0x87654321",
+        "M3 CRC32: PASS 0x5b156ce9",
+        "congratulations!"
+      ]
+    },
+    {
       "name": "dma-burst",
       "path": "dma/burst-into-tears/burst-into-tears.gba",
       "sha256": "803ce6e7d444ad4a1397fb12bee1e2144aa5e95731ff31e9c2d68077e45958ce",

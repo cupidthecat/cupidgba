@@ -1,11 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-#include "cupid/rtc.h"
 #include "../../test.h"
+#include "cupid/rtc.h"
 
 /* The first whole 16,777,216 Hz clock after the nominal 10 ms carry window. */
 enum { CARRY_END = 167773 };
 
-static void minute_carry(struct CupidRTC* rtc, bool steady) {
+static void minute_carry(struct CupidRTC *rtc, bool steady) {
     cupid_rtc_init(rtc, 123);
     const struct CupidRTCDateTime date = {26, 10, 13, 2, 12, 34, 59};
     CHECK(cupid_rtc_set_datetime(rtc, &date));
@@ -96,9 +96,13 @@ static void mode_priority_and_power_flags_preserve_a_real_carry(void) {
 }
 
 static void bulk_and_chunked_clock_inputs_retain_the_same_window_and_latch(void) {
-    const uint64_t intervals[] = {1, CARRY_END - 1, CARRY_END, CARRY_END + 1,
-        CUPID_RTC_CLOCK_HZ, 60 * CUPID_RTC_CLOCK_HZ + 1,
-        60 * CUPID_RTC_CLOCK_HZ + CARRY_END};
+    const uint64_t intervals[] = {1,
+                                  CARRY_END - 1,
+                                  CARRY_END,
+                                  CARRY_END + 1,
+                                  CUPID_RTC_CLOCK_HZ,
+                                  60 * CUPID_RTC_CLOCK_HZ + 1,
+                                  60 * CUPID_RTC_CLOCK_HZ + CARRY_END};
     for (unsigned steady = 0; steady < 2; steady++)
         for (unsigned i = 0; i < sizeof(intervals) / sizeof(*intervals); i++) {
             struct CupidRTC bulk, pieces;
@@ -107,7 +111,8 @@ static void bulk_and_chunked_clock_inputs_retain_the_same_window_and_latch(void)
             cupid_rtc_advance_clocks(&bulk, intervals[i]);
             for (uint64_t elapsed = 0; elapsed < intervals[i];) {
                 uint64_t amount = intervals[i] - elapsed;
-                if (amount > 65537) amount = 65537;
+                if (amount > 65537)
+                    amount = 65537;
                 cupid_rtc_advance_clocks(&pieces, amount);
                 elapsed += amount;
             }

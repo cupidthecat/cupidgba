@@ -41,3 +41,6 @@ Clients must rebuild against the matching CPU/GBA structure layout.
 Ordinary transfers use R0 through R14 as the data register. Invalid modes,
 PC destinations, power-up reserved bits and other unpredictable status or
 exception-return combinations require separate evidence.
+
+See [ARM-state status writes](status-pipeline.md) for retention of prefetched
+instructions across ordinary CPSR updates.

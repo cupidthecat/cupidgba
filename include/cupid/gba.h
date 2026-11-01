@@ -3,26 +3,25 @@
  * @brief Top-level GBA system struct and main emulation loop.
  *
  */
-
 #ifndef CUPID_GBA_H
 #define CUPID_GBA_H
 
-#include "cupid/types.h"
 #include "cupid/arm.h"
-#include "cupid/memory.h"
-#include "cupid/video.h"
 #include "cupid/audio.h"
-#include "cupid/timer.h"
-#include "cupid/serial.h"
-#include "cupid/timing.h"
+#include "cupid/bios.h"
+#include "cupid/cartridge.h"
 #include "cupid/io.h"
 #include "cupid/irq.h"
-#include "cupid/bios.h"
+#include "cupid/memory.h"
 #include "cupid/render.h"
-#include "cupid/cartridge.h"
+#include "cupid/serial.h"
+#include "cupid/timer.h"
+#include "cupid/timing.h"
+#include "cupid/types.h"
+#include "cupid/video.h"
 
 /** @name GBA Clock */
-#define GBA_ARM7TDMI_FREQUENCY 0x1000000U  /**< 16,777,216 Hz */
+#define GBA_ARM7TDMI_FREQUENCY 0x1000000U /**< 16,777,216 Hz */
 
 /**
  * @name GBA IRQ Bit Positions
@@ -30,43 +29,39 @@
  * Use as: (1 << GBA_IRQ_VBLANK), etc. Our CupidIRQ enum in io.h
  */
 enum GBAIRQ {
-    GBA_IRQ_VBLANK   = 0x0,
-    GBA_IRQ_HBLANK   = 0x1,
+    GBA_IRQ_VBLANK = 0x0,
+    GBA_IRQ_HBLANK = 0x1,
     GBA_IRQ_VCOUNTER = 0x2,
-    GBA_IRQ_TIMER0   = 0x3,
-    GBA_IRQ_TIMER1   = 0x4,
-    GBA_IRQ_TIMER2   = 0x5,
-    GBA_IRQ_TIMER3   = 0x6,
-    GBA_IRQ_SIO      = 0x7,
-    GBA_IRQ_DMA0     = 0x8,
-    GBA_IRQ_DMA1     = 0x9,
-    GBA_IRQ_DMA2     = 0xA,
-    GBA_IRQ_DMA3     = 0xB,
-    GBA_IRQ_KEYPAD   = 0xC,
-    GBA_IRQ_GAMEPAK  = 0xD
+    GBA_IRQ_TIMER0 = 0x3,
+    GBA_IRQ_TIMER1 = 0x4,
+    GBA_IRQ_TIMER2 = 0x5,
+    GBA_IRQ_TIMER3 = 0x6,
+    GBA_IRQ_SIO = 0x7,
+    GBA_IRQ_DMA0 = 0x8,
+    GBA_IRQ_DMA1 = 0x9,
+    GBA_IRQ_DMA2 = 0xA,
+    GBA_IRQ_DMA3 = 0xB,
+    GBA_IRQ_KEYPAD = 0xC,
+    GBA_IRQ_GAMEPAK = 0xD
 };
 
 /** @name Initial Stack-Pointer Bases */
 enum {
-    GBA_SP_BASE_SYSTEM     = 0x03007F00,
-    GBA_SP_BASE_IRQ        = 0x03007FA0,
+    GBA_SP_BASE_SYSTEM = 0x03007F00,
+    GBA_SP_BASE_IRQ = 0x03007FA0,
     GBA_SP_BASE_SUPERVISOR = 0x03007FE0
 };
 
 /** @name Idle-Loop Optimization Levels */
-enum CupidIdleLoopOpt {
-    IDLE_LOOP_IGNORE = -1,
-    IDLE_LOOP_REMOVE = 0,
-    IDLE_LOOP_DETECT
-};
+enum CupidIdleLoopOpt { IDLE_LOOP_IGNORE = -1, IDLE_LOOP_REMOVE = 0, IDLE_LOOP_DETECT };
 
 /** @name GBA System */
 struct CupidGBA {
-    struct CupidARM   cpu;
+    struct CupidARM cpu;
     struct CupidMemory memory;
-    struct CupidVideo  video;
-    struct CupidAudio  audio;
-    struct CupidTimer  timers[4];
+    struct CupidVideo video;
+    struct CupidAudio audio;
+    struct CupidTimer timers[4];
     struct CupidCartridge cartridge;
     struct CupidSerial serial;
 
@@ -82,13 +77,13 @@ struct CupidGBA {
     struct CupidIRQState irq;
 
     /** Interrupt state (stored in IO but mirrored here for fast access) */
-    uint16_t ime;        /**< Master interrupt enable */
-    uint16_t ie;         /**< Interrupt enable mask */
-    uint16_t irqf;       /**< Interrupt request flags (IF) */
+    uint16_t ime;  /**< Master interrupt enable */
+    uint16_t ie;   /**< Interrupt enable mask */
+    uint16_t irqf; /**< Interrupt request flags (IF) */
 
     /** Key input */
-    uint16_t keysActive;     /**< Current key state (host → emu) */
-    uint16_t keysLast;       /**< Previous frame's key state */
+    uint16_t keysActive; /**< Current key state (host → emu) */
+    uint16_t keysLast;   /**< Previous frame's key state */
 
     /** Frame complete flag (set when VBlank starts) */
     bool frameReady;
@@ -97,18 +92,23 @@ struct CupidGBA {
     uint32_t lastJump;
 
     /** CPU flow control */
-    bool cpuBlocked;     /**< True while DMA owns the bus */
-    bool earlyExit;      /**< Break out of the run loop (for sync) */
-    bool stopped;        /**< System clock is frozen until an eligible external IRQ */
-    bool haltIRQSample;  /**< IRQ line before the HALT acceptance clock */
+    bool cpuBlocked;    /**< True while DMA owns the bus */
+    bool earlyExit;     /**< Break out of the run loop (for sync) */
+    bool stopped;       /**< System clock is frozen until an eligible external IRQ */
+    bool haltIRQSample; /**< IRQ line before the HALT acceptance clock */
     bool haltIRQSampleValid;
+    bool haltTimed;
+    struct CupidTimingEvent haltEvent;
+    struct CupidExecution *execution; /**< Same-thread suspended CPU stack */
+    bool cpuInstructionPending;       /**< A bus phase remains inside an unfinished step */
+    bool externalExecution;           /**< A cable owns the CPU's cooperative stack */
     uint64_t intervalOvershoot; /**< Completed-step clocks charged to the next paced interval */
-    uint32_t biosStall;  /**< Extra stall cycles added by BIOS reads */
-    uint32_t dmaPC;      /**< PC snapshot when DMA started */
+    uint32_t biosStall;         /**< Extra stall cycles added by BIOS reads */
+    uint32_t dmaPC;             /**< PC snapshot when DMA started */
 
     /** ROM/BIOS identification */
     uint32_t biosChecksum;
-    bool     hasBios;        /**< True when a real BIOS image is loaded */
+    bool hasBios; /**< True when a real BIOS image is loaded */
     uint32_t romCrc32;
 
     /** Cycle tracking */
@@ -127,30 +127,60 @@ struct CupidGBA {
 };
 
 /** @name API */
-void cupid_gba_create(struct CupidGBA* gba);
-void cupid_gba_reset(struct CupidGBA* gba);
-void cupid_gba_destroy(struct CupidGBA* gba);
-void cupid_gba_skip_bios(struct CupidGBA* gba);
-void cupid_gba_halt(struct CupidGBA* gba);
-void cupid_gba_stop(struct CupidGBA* gba);
-void cupid_gba_wake_stop(struct CupidGBA* gba, enum CupidIRQ sources);
+void cupid_gba_create(struct CupidGBA *gba);
+void cupid_gba_reset(struct CupidGBA *gba);
+void cupid_gba_destroy(struct CupidGBA *gba);
+void cupid_gba_skip_bios(struct CupidGBA *gba);
+void cupid_gba_halt(struct CupidGBA *gba);
+/* Timed HALTCNT acceptance is deferred to the next completed CPU clock. */
+void cupid_gba_request_halt(struct CupidGBA *gba);
+void cupid_gba_wait_halt(struct CupidGBA *gba);
+void cupid_gba_stop(struct CupidGBA *gba);
+void cupid_gba_wake_stop(struct CupidGBA *gba, enum CupidIRQ sources);
 /* Consume explicit elapsed clocks in STOP, returning early at an eligible wake.
  * CPU, timer, video, audio and DMA clocks remain frozen. No host clock is read. */
-uint64_t cupid_gba_advance_stopped_time(struct CupidGBA* gba, uint64_t clocks);
+uint64_t cupid_gba_advance_stopped_time(struct CupidGBA *gba, uint64_t clocks);
 
 /** Test and fire keypad IRQ based on KEYCNT (call after key state changes) */
-void cupid_gba_test_keypad_irq(struct CupidGBA* gba);
+void cupid_gba_test_keypad_irq(struct CupidGBA *gba);
 
-/** Run to the next frame, or return while the system clock is stopped. */
-void cupid_gba_run_frame(struct CupidGBA* gba);
+/* Run to the next frame, or return while the system clock is stopped. HALT can
+ * retain an unfinished CPU fetch across this call and subsequent run calls. */
+void cupid_gba_run_frame(struct CupidGBA *gba);
 /* Run a paced interval including RTC time in STOP. A CPU step can finish beyond
  * its endpoint; the next interval consumes that overshoot before running again. */
-void cupid_gba_run_interval(struct CupidGBA* gba, uint32_t clocks);
+void cupid_gba_run_interval(struct CupidGBA *gba, uint32_t clocks);
 
-/** Run a single CPU step + process events */
-void cupid_gba_step(struct CupidGBA* gba);
+/* Complete one CPU step, or return at a halted CPU's next peripheral boundary.
+ * Resuming retains an unfinished instruction; its observer and side effects
+ * are not repeated. Run calls and subsequent reset/destruction stay on the
+ * thread that first runs this core, until reset releases its stack. */
+void cupid_gba_step(struct CupidGBA *gba);
+
+/* Run at most limit equivalent step boundaries without returning to the host
+ * stack after each one. This counts HALT/peripheral returns as ordinary step
+ * calls do, and stops when STOP freezes the clock. The optional callback runs
+ * at count zero and after each step, including the final one; false stops.
+ * It may inspect state and update input between steps, but must not reset,
+ * destroy or run cores, or otherwise advance emulated time. A zero limit
+ * calls neither the callback nor the CPU. The returned count excludes zero. */
+uint64_t cupid_gba_run_steps(struct CupidGBA *gba, uint64_t limit,
+                             bool (*boundary)(struct CupidGBA *, uint64_t steps, void *),
+                             void *context);
+
+/* Suspend an active bounded-step run from a scheduled peripheral callback, without
+ * completing the current CPU instruction or counting another step. The next
+ * execution call resumes at this point; reset/destroy instead cancel it.
+ * Returns true after resumption, or false without suspending outside an event
+ * callback in a local run_steps call. Interval runs retain their clock contract.
+ * The callback and its context must remain valid until resumed or cancelled. */
+bool cupid_gba_yield_steps(struct CupidGBA *gba);
 
 /** Process events (video, audio, timers, DMA, IRQ) after CPU steps */
-void cupid_gba_process_events(struct CupidGBA* gba);
+void cupid_gba_process_events(struct CupidGBA *gba);
+
+/* Default CPU event handler identity used to qualify owned bus waits.
+ * Custom handlers observe the ordinary held-clock and release sequence. */
+void cupid_gba_process_cpu_events(struct CupidARM *cpu);
 
 #endif /* CUPID_GBA_H */

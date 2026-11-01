@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-#include "cupid/rtc.h"
 #include "../../test.h"
+#include "cupid/rtc.h"
 
 static void formats_use_the_hour_flag_and_independent_weekday(void) {
     struct CupidRTC rtc;
@@ -23,12 +23,9 @@ static void formats_use_the_hour_flag_and_independent_weekday(void) {
 }
 
 static void midnight_month_leap_and_year_boundaries(void) {
-    const uint8_t dates[][6] = {
-        {0, 2, 28, 0, 2, 29}, {0, 2, 29, 0, 3, 1},
-        {1, 2, 28, 1, 3, 1}, {4, 2, 28, 4, 2, 29},
-        {96, 2, 29, 96, 3, 1}, {99, 12, 31, 0, 1, 1},
-        {26, 4, 30, 26, 5, 1}, {26, 1, 31, 26, 2, 1}
-    };
+    const uint8_t dates[][6] = {{0, 2, 28, 0, 2, 29},  {0, 2, 29, 0, 3, 1},   {1, 2, 28, 1, 3, 1},
+                                {4, 2, 28, 4, 2, 29},  {96, 2, 29, 96, 3, 1}, {99, 12, 31, 0, 1, 1},
+                                {26, 4, 30, 26, 5, 1}, {26, 1, 31, 26, 2, 1}};
     for (unsigned i = 0; i < sizeof(dates) / sizeof(dates[0]); i++) {
         struct CupidRTC rtc;
         cupid_rtc_init(&rtc, 0);
@@ -37,8 +34,10 @@ static void midnight_month_leap_and_year_boundaries(void) {
         cupid_rtc_sync(&rtc, CUPID_RTC_CLOCK_HZ - 1);
         CHECK(!memcmp(&rtc.date, &date, sizeof(date)));
         cupid_rtc_sync(&rtc, CUPID_RTC_CLOCK_HZ);
-        CHECK(rtc.date.year == dates[i][3] && rtc.date.month == dates[i][4] && rtc.date.day == dates[i][5]);
-        CHECK(rtc.date.weekday == 0 && rtc.date.hour == 0 && rtc.date.minute == 0 && rtc.date.second == 0);
+        CHECK(rtc.date.year == dates[i][3] && rtc.date.month == dates[i][4] &&
+              rtc.date.day == dates[i][5]);
+        CHECK(rtc.date.weekday == 0 && rtc.date.hour == 0 && rtc.date.minute == 0 &&
+              rtc.date.second == 0);
     }
 }
 
@@ -109,17 +108,17 @@ static void control_masks_readonly_power_and_force_reset(void) {
     CHECK(rtc.control == 0 && rtc.fraction == 0 && !rtc.invalidSecond && rtc.powerSampling);
 }
 
-static unsigned drive(struct CupidRTC* rtc, uint8_t pins, uint64_t* clock) {
+static unsigned drive(struct CupidRTC *rtc, uint8_t pins, uint64_t *clock) {
     *clock += 128;
     return cupid_rtc_write_pins(rtc, pins, *clock);
 }
 
-static void select_chip(struct CupidRTC* rtc, uint64_t* clock) {
+static void select_chip(struct CupidRTC *rtc, uint64_t *clock) {
     CHECK(!drive(rtc, 1, clock));
     CHECK(!drive(rtc, 5, clock));
 }
 
-static unsigned send_byte(struct CupidRTC* rtc, uint8_t data, bool msb, uint64_t* clock) {
+static unsigned send_byte(struct CupidRTC *rtc, uint8_t data, bool msb, uint64_t *clock) {
     unsigned requests = 0;
     for (unsigned i = 0; i < 8; i++) {
         const uint8_t bit = (data >> (msb ? 7 - i : i)) & 1;
@@ -132,7 +131,7 @@ static unsigned send_byte(struct CupidRTC* rtc, uint8_t data, bool msb, uint64_t
     return requests;
 }
 
-static uint8_t read_byte(struct CupidRTC* rtc, uint64_t* clock) {
+static uint8_t read_byte(struct CupidRTC *rtc, uint64_t *clock) {
     uint8_t result = 0;
     for (unsigned i = 0; i < 8; i++) {
         CHECK(!drive(rtc, 4, clock));
@@ -160,17 +159,21 @@ static void wire_commands_payloads_and_both_command_representations(void) {
         const uint8_t date[] = {0x26, 0x10, 0x13, 5, 0x93, 0x34, 0x56};
         select_chip(&rtc, &clock);
         CHECK(!send_byte(&rtc, msb ? 0x64 : 0x26, msb, &clock));
-        for (unsigned i = 0; i < 7; i++) CHECK(!send_byte(&rtc, date[i], false, &clock));
+        for (unsigned i = 0; i < 7; i++)
+            CHECK(!send_byte(&rtc, date[i], false, &clock));
         select_chip(&rtc, &clock);
         CHECK(!send_byte(&rtc, msb ? 0x65 : 0xA6, msb, &clock));
-        for (unsigned i = 0; i < 7; i++) CHECK(read_byte(&rtc, &clock) == date[i]);
+        for (unsigned i = 0; i < 7; i++)
+            CHECK(read_byte(&rtc, &clock) == date[i]);
         const uint8_t time[] = {0xA3, 0x12, 0x34};
         select_chip(&rtc, &clock);
         CHECK(!send_byte(&rtc, 0x66, msb, &clock));
-        for (unsigned i = 0; i < 3; i++) CHECK(!send_byte(&rtc, time[i], false, &clock));
+        for (unsigned i = 0; i < 3; i++)
+            CHECK(!send_byte(&rtc, time[i], false, &clock));
         select_chip(&rtc, &clock);
         CHECK(!send_byte(&rtc, msb ? 0x67 : 0xE6, msb, &clock));
-        for (unsigned i = 0; i < 3; i++) CHECK(read_byte(&rtc, &clock) == time[i]);
+        for (unsigned i = 0; i < 3; i++)
+            CHECK(read_byte(&rtc, &clock) == time[i]);
         CHECK(!drive(&rtc, 1, &clock));
         CHECK(cupid_rtc_output_pins(&rtc) == 2);
     }
@@ -186,12 +189,14 @@ static void wire_read_snapshot_survives_a_calendar_carry(void) {
     CHECK(!send_byte(&rtc, 0xA6, false, &clock));
     CHECK(clock < CUPID_RTC_CLOCK_HZ);
     const uint8_t old[] = {0x99, 0x12, 0x31, 0, 0xA3, 0x59, 0x59};
-    for (unsigned i = 0; i < 7; i++) CHECK(read_byte(&rtc, &clock) == old[i]);
+    for (unsigned i = 0; i < 7; i++)
+        CHECK(read_byte(&rtc, &clock) == old[i]);
     CHECK(rtc.date.year == 0 && rtc.date.month == 1 && rtc.date.day == 1 && rtc.date.weekday == 1);
     select_chip(&rtc, &clock);
     CHECK(!send_byte(&rtc, 0xA6, false, &clock));
     const uint8_t next[] = {0, 1, 1, 1, 0, 0, 0};
-    for (unsigned i = 0; i < 7; i++) CHECK(read_byte(&rtc, &clock) == next[i]);
+    for (unsigned i = 0; i < 7; i++)
+        CHECK(read_byte(&rtc, &clock) == next[i]);
 }
 
 static void wire_abort_reset_strobes_and_forced_requests(void) {
@@ -212,14 +217,16 @@ static void wire_abort_reset_strobes_and_forced_requests(void) {
         select_chip(&rtc, &clock);
         CHECK(!send_byte(&rtc, read ? 0x86 : 0x06, false, &clock));
         CHECK(rtc.control == 0 && rtc.date.year == 0 && rtc.date.month == 1 && rtc.date.day == 1);
-        CHECK(rtc.date.weekday == 0 && rtc.date.hour == 0 && rtc.date.minute == 0 && rtc.date.second == 0);
+        CHECK(rtc.date.weekday == 0 && rtc.date.hour == 0 && rtc.date.minute == 0 &&
+              rtc.date.second == 0);
     }
     select_chip(&rtc, &clock);
     CHECK(!send_byte(&rtc, 0x12, false, &clock));
     CHECK(!send_byte(&rtc, 0xFF, false, &clock));
     CHECK(rtc.control == 0);
     for (unsigned command = 1; command < 8; command += 2) {
-        if (command == 3) continue;
+        if (command == 3)
+            continue;
         select_chip(&rtc, &clock);
         CHECK(!send_byte(&rtc, (uint8_t)(0x86 | command << 4), false, &clock));
         CHECK(read_byte(&rtc, &clock) == 0xFF);
@@ -232,9 +239,17 @@ static void explicit_clock_input_and_strict_calendar_seed(void) {
     CHECK(date.year == 26 && date.month == 10 && date.day == 13 && date.weekday == 2);
     CHECK(date.hour == 12 && date.minute == 34 && date.second == 56);
     const struct CupidRTCDateTime before = date;
-    const char* invalid[] = {"2025-02-29T00:00:00", "2100-01-01T00:00:00", "2000-01-01T24:00:00",
-        "2000-01-01 00:00:00", "2000-01-01T00:00:00Z", "2000-01-01T00:00:60", "2000-00-01T00:00:00",
-        "2000-01-32T00:00:00", "2000-0x-01T00:00:00", "2000-1-1T0:0:0", ""};
+    const char *invalid[] = {"2025-02-29T00:00:00",
+                             "2100-01-01T00:00:00",
+                             "2000-01-01T24:00:00",
+                             "2000-01-01 00:00:00",
+                             "2000-01-01T00:00:00Z",
+                             "2000-01-01T00:00:60",
+                             "2000-00-01T00:00:00",
+                             "2000-01-32T00:00:00",
+                             "2000-0x-01T00:00:00",
+                             "2000-1-1T0:0:0",
+                             ""};
     for (unsigned i = 0; i < sizeof(invalid) / sizeof(*invalid); i++) {
         CHECK(!cupid_rtc_parse_datetime(invalid[i], &date));
         CHECK(!memcmp(&date, &before, sizeof(date)));
@@ -274,10 +289,12 @@ static void minute_output_latches_and_steady_release(void) {
         CHECK(rtc.interruptLow == ((mode & 1) != 0));
         cupid_rtc_sync(&rtc, 31 * CUPID_RTC_CLOCK_HZ);
         CHECK(rtc.interruptLow == (mode == 1));
-        if (mode == 3) CHECK(cupid_rtc_next_interrupt(&rtc) == 30 * CUPID_RTC_CLOCK_HZ);
+        if (mode == 3)
+            CHECK(cupid_rtc_next_interrupt(&rtc) == 30 * CUPID_RTC_CLOCK_HZ);
         cupid_rtc_write_control(&rtc, rtc.control);
         CHECK(!rtc.interruptLow);
-        if (mode & 1) CHECK(cupid_rtc_next_interrupt(&rtc) == 30 * CUPID_RTC_CLOCK_HZ);
+        if (mode & 1)
+            CHECK(cupid_rtc_next_interrupt(&rtc) == 30 * CUPID_RTC_CLOCK_HZ);
         cupid_rtc_sync(&rtc, 61 * CUPID_RTC_CLOCK_HZ);
         CHECK(rtc.interruptLow == ((mode & 1) != 0));
         cupid_rtc_reset_registers(&rtc);
@@ -287,23 +304,24 @@ static void minute_output_latches_and_steady_release(void) {
 
 static void minute_output_bulk_clock_matches_each_second(void) {
     for (unsigned second = 0; second < 60; second++) {
-        for (unsigned steady = 0; steady < 2; steady++) for (unsigned held = 0; held < 2; held++) {
-            struct CupidRTC bulk;
-            cupid_rtc_init(&bulk, UINT64_C(0xFFFFFFF0));
-            const struct CupidRTCDateTime date = {99, 12, 31, 6, 23, 59, (uint8_t)second};
-            CHECK(cupid_rtc_set_datetime(&bulk, &date));
-            cupid_rtc_write_control(&bulk, steady ? 0x4A : 0x48);
-            bulk.interruptLow = held != 0;
-            bulk.fraction = CUPID_RTC_CLOCK_HZ / 3;
-            struct CupidRTC each = bulk;
-            const uint64_t end = bulk.lastClock + 183 * CUPID_RTC_CLOCK_HZ;
-            cupid_rtc_sync(&bulk, end);
-            for (unsigned i = 1; i <= 183; i++)
-                cupid_rtc_sync(&each, UINT64_C(0xFFFFFFF0) + i * CUPID_RTC_CLOCK_HZ);
-            CHECK(!memcmp(&bulk.date, &each.date, sizeof(bulk.date)));
-            CHECK(bulk.interruptLow == each.interruptLow && bulk.fraction == each.fraction);
-            CHECK(cupid_rtc_next_interrupt(&bulk) == cupid_rtc_next_interrupt(&each));
-        }
+        for (unsigned steady = 0; steady < 2; steady++)
+            for (unsigned held = 0; held < 2; held++) {
+                struct CupidRTC bulk;
+                cupid_rtc_init(&bulk, UINT64_C(0xFFFFFFF0));
+                const struct CupidRTCDateTime date = {99, 12, 31, 6, 23, 59, (uint8_t)second};
+                CHECK(cupid_rtc_set_datetime(&bulk, &date));
+                cupid_rtc_write_control(&bulk, steady ? 0x4A : 0x48);
+                bulk.interruptLow = held != 0;
+                bulk.fraction = CUPID_RTC_CLOCK_HZ / 3;
+                struct CupidRTC each = bulk;
+                const uint64_t end = bulk.lastClock + 183 * CUPID_RTC_CLOCK_HZ;
+                cupid_rtc_sync(&bulk, end);
+                for (unsigned i = 1; i <= 183; i++)
+                    cupid_rtc_sync(&each, UINT64_C(0xFFFFFFF0) + i * CUPID_RTC_CLOCK_HZ);
+                CHECK(!memcmp(&bulk.date, &each.date, sizeof(bulk.date)));
+                CHECK(bulk.interruptLow == each.interruptLow && bulk.fraction == each.fraction);
+                CHECK(cupid_rtc_next_interrupt(&bulk) == cupid_rtc_next_interrupt(&each));
+            }
     }
 }
 
@@ -326,10 +344,11 @@ static void invalid_seconds_offline_clock_and_rebase_keep_the_minute_latch(void)
     CHECK(rtc.interruptLow && rtc.fraction == 17);
 }
 
-static void payload_bit(struct CupidRTC* rtc, bool value, uint64_t* clock, bool rising) {
+static void payload_bit(struct CupidRTC *rtc, bool value, uint64_t *clock, bool rising) {
     const uint8_t pins = (uint8_t)(4 | (value ? 2 : 0));
     CHECK(!drive(rtc, pins, clock));
-    if (rising) CHECK(!drive(rtc, pins | 1, clock));
+    if (rising)
+        CHECK(!drive(rtc, pins | 1, clock));
 }
 
 static void payload_commit_waits_for_the_eighth_rising_edge(void) {
@@ -340,7 +359,8 @@ static void payload_commit_waits_for_the_eighth_rising_edge(void) {
         uint64_t clock = 0;
         select_chip(&rtc, &clock);
         CHECK(!send_byte(&rtc, 0x46, false, &clock));
-        for (unsigned bit = 0; bit < 7; bit++) payload_bit(&rtc, (0x40 >> bit) & 1, &clock, true);
+        for (unsigned bit = 0; bit < 7; bit++)
+            payload_bit(&rtc, (0x40 >> bit) & 1, &clock, true);
         CHECK(rtc.control == 0x2A);
         payload_bit(&rtc, false, &clock, complete != 0);
         CHECK(rtc.control == (complete ? 0x40 : 0x2A));
@@ -356,7 +376,8 @@ static void response_frames_repeat_until_chip_select_release(void) {
     uint64_t clock = 0;
     select_chip(&rtc, &clock);
     CHECK(!send_byte(&rtc, 0xC6, false, &clock));
-    for (unsigned frame = 0; frame < 4; frame++) CHECK(read_byte(&rtc, &clock) == 0x4A);
+    for (unsigned frame = 0; frame < 4; frame++)
+        CHECK(read_byte(&rtc, &clock) == 0x4A);
     const struct CupidRTCDateTime date = {26, 10, 13, 2, 12, 34, 12};
     CHECK(cupid_rtc_set_datetime(&rtc, &date));
     uint8_t expected[7];
@@ -364,7 +385,8 @@ static void response_frames_repeat_until_chip_select_release(void) {
     select_chip(&rtc, &clock);
     CHECK(!send_byte(&rtc, 0xA6, false, &clock));
     for (unsigned frame = 0; frame < 3; frame++)
-        for (unsigned byte = 0; byte < 7; byte++) CHECK(read_byte(&rtc, &clock) == expected[byte]);
+        for (unsigned byte = 0; byte < 7; byte++)
+            CHECK(read_byte(&rtc, &clock) == expected[byte]);
     CHECK(!drive(&rtc, 1, &clock) && cupid_rtc_output_pins(&rtc) == 2);
 }
 
@@ -375,9 +397,11 @@ static void status_writes_repeat_and_retain_the_shifted_partial_byte(void) {
         uint64_t clock = 0;
         select_chip(&rtc, &clock);
         CHECK(!send_byte(&rtc, 0x46, false, &clock));
-        for (unsigned bit = 0; bit < 8; bit++) payload_bit(&rtc, (0x54 >> bit) & 1, &clock, true);
+        for (unsigned bit = 0; bit < 8; bit++)
+            payload_bit(&rtc, (0x54 >> bit) & 1, &clock, true);
         CHECK(rtc.control == 0x40);
-        for (unsigned bit = 0; bit < extra; bit++) payload_bit(&rtc, false, &clock, true);
+        for (unsigned bit = 0; bit < extra; bit++)
+            payload_bit(&rtc, false, &clock, true);
         CHECK(!drive(&rtc, 1, &clock));
         CHECK(rtc.control == (extra == 0 ? 0x40 : extra == 8 ? 0 : 0x2A));
     }
@@ -407,30 +431,33 @@ static void rejected_command_bytes_allow_another_aligned_command(void) {
 }
 
 static void driven_low_data_corrupts_only_the_previous_response_bit(void) {
-    for (unsigned bit = 0; bit < 16; bit++) for (unsigned race = 0; race < 3; race++) {
-        struct CupidRTC rtc;
-        cupid_rtc_init(&rtc, 0);
-        cupid_rtc_write_control(&rtc, 0x4A);
-        uint64_t clock = 0;
-        select_chip(&rtc, &clock);
-        CHECK(!send_byte(&rtc, 0xC6, false, &clock));
-        for (unsigned pulse = 0; pulse < 16; pulse++) {
-            const bool high = pulse != bit || race == 1;
-            const bool low = pulse != bit || race == 0;
+    for (unsigned bit = 0; bit < 16; bit++)
+        for (unsigned race = 0; race < 3; race++) {
+            struct CupidRTC rtc;
+            cupid_rtc_init(&rtc, 0);
+            cupid_rtc_write_control(&rtc, 0x4A);
+            uint64_t clock = 0;
+            select_chip(&rtc, &clock);
+            CHECK(!send_byte(&rtc, 0xC6, false, &clock));
+            for (unsigned pulse = 0; pulse < 16; pulse++) {
+                const bool high = pulse != bit || race == 1;
+                const bool low = pulse != bit || race == 0;
+                clock += 128;
+                CHECK(
+                    !cupid_rtc_write_pins_direction(&rtc, (uint8_t)(5 | (high ? 2 : 0)), 7, clock));
+                clock += 128;
+                CHECK(
+                    !cupid_rtc_write_pins_direction(&rtc, (uint8_t)(4 | (low ? 2 : 0)), 7, clock));
+            }
             clock += 128;
-            CHECK(!cupid_rtc_write_pins_direction(&rtc, (uint8_t)(5 | (high ? 2 : 0)), 7, clock));
-            clock += 128;
-            CHECK(!cupid_rtc_write_pins_direction(&rtc, (uint8_t)(4 | (low ? 2 : 0)), 7, clock));
+            CHECK(!cupid_rtc_write_pins_direction(&rtc, 5, 5, clock));
+            const uint8_t expected = (uint8_t)(0x4A & ~(1u << ((bit + 7) % 8)));
+            CHECK(read_byte(&rtc, &clock) == expected);
+            CHECK(cupid_rtc_read_control(&rtc) == 0x4A);
+            select_chip(&rtc, &clock);
+            CHECK(!send_byte(&rtc, 0xC6, false, &clock));
+            CHECK(read_byte(&rtc, &clock) == 0x4A);
         }
-        clock += 128;
-        CHECK(!cupid_rtc_write_pins_direction(&rtc, 5, 5, clock));
-        const uint8_t expected = (uint8_t)(0x4A & ~(1u << ((bit + 7) % 8)));
-        CHECK(read_byte(&rtc, &clock) == expected);
-        CHECK(cupid_rtc_read_control(&rtc) == 0x4A);
-        select_chip(&rtc, &clock);
-        CHECK(!send_byte(&rtc, 0xC6, false, &clock));
-        CHECK(read_byte(&rtc, &clock) == 0x4A);
-    }
 }
 
 static void interrupt_parameters_shift_during_writes_and_nominal_reads(void) {

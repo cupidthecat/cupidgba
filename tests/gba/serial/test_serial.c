@@ -1,10 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+#include "../../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
-#include "../../test.h"
 
-static struct CupidGBA* machine(uint64_t clock) {
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+static struct CupidGBA *machine(uint64_t clock) {
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba);
     cupid_gba_create(gba);
     cupid_gba_reset(gba);
@@ -16,17 +16,17 @@ static struct CupidGBA* machine(uint64_t clock) {
     return gba;
 }
 
-static void destroy(struct CupidGBA* gba) {
+static void destroy(struct CupidGBA *gba) {
     cupid_gba_destroy(gba);
     free(gba);
 }
 
-static void tick(struct CupidGBA* gba, unsigned cycles) {
+static void tick(struct CupidGBA *gba, unsigned cycles) {
     CHECK(gba->cpu.cycles == 0);
     cupid_timing_tick(&gba->timing, (int32_t)cycles);
 }
 
-static void configure(struct CupidGBA* gba, bool wide, bool fast, bool owner, uint32_t data) {
+static void configure(struct CupidGBA *gba, bool wide, bool fast, bool owner, uint32_t data) {
     cupid_io_write(gba, REG_RCNT, 0);
     cupid_io_write(gba, REG_SIOCNT, (wide ? 0x1000 : 0) | (fast ? 2 : 0) | owner);
     if (wide) {
@@ -37,19 +37,19 @@ static void configure(struct CupidGBA* gba, bool wide, bool fast, bool owner, ui
     }
 }
 
-static void start(struct CupidGBA* gba, bool irq) {
+static void start(struct CupidGBA *gba, bool irq) {
     cupid_io_write8(gba, REG_SIOCNT + 1, (gba->serial.control >> 8) | (irq ? 0x40 : 0));
     cupid_io_write8(gba, REG_SIOCNT, (uint8_t)gba->serial.control | 0x80);
 }
 
-static uint32_t received(struct CupidGBA* gba, bool wide) {
+static uint32_t received(struct CupidGBA *gba, bool wide) {
     return wide ? cupid_io_read(gba, REG_SIODATA32_LO) |
-                  ((uint32_t)cupid_io_read(gba, REG_SIODATA32_HI) << 16) :
-                  cupid_io_read(gba, REG_SIOMLT_SEND);
+                      ((uint32_t)cupid_io_read(gba, REG_SIODATA32_HI) << 16)
+                : cupid_io_read(gba, REG_SIOMLT_SEND);
 }
 
 struct Wave {
-    struct CupidGBA* gba;
+    struct CupidGBA *gba;
     uint32_t input;
     uint32_t sent;
     unsigned bits;
@@ -59,14 +59,16 @@ struct Wave {
     unsigned edgeCount;
 };
 
-static void drive_wave(void* context, uint8_t mask, uint8_t levels, uint64_t timestamp) {
-    struct Wave* wave = context;
+static void drive_wave(void *context, uint8_t mask, uint8_t levels, uint64_t timestamp) {
+    struct Wave *wave = context;
     bool high = (levels & SERIAL_SC) != 0;
-    if (!(mask & SERIAL_SC) || high == wave->clockHigh) return;
+    if (!(mask & SERIAL_SC) || high == wave->clockHigh)
+        return;
     wave->clockHigh = high;
     CHECK(wave->edgeCount < 64);
     wave->edges[wave->edgeCount++] = timestamp;
-    if (high) return;
+    if (high)
+        return;
     CHECK(wave->bits < wave->width);
     wave->sent = (wave->sent << 1) | ((levels & SERIAL_SO) != 0);
     bool input = ((wave->input >> (wave->width - 1 - wave->bits)) & 1) != 0;
@@ -80,11 +82,12 @@ static void internal_clocks_and_patterns(void) {
         for (unsigned fast = 0; fast < 2; fast++) {
             unsigned cases = wide ? sizeof(words) / sizeof(*words) : 256;
             for (unsigned i = 0; i < cases; i++) {
-                struct CupidGBA* gba = machine(100);
+                struct CupidGBA *gba = machine(100);
                 uint32_t data = wide ? words[i] : 0xA500 | i;
                 uint32_t input = wide ? ~data : (i * 73u) & 255;
                 configure(gba, wide, fast, true, data);
-                struct Wave wave = {.gba = gba, .input = input, .width = wide ? 32 : 8, .clockHigh = true};
+                struct Wave wave = {
+                    .gba = gba, .input = input, .width = wide ? 32 : 8, .clockHigh = true};
                 cupid_serial_set_output_callback(&gba->serial, drive_wave, &wave);
                 start(gba, true);
                 unsigned period = fast ? 8 : 64;
@@ -115,7 +118,7 @@ static void internal_clocks_and_patterns(void) {
 
 static void external_clock_and_input_edges(void) {
     for (unsigned wide = 0; wide < 2; wide++) {
-        struct CupidGBA* gba = machine(0);
+        struct CupidGBA *gba = machine(0);
         uint32_t output = wide ? 0x9248F00D : 0x5A;
         uint32_t input = wide ? 0x71C39A02 : 0xC3;
         configure(gba, wide, true, false, output);
@@ -133,7 +136,8 @@ static void external_clock_and_input_edges(void) {
             /* Repeating a level is not another shift-clock edge. */
             cupid_serial_set_input(&gba->serial, SERIAL_SC | SERIAL_SI, (uint8_t)sample);
             tick(gba, 3);
-            cupid_serial_set_input(&gba->serial, SERIAL_SC | SERIAL_SI, (uint8_t)(sample | SERIAL_SC));
+            cupid_serial_set_input(&gba->serial, SERIAL_SC | SERIAL_SI,
+                                   (uint8_t)(sample | SERIAL_SC));
             tick(gba, 1);
         }
         CHECK(sent == output);
@@ -146,13 +150,16 @@ static void external_clock_and_input_edges(void) {
     }
 }
 
-struct Connection { struct CupidGBA* other; };
+struct Connection {
+    struct CupidGBA *other;
+};
 
-static void connect_pins(void* context, uint8_t mask, uint8_t levels, uint64_t timestamp) {
-    struct CupidGBA* other = ((struct Connection*)context)->other;
+static void connect_pins(void *context, uint8_t mask, uint8_t levels, uint64_t timestamp) {
+    struct CupidGBA *other = ((struct Connection *)context)->other;
     uint64_t now = cupid_timing_global_time(&other->timing);
     CHECK(timestamp >= now && timestamp - now <= INT32_MAX);
-    if (timestamp > now) tick(other, (unsigned)(timestamp - now));
+    if (timestamp > now)
+        tick(other, (unsigned)(timestamp - now));
     uint8_t inputMask = (mask & SERIAL_SC) | ((mask & SERIAL_SO) ? SERIAL_SI : 0);
     uint8_t inputLevels = (levels & SERIAL_SC) | ((levels & SERIAL_SO) ? SERIAL_SI : 0);
     cupid_serial_set_input(&other->serial, inputMask, inputLevels);
@@ -160,8 +167,8 @@ static void connect_pins(void* context, uint8_t mask, uint8_t levels, uint64_t t
 
 static void two_connected_ports(void) {
     for (unsigned wide = 0; wide < 2; wide++) {
-        struct CupidGBA* owner = machine(0);
-        struct CupidGBA* receiver = machine(0);
+        struct CupidGBA *owner = machine(0);
+        struct CupidGBA *receiver = machine(0);
         uint32_t a = wide ? 0x8AB32917 : 0x69;
         uint32_t b = wide ? 0x61E728D3 : 0xB6;
         configure(owner, wide, true, true, a);
@@ -175,7 +182,8 @@ static void two_connected_ports(void) {
         /* The receiving clock has advanced through the last observed output;
          * dispatch its remaining completion and IRQ publication stages. */
         uint64_t now = cupid_timing_global_time(&receiver->timing);
-        if (now < cupid_timing_global_time(&owner->timing)) tick(receiver, (unsigned)(cupid_timing_global_time(&owner->timing) - now));
+        if (now < cupid_timing_global_time(&owner->timing))
+            tick(receiver, (unsigned)(cupid_timing_global_time(&owner->timing) - now));
         CHECK(received(owner, wide) == b && received(receiver, wide) == a);
         CHECK(owner->irqf == IRQ_SIO && receiver->irqf == IRQ_SIO);
         CHECK(!owner->serial.active && !receiver->serial.active);
@@ -187,7 +195,7 @@ static void two_connected_ports(void) {
 }
 
 static void byte_registers_and_mode_access(void) {
-    struct CupidGBA* gba = machine(0);
+    struct CupidGBA *gba = machine(0);
     configure(gba, true, true, true, 0x12345678);
     cupid_io_write8(gba, REG_SIOCNT + 1, 0x5F);
     CHECK(gba->serial.control == 0x5F03);
@@ -222,14 +230,16 @@ static void byte_registers_and_mode_access(void) {
 }
 
 static void gpio_directions_and_interrupts(void) {
-    struct CupidGBA* gba = machine(0);
+    struct CupidGBA *gba = machine(0);
     for (unsigned directions = 0; directions < 16; directions++) {
         for (unsigned outputs = 0; outputs < 16; outputs++) {
             cupid_io_write(gba, REG_RCNT, (uint16_t)(0x8000 | directions << 4 | outputs));
             cupid_serial_set_input(&gba->serial, 15, 5);
-            CHECK((cupid_io_read(gba, REG_RCNT) & 15) == ((outputs & directions) | (5 & ~directions)));
+            CHECK((cupid_io_read(gba, REG_RCNT) & 15) ==
+                  ((outputs & directions) | (5 & ~directions)));
             cupid_serial_set_input(&gba->serial, 0, 0);
-            CHECK((cupid_io_read(gba, REG_RCNT) & 15) == ((outputs & directions) | (15 & ~directions)));
+            CHECK((cupid_io_read(gba, REG_RCNT) & 15) ==
+                  ((outputs & directions) | (15 & ~directions)));
         }
     }
     cupid_io_write(gba, REG_RCNT, 0x8100);
@@ -256,7 +266,7 @@ static void arm_and_thumb_bus_access(void) {
     const uint16_t thumb[] = {0x7008, 0x8008, 0x6008};
     for (unsigned mode = 0; mode < 2; mode++) {
         for (unsigned width = 0; width < 3; width++) {
-            struct CupidGBA* gba = machine(0);
+            struct CupidGBA *gba = machine(0);
             configure(gba, false, true, true, 0x3C);
             cupid_io_write8(gba, REG_SIOCNT + 1, 0x40);
             if (mode) {
@@ -292,42 +302,45 @@ static void arm_and_thumb_bus_access(void) {
 static void late_dispatch_wrap_cancel_and_reset(void) {
     const uint64_t clocks[] = {0, INT32_MAX - 12u, UINT32_MAX - 12u, UINT64_C(0x300000000)};
     for (unsigned i = 0; i < sizeof(clocks) / sizeof(*clocks); i++) {
-        struct CupidGBA* late = machine(clocks[i]);
-        struct CupidGBA* punctual = machine(clocks[i]);
+        struct CupidGBA *late = machine(clocks[i]);
+        struct CupidGBA *punctual = machine(clocks[i]);
         struct Wave waves[2] = {
             {.gba = late, .input = 0xABCD1234, .width = 32, .clockHigh = true},
             {.gba = punctual, .input = 0xABCD1234, .width = 32, .clockHigh = true}};
         for (unsigned j = 0; j < 2; j++) {
-            struct CupidGBA* gba = waves[j].gba;
+            struct CupidGBA *gba = waves[j].gba;
             configure(gba, true, true, true, 0x196387B4);
             cupid_serial_set_output_callback(&gba->serial, drive_wave, &waves[j]);
             start(gba, true);
         }
         tick(late, 280);
-        for (unsigned cycle = 0; cycle < 280; cycle++) tick(punctual, 1);
+        for (unsigned cycle = 0; cycle < 280; cycle++)
+            tick(punctual, 1);
         CHECK(received(late, true) == 0xABCD1234 && received(punctual, true) == 0xABCD1234);
         CHECK(late->irqf == IRQ_SIO && punctual->irqf == IRQ_SIO);
         CHECK(waves[0].sent == waves[1].sent);
         CHECK(waves[0].edgeCount == waves[1].edgeCount);
         CHECK(!memcmp(waves[0].edges, waves[1].edges, sizeof(waves[0].edges)));
         for (unsigned j = 0; j < 2; j++) {
-            struct CupidGBA* gba = waves[j].gba;
+            struct CupidGBA *gba = waves[j].gba;
             cupid_serial_set_output_callback(&gba->serial, NULL, NULL);
             configure(gba, false, false, true, 0x3C);
             start(gba, false);
             tick(gba, 35);
             cupid_io_write(gba, REG_RCNT, 0x8000);
-            CHECK(!gba->serial.active && !cupid_timing_is_scheduled(&gba->timing, &gba->serial.edgeEvent));
+            CHECK(!gba->serial.active &&
+                  !cupid_timing_is_scheduled(&gba->timing, &gba->serial.edgeEvent));
             cupid_gba_reset(gba);
             CHECK(cupid_serial_mode(&gba->serial) == SERIAL_GPIO);
-            CHECK(!gba->serial.active && !cupid_timing_is_scheduled(&gba->timing, &gba->serial.edgeEvent));
+            CHECK(!gba->serial.active &&
+                  !cupid_timing_is_scheduled(&gba->timing, &gba->serial.edgeEvent));
             destroy(gba);
         }
     }
 }
 
 static void halt_and_stop(void) {
-    struct CupidGBA* gba = machine(0);
+    struct CupidGBA *gba = machine(0);
     const uint32_t code[] = {0xE1A00000, 0xE1A00000, 0xE1A00000};
     memcpy(gba->memory.iwram, code, sizeof(code));
     gba->cpu.gprs[ARM_PC] = GBA_BASE_IWRAM;
@@ -337,7 +350,8 @@ static void halt_and_stop(void) {
     configure(gba, false, true, true, 0xF0);
     start(gba, true);
     cupid_gba_halt(gba);
-    for (unsigned step = 0; gba->cpu.halted && step < 30; step++) cupid_gba_step(gba);
+    for (unsigned step = 0; gba->cpu.halted && step < 30; step++)
+        cupid_gba_step(gba);
     CHECK(!gba->cpu.halted && gba->irqf == IRQ_SIO && !gba->irq.line);
     CHECK(gba->cpu.cpsr.i && gba->cpu.privilegeMode == MODE_SYS);
     cupid_io_write(gba, REG_RCNT, 0x8100);
@@ -349,11 +363,13 @@ static void halt_and_stop(void) {
     CHECK(gba->stopped);
     uint64_t frozen = cupid_timing_global_time(&gba->timing);
     cupid_gba_run_frame(gba);
-    for (unsigned i = 0; i < 20; i++) cupid_gba_step(gba);
+    for (unsigned i = 0; i < 20; i++)
+        cupid_gba_step(gba);
     CHECK(gba->stopped && cupid_timing_global_time(&gba->timing) == frozen);
     cupid_serial_set_input(&gba->serial, SERIAL_SI, 0);
     CHECK(!gba->stopped);
-    for (unsigned i = 0; gba->cpu.halted && i < 8; i++) cupid_gba_step(gba);
+    for (unsigned i = 0; gba->cpu.halted && i < 8; i++)
+        cupid_gba_step(gba);
     CHECK(!gba->cpu.halted && gba->irqf == IRQ_SIO);
     destroy(gba);
 
@@ -373,7 +389,7 @@ static void halt_and_stop(void) {
 }
 
 static void stop_freezes_peripherals_and_filters_wake_sources(void) {
-    struct CupidGBA* gba = machine(0);
+    struct CupidGBA *gba = machine(0);
     cupid_gba_reset(gba); /* Keep the real video and audio event queues. */
     cupid_io_write(gba, REG_TM0CNT_L, 0x1000);
     cupid_io_write(gba, REG_TM0CNT_H, 0x80);
@@ -389,14 +405,16 @@ static void stop_freezes_peripherals_and_filters_wake_sources(void) {
     gba->cpu.gprs[ARM_PC] = GBA_BASE_IWRAM;
     CupidARMWritePC(&gba->cpu);
     unsigned steps;
-    for (steps = 0; steps < 2000 && !gba->stopped; steps++) cupid_gba_step(gba);
+    for (steps = 0; steps < 2000 && !gba->stopped; steps++)
+        cupid_gba_step(gba);
     CHECK(steps < 2000);
     CHECK(gba->stopped && gba->cpu.halted);
     uint64_t clock = cupid_timing_global_time(&gba->timing);
     uint16_t timer = cupid_io_read(gba, REG_TM0CNT_L);
     uint16_t line = cupid_io_read(gba, REG_VCOUNT);
     int samples = gba->audio.sampleWritePos;
-    for (unsigned i = 0; i < 20; i++) cupid_gba_run_frame(gba);
+    for (unsigned i = 0; i < 20; i++)
+        cupid_gba_run_frame(gba);
     CHECK(cupid_timing_global_time(&gba->timing) == clock);
     CHECK(cupid_io_read(gba, REG_TM0CNT_L) == timer);
     CHECK(cupid_io_read(gba, REG_VCOUNT) == line && gba->audio.sampleWritePos == samples);

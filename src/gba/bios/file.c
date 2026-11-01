@@ -4,7 +4,7 @@
 #include <inttypes.h>
 #include <sys/stat.h>
 
-bool cupid_load_bios(struct CupidGBA* gba, const char* path) {
+bool cupid_load_bios(struct CupidGBA *gba, const char *path) {
 #ifdef _WIN32
     struct _stat64 info;
     int inspected = _stat64(path, &info);
@@ -19,13 +19,15 @@ bool cupid_load_bios(struct CupidGBA* gba, const char* path) {
         return false;
     }
     if (!regular || info.st_size != GBA_SIZE_BIOS) {
-        fprintf(stderr, "CUPID: Invalid BIOS input: %s (%" PRIdMAX " bytes); expected a regular %d-byte file\n",
-            path, (intmax_t)info.st_size, GBA_SIZE_BIOS);
+        fprintf(stderr,
+                "CUPID: Invalid BIOS input: %s (%" PRIdMAX
+                " bytes); expected a regular %d-byte file\n",
+                path, (intmax_t)info.st_size, GBA_SIZE_BIOS);
         errno = EINVAL;
         return false;
     }
 
-    FILE* file = fopen(path, "rb");
+    FILE *file = fopen(path, "rb");
     if (!file) {
         fprintf(stderr, "CUPID: Failed to open BIOS: %s: %s\n", path, strerror(errno));
         return false;
@@ -41,15 +43,16 @@ bool cupid_load_bios(struct CupidGBA* gba, const char* path) {
         return false;
     }
 
-    uint8_t* installed = gba->memory.bios;
+    uint8_t *installed = gba->memory.bios;
     if (!installed) {
         installed = malloc(sizeof(candidate));
-        if (!installed) return false;
+        if (!installed)
+            return false;
     }
     memcpy(installed, candidate, sizeof(candidate));
     gba->memory.bios = installed;
     if (gba->memory.activeRegion == GBA_REGION_BIOS) {
-        gba->cpu.memory.activeRegion = (const uint32_t*)installed;
+        gba->cpu.memory.activeRegion = (const uint32_t *)installed;
     }
     gba->memory.fullBios = 1;
     gba->memory.biosLoaded = true;

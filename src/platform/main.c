@@ -2,14 +2,14 @@
  * @file main.c
  * @brief SDL2 entry point, CLI parsing, initialization, and main loop.
  */
-
 #include "cupid/gba.h"
 #include "cupid/platform.h"
-#include "cupid/platform/rtc.h"
 #include "cupid/platform/peripherals.h"
+#include "cupid/platform/rtc.h"
+#include "cupid/platform/save.h"
 #include "local.h"
-#include <limits.h>
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,13 +19,15 @@
  */
 #define SAVE_FLUSH_FRAMES 300
 
-static bool flush_rtc(struct CupidGBA* gba, struct CupidPlatformRTC* config) {
+static bool flush_rtc(struct CupidGBA *gba, struct CupidPlatformRTC *config) {
     uint64_t stamp = 0;
-    if (gba->cartridge.rtcPresent && config->offlineWall && !cupid_platform_rtc_host_clock(NULL, &stamp)) return false;
+    if (gba->cartridge.rtcPresent && config->offlineWall &&
+        !cupid_platform_rtc_host_clock(NULL, &stamp))
+        return false;
     return cupid_platform_rtc_save(gba, config, stamp);
 }
 
-static void capture_completed_frame(void* context, const uint32_t* pixels, uint64_t clock) {
+static void capture_completed_frame(void *context, const uint32_t *pixels, uint64_t clock) {
     (void)clock;
     memcpy(context, pixels, GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT * sizeof(*pixels));
 }
@@ -33,16 +35,18 @@ static void capture_completed_frame(void* context, const uint32_t* pixels, uint6
 /**
  * @brief Derive a .sav path from a ROM path.
  */
-static bool derive_save_path(const char* romPath, char* out, size_t outSize) {
-    const char* lastSlash = strrchr(romPath, '/');
+static bool derive_save_path(const char *romPath, char *out, size_t outSize) {
+    const char *lastSlash = strrchr(romPath, '/');
 #ifdef _WIN32
-    const char* backslash = strrchr(romPath, '\\');
-    if (backslash && (!lastSlash || backslash > lastSlash)) lastSlash = backslash;
+    const char *backslash = strrchr(romPath, '\\');
+    if (backslash && (!lastSlash || backslash > lastSlash))
+        lastSlash = backslash;
 #endif
-    const char* ext = strrchr(romPath, '.');
-    size_t prefix = ext && (!lastSlash || ext > lastSlash)
-        ? (size_t)(ext - romPath) : strlen(romPath);
-    if (outSize < 5 || prefix > outSize - 5) return false;
+    const char *ext = strrchr(romPath, '.');
+    size_t prefix =
+        ext && (!lastSlash || ext > lastSlash) ? (size_t)(ext - romPath) : strlen(romPath);
+    if (outSize < 5 || prefix > outSize - 5)
+        return false;
     memcpy(out, romPath, prefix);
     memcpy(out + prefix, ".sav", 5);
     return true;
@@ -51,39 +55,48 @@ static bool derive_save_path(const char* romPath, char* out, size_t outSize) {
 /**
  * @brief Print CLI usage.
  */
-
-static void printUsage(const char* progname) {
-    fprintf(stderr, "Usage: %s rom.gba [-b bios.bin] [-s scale] [-S savetype]\n", progname);
-    fprintf(stderr, "       %s rom.gba --link peer.gba [--link third.gba] [--link fourth.gba] [--frames count]\n", progname);
-    fprintf(stderr, "\nSave types (GBA): sram, sram512, flash512, flash1m, sst39vf512, eeprom, eeprom512, none\n");
+static void printUsage(const char *progname) {
+    fprintf(stderr, "Usage: %s rom.gba [-b bios.bin] [-s scale] [-S savetype] [--frames count]\n",
+            progname);
+    fprintf(stderr,
+            "       %s rom.gba --link peer.gba [--link third.gba] [--link fourth.gba] [--frames "
+            "count]\n",
+            progname);
+    fprintf(stderr,
+            "\nSave types (GBA): auto, sram, sram512, flash512, flash1m, sst39vf512, eeprom, "
+            "eeprom512, none\n");
     fprintf(stderr, "\nRTC: --rtc auto|on|off  --rtc-time YYYY-MM-DDTHH:MM:SS\n");
-    fprintf(stderr, "     --rtc-offline pause|wall (default: pause; wall includes powered-off time)\n");
+    fprintf(stderr,
+            "     --rtc-offline pause|wall (default: pause; wall includes powered-off time)\n");
     fprintf(stderr, "\nPeripherals: --solar auto|on|off  --sunlight 0..255 (default: 128)\n");
     fprintf(stderr, "             --rumble auto|on|off\n");
     fprintf(stderr, "             --gyro auto|on|off  --gyro-sample 0..4095 (default: 1728)\n");
-    fprintf(stderr, "             --tilt auto|on|off  --tilt-x 0..4095  --tilt-y 0..4095 (defaults: 928)\n");
+    fprintf(
+        stderr,
+        "             --tilt auto|on|off  --tilt-x 0..4095  --tilt-y 0..4095 (defaults: 928)\n");
     fprintf(stderr, "\nControls:\n");
     fprintf(stderr, "  Z=A  X=B  Enter=Start  Backspace=Select\n");
     fprintf(stderr, "  Arrow keys=D-Pad  A=L  S=R  Esc=Quit\n");
     fprintf(stderr, "  F5=Less sunlight  F6=More sunlight\n");
     fprintf(stderr, "  F7=Lower gyro input  F8=Higher gyro input  F9=Nominal neutral\n");
-    fprintf(stderr, "  F1/F2=Lower/higher tilt X  F3/F4=Lower/higher tilt Y  F10=Nominal neutral\n");
+    fprintf(stderr,
+            "  F1/F2=Lower/higher tilt X  F3/F4=Lower/higher tilt Y  F10=Nominal neutral\n");
 }
 
 /**
  * @brief Program entry point.
  */
-
-int main(int argc, char* argv[]) {
-    const char* romPath = NULL;
-    const char* biosPath = NULL;
-    const char* saveTypeStr = NULL;
+int main(int argc, char *argv[]) {
+    const char *romPath = NULL;
+    const char *biosPath = NULL;
+    const char *saveTypeStr = NULL;
+    struct CupidPlatformSave saveSelection = {SAVE_AUTODETECT, FLASH_PROFILE_DEFAULT};
     int scale = CUPID_DEFAULT_SCALE;
     int rtcPresence = -1;
     struct CupidRTCDateTime rtcSeed;
     struct CupidPlatformRTC rtcConfig = {0};
     struct CupidPlatformPeripherals peripherals = CUPID_PLATFORM_PERIPHERALS_DEFAULT;
-    const char* linked[4] = {0};
+    const char *linked[4] = {0};
     unsigned peerCount = 0, frames = 0;
 
     /** Parse CLI arguments. */
@@ -91,59 +104,85 @@ int main(int argc, char* argv[]) {
         if (strcmp(argv[i], "--link") == 0 && i + 1 < argc && peerCount < 3) {
             linked[++peerCount] = argv[++i];
         } else if (strcmp(argv[i], "--frames") == 0 && i + 1 < argc) {
-            char* end;
+            char *end;
             errno = 0;
-            const char* text = argv[++i];
+            const char *text = argv[++i];
             unsigned long value = strtoul(text, &end, 10);
             if (text[0] < '0' || text[0] > '9' || *end || errno || !value || value > UINT_MAX) {
-                fprintf(stderr, "Error: Invalid frame count: %s\n", text); return 1;
+                fprintf(stderr, "Error: Invalid frame count: %s\n", text);
+                return 1;
             }
             frames = (unsigned)value;
         } else if (strcmp(argv[i], "-b") == 0 && i + 1 < argc) {
             biosPath = argv[++i];
         } else if (strcmp(argv[i], "-s") == 0 && i + 1 < argc) {
             scale = atoi(argv[++i]);
-            if (scale < 1) scale = 1;
-            if (scale > 10) scale = 10;
+            if (scale < 1)
+                scale = 1;
+            if (scale > 10)
+                scale = 10;
         } else if (strcmp(argv[i], "-S") == 0 && i + 1 < argc) {
             saveTypeStr = argv[++i];
+            if (!cupid_platform_save_parse(saveTypeStr, &saveSelection)) {
+                fprintf(stderr, "Error: Unknown save type '%s'\n", saveTypeStr);
+                return 1;
+            }
         } else if ((!strcmp(argv[i], "--solar") || !strcmp(argv[i], "--rumble") ||
-                    !strcmp(argv[i], "--gyro") || !strcmp(argv[i], "--tilt")) && i + 1 < argc) {
-            int* presence = !strcmp(argv[i], "--solar") ? &peripherals.solarPresence :
-                !strcmp(argv[i], "--rumble") ? &peripherals.rumblePresence :
-                !strcmp(argv[i], "--gyro") ? &peripherals.gyroPresence : &peripherals.tiltPresence;
+                    !strcmp(argv[i], "--gyro") || !strcmp(argv[i], "--tilt")) &&
+                   i + 1 < argc) {
+            int *presence = !strcmp(argv[i], "--solar")    ? &peripherals.solarPresence
+                            : !strcmp(argv[i], "--rumble") ? &peripherals.rumblePresence
+                            : !strcmp(argv[i], "--gyro")   ? &peripherals.gyroPresence
+                                                           : &peripherals.tiltPresence;
             if (!cupid_platform_peripheral_mode(argv[++i], presence)) {
-                fprintf(stderr, "Error: Peripheral mode must be auto, on or off\n"); return 1;
+                fprintf(stderr, "Error: Peripheral mode must be auto, on or off\n");
+                return 1;
             }
         } else if (!strcmp(argv[i], "--sunlight") && i + 1 < argc) {
             if (!cupid_platform_solar_level(argv[++i], &peripherals.solarLevel)) {
-                fprintf(stderr, "Error: Sunlight must be an integer from 0 through 255\n"); return 1;
+                fprintf(stderr, "Error: Sunlight must be an integer from 0 through 255\n");
+                return 1;
             }
         } else if (!strcmp(argv[i], "--gyro-sample") && i + 1 < argc) {
             if (!cupid_platform_gyro_sample(argv[++i], &peripherals.gyroSample)) {
-                fprintf(stderr, "Error: Gyro input must be an integer from 0 through 4095\n"); return 1;
+                fprintf(stderr, "Error: Gyro input must be an integer from 0 through 4095\n");
+                return 1;
             }
         } else if ((!strcmp(argv[i], "--tilt-x") || !strcmp(argv[i], "--tilt-y")) && i + 1 < argc) {
-            uint16_t* axis = !strcmp(argv[i], "--tilt-x") ? &peripherals.tiltX : &peripherals.tiltY;
+            uint16_t *axis = !strcmp(argv[i], "--tilt-x") ? &peripherals.tiltX : &peripherals.tiltY;
             if (!cupid_platform_sample12(argv[++i], axis)) {
-                fprintf(stderr, "Error: Tilt input must be an integer from 0 through 4095\n"); return 1;
+                fprintf(stderr, "Error: Tilt input must be an integer from 0 through 4095\n");
+                return 1;
             }
         } else if (strcmp(argv[i], "--rtc") == 0 && i + 1 < argc) {
-            const char* mode = argv[++i];
-            if (!strcmp(mode, "auto")) rtcPresence = -1;
-            else if (!strcmp(mode, "on")) rtcPresence = 1;
-            else if (!strcmp(mode, "off")) rtcPresence = 0;
-            else { fprintf(stderr, "Error: Invalid RTC mode: %s\n", mode); return 1; }
+            const char *mode = argv[++i];
+            if (!strcmp(mode, "auto"))
+                rtcPresence = -1;
+            else if (!strcmp(mode, "on"))
+                rtcPresence = 1;
+            else if (!strcmp(mode, "off"))
+                rtcPresence = 0;
+            else {
+                fprintf(stderr, "Error: Invalid RTC mode: %s\n", mode);
+                return 1;
+            }
         } else if (strcmp(argv[i], "--rtc-time") == 0 && i + 1 < argc) {
             if (!cupid_rtc_parse_datetime(argv[++i], &rtcSeed)) {
-                fprintf(stderr, "Error: Invalid RTC time; use a valid date from 2000 through 2099\n"); return 1;
+                fprintf(stderr,
+                        "Error: Invalid RTC time; use a valid date from 2000 through 2099\n");
+                return 1;
             }
             rtcConfig.seed = &rtcSeed;
         } else if (strcmp(argv[i], "--rtc-offline") == 0 && i + 1 < argc) {
-            const char* mode = argv[++i];
-            if (!strcmp(mode, "pause")) rtcConfig.offlineWall = false;
-            else if (!strcmp(mode, "wall")) rtcConfig.offlineWall = true;
-            else { fprintf(stderr, "Error: Invalid RTC offline mode: %s\n", mode); return 1; }
+            const char *mode = argv[++i];
+            if (!strcmp(mode, "pause"))
+                rtcConfig.offlineWall = false;
+            else if (!strcmp(mode, "wall"))
+                rtcConfig.offlineWall = true;
+            else {
+                fprintf(stderr, "Error: Invalid RTC offline mode: %s\n", mode);
+                return 1;
+            }
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
             printUsage(argv[0]);
             return 0;
@@ -165,12 +204,11 @@ int main(int argc, char* argv[]) {
     if (peerCount) {
         linked[0] = romPath;
         const struct CupidLocalDevices devices = {rtcPresence, rtcConfig, peripherals};
-        return cupid_platform_run_local(linked, peerCount + 1, biosPath, saveTypeStr, scale, frames, &devices);
+        return cupid_platform_run_local(linked, peerCount + 1, biosPath, saveTypeStr, scale, frames,
+                                        &devices);
     }
-    if (frames) { fprintf(stderr, "Error: --frames requires --link\n"); return 1; }
 
     /** GBA path. */
-
     /** Derive save-file path (.sav alongside the ROM). */
     char savePath[512];
     if (!derive_save_path(romPath, savePath, sizeof(savePath))) {
@@ -189,34 +227,18 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     printf("Loaded ROM: %s (%zu bytes)\n", romPath, gba.memory.romSize);
-    if (rtcPresence >= 0) cupid_cartridge_enable_rtc(&gba, rtcPresence != 0);
+    if (rtcPresence >= 0)
+        cupid_cartridge_enable_rtc(&gba, rtcPresence != 0);
     cupid_platform_peripherals_configure(&gba, &peripherals);
 
-    /** Override save type if specified on CLI. */
-    if (saveTypeStr) {
-        enum CupidSaveType stype = SAVE_AUTODETECT;
-        if (strcmp(saveTypeStr, "sram") == 0)          stype = SAVE_SRAM;
-        else if (strcmp(saveTypeStr, "sram512") == 0)   stype = SAVE_SRAM512;
-        else if (strcmp(saveTypeStr, "flash512") == 0 ||
-                 strcmp(saveTypeStr, "sst39vf512") == 0) stype = SAVE_FLASH512;
-        else if (strcmp(saveTypeStr, "flash1m") == 0)   stype = SAVE_FLASH1M;
-        else if (strcmp(saveTypeStr, "eeprom") == 0)    stype = SAVE_EEPROM;
-        else if (strcmp(saveTypeStr, "eeprom512") == 0) stype = SAVE_EEPROM512;
-        else if (strcmp(saveTypeStr, "none") == 0)      stype = SAVE_NONE;
-        else {
-            fprintf(stderr, "Warning: Unknown save type '%s', using auto-detect\n", saveTypeStr);
-        }
-        if (stype != SAVE_AUTODETECT) {
-            cupid_savedata_force_type(&gba.memory.savedata, stype);
-            if (!strcmp(saveTypeStr, "sst39vf512") &&
-                !cupid_savedata_set_flash_profile(&gba.memory.savedata, FLASH_PROFILE_SST39VF512)) {
-                fprintf(stderr, "Error: Cannot select Flash device '%s'\n", saveTypeStr);
-                cupid_gba_destroy(&gba);
-                return 1;
-            }
-            printf("Save type forced: %s\n", saveTypeStr);
-        }
+    /* Select the same backup hardware for single-console and linked runs. */
+    if (!cupid_platform_save_configure(&gba.memory.savedata, &saveSelection)) {
+        fprintf(stderr, "Error: Cannot configure save hardware\n");
+        cupid_gba_destroy(&gba);
+        return 1;
     }
+    if (saveTypeStr)
+        printf("Save type selected: %s\n", saveTypeStr);
 
     /** Load BIOS (optional). */
     if (biosPath) {
@@ -235,9 +257,9 @@ int main(int argc, char* argv[]) {
 
     /** Load persisted save data (no-op when .sav does not exist). */
     if (!cupid_savedata_load_file(&gba.memory.savedata, savePath) && errno != ENOENT) {
-        const char* reason = errno == EINVAL
-            ? "unsupported save size or incompatible save type; check the -S option"
-            : strerror(errno);
+        const char *reason =
+            errno == EINVAL ? "unsupported save size or incompatible save type; check the -S option"
+                            : strerror(errno);
         fprintf(stderr, "Error: Cannot load save %s: %s\n", savePath, reason);
         cupid_gba_destroy(&gba);
         return 1;
@@ -249,13 +271,17 @@ int main(int argc, char* argv[]) {
     rtcConfig.path = rtcPath;
     struct CupidRTCDateTime hostDate;
     uint64_t hostStamp = 0;
-    if (gba.cartridge.rtcPresent && rtcConfig.offlineWall && !cupid_platform_rtc_host_clock(&hostDate, &hostStamp)) {
+    if (gba.cartridge.rtcPresent && rtcConfig.offlineWall &&
+        !cupid_platform_rtc_host_clock(&hostDate, &hostStamp)) {
         fprintf(stderr, "Error: Cannot read RTC host clock: %s\n", strerror(errno));
-        cupid_gba_destroy(&gba); return 1;
+        cupid_gba_destroy(&gba);
+        return 1;
     }
-    if (!cupid_platform_rtc_load(&gba, &rtcConfig, rtcConfig.offlineWall ? &hostDate : NULL, hostStamp)) {
+    if (!cupid_platform_rtc_load(&gba, &rtcConfig, rtcConfig.offlineWall ? &hostDate : NULL,
+                                 hostStamp)) {
         fprintf(stderr, "Error: Cannot load RTC state %s: %s\n", rtcPath, strerror(errno));
-        cupid_gba_destroy(&gba); return 1;
+        cupid_gba_destroy(&gba);
+        return 1;
     }
 
     /** Initialize SDL platform. */
@@ -264,7 +290,8 @@ int main(int argc, char* argv[]) {
         cupid_gba_destroy(&gba);
         return 1;
     }
-    uint32_t* completedFrame = calloc(GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT, sizeof(*completedFrame));
+    uint32_t *completedFrame =
+        calloc(GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT, sizeof(*completedFrame));
     if (!completedFrame) {
         fprintf(stderr, "Error: Cannot allocate completed frame\n");
         cupid_platform_deinit(&plat);
@@ -279,8 +306,7 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "Warning: Audio initialization failed, continuing without audio\n");
     }
 
-    printf("CupidGBA started — %dx%d (scale %d)\n",
-           plat.windowWidth, plat.windowHeight, scale);
+    printf("CupidGBA started — %dx%d (scale %d)\n", plat.windowWidth, plat.windowHeight, scale);
 
     /**
      * Frame pacing target: real GBA frame period.
@@ -289,8 +315,8 @@ int main(int argc, char* argv[]) {
      * even when the display refresh is 60 Hz, preventing audio lag drift.
      */
     const uint64_t perfFreq = SDL_GetPerformanceFrequency();
-    const uint64_t frameTicks = (uint64_t)(((double)perfFreq *
-        (double)VIDEO_TOTAL_LENGTH / (double)GBA_CLOCK_FREQ) + 0.5);
+    const uint64_t frameTicks =
+        (uint64_t)(((double)perfFreq * (double)VIDEO_TOTAL_LENGTH / (double)GBA_CLOCK_FREQ) + 0.5);
     uint64_t nextFrameTick = SDL_GetPerformanceCounter() + frameTicks;
 
     /**
@@ -301,15 +327,19 @@ int main(int argc, char* argv[]) {
      * 4. Periodically flush dirty save data.
      */
     int saveFlushCounter = 0;
+    unsigned completedIntervals = 0;
     while (plat.running) {
         /** Poll input. */
-        if (!cupid_platform_poll_events(&plat, &gba)) break;
+        if (!cupid_platform_poll_events(&plat, &gba))
+            break;
         cupid_platform_rumble_refresh(&plat);
 
         /* The SDL callback consumes the same queue that emulation produces. */
-        if (plat.audioDevice) SDL_LockAudioDevice(plat.audioDevice);
+        if (plat.audioDevice)
+            SDL_LockAudioDevice(plat.audioDevice);
         cupid_gba_run_interval(&gba, VIDEO_TOTAL_LENGTH);
-        if (plat.audioDevice) SDL_UnlockAudioDevice(plat.audioDevice);
+        if (plat.audioDevice)
+            SDL_UnlockAudioDevice(plat.audioDevice);
 
         /** Retain the last complete image while the next frame draws or STOP waits. */
         cupid_platform_render_frame(&plat, completedFrame);
@@ -323,6 +353,11 @@ int main(int argc, char* argv[]) {
                 fprintf(stderr, "Error: Cannot save RTC state %s: %s\n", rtcPath, strerror(errno));
         }
 
+        /* Count paced intervals, including STOP, rather than completed video
+         * frames. The ordinary shutdown path still owns the final batteries. */
+        if (frames && ++completedIntervals == frames)
+            break;
+
         /**
          * Pace to hardware frame length.
          *
@@ -332,7 +367,7 @@ int main(int argc, char* argv[]) {
         uint64_t now = SDL_GetPerformanceCounter();
         if (now < nextFrameTick) {
             uint64_t remaining = nextFrameTick - now;
-            uint64_t coarseDelayTicks = perfFreq / 500;  /** ~2 ms */
+            uint64_t coarseDelayTicks = perfFreq / 500; /** ~2 ms */
             if (remaining > coarseDelayTicks) {
                 uint32_t delayMs = (uint32_t)((remaining * 1000) / perfFreq);
                 if (delayMs > 1) {

@@ -1,0 +1,66 @@
+{
+  "revision": "66f5f1d60cd7030b600606886c76f5c821ecaf9d",
+  "cases": [
+    {
+      "name": "cpu",
+      "path": "Bus/DMA_CPU_Bus_Interaction.gba",
+      "sha256": "13773e62e02e12d4cf7bbb48e7ed72ab47ab7ec3fcf1a6ad4e5f5e73d4812842",
+      "address": "0x80001c0",
+      "mode": "arm",
+      "opcode": "0xe35200ff",
+      "expected": "0xff",
+      "terminal": "0x8000360"
+    },
+    {
+      "name": "iwram",
+      "path": "Bus/DMA_IWRAM_Bus.gba",
+      "sha256": "62fbde5a5b4cdafae5fa4f50544a7b8b1d788dd6cd853c676a31ea62c481e504",
+      "address": "0x8000214",
+      "mode": "thumb",
+      "opcode": "0x2aae",
+      "expected": "0xae",
+      "terminal": "0x80003a4"
+    },
+    {
+      "name": "oam",
+      "path": "Bus/DMA_OAM_Bus.gba",
+      "sha256": "a0aceebcd750d95d6b980cc6c0ba1883f9668588fd35319189aa4250017cb893",
+      "address": "0x8000200",
+      "mode": "thumb",
+      "opcode": "0x2a07",
+      "expected": "0x7",
+      "terminal": "0x8000390"
+    },
+    {
+      "name": "protected",
+      "path": "Bus/DMA_Outside_Bios_Bus.gba",
+      "sha256": "b9c6cd1030d95478fd666efc245f710d843c11f276cbdc68936ef67a8e404c9c",
+      "address": "0x8000200",
+      "mode": "thumb",
+      "opcode": "0x2aae",
+      "expected": "0xae",
+      "terminal": "0x8000390"
+    },
+    {
+      "name": "signed-halfword",
+      "path": "Bus/LDRSH_misaligned.gba",
+      "sha256": "a70ef07caf90c6d08f9c93f1f27845bc658f4a4fb81b688581b6461fb057440f",
+      "address": "0x80001a6",
+      "mode": "thumb",
+      "opcode": "0x2a24",
+      "expected": "0x24",
+      "terminal": "0x8000338"
+    },
+    {
+      "name": "unmapped",
+      "path": "Bus/Unused_location_update_bus.gba",
+      "sha256": "808a09ac2a8c0dbb66ac6f1690205e727b9aa73e373eeb0b2a00185550455c95",
+      "address": "0x8000220",
+      "mode": "arm",
+      "opcode": "0xe35200a0",
+      "expected": "0xa0",
+      "terminal": "0x80003c0"
+    }
+  ],
+  "license_sha256": "b59a9ed235d76752c977f04116bc72155a14af48176bdbf50d7e5c29fca35aa7"
+}

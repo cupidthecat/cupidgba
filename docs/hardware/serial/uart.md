@@ -30,8 +30,8 @@ request publication and HALT wake path.
 The host owns synchronization between connected cores. Dispatch preceding
 events before applying an input change with `cupid_serial_set_input`, and use
 the timestamp supplied to `cupid_serial_set_output_callback`. Cross SO to SI
-and SD to SC for flow control. The SDL2 frontend does not yet expose a cable
-connection. STOP freezes pending UART deadlines; UART inputs do not wake STOP.
+and SD to SC for flow control. The SDL2 frontend provides this pairing through
+[local sessions](local-session.md). STOP freezes pending UART deadlines; UART inputs do not wake STOP.
 Mode changes and reset cancel active frames.
 
 Seven native groups check 12,288 complete format-matrix frames and 124,928

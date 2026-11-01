@@ -1,0 +1,73 @@
+{
+  "source": "https://raw.githubusercontent.com/DenSinH/FuzzARM",
+  "revision": "a675329cd57da48e3e406216ba2d79dd7e09ee20",
+  "license_sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+  "bytes": 203708,
+  "cases_per_rom": 10000,
+  "table_offset": 1232,
+  "control_words": [
+    {
+      "address": "08031238",
+      "value": "e8bb00e3"
+    },
+    {
+      "address": "0803123c",
+      "value": "e3a0a0ff"
+    },
+    {
+      "address": "080316a4",
+      "value": "e1530005"
+    },
+    {
+      "address": "080316a8",
+      "value": "1a000004"
+    },
+    {
+      "address": "080316ac",
+      "value": "e1540006"
+    },
+    {
+      "address": "080316b0",
+      "value": "1a000002"
+    },
+    {
+      "address": "080316b4",
+      "value": "e15b0007"
+    },
+    {
+      "address": "080316b8",
+      "value": "1a000000"
+    },
+    {
+      "address": "080000f0",
+      "value": "eafffffe"
+    }
+  ],
+  "cases": [
+    {
+      "name": "arm-any",
+      "path": "ARM_Any.gba",
+      "sha256": "5db4e020a61a0760043cb66b7149fa1777501080dbfc1b956c9600d44a4500f5"
+    },
+    {
+      "name": "arm-data",
+      "path": "ARM_DataProcessing.gba",
+      "sha256": "c9b96170c8a511eb3bb8adcf42fbf39eb51be09bbe0470150a51224238ea2f64"
+    },
+    {
+      "name": "mixed",
+      "path": "FuzzARM.gba",
+      "sha256": "266e3d4f1dc231aadf9d296b13897cdc0de4c3cef73cf0c83806c0cef3422269"
+    },
+    {
+      "name": "thumb-any",
+      "path": "THUMB_Any.gba",
+      "sha256": "c89d9e0894d9ef5af5de6bf7819b32383acad535ec5ab8c7e5b4f6278dff34f6"
+    },
+    {
+      "name": "thumb-data",
+      "path": "THUMB_DataProcessing.gba",
+      "sha256": "ad48a27d7a956f703a8813358f61de866b0e9a9988fb5603c7b2af91d38b0adc"
+    }
+  ]
+}

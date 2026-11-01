@@ -42,8 +42,13 @@ is rejected rather than truncated.
 Native regressions cover all capacities, two complete replacements and reloads,
 capacity expansion, explicit overrides, invalid input, companion-file collisions,
 protected files, open readers and recovery after a real delayed write error.
-Frontend checks verify invalid-save rejection and filename handling. These tests
-qualify file persistence. Chip-specific EEPROM/Flash durations, disputed bus accesses,
+Frontend checks verify invalid-save rejection and filename handling. They also
+cover bounded single-console runs, complete SRAM reloads across three
+processes, periodic and final flushes, early quit, STOP with an RTC battery, and
+read-only destination failures. The interval observer retains the real core,
+SDL input/render/audio and battery paths while removing only host pacing.
+See [running games](../../usage/running.md) for `--frames`. These checks qualify
+file persistence. Chip-specific EEPROM/Flash durations, disputed bus accesses,
 peripheral metadata and complete cartridge accuracy remain in
 [issue 1](https://github.com/cupidthecat/cupidgba/issues/1). Power-loss behavior
 beyond the host's file and replacement guarantees remains unqualified.
@@ -53,3 +58,22 @@ and block selection before data reaches the saved image.
 
 [Save programming](programming.md) describes pending operations, ready polling
 and the committed bytes available to file persistence.
+
+## Consistent startup selection
+
+The frontend and headless runner share the backup-name parser and startup
+configuration. An explicit selection is applied after loading the cartridge
+and before reset and battery restoration. `auto` leaves the detected device
+alone; `none` disables backup storage. Unknown names are rejected rather than
+silently falling back to a different device. The hardware protocol, programming
+durations and raw file layouts are unchanged.
+
+Native checks cover all 81 prior-device/selected-device pairs, exact names,
+invalid configurations without state changes, capacity, retained bytes and Flash
+profile selection. Owned ARM cartridges exercise SRAM, both Flash capacities,
+the explicit Flash profile and both EEPROM capacities. EEPROM commands use DMA3
+from internal RAM and read all 68 response bits. Flash1M writes and reads bank 1;
+SRAM512 accesses its upper half. Host checks compare the entire battery and
+EWRAM response, then reload the output in a separate read-only guest process.
+The frontend runs the same writes through single-console and two-console paths.
+These checks establish selection and persistence, not new chip timing evidence.

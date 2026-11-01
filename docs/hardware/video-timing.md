@@ -49,9 +49,10 @@ The complete bus, BIOS math, DMA and timer/IRQ suites retain their results.
 Display mode changes at latch/window edges, frame polarity, DRQ and same-cycle
 request/acknowledgement priority need further hardware captures.
 Reset and BIOS-skipped display phases also lack hardware captures.
-Rendering operates by scanline; pixel fetches, bus contention, mid-line register effects,
-forced-blank transitions and full PPU accuracy require separate work. The
-status and request results do not establish those behaviors.
+Pixel fetches, bus contention, register effects and forced-blank transitions
+are described in [the pixel pipeline](pixel-pipeline.md), including its remaining
+qualification limits. The status and request results alone do not establish
+complete PPU accuracy.
 
 ## Completed display images
 

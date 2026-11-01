@@ -2,12 +2,11 @@
  * @file platform.h
  * @brief SDL2 platform layer: window, input, audio output.
  */
-
 #ifndef CUPID_PLATFORM_H
 #define CUPID_PLATFORM_H
 
-#include "cupid/types.h"
 #include "cupid/gba.h"
+#include "cupid/types.h"
 #include <SDL2/SDL.h>
 
 /** Scale factor for the window */
@@ -22,17 +21,17 @@
  * Tracks elapsed CPU clocks for interpolation between captured stereo frames.
  */
 struct CupidPlatformAudio {
-    struct CupidAudio* audio;   /**< Pointer to emulator audio state */
-    int    hostRate;            /**< Actual device rate (may differ from requested) */
-    double resampleStep;        /**< CPU clocks per host frame */
-    double resamplePos;         /**< Clocks elapsed since the source anchor frame */
-    uint64_t sampleOverruns;    /**< Last observed producer overrun count */
-    int16_t lastSampleL;        /**< Last output sample (for underrun fade) */
+    struct CupidAudio *audio; /**< Pointer to emulator audio state */
+    int hostRate;             /**< Actual device rate (may differ from requested) */
+    double resampleStep;      /**< CPU clocks per host frame */
+    double resamplePos;       /**< Clocks elapsed since the source anchor frame */
+    uint64_t sampleOverruns;  /**< Last observed producer overrun count */
+    int16_t lastSampleL;      /**< Last output sample (for underrun fade) */
     int16_t lastSampleR;
     /* Optional playback observer. Called on the SDL worker with a borrowed
      * stereo buffer; validFrames excludes the synthesized underrun tail. */
-    void (*outputSink)(void* context, const int16_t* pcm, int frames, int validFrames);
-    void* outputSinkContext;
+    void (*outputSink)(void *context, const int16_t *pcm, int frames, int validFrames);
+    void *outputSinkContext;
 };
 
 struct CupidPlatformAudioMix {
@@ -42,14 +41,14 @@ struct CupidPlatformAudioMix {
 
 /** @name Platform State */
 struct CupidPlatform {
-    SDL_Window*   window;
-    SDL_Renderer* renderer;
-    SDL_Texture*  texture;
+    SDL_Window *window;
+    SDL_Renderer *renderer;
+    SDL_Texture *texture;
     SDL_AudioDeviceID audioDevice;
 
-    SDL_GameController* controller;   /**< First attached controller, or NULL */
-    int controllerIndex;              /**< SDL joystick instance ID of `controller` */
-    uint16_t keyboardKeys;            /**< Held GBA keys from keyboard events */
+    SDL_GameController *controller; /**< First attached controller, or NULL */
+    int controllerIndex;            /**< SDL joystick instance ID of `controller` */
+    uint16_t keyboardKeys;          /**< Held GBA keys from keyboard events */
     bool rumbleActive, rumbleDriving;
     uint32_t rumbleRefresh;
 
@@ -63,30 +62,30 @@ struct CupidPlatform {
 };
 
 /** @name API */
-bool cupid_platform_init(struct CupidPlatform* plat, int scale);
-void cupid_platform_deinit(struct CupidPlatform* plat);
+bool cupid_platform_init(struct CupidPlatform *plat, int scale);
+void cupid_platform_deinit(struct CupidPlatform *plat);
 
 /** Upload framebuffer to SDL texture and present */
-void cupid_platform_render_frame(struct CupidPlatform* plat, const uint32_t* framebuffer);
+void cupid_platform_render_frame(struct CupidPlatform *plat, const uint32_t *framebuffer);
 
 /** Poll SDL events, update key state. Returns false if quit requested. */
-bool cupid_platform_poll_events(struct CupidPlatform* plat, struct CupidGBA* gba);
+bool cupid_platform_poll_events(struct CupidPlatform *plat, struct CupidGBA *gba);
 
-void cupid_platform_rumble_changed(void* context, bool active, uint64_t clock);
-void cupid_platform_rumble_refresh(struct CupidPlatform* plat);
-void cupid_platform_rumble_stop(struct CupidPlatform* plat);
+void cupid_platform_rumble_changed(void *context, bool active, uint64_t clock);
+void cupid_platform_rumble_refresh(struct CupidPlatform *plat);
+void cupid_platform_rumble_stop(struct CupidPlatform *plat);
 /* One event queue serves a local session. Keyboard focus belongs to one
  * console; each controller instance is assigned to at most one console. */
-bool cupid_platform_poll_local(struct CupidPlatform* platforms, struct CupidGBA* const cores[],
-                               unsigned count, unsigned* focus, bool* connected);
+bool cupid_platform_poll_local(struct CupidPlatform *platforms, struct CupidGBA *const cores[],
+                               unsigned count, unsigned *focus, bool *connected);
 
 /** Audio callback */
-void cupid_platform_audio_callback(void* userdata, uint8_t* stream, int len);
+void cupid_platform_audio_callback(void *userdata, uint8_t *stream, int len);
 
 /** Init SDL audio device with callback */
-bool cupid_platform_init_audio(struct CupidPlatform* plat, struct CupidGBA* gba);
-bool cupid_platform_init_audio_mix(struct CupidPlatform* plat, struct CupidPlatformAudioMix* mix,
-                                   struct CupidGBA* const cores[], unsigned count);
-void cupid_platform_audio_mix_callback(void* userdata, uint8_t* stream, int len);
+bool cupid_platform_init_audio(struct CupidPlatform *plat, struct CupidGBA *gba);
+bool cupid_platform_init_audio_mix(struct CupidPlatform *plat, struct CupidPlatformAudioMix *mix,
+                                   struct CupidGBA *const cores[], unsigned count);
+void cupid_platform_audio_mix_callback(void *userdata, uint8_t *stream, int len);
 
 #endif /* CUPID_PLATFORM_H */

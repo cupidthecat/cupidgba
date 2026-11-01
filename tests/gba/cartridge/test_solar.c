@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+#include "../../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
-#include "../../test.h"
 
-static const char* externalBios;
+static const char *externalBios;
 
 static void clear_and_clock_edges(void) {
     struct CupidSolar solar;
@@ -40,9 +40,12 @@ static void all_levels_and_counter_converter_wrap(void) {
             cupid_solar_write_pins(&solar, 1);
             cupid_solar_write_pins(&solar, 0);
             CHECK(solar.counter == pulse % 4096);
-            if (!(pulse % 256)) CHECK(!cupid_solar_output_pins(&solar));
-            else if (pulse % 256 == 256 - level) CHECK(cupid_solar_output_pins(&solar) == 8);
-            else if (pulse % 256 == 255 - level) CHECK(!cupid_solar_output_pins(&solar));
+            if (!(pulse % 256))
+                CHECK(!cupid_solar_output_pins(&solar));
+            else if (pulse % 256 == 256 - level)
+                CHECK(cupid_solar_output_pins(&solar) == 8);
+            else if (pulse % 256 == 255 - level)
+                CHECK(!cupid_solar_output_pins(&solar));
             high += cupid_solar_output_pins(&solar) != 0;
             observations++;
         }
@@ -52,8 +55,8 @@ static void all_levels_and_counter_converter_wrap(void) {
     CHECK(observations == 2097152);
 }
 
-static struct CupidGBA* machine(void) {
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+static struct CupidGBA *machine(void) {
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba);
     cupid_gba_create(gba);
     gba->memory.rom = calloc(1, 0x4000);
@@ -62,16 +65,20 @@ static struct CupidGBA* machine(void) {
     gba->memory.romMask = 0x3FFF;
     const uint8_t raw[] = {0x33, 0x44, 0x77, 0x88, 0xCC, 0xDD, 0x5A, 0xA5};
     memcpy(gba->memory.rom + 0xC4, raw, sizeof(raw));
-    if (externalBios) CHECK(cupid_load_bios(gba, externalBios));
+    if (externalBios)
+        CHECK(cupid_load_bios(gba, externalBios));
     cupid_gba_reset(gba);
     cupid_cartridge_enable_solar(gba, true);
     return gba;
 }
 
-static void destroy(struct CupidGBA* gba) { cupid_gba_destroy(gba); free(gba); }
+static void destroy(struct CupidGBA *gba) {
+    cupid_gba_destroy(gba);
+    free(gba);
+}
 
-static uint32_t access_port(struct CupidGBA* gba, bool thumb, unsigned width,
-                            uint32_t address, uint32_t value, bool load) {
+static uint32_t access_port(struct CupidGBA *gba, bool thumb, unsigned width, uint32_t address,
+                            uint32_t value, bool load) {
     static const uint16_t thumbLoad[] = {0x7801, 0x8801, 0x6801};
     static const uint16_t thumbStore[] = {0x7001, 0x8001, 0x6001};
     static const uint32_t armLoad[] = {0xE5D01000, 0xE1D010B0, 0xE5901000};
@@ -103,10 +110,10 @@ static void instruction_driver_and_physical_windows(void) {
         for (unsigned bank = 0; bank < 3; bank++) {
             for (unsigned width = 2; width <= 4; width += 2) {
                 for (unsigned prefetch = 0; prefetch < 2; prefetch++) {
-                    struct CupidGBA* gba = machine();
+                    struct CupidGBA *gba = machine();
                     const uint32_t port = 0x080000C4 + bank * 0x02000000;
-                    const uint32_t ordinaryUpper = access_port(gba, thumb, 2,
-                        port + 0x01000000, 0, true);
+                    const uint32_t ordinaryUpper =
+                        access_port(gba, thumb, 2, port + 0x01000000, 0, true);
                     cupid_memory_update_waitstates(gba, (uint16_t)(prefetch << 14));
                     access_port(gba, thumb, 2, port + 4, 1, false);
                     access_port(gba, thumb, 2, port + 2, 3, false);
@@ -116,7 +123,8 @@ static void instruction_driver_and_physical_windows(void) {
                     CHECK(gba->cartridge.solar.counter == 0);
                     for (unsigned l = 0; l < sizeof(levels); l++) {
                         cupid_cartridge_set_solar_level(gba, levels[l]);
-                        access_port(gba, thumb, width, port, 2 | (width == 4 ? 3u << 16 : 0), false);
+                        access_port(gba, thumb, width, port, 2 | (width == 4 ? 3u << 16 : 0),
+                                    false);
                         access_port(gba, thumb, 2, port, 0, false);
                         for (unsigned pulse = 1; pulse <= 256; pulse++) {
                             access_port(gba, thumb, 2, port, 1, false);
@@ -143,7 +151,7 @@ static void instruction_driver_and_physical_windows(void) {
 }
 
 static void live_input_direction_reset_and_shared_rtc(void) {
-    struct CupidGBA* gba = machine();
+    struct CupidGBA *gba = machine();
     cupid_cartridge_enable_rtc(gba, true);
     const struct CupidRTCDateTime date = {26, 10, 14, 3, 12, 34, 56};
     CHECK(cupid_rtc_set_datetime(&gba->cartridge.rtc, &date));
@@ -187,16 +195,22 @@ static void live_input_direction_reset_and_shared_rtc(void) {
         cupid_timing_tick(&gba->timing, 128);
         cupid_memory_store16(&gba->cpu, 0x080000C4, 5, NULL);
         cupid_timing_tick(&gba->timing, 128);
-        if (cupid_memory_loadU16(&gba->cpu, 0x080000C4, NULL) & 2) control |= 1u << bit;
+        if (cupid_memory_loadU16(&gba->cpu, 0x080000C4, NULL) & 2)
+            control |= 1u << bit;
     }
     CHECK(control == 0x40);
     destroy(gba);
 }
 
-struct LightChange { struct CupidGBA* gba; uint64_t clock; unsigned calls; };
-static void change_light(struct CupidTiming* timing, void* context, uint32_t late) {
+struct LightChange {
+    struct CupidGBA *gba;
+    uint64_t clock;
+    unsigned calls;
+};
+
+static void change_light(struct CupidTiming *timing, void *context, uint32_t late) {
     (void)late;
-    struct LightChange* event = context;
+    struct LightChange *event = context;
     event->clock = cupid_timing_global_time(timing);
     event->calls++;
     cupid_cartridge_set_solar_level(event->gba, 255);
@@ -204,7 +218,7 @@ static void change_light(struct CupidTiming* timing, void* context, uint32_t lat
 
 static void dma_and_prefetch_keep_original_sample_clocks(void) {
     for (unsigned wrap = 0; wrap < 2; wrap++) {
-        struct CupidGBA* gba = machine();
+        struct CupidGBA *gba = machine();
         cupid_cartridge_set_solar_level(gba, 0);
         cupid_memory_store16(&gba->cpu, 0x080000C8, 1, NULL);
         cupid_memory_store16(&gba->cpu, 0x080000C6, 3, NULL);
@@ -215,7 +229,8 @@ static void dma_and_prefetch_keep_original_sample_clocks(void) {
         gba->timing.globalCycles = base;
         gba->timing.masterCycles = (uint32_t)base;
         struct LightChange change = {.gba = gba};
-        struct CupidTimingEvent event = {.context = &change, .callback = change_light, .priority = 0x60};
+        struct CupidTimingEvent event = {
+            .context = &change, .callback = change_light, .priority = 0x60};
         cupid_timing_schedule(&gba->timing, &event, 9);
         cupid_dma_write_sad(gba, 3, 0x080000C4);
         cupid_dma_write_dad(gba, 3, GBA_BASE_IWRAM);
@@ -229,7 +244,7 @@ static void dma_and_prefetch_keep_original_sample_clocks(void) {
         destroy(gba);
     }
     for (unsigned width = 2; width <= 4; width += 2) {
-        struct CupidGBA* gba = machine();
+        struct CupidGBA *gba = machine();
         cupid_cartridge_set_solar_level(gba, 0);
         cupid_memory_store16(&gba->cpu, 0x080000C8, 1, NULL);
         cupid_memory_store16(&gba->cpu, 0x080000C6, 3, NULL);
@@ -255,9 +270,11 @@ static void dma_and_prefetch_keep_original_sample_clocks(void) {
     }
 }
 
-int main(int argc, char** argv) {
-    if (argc == 3) externalBios = argv[2];
-    else if (argc != 2) return 2;
+int main(int argc, char **argv) {
+    if (argc == 3)
+        externalBios = argv[2];
+    else if (argc != 2)
+        return 2;
     if (!strcmp(argv[1], "--component")) {
         RUN(clear_and_clock_edges);
         RUN(all_levels_and_counter_converter_wrap);
@@ -266,6 +283,7 @@ int main(int argc, char** argv) {
     } else if (!strcmp(argv[1], "--interactions")) {
         RUN(live_input_direction_reset_and_shared_rtc);
         RUN(dma_and_prefetch_keep_original_sample_clocks);
-    } else return 2;
+    } else
+        return 2;
     return 0;
 }

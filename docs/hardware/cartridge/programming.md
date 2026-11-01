@@ -181,5 +181,7 @@ EEPROM and Flash byte/sector/chip operations, both caller instruction states,
 and four clock epochs including signed/unsigned wrap. Selected long synthetic
 profiles keep programming in flight after the firmware reaches cartridge
 entry. Storage, bank/range, dirty state and the original deadline survive; the
-operation commits exactly at that deadline. The group retains its ten-second
-deadline and does not calibrate physical chip timing.
+operation commits exactly at that deadline. Each case observes cartridge entry
+after every step in a batch capped at 500,000 returns. Entry on the last allowed
+step remains valid; count zero cannot complete a reboot. The group retains its
+ten-second deadline and does not calibrate physical chip timing.

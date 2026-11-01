@@ -1,0 +1,10 @@
+{
+  "cases": [
+    {"name": "green-swap", "path": "ppu/greenswap/greenswap.gba",
+     "sha256": "17c5701b342525515c0278f504d812fc6fa028ae542c1a25cb79c0d794e44880"},
+    {"name": "affine-line-step", "path": "ppu/bgpd/bgpd.gba",
+     "sha256": "beafeec621abd2dc9dd4cb8e0bf310c2b8c69ee0295945506dc74b19767016c3"},
+    {"name": "sprite-mosaic", "path": "ppu/sprite-hmosaic/sprite-hmosaic.gba",
+     "sha256": "792fe1398ffa6f94c9096559d9f5babad2d5a3fdb48babc42ffd634966d6d28f"}
+  ]
+}

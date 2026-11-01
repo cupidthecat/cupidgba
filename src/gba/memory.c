@@ -2,33 +2,67 @@
  * @file memory.c
  * @brief GBA memory bus, region switching, ROM loading and BIOS buffer setup.
  */
-
 #include "cupid/gba.h"
 #include "cupid/registers.h"
 #include <errno.h>
 
+static bool reserved_vram(const struct CupidGBA *gba, uint32_t address) {
+    return DISPCNT_MODE(gba->video.dispcnt) >= 3 && (address & 0x1C000) == 0x18000;
+}
+
+void cupid_memory_refresh_vram_fetch(struct CupidARM *cpu, uint32_t address) {
+    struct CupidGBA *gba = cpu->master;
+    static const uint32_t zero = 0;
+    if (reserved_vram(gba, address)) {
+        cpu->memory.activeRegion = &zero;
+        cpu->memory.activeMask = 0;
+    } else if (address & 0x10000) {
+        cpu->memory.activeRegion = (const uint32_t *)((uint8_t *)gba->video.vram + 0x10000);
+        cpu->memory.activeMask = 0x7FFF;
+    } else {
+        cpu->memory.activeRegion = (const uint32_t *)gba->video.vram;
+        cpu->memory.activeMask = 0xFFFF;
+    }
+    cpu->memory.activeMask &= cpu->cpsr.t ? ~1u : ~3u;
+}
+
 /* Small-image boards select the upper ROM half; large boards also decode
  * the upper seventeen halfword-address lines, reserving the last 256 bytes. */
-bool cupid_memory_is_eeprom_address(const struct CupidMemory* memory, uint32_t address) {
-    if ((address >> GBA_BASE_OFFSET) != GBA_REGION_ROM2_EX) return false;
+bool cupid_memory_is_eeprom_address(const struct CupidMemory *memory, uint32_t address) {
+    if ((address >> GBA_BASE_OFFSET) != GBA_REGION_ROM2_EX)
+        return false;
     size_t imageSize = memory->romImageSize ? memory->romImageSize : memory->romSize;
     return imageSize <= 0x01000000 || address >= 0x0DFFFF00;
 }
 
-static void begin_data_access(struct CupidARM* cpu, uint32_t address,
-                              unsigned width, int* cycles) {
-    struct CupidMemory* memory = &((struct CupidGBA*)cpu->master)->memory;
+static void begin_data_access(struct CupidARM *cpu, uint32_t address, unsigned width, int *cycles) {
+    struct CupidMemory *memory = &((struct CupidGBA *)cpu->master)->memory;
     cpu->cycles += *cycles;
     *cycles = 0;
     cupid_bus_wait(cpu);
     unsigned region = address >> GBA_BASE_OFFSET;
+    if (region >= GBA_REGION_PALETTE && region <= GBA_REGION_OAM) {
+        /* Display waits come from the live PPU port. Cartridge/RAM wait
+         * tables and sequential hints do not select its ready edge. Keep
+         * prefetch publication and the data phase at their ordinary clocks. */
+        memory->fetchNonseq = true;
+        unsigned penalty = cupid_prefetch_before_data(cpu->master, address);
+        if (penalty)
+            abort(); /* Display accesses do not cancel Game Pak prefetch. */
+        cupid_bus_display_beat(cpu, address, width != 4 || region == GBA_REGION_OAM);
+        cupid_prefetch_after_data(cpu->master);
+        CupidRegisterDataPhase(cpu);
+        return;
+    }
     bool sequential = cpu->memory.dataSequential;
     if (region >= GBA_REGION_ROM0 && region <= GBA_REGION_ROM2_EX &&
-        (!(address & 0x1FFFF) || memory->lastWasDMA)) sequential = false;
+        (!(address & 0x1FFFF) || memory->lastWasDMA))
+        sequential = false;
     bool word = width == 4 && region != GBA_REGION_SRAM && region != GBA_REGION_SRAM_MIRROR;
-    unsigned wait = (unsigned)(word
-        ? (sequential ? memory->waitstatesSeq32[region] : memory->waitstatesNonseq32[region])
-        : (sequential ? memory->waitstatesSeq16[region] : memory->waitstatesNonseq16[region]));
+    unsigned wait = (unsigned)(word ? (sequential ? memory->waitstatesSeq32[region]
+                                                  : memory->waitstatesNonseq32[region])
+                                    : (sequential ? memory->waitstatesSeq16[region]
+                                                  : memory->waitstatesNonseq16[region]));
     memory->fetchNonseq = true;
     unsigned penalty = cupid_prefetch_before_data(cpu->master, address);
     cupid_bus_advance(cpu, wait + 1 + penalty, true);
@@ -36,42 +70,55 @@ static void begin_data_access(struct CupidARM* cpu, uint32_t address,
     CupidRegisterDataPhase(cpu);
 }
 
-static void end_data_access(struct CupidARM* cpu, int* cycles, bool load) {
-    if (!cycles) return;
+static void end_data_access(struct CupidARM *cpu, int *cycles, bool load) {
+    if (!cycles)
+        return;
     *cycles = load ? 1 : 0;
-    ((struct CupidGBA*)cpu->master)->memory.lastWasDMA = false;
+    ((struct CupidGBA *)cpu->master)->memory.lastWasDMA = false;
     cupid_bus_release(cpu);
 }
 
-static void begin_gpio_word(struct CupidARM* cpu, uint32_t address, int* cycles) {
-    struct CupidGBA* gba = cpu->master;
-    struct CupidMemory* memory = &gba->memory;
+static void begin_gpio_word(struct CupidARM *cpu, uint32_t address, int *cycles) {
+    struct CupidGBA *gba = cpu->master;
+    struct CupidMemory *memory = &gba->memory;
     cpu->cycles += *cycles;
     *cycles = 0;
     cupid_bus_wait(cpu);
     const unsigned region = address >> GBA_BASE_OFFSET;
     bool sequential = cpu->memory.dataSequential;
-    if (!(address & 0x1FFFF) || memory->lastWasDMA) sequential = false;
-    const unsigned wait = sequential ? memory->waitstatesSeq16[region] : memory->waitstatesNonseq16[region];
+    if (!(address & 0x1FFFF) || memory->lastWasDMA)
+        sequential = false;
+    const unsigned wait =
+        sequential ? memory->waitstatesSeq16[region] : memory->waitstatesNonseq16[region];
     memory->fetchNonseq = true;
     const unsigned penalty = cupid_prefetch_before_data(gba, address);
-    cupid_bus_advance(cpu, wait + 1 + penalty, true);
+    const unsigned low = wait + 1 + penalty;
+    const unsigned high = (unsigned)memory->waitstatesSeq16[region] + 1;
+    /* Two cartridge strobes complete one CPU word request. Keep the IRQ
+     * synchronizer held through the low strobe and sample only at the end. */
+    cupid_bus_begin_transfer(cpu, low + high, true);
+    cupid_bus_advance_part(cpu, low);
 }
 
-static void next_gpio_halfword(struct CupidARM* cpu, uint32_t address) {
-    struct CupidGBA* gba = cpu->master;
-    cupid_bus_advance(cpu, (unsigned)gba->memory.waitstatesSeq16[address >> GBA_BASE_OFFSET] + 1, true);
+static void next_gpio_halfword(struct CupidARM *cpu, uint32_t address) {
+    struct CupidGBA *gba = cpu->master;
+    cupid_bus_advance_part(cpu,
+                           (unsigned)gba->memory.waitstatesSeq16[address >> GBA_BASE_OFFSET] + 1);
+    /* The completed word releases the register read-port conflict before a
+     * following STM word samples its source register. */
+    CupidRegisterDataPhase(cpu);
 }
 
 /* Observe MMIO at the end of its data-bus cycle. The instruction's accumulated
  * fetch/data clocks are consumed here; its remaining internal clocks stay in
  * cycleCounter. Peripheral events run here, while CPU IRQ entry stays at the
  * next instruction boundary. NULL counters are untimed observer/DMA accesses. */
-static void sync_io(struct CupidARM* cpu, int* cycleCounter) {
-    if (!cycleCounter) return;
+static void sync_io(struct CupidARM *cpu, int *cycleCounter) {
+    if (!cycleCounter)
+        return;
     cpu->cycles += *cycleCounter + 1;
     *cycleCounter = -1;
-    if (cpu->cycles >= cpu->nextEvent || ((struct CupidGBA*)cpu->master)->timing.synchronize)
+    if (cpu->cycles >= cpu->nextEvent || ((struct CupidGBA *)cpu->master)->timing.synchronize)
         cpu->irqh.processEvents(cpu);
 }
 
@@ -83,26 +130,28 @@ extern const uint8_t cupid_hle_bios[];
 /**
  * @brief Default wait-state tables per region, indexed by address >> 24.
  */
-static const char GBA_BASE_WAITSTATES[16]       = { 0, 0, 2, 0, 0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 0 };
-static const char GBA_BASE_WAITSTATES_32[16]    = { 0, 0, 5, 0, 0, 1, 1, 0, 7, 7, 9, 9, 13, 13, 9, 0 };
-static const char GBA_BASE_WAITSTATES_SEQ[16]   = { 0, 0, 2, 0, 0, 0, 0, 0, 2, 2, 4, 4, 8, 8, 4, 0 };
-static const char GBA_BASE_WAITSTATES_SEQ_32[16]= { 0, 0, 5, 0, 0, 1, 1, 0, 5, 5, 9, 9, 17, 17, 9, 0 };
+static const char GBA_BASE_WAITSTATES[16] = {0, 0, 2, 0, 0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 0};
+static const char GBA_BASE_WAITSTATES_32[16] = {0, 0, 5, 0, 0, 1, 1, 0, 7, 7, 9, 9, 13, 13, 9, 0};
+static const char GBA_BASE_WAITSTATES_SEQ[16] = {0, 0, 2, 0, 0, 0, 0, 0, 2, 2, 4, 4, 8, 8, 4, 0};
+static const char GBA_BASE_WAITSTATES_SEQ_32[16] = {0, 0, 5, 0, 0,  1,  1, 0,
+                                                    5, 5, 9, 9, 17, 17, 9, 0};
 
 /**
  * @brief ROM wait-state lookup from WAITCNT register fields.
  */
-const char GBA_ROM_WAITSTATES[4]     = { 4, 3, 2, 8 };
-const char GBA_ROM_WAITSTATES_SEQ[6] = { 2, 1, 4, 1, 8, 1 };
+const char GBA_ROM_WAITSTATES[4] = {4, 3, 2, 8};
+const char GBA_ROM_WAITSTATES_SEQ[6] = {2, 1, 4, 1, 8, 1};
 
 /**
  * @brief Initialize memory subsystem buffers and CPU memory bus callbacks.
  */
+void cupid_memory_init(struct CupidGBA *gba) {
+    struct CupidMemory *mem = &gba->memory;
 
-void cupid_memory_init(struct CupidGBA* gba) {
-    struct CupidMemory* mem = &gba->memory;
-
-    if (!mem->ewram) mem->ewram = calloc(1, GBA_SIZE_EWRAM);
-    if (!mem->iwram) mem->iwram = calloc(1, GBA_SIZE_IWRAM);
+    if (!mem->ewram)
+        mem->ewram = calloc(1, GBA_SIZE_EWRAM);
+    if (!mem->iwram)
+        mem->iwram = calloc(1, GBA_SIZE_IWRAM);
     memset(mem->io, 0, sizeof(mem->io));
 
     /**
@@ -118,18 +167,19 @@ void cupid_memory_init(struct CupidGBA* gba) {
     mem->fullBios = 0;
 
     /** Wire up CPU memory bus callbacks. */
-    struct CupidARM* cpu = &gba->cpu;
-    cpu->memory.load32  = cupid_memory_load32;
-    cpu->memory.load16  = cupid_memory_load16;
+    struct CupidARM *cpu = &gba->cpu;
+    cpu->memory.load32 = cupid_memory_load32;
+    cpu->memory.load16 = cupid_memory_load16;
     cpu->memory.loadU16 = cupid_memory_loadU16;
-    cpu->memory.load8   = cupid_memory_load8;
+    cpu->memory.load8 = cupid_memory_load8;
     cpu->memory.store32 = cupid_memory_store32;
     cpu->memory.store16 = cupid_memory_store16;
-    cpu->memory.store8  = cupid_memory_store8;
-    cpu->memory.loadMultiple  = cupid_memory_load_multiple;
+    cpu->memory.store8 = cupid_memory_store8;
+    cpu->memory.loadMultiple = cupid_memory_load_multiple;
     cpu->memory.storeMultiple = cupid_memory_store_multiple;
     cpu->memory.setActiveRegion = cupid_memory_set_active_region;
     cpu->memory.fetch = cupid_bus_fetch;
+    cpu->memory.captureOpcode = cupid_memory_capture_opcode;
     cpu->memory.finish = cupid_bus_finish;
     cpu->memory.lock = cupid_bus_lock;
     cpu->memory.timed = false;
@@ -139,14 +189,14 @@ void cupid_memory_init(struct CupidGBA* gba) {
 
     mem->activeDMA = -1;
     mem->dmaRunning = false;
-    mem->activeRegion = -1;  /** Force full setActiveRegion on first call. */
+    mem->activeRegion = -1; /** Force full setActiveRegion on first call. */
 
     cupid_dma_init(gba);
     cupid_savedata_init(&mem->savedata);
 }
 
-void cupid_memory_reset(struct CupidGBA* gba) {
-    struct CupidMemory* mem = &gba->memory;
+void cupid_memory_reset(struct CupidGBA *gba) {
+    struct CupidMemory *mem = &gba->memory;
     memset(mem->ewram, 0, GBA_SIZE_EWRAM);
     memset(mem->iwram, 0, GBA_SIZE_IWRAM);
 
@@ -156,27 +206,33 @@ void cupid_memory_reset(struct CupidGBA* gba) {
     }
     memset(mem->io, 0, sizeof(mem->io));
 
+    mem->ewramWaitControl = 0x0D00;
+
     /** Initialize default wait states. */
     int i;
     for (i = 0; i < 16; ++i) {
         mem->waitstatesNonseq16[i] = GBA_BASE_WAITSTATES[i];
-        mem->waitstatesSeq16[i]    = GBA_BASE_WAITSTATES_SEQ[i];
+        mem->waitstatesSeq16[i] = GBA_BASE_WAITSTATES_SEQ[i];
         mem->waitstatesNonseq32[i] = GBA_BASE_WAITSTATES_32[i];
-        mem->waitstatesSeq32[i]    = GBA_BASE_WAITSTATES_SEQ_32[i];
+        mem->waitstatesSeq32[i] = GBA_BASE_WAITSTATES_SEQ_32[i];
     }
     for (; i < 256; ++i) {
         mem->waitstatesNonseq16[i] = 0;
-        mem->waitstatesSeq16[i]    = 0;
+        mem->waitstatesSeq16[i] = 0;
         mem->waitstatesNonseq32[i] = 0;
-        mem->waitstatesSeq32[i]    = 0;
+        mem->waitstatesSeq32[i] = 0;
     }
 
     mem->activeRegion = -1;
     mem->biosPrefetch = 0;
     mem->prefetch = false;
     memset(&mem->prefetchUnit, 0, sizeof(mem->prefetchUnit));
+    mem->displayAddress = 0;
+    mem->displayBeatReady = mem->displayFinal = false;
     mem->lastPrefetchedPc = 0;
     mem->openBus = 0;
+    mem->inputBusValid = false;
+    mem->iwramBus = 0;
     mem->busBusy = false;
     mem->busLocked = false;
     mem->fetchNonseq = false;
@@ -184,21 +240,26 @@ void cupid_memory_reset(struct CupidGBA* gba) {
     gba->cpu.memory.dataSequential = false;
 }
 
-void cupid_memory_deinit(struct CupidGBA* gba) {
-    struct CupidMemory* mem = &gba->memory;
-    free(mem->ewram);  mem->ewram = NULL;
-    free(mem->iwram);  mem->iwram = NULL;
-    free(mem->rom);    mem->rom = NULL;
-    free(mem->bios);   mem->bios = NULL;
+void cupid_memory_deinit(struct CupidGBA *gba) {
+    struct CupidMemory *mem = &gba->memory;
+    free(mem->ewram);
+    mem->ewram = NULL;
+    free(mem->iwram);
+    mem->iwram = NULL;
+    free(mem->rom);
+    mem->rom = NULL;
+    free(mem->bios);
+    mem->bios = NULL;
     cupid_savedata_deinit(&mem->savedata);
 }
 
 /* A reset or invalid jump has no mapped CPU region to refresh yet. */
-static void refresh_active_waitstates(struct CupidGBA* gba) {
-    struct CupidMemory* memory = &gba->memory;
-    struct CupidARM* cpu = &gba->cpu;
+static void refresh_active_waitstates(struct CupidGBA *gba) {
+    struct CupidMemory *memory = &gba->memory;
+    struct CupidARM *cpu = &gba->cpu;
     const size_t region = (size_t)memory->activeRegion;
-    if (region >= sizeof(memory->waitstatesSeq32) / sizeof(memory->waitstatesSeq32[0])) return;
+    if (region >= sizeof(memory->waitstatesSeq32) / sizeof(memory->waitstatesSeq32[0]))
+        return;
     cpu->memory.activeSeqCycles32 = memory->waitstatesSeq32[region];
     cpu->memory.activeSeqCycles16 = memory->waitstatesSeq16[region];
     cpu->memory.activeNonseqCycles32 = memory->waitstatesNonseq32[region];
@@ -208,57 +269,78 @@ static void refresh_active_waitstates(struct CupidGBA* gba) {
 /**
  * @brief Update wait-state tables from WAITCNT register fields.
  */
-void cupid_memory_update_waitstates(struct CupidGBA* gba, uint16_t parameters) {
-    struct CupidMemory* memory = &gba->memory;
-    int sram   = parameters & 0x0003;
-    int ws0    = (parameters & 0x000C) >> 2;
+void cupid_memory_update_waitstates(struct CupidGBA *gba, uint16_t parameters) {
+    struct CupidMemory *memory = &gba->memory;
+    int sram = parameters & 0x0003;
+    int ws0 = (parameters & 0x000C) >> 2;
     int ws0seq = (parameters & 0x0010) >> 4;
-    int ws1    = (parameters & 0x0060) >> 5;
+    int ws1 = (parameters & 0x0060) >> 5;
     int ws1seq = (parameters & 0x0080) >> 7;
-    int ws2    = (parameters & 0x0300) >> 8;
+    int ws2 = (parameters & 0x0300) >> 8;
     int ws2seq = (parameters & 0x0400) >> 10;
     int prefetch = parameters & 0x4000;
 
-    memory->waitstatesNonseq16[GBA_REGION_SRAM] = memory->waitstatesNonseq16[GBA_REGION_SRAM_MIRROR] = GBA_ROM_WAITSTATES[sram];
-    memory->waitstatesSeq16[GBA_REGION_SRAM]    = memory->waitstatesSeq16[GBA_REGION_SRAM_MIRROR]    = GBA_ROM_WAITSTATES[sram];
-    memory->waitstatesNonseq32[GBA_REGION_SRAM] = memory->waitstatesNonseq32[GBA_REGION_SRAM_MIRROR] = 2 * GBA_ROM_WAITSTATES[sram] + 1;
-    memory->waitstatesSeq32[GBA_REGION_SRAM]    = memory->waitstatesSeq32[GBA_REGION_SRAM_MIRROR]    = 2 * GBA_ROM_WAITSTATES[sram] + 1;
+    memory->waitstatesNonseq16[GBA_REGION_SRAM] =
+        memory->waitstatesNonseq16[GBA_REGION_SRAM_MIRROR] = GBA_ROM_WAITSTATES[sram];
+    memory->waitstatesSeq16[GBA_REGION_SRAM] = memory->waitstatesSeq16[GBA_REGION_SRAM_MIRROR] =
+        GBA_ROM_WAITSTATES[sram];
+    memory->waitstatesNonseq32[GBA_REGION_SRAM] =
+        memory->waitstatesNonseq32[GBA_REGION_SRAM_MIRROR] = 2 * GBA_ROM_WAITSTATES[sram] + 1;
+    memory->waitstatesSeq32[GBA_REGION_SRAM] = memory->waitstatesSeq32[GBA_REGION_SRAM_MIRROR] =
+        2 * GBA_ROM_WAITSTATES[sram] + 1;
 
-    memory->waitstatesNonseq16[GBA_REGION_ROM0] = memory->waitstatesNonseq16[GBA_REGION_ROM0_EX] = GBA_ROM_WAITSTATES[ws0];
-    memory->waitstatesNonseq16[GBA_REGION_ROM1] = memory->waitstatesNonseq16[GBA_REGION_ROM1_EX] = GBA_ROM_WAITSTATES[ws1];
-    memory->waitstatesNonseq16[GBA_REGION_ROM2] = memory->waitstatesNonseq16[GBA_REGION_ROM2_EX] = GBA_ROM_WAITSTATES[ws2];
+    memory->waitstatesNonseq16[GBA_REGION_ROM0] = memory->waitstatesNonseq16[GBA_REGION_ROM0_EX] =
+        GBA_ROM_WAITSTATES[ws0];
+    memory->waitstatesNonseq16[GBA_REGION_ROM1] = memory->waitstatesNonseq16[GBA_REGION_ROM1_EX] =
+        GBA_ROM_WAITSTATES[ws1];
+    memory->waitstatesNonseq16[GBA_REGION_ROM2] = memory->waitstatesNonseq16[GBA_REGION_ROM2_EX] =
+        GBA_ROM_WAITSTATES[ws2];
 
-    memory->waitstatesSeq16[GBA_REGION_ROM0] = memory->waitstatesSeq16[GBA_REGION_ROM0_EX] = GBA_ROM_WAITSTATES_SEQ[ws0seq];
-    memory->waitstatesSeq16[GBA_REGION_ROM1] = memory->waitstatesSeq16[GBA_REGION_ROM1_EX] = GBA_ROM_WAITSTATES_SEQ[ws1seq + 2];
-    memory->waitstatesSeq16[GBA_REGION_ROM2] = memory->waitstatesSeq16[GBA_REGION_ROM2_EX] = GBA_ROM_WAITSTATES_SEQ[ws2seq + 4];
+    memory->waitstatesSeq16[GBA_REGION_ROM0] = memory->waitstatesSeq16[GBA_REGION_ROM0_EX] =
+        GBA_ROM_WAITSTATES_SEQ[ws0seq];
+    memory->waitstatesSeq16[GBA_REGION_ROM1] = memory->waitstatesSeq16[GBA_REGION_ROM1_EX] =
+        GBA_ROM_WAITSTATES_SEQ[ws1seq + 2];
+    memory->waitstatesSeq16[GBA_REGION_ROM2] = memory->waitstatesSeq16[GBA_REGION_ROM2_EX] =
+        GBA_ROM_WAITSTATES_SEQ[ws2seq + 4];
 
-    memory->waitstatesNonseq32[GBA_REGION_ROM0] = memory->waitstatesNonseq32[GBA_REGION_ROM0_EX] = memory->waitstatesNonseq16[GBA_REGION_ROM0] + 1 + memory->waitstatesSeq16[GBA_REGION_ROM0];
-    memory->waitstatesNonseq32[GBA_REGION_ROM1] = memory->waitstatesNonseq32[GBA_REGION_ROM1_EX] = memory->waitstatesNonseq16[GBA_REGION_ROM1] + 1 + memory->waitstatesSeq16[GBA_REGION_ROM1];
-    memory->waitstatesNonseq32[GBA_REGION_ROM2] = memory->waitstatesNonseq32[GBA_REGION_ROM2_EX] = memory->waitstatesNonseq16[GBA_REGION_ROM2] + 1 + memory->waitstatesSeq16[GBA_REGION_ROM2];
+    memory->waitstatesNonseq32[GBA_REGION_ROM0] = memory->waitstatesNonseq32[GBA_REGION_ROM0_EX] =
+        memory->waitstatesNonseq16[GBA_REGION_ROM0] + 1 + memory->waitstatesSeq16[GBA_REGION_ROM0];
+    memory->waitstatesNonseq32[GBA_REGION_ROM1] = memory->waitstatesNonseq32[GBA_REGION_ROM1_EX] =
+        memory->waitstatesNonseq16[GBA_REGION_ROM1] + 1 + memory->waitstatesSeq16[GBA_REGION_ROM1];
+    memory->waitstatesNonseq32[GBA_REGION_ROM2] = memory->waitstatesNonseq32[GBA_REGION_ROM2_EX] =
+        memory->waitstatesNonseq16[GBA_REGION_ROM2] + 1 + memory->waitstatesSeq16[GBA_REGION_ROM2];
 
-    memory->waitstatesSeq32[GBA_REGION_ROM0] = memory->waitstatesSeq32[GBA_REGION_ROM0_EX] = 2 * memory->waitstatesSeq16[GBA_REGION_ROM0] + 1;
-    memory->waitstatesSeq32[GBA_REGION_ROM1] = memory->waitstatesSeq32[GBA_REGION_ROM1_EX] = 2 * memory->waitstatesSeq16[GBA_REGION_ROM1] + 1;
-    memory->waitstatesSeq32[GBA_REGION_ROM2] = memory->waitstatesSeq32[GBA_REGION_ROM2_EX] = 2 * memory->waitstatesSeq16[GBA_REGION_ROM2] + 1;
+    memory->waitstatesSeq32[GBA_REGION_ROM0] = memory->waitstatesSeq32[GBA_REGION_ROM0_EX] =
+        2 * memory->waitstatesSeq16[GBA_REGION_ROM0] + 1;
+    memory->waitstatesSeq32[GBA_REGION_ROM1] = memory->waitstatesSeq32[GBA_REGION_ROM1_EX] =
+        2 * memory->waitstatesSeq16[GBA_REGION_ROM1] + 1;
+    memory->waitstatesSeq32[GBA_REGION_ROM2] = memory->waitstatesSeq32[GBA_REGION_ROM2_EX] =
+        2 * memory->waitstatesSeq16[GBA_REGION_ROM2] + 1;
 
     cupid_prefetch_update(gba, cupid_timing_global_time(&gba->timing));
-    if (memory->prefetch && !prefetch) memory->prefetchUnit.disabled = true;
+    if (memory->prefetch && !prefetch)
+        memory->prefetchUnit.disabled = true;
     memory->prefetch = prefetch;
 
     refresh_active_waitstates(gba);
 }
 
 /**
- * @brief Update EWRAM wait-state timing from control parameters.
+ * @brief Retain the high control halfword and update valid EWRAM timing.
  */
-void cupid_memory_update_ewram_waitstates(struct CupidGBA* gba, uint16_t parameters) {
-    struct CupidMemory* memory = &gba->memory;
+void cupid_memory_update_ewram_waitstates(struct CupidGBA *gba, uint16_t parameters) {
+    struct CupidMemory *memory = &gba->memory;
 
+    /* Readback includes the undocumented writable upper nibble. Value 15
+     * retains the existing last-valid timing policy; physical failure at that
+     * setting is not modeled by the wait tables. */
+    memory->ewramWaitControl = parameters & 0xFF00;
     int wait = 15 - ((parameters >> 8) & 0xF);
     if (wait) {
         memory->waitstatesNonseq16[GBA_REGION_EWRAM] = wait;
-        memory->waitstatesSeq16[GBA_REGION_EWRAM]    = wait;
+        memory->waitstatesSeq16[GBA_REGION_EWRAM] = wait;
         memory->waitstatesNonseq32[GBA_REGION_EWRAM] = 2 * wait + 1;
-        memory->waitstatesSeq32[GBA_REGION_EWRAM]    = 2 * wait + 1;
+        memory->waitstatesSeq32[GBA_REGION_EWRAM] = 2 * wait + 1;
 
         refresh_active_waitstates(gba);
     }
@@ -267,38 +349,44 @@ void cupid_memory_update_ewram_waitstates(struct CupidGBA* gba, uint16_t paramet
 /**
  * @brief Illegal instruction bytes used as dead region for invalid jumps.
  */
-static uint8_t _deadbeef[4] = { 0x10, 0xB7, 0x10, 0xE7 };
+static uint8_t _deadbeef[4] = {0x10, 0xB7, 0x10, 0xE7};
 
 /**
  * @brief Return open-bus data for invalid or protected reads.
  *
- * Returns the prefetch pipeline value, swizzled for Thumb mode.
- * After a DMA bus access, returns the DMA read latch until the CPU next
- * completes a fetch or data access.
+ * Uses retained physical input when available, then falls back to the
+ * prefetch pipeline, swizzled for Thumb mode. Halfword reads and sampled
+ * opcodes can publish physical input.
+ * Fast-RAM fetches update one Thumb bank; BIOS/OAM provide their aligned word.
+ * Other fetch regions keep the pipeline reconstruction below. A later DMA
+ * read takes precedence over retained CPU input.
  */
-uint32_t cupid_memory_open_bus(struct CupidARM* cpu) {
-    struct CupidGBA* gba = cpu->master;
+uint32_t cupid_memory_open_bus(struct CupidARM *cpu) {
+    struct CupidGBA *gba = cpu->master;
     uint32_t value = 0;
-    if (gba->memory.lastWasDMA) return gba->memory.dmaBus;
+    if (gba->memory.lastWasDMA)
+        return gba->memory.dmaBus;
+    if (gba->memory.inputBusValid)
+        return gba->memory.openBus;
     value = cpu->prefetch[1];
     if (cpu->executionMode == MODE_THUMB) {
         switch (cpu->gprs[ARM_PC] >> GBA_BASE_OFFSET) {
-        case GBA_REGION_BIOS:
-        case GBA_REGION_OAM:
-            value <<= 16;
-            value |= cpu->prefetch[0];
-            break;
-        case GBA_REGION_IWRAM:
-            if (cpu->gprs[ARM_PC] & 2) {
+            case GBA_REGION_BIOS:
+            case GBA_REGION_OAM:
                 value <<= 16;
                 value |= cpu->prefetch[0];
-            } else {
-                value |= cpu->prefetch[0] << 16;
-            }
-            break;
-        default:
-            value |= value << 16;
-            break;
+                break;
+            case GBA_REGION_IWRAM:
+                if (cpu->gprs[ARM_PC] & 2) {
+                    value <<= 16;
+                    value |= cpu->prefetch[0];
+                } else {
+                    value |= cpu->prefetch[0] << 16;
+                }
+                break;
+            default:
+                value |= value << 16;
+                break;
         }
     }
     return value;
@@ -311,9 +399,9 @@ uint32_t cupid_memory_open_bus(struct CupidARM* cpu) {
  * region is unchanged, saves BIOS prefetch when leaving BIOS, updates
  * accessSource and region pointers, and updates cycle cost tables.
  */
-void cupid_memory_set_active_region(struct CupidARM* cpu, uint32_t address) {
-    struct CupidGBA* gba = cpu->master;
-    struct CupidMemory* memory = &gba->memory;
+void cupid_memory_set_active_region(struct CupidARM *cpu, uint32_t address) {
+    struct CupidGBA *gba = cpu->master;
+    struct CupidMemory *memory = &gba->memory;
     int newRegion = address >> GBA_BASE_OFFSET;
 
     gba->lastJump = address;
@@ -326,7 +414,8 @@ void cupid_memory_set_active_region(struct CupidARM* cpu, uint32_t address) {
         } else {
             cpu->memory.activeMask &= -WORD_SIZE_ARM;
         }
-        if (newRegion < GBA_REGION_ROM0 || (address & (GBA_SIZE_ROM - 1)) < memory->romSize) {
+        if (newRegion != GBA_REGION_VRAM &&
+            (newRegion < GBA_REGION_ROM0 || (address & (GBA_SIZE_ROM - 1)) < memory->romSize)) {
             return;
         }
     }
@@ -338,61 +427,55 @@ void cupid_memory_set_active_region(struct CupidARM* cpu, uint32_t address) {
 
     memory->activeRegion = newRegion;
     switch (newRegion) {
-    case GBA_REGION_BIOS:
-        cpu->memory.accessSource = CUPID_ACCESS_SYSTEM;
-        cpu->memory.activeRegion = (const uint32_t*)memory->bios;
-        cpu->memory.activeMask = GBA_SIZE_BIOS - 1;
-        break;
-    case GBA_REGION_EWRAM:
-        cpu->memory.accessSource = CUPID_ACCESS_PROGRAM;
-        cpu->memory.activeRegion = (const uint32_t*)memory->ewram;
-        cpu->memory.activeMask = GBA_SIZE_EWRAM - 1;
-        break;
-    case GBA_REGION_IWRAM:
-        cpu->memory.accessSource = CUPID_ACCESS_PROGRAM;
-        cpu->memory.activeRegion = (const uint32_t*)memory->iwram;
-        cpu->memory.activeMask = GBA_SIZE_IWRAM - 1;
-        break;
-    case GBA_REGION_PALETTE:
-        cpu->memory.accessSource = CUPID_ACCESS_PROGRAM;
-        cpu->memory.activeRegion = (const uint32_t*)gba->video.palette;
-        cpu->memory.activeMask = GBA_SIZE_PALETTE - 1;
-        break;
-    case GBA_REGION_VRAM:
-        cpu->memory.accessSource = CUPID_ACCESS_PROGRAM;
-        if (address & 0x10000) {
-            cpu->memory.activeRegion = (const uint32_t*)((uint8_t*)gba->video.vram + 0x10000);
-            cpu->memory.activeMask = 0x00007FFF;
-        } else {
-            cpu->memory.activeRegion = (const uint32_t*)gba->video.vram;
-            cpu->memory.activeMask = 0x0000FFFF;
-        }
-        break;
-    case GBA_REGION_OAM:
-        cpu->memory.accessSource = CUPID_ACCESS_PROGRAM;
-        cpu->memory.activeRegion = (const uint32_t*)gba->video.oam.raw;
-        cpu->memory.activeMask = GBA_SIZE_OAM - 1;
-        break;
-    case GBA_REGION_ROM0:
-    case GBA_REGION_ROM0_EX:
-    case GBA_REGION_ROM1:
-    case GBA_REGION_ROM1_EX:
-    case GBA_REGION_ROM2:
-    case GBA_REGION_ROM2_EX:
-        cpu->memory.accessSource = CUPID_ACCESS_PROGRAM;
-        cpu->memory.activeRegion = (const uint32_t*)memory->rom;
-        cpu->memory.activeMask = memory->romMask;
-        if ((address & (GBA_SIZE_ROM - 1)) < memory->romSize) {
+        case GBA_REGION_BIOS:
+            cpu->memory.accessSource = CUPID_ACCESS_SYSTEM;
+            cpu->memory.activeRegion = (const uint32_t *)memory->bios;
+            cpu->memory.activeMask = GBA_SIZE_BIOS - 1;
             break;
-        }
-        /* fall through */
-    default:
-        cpu->memory.accessSource = CUPID_ACCESS_UNKNOWN;
-        memory->activeRegion = -1;
-        cpu->memory.activeRegion = (const uint32_t*)_deadbeef;
-        cpu->memory.activeMask = 0;
-        fprintf(stderr, "CUPID: Jumped to invalid address: 0x%08X\n", address);
-        return;
+        case GBA_REGION_EWRAM:
+            cpu->memory.accessSource = CUPID_ACCESS_PROGRAM;
+            cpu->memory.activeRegion = (const uint32_t *)memory->ewram;
+            cpu->memory.activeMask = GBA_SIZE_EWRAM - 1;
+            break;
+        case GBA_REGION_IWRAM:
+            cpu->memory.accessSource = CUPID_ACCESS_PROGRAM;
+            cpu->memory.activeRegion = (const uint32_t *)memory->iwram;
+            cpu->memory.activeMask = GBA_SIZE_IWRAM - 1;
+            break;
+        case GBA_REGION_PALETTE:
+            cpu->memory.accessSource = CUPID_ACCESS_PROGRAM;
+            cpu->memory.activeRegion = (const uint32_t *)gba->video.palette;
+            cpu->memory.activeMask = GBA_SIZE_PALETTE - 1;
+            break;
+        case GBA_REGION_VRAM:
+            cpu->memory.accessSource = CUPID_ACCESS_PROGRAM;
+            cupid_memory_refresh_vram_fetch(cpu, address);
+            break;
+        case GBA_REGION_OAM:
+            cpu->memory.accessSource = CUPID_ACCESS_PROGRAM;
+            cpu->memory.activeRegion = (const uint32_t *)gba->video.oam.raw;
+            cpu->memory.activeMask = GBA_SIZE_OAM - 1;
+            break;
+        case GBA_REGION_ROM0:
+        case GBA_REGION_ROM0_EX:
+        case GBA_REGION_ROM1:
+        case GBA_REGION_ROM1_EX:
+        case GBA_REGION_ROM2:
+        case GBA_REGION_ROM2_EX:
+            cpu->memory.accessSource = CUPID_ACCESS_PROGRAM;
+            cpu->memory.activeRegion = (const uint32_t *)memory->rom;
+            cpu->memory.activeMask = memory->romMask;
+            if ((address & (GBA_SIZE_ROM - 1)) < memory->romSize) {
+                break;
+            }
+            /* fall through */
+        default:
+            cpu->memory.accessSource = CUPID_ACCESS_UNKNOWN;
+            memory->activeRegion = -1;
+            cpu->memory.activeRegion = (const uint32_t *)_deadbeef;
+            cpu->memory.activeMask = 0;
+            fprintf(stderr, "CUPID: Jumped to invalid address: 0x%08X\n", address);
+            return;
     }
 
     refresh_active_waitstates(gba);
@@ -405,13 +488,23 @@ void cupid_memory_set_active_region(struct CupidARM* cpu, uint32_t address) {
  * Handles per-region dispatch, alignment behavior, wait-state penalties,
  * BIOS protection, VRAM mirroring, SRAM 8-bit bus behavior, and open bus.
  */
-
 /**
  * @brief Load 32-bit value from memory bus.
  */
-uint32_t cupid_memory_load32(struct CupidARM* cpu, uint32_t address, int* cycleCounter) {
-    struct CupidGBA* gba = cpu->master;
-    struct CupidMemory* memory = &gba->memory;
+uint32_t cupid_memory_load32(struct CupidARM *cpu, uint32_t address, int *cycleCounter) {
+    struct CupidGBA *gba = cpu->master;
+    struct CupidMemory *memory = &gba->memory;
+    unsigned region = address >> 24;
+    if (cycleCounter && cpu->memory.timed &&
+        (region == GBA_REGION_PALETTE || region == GBA_REGION_VRAM)) {
+        uint32_t aligned = address & ~3u;
+        begin_data_access(cpu, aligned, 4, cycleCounter);
+        uint32_t value = cupid_memory_load16(cpu, aligned, NULL);
+        cupid_bus_display_beat(cpu, aligned + 2, true);
+        value |= cupid_memory_load16(cpu, aligned + 2, NULL) << 16;
+        end_data_access(cpu, cycleCounter, true);
+        return ROR(value, (address & 3) * 8);
+    }
     if (cycleCounter && cpu->memory.timed && cupid_cartridge_gpio_address(gba, address & ~3u)) {
         const uint32_t aligned = address & ~3u;
         begin_gpio_word(cpu, aligned, cycleCounter);
@@ -422,7 +515,7 @@ uint32_t cupid_memory_load32(struct CupidARM* cpu, uint32_t address, int* cycleC
         end_data_access(cpu, cycleCounter, true);
         return ROR(low | high << 16, (address & 3) * 8);
     }
-    int* timedCounter = NULL;
+    int *timedCounter = NULL;
     if (cycleCounter && cpu->memory.timed) {
         timedCounter = cycleCounter;
         begin_data_access(cpu, address, 4, cycleCounter);
@@ -430,82 +523,89 @@ uint32_t cupid_memory_load32(struct CupidARM* cpu, uint32_t address, int* cycleC
     }
     uint32_t value = 0;
     int wait = 0;
-    char* waitstatesRegion = memory->waitstatesNonseq32;
+    char *waitstatesRegion = memory->waitstatesNonseq32;
 
     switch (address >> GBA_BASE_OFFSET) {
-    case GBA_REGION_BIOS:
-        if (address < GBA_SIZE_BIOS) {
-            if (memory->activeRegion == GBA_REGION_BIOS) {
-                LOAD_32(value, address & -4, memory->bios);
+        case GBA_REGION_BIOS:
+            if (address < GBA_SIZE_BIOS) {
+                if (memory->activeRegion == GBA_REGION_BIOS) {
+                    LOAD_32(value, address & -4, memory->bios);
+                } else {
+                    value = memory->biosPrefetch;
+                }
             } else {
-                value = memory->biosPrefetch;
+                value = cupid_memory_open_bus(cpu);
             }
-        } else {
+            break;
+        case GBA_REGION_EWRAM:
+            LOAD_32(value, address & (GBA_SIZE_EWRAM - 4), memory->ewram);
+            wait += waitstatesRegion[GBA_REGION_EWRAM];
+            break;
+        case GBA_REGION_IWRAM:
+            LOAD_32(value, address & (GBA_SIZE_IWRAM - 4), memory->iwram);
+            if (timedCounter || cycleCounter || gba->performingDMA)
+                memory->iwramBus = value;
+            break;
+        case GBA_REGION_IO:
+            sync_io(cpu, cycleCounter);
+            value = cupid_io_read(gba, address & GBA_OFFSET_MASK & ~3) |
+                    ((uint32_t)cupid_io_read(gba, (address & GBA_OFFSET_MASK & ~1) | 2) << 16);
+            break;
+        case GBA_REGION_PALETTE:
+            LOAD_32(value, address & (GBA_SIZE_PALETTE - 4), gba->video.palette);
+            wait += waitstatesRegion[GBA_REGION_PALETTE];
+            break;
+        case GBA_REGION_VRAM:
+            if (reserved_vram(gba, address)) {
+                value = 0;
+                ++wait;
+                break;
+            }
+            if ((address & 0x0001FFFF) >= GBA_SIZE_VRAM) {
+                LOAD_32(value, address & 0x00017FFC, gba->video.vram);
+            } else {
+                LOAD_32(value, address & 0x0001FFFC, gba->video.vram);
+            }
+            ++wait;
+            break;
+        case GBA_REGION_OAM:
+            LOAD_32(value, address & (GBA_SIZE_OAM - 4), gba->video.oam.raw);
+            break;
+        case GBA_REGION_ROM0:
+        case GBA_REGION_ROM0_EX:
+        case GBA_REGION_ROM1:
+        case GBA_REGION_ROM1_EX:
+        case GBA_REGION_ROM2:
+            wait += waitstatesRegion[address >> GBA_BASE_OFFSET];
+            if ((address & (GBA_SIZE_ROM - 4)) < memory->romSize) {
+                LOAD_32(value, address & (GBA_SIZE_ROM - 4), memory->rom);
+            } else {
+                value = ((address & ~3) >> 1) & 0xFFFF;
+                value |= (((address & ~3) + 2) >> 1) << 16;
+            }
+            break;
+        case GBA_REGION_ROM2_EX:
+            wait += waitstatesRegion[address >> GBA_BASE_OFFSET];
+            if (cupid_memory_is_eeprom_address(memory, address) &&
+                (memory->savedata.type == SAVE_EEPROM || memory->savedata.type == SAVE_EEPROM512)) {
+                value = cupid_savedata_read_eeprom(&memory->savedata);
+            } else if ((address & (GBA_SIZE_ROM - 4)) < memory->romSize) {
+                LOAD_32(value, address & (GBA_SIZE_ROM - 4), memory->rom);
+            } else {
+                value = ((address & ~3) >> 1) & 0xFFFF;
+                value |= (((address & ~3) + 2) >> 1) << 16;
+            }
+            break;
+        case GBA_REGION_SRAM:
+        case GBA_REGION_SRAM_MIRROR:
+            wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
+            value = cupid_memory_load8(cpu, address, 0);
+            value |= value << 8;
+            value |= value << 16;
+            break;
+        default:
             value = cupid_memory_open_bus(cpu);
-        }
-        break;
-    case GBA_REGION_EWRAM:
-        LOAD_32(value, address & (GBA_SIZE_EWRAM - 4), memory->ewram);
-        wait += waitstatesRegion[GBA_REGION_EWRAM];
-        break;
-    case GBA_REGION_IWRAM:
-        LOAD_32(value, address & (GBA_SIZE_IWRAM - 4), memory->iwram);
-        break;
-    case GBA_REGION_IO:
-        sync_io(cpu, cycleCounter);
-        value = cupid_io_read(gba, address & GBA_OFFSET_MASK & ~3)
-              | ((uint32_t)cupid_io_read(gba, (address & GBA_OFFSET_MASK & ~1) | 2) << 16);
-        break;
-    case GBA_REGION_PALETTE:
-        LOAD_32(value, address & (GBA_SIZE_PALETTE - 4), gba->video.palette);
-        wait += waitstatesRegion[GBA_REGION_PALETTE];
-        break;
-    case GBA_REGION_VRAM:
-        if ((address & 0x0001FFFF) >= GBA_SIZE_VRAM) {
-            LOAD_32(value, address & 0x00017FFC, gba->video.vram);
-        } else {
-            LOAD_32(value, address & 0x0001FFFC, gba->video.vram);
-        }
-        ++wait;
-        break;
-    case GBA_REGION_OAM:
-        LOAD_32(value, address & (GBA_SIZE_OAM - 4), gba->video.oam.raw);
-        break;
-    case GBA_REGION_ROM0:
-    case GBA_REGION_ROM0_EX:
-    case GBA_REGION_ROM1:
-    case GBA_REGION_ROM1_EX:
-    case GBA_REGION_ROM2:
-        wait += waitstatesRegion[address >> GBA_BASE_OFFSET];
-        if ((address & (GBA_SIZE_ROM - 4)) < memory->romSize) {
-            LOAD_32(value, address & (GBA_SIZE_ROM - 4), memory->rom);
-        } else {
-            value = ((address & ~3) >> 1) & 0xFFFF;
-            value |= (((address & ~3) + 2) >> 1) << 16;
-        }
-        break;
-    case GBA_REGION_ROM2_EX:
-        wait += waitstatesRegion[address >> GBA_BASE_OFFSET];
-        if (cupid_memory_is_eeprom_address(memory, address) &&
-            (memory->savedata.type == SAVE_EEPROM || memory->savedata.type == SAVE_EEPROM512)) {
-            value = cupid_savedata_read_eeprom(&memory->savedata);
-        } else if ((address & (GBA_SIZE_ROM - 4)) < memory->romSize) {
-            LOAD_32(value, address & (GBA_SIZE_ROM - 4), memory->rom);
-        } else {
-            value = ((address & ~3) >> 1) & 0xFFFF;
-            value |= (((address & ~3) + 2) >> 1) << 16;
-        }
-        break;
-    case GBA_REGION_SRAM:
-    case GBA_REGION_SRAM_MIRROR:
-        wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
-        value = cupid_memory_load8(cpu, address, 0);
-        value |= value << 8;
-        value |= value << 16;
-        break;
-    default:
-        value = cupid_memory_open_bus(cpu);
-        break;
+            break;
     }
 
     if (cycleCounter) {
@@ -513,11 +613,14 @@ uint32_t cupid_memory_load32(struct CupidARM* cpu, uint32_t address, int* cycleC
         *cycleCounter += wait;
     }
     /** Unaligned 32-bit loads are rotated to match hardware behavior. */
-    if (memory->rom && gba->cartridge.readable && cupid_cartridge_gpio_address(gba, address & ~3u)) {
+    if (memory->rom && gba->cartridge.readable &&
+        cupid_cartridge_gpio_address(gba, address & ~3u)) {
         const uint32_t aligned = address & ~3u;
         uint16_t low, high;
-        if (cupid_cartridge_gpio_read(gba, aligned, &low)) value = (value & 0xFFFF0000) | low;
-        if (cupid_cartridge_gpio_read(gba, aligned + 2, &high)) value = (value & 0xFFFF) | (uint32_t)high << 16;
+        if (cupid_cartridge_gpio_read(gba, aligned, &low))
+            value = (value & 0xFFFF0000) | low;
+        if (cupid_cartridge_gpio_read(gba, aligned + 2, &high))
+            value = (value & 0xFFFF) | (uint32_t)high << 16;
     }
     end_data_access(cpu, timedCounter, true);
     int rotate = (address & 3) << 3;
@@ -529,10 +632,10 @@ uint32_t cupid_memory_load32(struct CupidARM* cpu, uint32_t address, int* cycleC
  *
  * Sign extension for LDRSH is handled by the instruction decoder.
  */
-uint32_t cupid_memory_load16(struct CupidARM* cpu, uint32_t address, int* cycleCounter) {
-    struct CupidGBA* gba = cpu->master;
-    struct CupidMemory* memory = &gba->memory;
-    int* timedCounter = NULL;
+uint32_t cupid_memory_load16(struct CupidARM *cpu, uint32_t address, int *cycleCounter) {
+    struct CupidGBA *gba = cpu->master;
+    struct CupidMemory *memory = &gba->memory;
+    int *timedCounter = NULL;
     if (cycleCounter && cpu->memory.timed) {
         timedCounter = cycleCounter;
         begin_data_access(cpu, address, 2, cycleCounter);
@@ -542,73 +645,77 @@ uint32_t cupid_memory_load16(struct CupidARM* cpu, uint32_t address, int* cycleC
     int wait = 0;
 
     switch (address >> GBA_BASE_OFFSET) {
-    case GBA_REGION_BIOS:
-        if (address < GBA_SIZE_BIOS) {
-            if (memory->activeRegion == GBA_REGION_BIOS) {
-                LOAD_16(value, address & -2, memory->bios);
+        case GBA_REGION_BIOS:
+            if (address < GBA_SIZE_BIOS) {
+                if (memory->activeRegion == GBA_REGION_BIOS) {
+                    LOAD_16(value, address & -2, memory->bios);
+                } else {
+                    value = (memory->biosPrefetch >> ((address & 2) * 8)) & 0xFFFF;
+                }
             } else {
-                value = (memory->biosPrefetch >> ((address & 2) * 8)) & 0xFFFF;
+                value = (cupid_memory_open_bus(cpu) >> ((address & 2) * 8)) & 0xFFFF;
             }
-        } else {
+            break;
+        case GBA_REGION_EWRAM:
+            LOAD_16(value, address & (GBA_SIZE_EWRAM - 2), memory->ewram);
+            wait = memory->waitstatesNonseq16[GBA_REGION_EWRAM];
+            break;
+        case GBA_REGION_IWRAM:
+            LOAD_16(value, address & (GBA_SIZE_IWRAM - 2), memory->iwram);
+            break;
+        case GBA_REGION_IO:
+            sync_io(cpu, cycleCounter);
+            value = cupid_io_read(gba, address & (GBA_OFFSET_MASK - 1));
+            break;
+        case GBA_REGION_PALETTE:
+            LOAD_16(value, address & (GBA_SIZE_PALETTE - 2), gba->video.palette);
+            break;
+        case GBA_REGION_VRAM:
+            if (reserved_vram(gba, address)) {
+                value = 0;
+                break;
+            }
+            if ((address & 0x0001FFFF) >= GBA_SIZE_VRAM) {
+                LOAD_16(value, address & 0x00017FFE, gba->video.vram);
+            } else {
+                LOAD_16(value, address & 0x0001FFFE, gba->video.vram);
+            }
+            break;
+        case GBA_REGION_OAM:
+            LOAD_16(value, address & (GBA_SIZE_OAM - 2), gba->video.oam.raw);
+            break;
+        case GBA_REGION_ROM0:
+        case GBA_REGION_ROM0_EX:
+        case GBA_REGION_ROM1:
+        case GBA_REGION_ROM1_EX:
+        case GBA_REGION_ROM2:
+            wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
+            if ((address & (GBA_SIZE_ROM - 2)) < memory->romSize) {
+                LOAD_16(value, address & (GBA_SIZE_ROM - 2), memory->rom);
+            } else {
+                value = (address >> 1) & 0xFFFF;
+            }
+            break;
+        case GBA_REGION_ROM2_EX:
+            wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
+            if (cupid_memory_is_eeprom_address(memory, address) &&
+                (memory->savedata.type == SAVE_EEPROM || memory->savedata.type == SAVE_EEPROM512)) {
+                value = cupid_savedata_read_eeprom(&memory->savedata);
+            } else if ((address & (GBA_SIZE_ROM - 2)) < memory->romSize) {
+                LOAD_16(value, address & (GBA_SIZE_ROM - 2), memory->rom);
+            } else {
+                value = (address >> 1) & 0xFFFF;
+            }
+            break;
+        case GBA_REGION_SRAM:
+        case GBA_REGION_SRAM_MIRROR:
+            wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
+            value = cupid_memory_load8(cpu, address, 0);
+            value |= value << 8;
+            break;
+        default:
             value = (cupid_memory_open_bus(cpu) >> ((address & 2) * 8)) & 0xFFFF;
-        }
-        break;
-    case GBA_REGION_EWRAM:
-        LOAD_16(value, address & (GBA_SIZE_EWRAM - 2), memory->ewram);
-        wait = memory->waitstatesNonseq16[GBA_REGION_EWRAM];
-        break;
-    case GBA_REGION_IWRAM:
-        LOAD_16(value, address & (GBA_SIZE_IWRAM - 2), memory->iwram);
-        break;
-    case GBA_REGION_IO:
-        sync_io(cpu, cycleCounter);
-        value = cupid_io_read(gba, address & (GBA_OFFSET_MASK - 1));
-        break;
-    case GBA_REGION_PALETTE:
-        LOAD_16(value, address & (GBA_SIZE_PALETTE - 2), gba->video.palette);
-        break;
-    case GBA_REGION_VRAM:
-        if ((address & 0x0001FFFF) >= GBA_SIZE_VRAM) {
-            LOAD_16(value, address & 0x00017FFE, gba->video.vram);
-        } else {
-            LOAD_16(value, address & 0x0001FFFE, gba->video.vram);
-        }
-        break;
-    case GBA_REGION_OAM:
-        LOAD_16(value, address & (GBA_SIZE_OAM - 2), gba->video.oam.raw);
-        break;
-    case GBA_REGION_ROM0:
-    case GBA_REGION_ROM0_EX:
-    case GBA_REGION_ROM1:
-    case GBA_REGION_ROM1_EX:
-    case GBA_REGION_ROM2:
-        wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
-        if ((address & (GBA_SIZE_ROM - 2)) < memory->romSize) {
-            LOAD_16(value, address & (GBA_SIZE_ROM - 2), memory->rom);
-        } else {
-            value = (address >> 1) & 0xFFFF;
-        }
-        break;
-    case GBA_REGION_ROM2_EX:
-        wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
-        if (cupid_memory_is_eeprom_address(memory, address) &&
-            (memory->savedata.type == SAVE_EEPROM || memory->savedata.type == SAVE_EEPROM512)) {
-            value = cupid_savedata_read_eeprom(&memory->savedata);
-        } else if ((address & (GBA_SIZE_ROM - 2)) < memory->romSize) {
-            LOAD_16(value, address & (GBA_SIZE_ROM - 2), memory->rom);
-        } else {
-            value = (address >> 1) & 0xFFFF;
-        }
-        break;
-    case GBA_REGION_SRAM:
-    case GBA_REGION_SRAM_MIRROR:
-        wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
-        value = cupid_memory_load8(cpu, address, 0);
-        value |= value << 8;
-        break;
-    default:
-        value = (cupid_memory_open_bus(cpu) >> ((address & 2) * 8)) & 0xFFFF;
-        break;
+            break;
     }
 
     if (cycleCounter) {
@@ -617,7 +724,10 @@ uint32_t cupid_memory_load16(struct CupidARM* cpu, uint32_t address, int* cycleC
     }
     /** Unaligned 16-bit loads are rotated on real hardware. */
     uint16_t port;
-    if (cupid_cartridge_gpio_read(gba, address & ~1u, &port)) value = port;
+    if (cupid_cartridge_gpio_read(gba, address & ~1u, &port))
+        value = port;
+    if (timedCounter || cycleCounter)
+        cupid_memory_capture_halfword(gba, address, (uint16_t)value);
     end_data_access(cpu, timedCounter, true);
     int rotate = (address & 1) << 3;
     return ROR(value, rotate);
@@ -626,17 +736,17 @@ uint32_t cupid_memory_load16(struct CupidARM* cpu, uint32_t address, int* cycleC
 /**
  * @brief Legacy wrapper for unsigned 16-bit load.
  */
-uint32_t cupid_memory_loadU16(struct CupidARM* cpu, uint32_t address, int* cycleCounter) {
+uint32_t cupid_memory_loadU16(struct CupidARM *cpu, uint32_t address, int *cycleCounter) {
     return cupid_memory_load16(cpu, address, cycleCounter);
 }
 
 /**
  * @brief Load 8-bit value from memory bus.
  */
-uint32_t cupid_memory_load8(struct CupidARM* cpu, uint32_t address, int* cycleCounter) {
-    struct CupidGBA* gba = cpu->master;
-    struct CupidMemory* memory = &gba->memory;
-    int* timedCounter = NULL;
+uint32_t cupid_memory_load8(struct CupidARM *cpu, uint32_t address, int *cycleCounter) {
+    struct CupidGBA *gba = cpu->master;
+    struct CupidMemory *memory = &gba->memory;
+    int *timedCounter = NULL;
     if (cycleCounter && cpu->memory.timed) {
         timedCounter = cycleCounter;
         begin_data_access(cpu, address, 1, cycleCounter);
@@ -646,81 +756,87 @@ uint32_t cupid_memory_load8(struct CupidARM* cpu, uint32_t address, int* cycleCo
     int wait = 0;
 
     switch (address >> GBA_BASE_OFFSET) {
-    case GBA_REGION_BIOS:
-        if (address < GBA_SIZE_BIOS) {
-            if (memory->activeRegion == GBA_REGION_BIOS) {
-                value = ((uint8_t*)memory->bios)[address];
+        case GBA_REGION_BIOS:
+            if (address < GBA_SIZE_BIOS) {
+                if (memory->activeRegion == GBA_REGION_BIOS) {
+                    value = ((uint8_t *)memory->bios)[address];
+                } else {
+                    value = (memory->biosPrefetch >> ((address & 3) * 8)) & 0xFF;
+                }
             } else {
-                value = (memory->biosPrefetch >> ((address & 3) * 8)) & 0xFF;
+                value = (cupid_memory_open_bus(cpu) >> ((address & 3) * 8)) & 0xFF;
             }
-        } else {
-            value = (cupid_memory_open_bus(cpu) >> ((address & 3) * 8)) & 0xFF;
-        }
-        break;
-    case GBA_REGION_EWRAM:
-        value = ((uint8_t*)memory->ewram)[address & (GBA_SIZE_EWRAM - 1)];
-        wait = memory->waitstatesNonseq16[GBA_REGION_EWRAM];
-        break;
-    case GBA_REGION_IWRAM:
-        value = ((uint8_t*)memory->iwram)[address & (GBA_SIZE_IWRAM - 1)];
-        break;
-    case GBA_REGION_IO:
-        sync_io(cpu, cycleCounter);
-        value = (cupid_io_read(gba, address & 0xFFFE) >> ((address & 1) << 3)) & 0xFF;
-        break;
-    case GBA_REGION_PALETTE:
-        value = ((uint8_t*)gba->video.palette)[address & (GBA_SIZE_PALETTE - 1)];
-        break;
-    case GBA_REGION_VRAM:
-        if ((address & 0x0001FFFF) >= GBA_SIZE_VRAM) {
-            value = ((uint8_t*)gba->video.vram)[address & 0x00017FFF];
-        } else {
-            value = ((uint8_t*)gba->video.vram)[address & 0x0001FFFF];
-        }
-        break;
-    case GBA_REGION_OAM:
-        value = ((uint8_t*)gba->video.oam.raw)[address & (GBA_SIZE_OAM - 1)];
-        break;
-    case GBA_REGION_ROM0:
-    case GBA_REGION_ROM0_EX:
-    case GBA_REGION_ROM1:
-    case GBA_REGION_ROM1_EX:
-    case GBA_REGION_ROM2:
-    case GBA_REGION_ROM2_EX:
-        wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
-        if ((address & (GBA_SIZE_ROM - 1)) < memory->romSize) {
-            value = ((uint8_t*)memory->rom)[address & (GBA_SIZE_ROM - 1)];
-        } else {
-            value = ((address >> 1) >> ((address & 1) * 8)) & 0xFF;
-        }
-        break;
-    case GBA_REGION_SRAM:
-    case GBA_REGION_SRAM_MIRROR:
-        wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
-        {
-            uint8_t sample;
-            if (cupid_cartridge_tilt_read(gba, address, &sample)) {
-                value = sample;
+            break;
+        case GBA_REGION_EWRAM:
+            value = ((uint8_t *)memory->ewram)[address & (GBA_SIZE_EWRAM - 1)];
+            wait = memory->waitstatesNonseq16[GBA_REGION_EWRAM];
+            break;
+        case GBA_REGION_IWRAM:
+            value = ((uint8_t *)memory->iwram)[address & (GBA_SIZE_IWRAM - 1)];
+            break;
+        case GBA_REGION_IO:
+            sync_io(cpu, cycleCounter);
+            value =
+                (cupid_io_read(gba, address & (GBA_OFFSET_MASK & ~1u)) >> ((address & 1) << 3)) &
+                0xFF;
+            break;
+        case GBA_REGION_PALETTE:
+            value = ((uint8_t *)gba->video.palette)[address & (GBA_SIZE_PALETTE - 1)];
+            break;
+        case GBA_REGION_VRAM:
+            if (reserved_vram(gba, address)) {
+                value = 0;
                 break;
             }
-        }
-        if (memory->savedata.type == SAVE_AUTODETECT) {
-            cupid_savedata_init_sram(&memory->savedata);
-        }
-        if (memory->savedata.type == SAVE_FLASH512 || memory->savedata.type == SAVE_FLASH1M) {
-            value = cupid_savedata_read_flash(&memory->savedata, address & 0xFFFF);
-        } else if (memory->savedata.type == SAVE_SRAM) {
-            value = memory->savedata.data[address & (GBA_SIZE_SRAM - 1)];
-        } else if (memory->savedata.type == SAVE_SRAM512) {
-            value = memory->savedata.data[address & (GBA_SIZE_FLASH512 - 1)];
-        } else {
-            value = 0xFF;
-        }
-        value &= 0xFF;
-        break;
-    default:
-        value = (cupid_memory_open_bus(cpu) >> ((address & 3) * 8)) & 0xFF;
-        break;
+            if ((address & 0x0001FFFF) >= GBA_SIZE_VRAM) {
+                value = ((uint8_t *)gba->video.vram)[address & 0x00017FFF];
+            } else {
+                value = ((uint8_t *)gba->video.vram)[address & 0x0001FFFF];
+            }
+            break;
+        case GBA_REGION_OAM:
+            value = ((uint8_t *)gba->video.oam.raw)[address & (GBA_SIZE_OAM - 1)];
+            break;
+        case GBA_REGION_ROM0:
+        case GBA_REGION_ROM0_EX:
+        case GBA_REGION_ROM1:
+        case GBA_REGION_ROM1_EX:
+        case GBA_REGION_ROM2:
+        case GBA_REGION_ROM2_EX:
+            wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
+            if ((address & (GBA_SIZE_ROM - 1)) < memory->romSize) {
+                value = ((uint8_t *)memory->rom)[address & (GBA_SIZE_ROM - 1)];
+            } else {
+                value = ((address >> 1) >> ((address & 1) * 8)) & 0xFF;
+            }
+            break;
+        case GBA_REGION_SRAM:
+        case GBA_REGION_SRAM_MIRROR:
+            wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
+            {
+                uint8_t sample;
+                if (cupid_cartridge_tilt_read(gba, address, &sample)) {
+                    value = sample;
+                    break;
+                }
+            }
+            if (memory->savedata.type == SAVE_AUTODETECT) {
+                cupid_savedata_init_sram(&memory->savedata);
+            }
+            if (memory->savedata.type == SAVE_FLASH512 || memory->savedata.type == SAVE_FLASH1M) {
+                value = cupid_savedata_read_flash(&memory->savedata, address & 0xFFFF);
+            } else if (memory->savedata.type == SAVE_SRAM) {
+                value = memory->savedata.data[address & (GBA_SIZE_SRAM - 1)];
+            } else if (memory->savedata.type == SAVE_SRAM512) {
+                value = memory->savedata.data[address & (GBA_SIZE_FLASH512 - 1)];
+            } else {
+                value = 0xFF;
+            }
+            value &= 0xFF;
+            break;
+        default:
+            value = (cupid_memory_open_bus(cpu) >> ((address & 3) * 8)) & 0xFF;
+            break;
     }
 
     if (cycleCounter) {
@@ -728,17 +844,53 @@ uint32_t cupid_memory_load8(struct CupidARM* cpu, uint32_t address, int* cycleCo
         *cycleCounter += wait;
     }
     uint16_t port;
-    if (cupid_cartridge_gpio_read(gba, address & ~1u, &port)) value = (port >> ((address & 1) * 8)) & 255;
+    if (cupid_cartridge_gpio_read(gba, address & ~1u, &port))
+        value = (port >> ((address & 1) * 8)) & 255;
     end_data_access(cpu, timedCounter, true);
     return value;
+}
+
+/* Publish one completed display halfword. A word request still calls this
+ * after each physical beat, so the low half remains visible before the high
+ * half completes. Keep renderer synchronization and mode-dependent mapping. */
+static void store_display_halfword(struct CupidGBA *gba, uint32_t address, int16_t value) {
+    cupid_video_sync(&gba->video);
+    switch (address >> GBA_BASE_OFFSET) {
+        case GBA_REGION_PALETTE:
+            STORE_16(value, address & (GBA_SIZE_PALETTE - 2), gba->video.palette);
+            break;
+        case GBA_REGION_VRAM:
+            if (reserved_vram(gba, address))
+                break;
+            if ((address & 0x0001FFFF) >= GBA_SIZE_VRAM) {
+                STORE_16(value, address & 0x00017FFE, gba->video.vram);
+            } else {
+                STORE_16(value, address & 0x0001FFFE, gba->video.vram);
+            }
+            break;
+        case GBA_REGION_OAM:
+            STORE_16(value, address & (GBA_SIZE_OAM - 2), gba->video.oam.raw);
+            break;
+    }
 }
 
 /**
  * @brief Store 32-bit value to memory bus.
  */
-void cupid_memory_store32(struct CupidARM* cpu, uint32_t address, int32_t value, int* cycleCounter) {
-    struct CupidGBA* gba = cpu->master;
-    struct CupidMemory* memory = &gba->memory;
+void cupid_memory_store32(struct CupidARM *cpu, uint32_t address, int32_t value,
+                          int *cycleCounter) {
+    struct CupidGBA *gba = cpu->master;
+    unsigned region = address >> 24;
+    if (cycleCounter && cpu->memory.timed &&
+        (region == GBA_REGION_PALETTE || region == GBA_REGION_VRAM)) {
+        uint32_t aligned = address & ~3u;
+        begin_data_access(cpu, aligned, 4, cycleCounter);
+        store_display_halfword(gba, aligned, (int16_t)value);
+        cupid_bus_display_beat(cpu, aligned + 2, true);
+        store_display_halfword(gba, aligned + 2, (int16_t)((uint32_t)value >> 16));
+        end_data_access(cpu, cycleCounter, false);
+        return;
+    }
     if (cycleCounter && cpu->memory.timed && cupid_cartridge_gpio_address(gba, address & ~3u)) {
         const uint32_t aligned = address & ~3u;
         begin_gpio_word(cpu, aligned, cycleCounter);
@@ -749,60 +901,68 @@ void cupid_memory_store32(struct CupidARM* cpu, uint32_t address, int32_t value,
         end_data_access(cpu, cycleCounter, false);
         return;
     }
-    int* timedCounter = NULL;
+    struct CupidMemory *memory = &gba->memory;
+    int *timedCounter = NULL;
     if (cycleCounter && cpu->memory.timed) {
         timedCounter = cycleCounter;
         begin_data_access(cpu, address, 4, cycleCounter);
         cycleCounter = NULL;
     }
+    if ((address >> 24) >= GBA_REGION_PALETTE && (address >> 24) <= GBA_REGION_OAM)
+        cupid_video_sync(&gba->video);
     int wait = 0;
-    char* waitstatesRegion = memory->waitstatesNonseq32;
+    char *waitstatesRegion = memory->waitstatesNonseq32;
 
     switch (address >> GBA_BASE_OFFSET) {
-    case GBA_REGION_EWRAM:
-        STORE_32(value, address & (GBA_SIZE_EWRAM - 4), memory->ewram);
-        wait += waitstatesRegion[GBA_REGION_EWRAM];
-        break;
-    case GBA_REGION_IWRAM:
-        STORE_32(value, address & (GBA_SIZE_IWRAM - 4), memory->iwram);
-        break;
-    case GBA_REGION_IO:
-        sync_io(cpu, cycleCounter);
-        cupid_io_write(gba, address & (GBA_OFFSET_MASK - 3), value & 0xFFFF);
-        cupid_io_write(gba, (address & (GBA_OFFSET_MASK - 3)) + 2, value >> 16);
-        break;
-    case GBA_REGION_PALETTE:
-        STORE_32(value, address & (GBA_SIZE_PALETTE - 4), gba->video.palette);
-        wait += waitstatesRegion[GBA_REGION_PALETTE];
-        break;
-    case GBA_REGION_VRAM:
-        if ((address & 0x0001FFFF) >= GBA_SIZE_VRAM) {
-            STORE_32(value, address & 0x00017FFC, gba->video.vram);
-        } else {
-            STORE_32(value, address & 0x0001FFFC, gba->video.vram);
-        }
-        ++wait;
-        break;
-    case GBA_REGION_OAM:
-        STORE_32(value, address & (GBA_SIZE_OAM - 4), gba->video.oam.raw);
-        break;
-    case GBA_REGION_ROM0:
-    case GBA_REGION_ROM0_EX:
-    case GBA_REGION_ROM1:
-    case GBA_REGION_ROM1_EX:
-    case GBA_REGION_ROM2:
-    case GBA_REGION_ROM2_EX:
-        wait += waitstatesRegion[address >> GBA_BASE_OFFSET];
-        cupid_cartridge_gpio_write(gba, address & ~3u, (uint16_t)value);
-        cupid_cartridge_gpio_write(gba, (address & ~3u) + 2, (uint16_t)((uint32_t)value >> 16));
-        break;
-    case GBA_REGION_SRAM:
-    case GBA_REGION_SRAM_MIRROR:
-        cupid_memory_store8(cpu, address, value >> (8 * (address & 3)), cycleCounter);
-        end_data_access(cpu, timedCounter, false);
-        return;  /** Store8 handles the cycle counter. */
-    default:
-        break;
+        case GBA_REGION_EWRAM:
+            STORE_32(value, address & (GBA_SIZE_EWRAM - 4), memory->ewram);
+            wait += waitstatesRegion[GBA_REGION_EWRAM];
+            break;
+        case GBA_REGION_IWRAM:
+            STORE_32(value, address & (GBA_SIZE_IWRAM - 4), memory->iwram);
+            if (timedCounter || cycleCounter || gba->performingDMA)
+                memory->iwramBus = value;
+            break;
+        case GBA_REGION_IO:
+            sync_io(cpu, cycleCounter);
+            cupid_io_write32(gba, address & (GBA_OFFSET_MASK - 3), (uint32_t)value);
+            break;
+        case GBA_REGION_PALETTE:
+            STORE_32(value, address & (GBA_SIZE_PALETTE - 4), gba->video.palette);
+            wait += waitstatesRegion[GBA_REGION_PALETTE];
+            break;
+        case GBA_REGION_VRAM:
+            if (reserved_vram(gba, address)) {
+                ++wait;
+                break;
+            }
+            if ((address & 0x0001FFFF) >= GBA_SIZE_VRAM) {
+                STORE_32(value, address & 0x00017FFC, gba->video.vram);
+            } else {
+                STORE_32(value, address & 0x0001FFFC, gba->video.vram);
+            }
+            ++wait;
+            break;
+        case GBA_REGION_OAM:
+            STORE_32(value, address & (GBA_SIZE_OAM - 4), gba->video.oam.raw);
+            break;
+        case GBA_REGION_ROM0:
+        case GBA_REGION_ROM0_EX:
+        case GBA_REGION_ROM1:
+        case GBA_REGION_ROM1_EX:
+        case GBA_REGION_ROM2:
+        case GBA_REGION_ROM2_EX:
+            wait += waitstatesRegion[address >> GBA_BASE_OFFSET];
+            cupid_cartridge_gpio_write(gba, address & ~3u, (uint16_t)value);
+            cupid_cartridge_gpio_write(gba, (address & ~3u) + 2, (uint16_t)((uint32_t)value >> 16));
+            break;
+        case GBA_REGION_SRAM:
+        case GBA_REGION_SRAM_MIRROR:
+            cupid_memory_store8(cpu, address, value >> (8 * (address & 3)), cycleCounter);
+            end_data_access(cpu, timedCounter, false);
+            return; /** Store8 handles the cycle counter. */
+        default:
+            break;
     }
 
     if (cycleCounter) {
@@ -815,10 +975,11 @@ void cupid_memory_store32(struct CupidARM* cpu, uint32_t address, int32_t value,
 /**
  * @brief Store 16-bit value to memory bus.
  */
-void cupid_memory_store16(struct CupidARM* cpu, uint32_t address, int16_t value, int* cycleCounter) {
-    struct CupidGBA* gba = cpu->master;
-    struct CupidMemory* memory = &gba->memory;
-    int* timedCounter = NULL;
+void cupid_memory_store16(struct CupidARM *cpu, uint32_t address, int16_t value,
+                          int *cycleCounter) {
+    struct CupidGBA *gba = cpu->master;
+    struct CupidMemory *memory = &gba->memory;
+    int *timedCounter = NULL;
     if (cycleCounter && cpu->memory.timed) {
         timedCounter = cycleCounter;
         begin_data_access(cpu, address, 2, cycleCounter);
@@ -827,60 +988,53 @@ void cupid_memory_store16(struct CupidARM* cpu, uint32_t address, int16_t value,
     int wait = 0;
 
     switch (address >> GBA_BASE_OFFSET) {
-    case GBA_REGION_EWRAM:
-        STORE_16(value, address & (GBA_SIZE_EWRAM - 2), memory->ewram);
-        wait = memory->waitstatesNonseq16[GBA_REGION_EWRAM];
-        break;
-    case GBA_REGION_IWRAM:
-        STORE_16(value, address & (GBA_SIZE_IWRAM - 2), memory->iwram);
-        break;
-    case GBA_REGION_IO:
-        sync_io(cpu, cycleCounter);
-        cupid_io_write(gba, address & (GBA_OFFSET_MASK - 1), value);
-        break;
-    case GBA_REGION_PALETTE:
-        STORE_16(value, address & (GBA_SIZE_PALETTE - 2), gba->video.palette);
-        break;
-    case GBA_REGION_VRAM:
-        if ((address & 0x0001FFFF) >= GBA_SIZE_VRAM) {
-            STORE_16(value, address & 0x00017FFE, gba->video.vram);
-        } else {
-            STORE_16(value, address & 0x0001FFFE, gba->video.vram);
-        }
-        break;
-    case GBA_REGION_OAM:
-        STORE_16(value, address & (GBA_SIZE_OAM - 2), gba->video.oam.raw);
-        break;
-    case GBA_REGION_ROM0:
-    case GBA_REGION_ROM0_EX:
-    case GBA_REGION_ROM1:
-    case GBA_REGION_ROM1_EX:
-    case GBA_REGION_ROM2:
-        cupid_cartridge_gpio_write(gba, address & ~1u, (uint16_t)value);
-        wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
-        break;
-    case GBA_REGION_ROM2_EX:
-        /** EEPROM writes. */
-        if (!cupid_memory_is_eeprom_address(memory, address)) break;
-        if (memory->savedata.type == SAVE_AUTODETECT) {
-            memory->savedata.type = SAVE_EEPROM512;
-            cupid_savedata_init_eeprom(&memory->savedata);
-        }
-        if (memory->savedata.type == SAVE_EEPROM || memory->savedata.type == SAVE_EEPROM512) {
-            cupid_savedata_write_eeprom(&memory->savedata, value & 1, 1);
-        }
-        break;
-    case GBA_REGION_SRAM:
-    case GBA_REGION_SRAM_MIRROR:
-        /** SRAM is an 8-bit bus; unaligned 16-bit store shifts down. */
-        if (address & 1) {
-            value >>= 8;
-        }
-        cupid_memory_store8(cpu, address, value, cycleCounter);
-        end_data_access(cpu, timedCounter, false);
-        return;  /** Store8 handles the cycle counter. */
-    default:
-        break;
+        case GBA_REGION_EWRAM:
+            STORE_16(value, address & (GBA_SIZE_EWRAM - 2), memory->ewram);
+            wait = memory->waitstatesNonseq16[GBA_REGION_EWRAM];
+            break;
+        case GBA_REGION_IWRAM:
+            STORE_16(value, address & (GBA_SIZE_IWRAM - 2), memory->iwram);
+            break;
+        case GBA_REGION_IO:
+            sync_io(cpu, cycleCounter);
+            cupid_io_write(gba, address & (GBA_OFFSET_MASK - 1), value);
+            break;
+        case GBA_REGION_PALETTE:
+        case GBA_REGION_VRAM:
+        case GBA_REGION_OAM:
+            store_display_halfword(gba, address, value);
+            break;
+        case GBA_REGION_ROM0:
+        case GBA_REGION_ROM0_EX:
+        case GBA_REGION_ROM1:
+        case GBA_REGION_ROM1_EX:
+        case GBA_REGION_ROM2:
+            cupid_cartridge_gpio_write(gba, address & ~1u, (uint16_t)value);
+            wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
+            break;
+        case GBA_REGION_ROM2_EX:
+            /** EEPROM writes. */
+            if (!cupid_memory_is_eeprom_address(memory, address))
+                break;
+            if (memory->savedata.type == SAVE_AUTODETECT) {
+                memory->savedata.type = SAVE_EEPROM512;
+                cupid_savedata_init_eeprom(&memory->savedata);
+            }
+            if (memory->savedata.type == SAVE_EEPROM || memory->savedata.type == SAVE_EEPROM512) {
+                cupid_savedata_write_eeprom(&memory->savedata, value & 1, 1);
+            }
+            break;
+        case GBA_REGION_SRAM:
+        case GBA_REGION_SRAM_MIRROR:
+            /** SRAM is an 8-bit bus; unaligned 16-bit store shifts down. */
+            if (address & 1) {
+                value >>= 8;
+            }
+            cupid_memory_store8(cpu, address, value, cycleCounter);
+            end_data_access(cpu, timedCounter, false);
+            return; /** Store8 handles the cycle counter. */
+        default:
+            break;
     }
 
     if (cycleCounter) {
@@ -893,91 +1047,93 @@ void cupid_memory_store16(struct CupidARM* cpu, uint32_t address, int16_t value,
 /**
  * @brief Store 8-bit value to memory bus.
  */
-void cupid_memory_store8(struct CupidARM* cpu, uint32_t address, int8_t value, int* cycleCounter) {
-    struct CupidGBA* gba = cpu->master;
-    struct CupidMemory* memory = &gba->memory;
-    int* timedCounter = NULL;
+void cupid_memory_store8(struct CupidARM *cpu, uint32_t address, int8_t value, int *cycleCounter) {
+    struct CupidGBA *gba = cpu->master;
+    struct CupidMemory *memory = &gba->memory;
+    int *timedCounter = NULL;
     if (cycleCounter && cpu->memory.timed) {
         timedCounter = cycleCounter;
         begin_data_access(cpu, address, 1, cycleCounter);
         cycleCounter = NULL;
     }
+    if ((address >> 24) >= GBA_REGION_PALETTE && (address >> 24) <= GBA_REGION_OAM)
+        cupid_video_sync(&gba->video);
     int wait = 0;
 
     switch (address >> GBA_BASE_OFFSET) {
-    case GBA_REGION_EWRAM:
-        ((int8_t*)memory->ewram)[address & (GBA_SIZE_EWRAM - 1)] = value;
-        wait = memory->waitstatesNonseq16[GBA_REGION_EWRAM];
-        break;
-    case GBA_REGION_IWRAM:
-        ((int8_t*)memory->iwram)[address & (GBA_SIZE_IWRAM - 1)] = value;
-        break;
-    case GBA_REGION_IO:
-        sync_io(cpu, cycleCounter);
-        cupid_io_write8(gba, address & GBA_OFFSET_MASK, (uint8_t)value);
-        break;
-    case GBA_REGION_PALETTE:
-        /** 8-bit writes duplicate byte to both halves of the halfword. */
-        cupid_memory_store16(cpu, address & ~1, ((uint8_t)value) | ((uint8_t)value << 8), cycleCounter);
-        return;  /** Store16 handles the cycle counter. */
-    case GBA_REGION_VRAM:
-    {
-        /**
-         * 8-bit writes affect BG region only, not OBJ VRAM.
-         * In modes 3-5 the boundary is 0x14000, otherwise 0x10000.
-         */
-        uint32_t vaddr = address & 0x0001FFFF;
-        uint32_t limit = (gba->video.dispcnt & 7) >= 3 ? 0x00014000 : 0x00010000;
-        if (vaddr >= limit) {
-            break;  /** Cannot Store8 to OBJ VRAM. */
-        }
-        /** Write byte to both halves of the halfword. */
-        uint16_t hw = ((uint8_t)value) | ((uint8_t)value << 8);
-        STORE_16(hw, (address & 0x1FFFE), gba->video.vram);
-        break;
-    }
-    case GBA_REGION_OAM:
-        /** Cannot Store8 to OAM. */
-        break;
-    case GBA_REGION_ROM0:
-    case GBA_REGION_ROM0_EX:
-    case GBA_REGION_ROM1:
-    case GBA_REGION_ROM1_EX:
-    case GBA_REGION_ROM2:
-    case GBA_REGION_ROM2_EX:
-        /* The 16-bit cartridge bus repeats a byte on both lanes. GPIO sees
-         * the aligned halfword strobe after the ordinary bus wait. */
-        cupid_cartridge_gpio_write(gba, address & ~1u, (uint16_t)((uint8_t)value * 0x0101u));
-        wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
-        break;
-    case GBA_REGION_SRAM:
-    case GBA_REGION_SRAM_MIRROR:
-        wait = memory->waitstatesNonseq16[GBA_REGION_SRAM];
-        if (cupid_cartridge_tilt_write(gba, address, (uint8_t)value)) break;
-        if (memory->savedata.type == SAVE_AUTODETECT) {
-            if ((address & 0xFFFF) == FLASH_BASE_HI && (uint8_t)value == FLASH_COMMAND_START) {
-                memory->savedata.type = SAVE_FLASH512;
-                cupid_savedata_init_flash(&memory->savedata);
-            } else {
-                cupid_savedata_init_sram(&memory->savedata);
+        case GBA_REGION_EWRAM:
+            ((int8_t *)memory->ewram)[address & (GBA_SIZE_EWRAM - 1)] = value;
+            wait = memory->waitstatesNonseq16[GBA_REGION_EWRAM];
+            break;
+        case GBA_REGION_IWRAM:
+            ((int8_t *)memory->iwram)[address & (GBA_SIZE_IWRAM - 1)] = value;
+            break;
+        case GBA_REGION_IO:
+            sync_io(cpu, cycleCounter);
+            cupid_io_write8(gba, address & GBA_OFFSET_MASK, (uint8_t)value);
+            break;
+        case GBA_REGION_PALETTE:
+            /** 8-bit writes duplicate byte to both halves of the halfword. */
+            gba->video.palette[(address & (GBA_SIZE_PALETTE - 2)) >> 1] = (uint8_t)value * 0x101u;
+            break;
+        case GBA_REGION_VRAM: {
+            /**
+             * 8-bit writes affect BG region only, not OBJ VRAM.
+             * In modes 3-5 the boundary is 0x14000, otherwise 0x10000.
+             */
+            uint32_t vaddr = address & 0x0001FFFF;
+            uint32_t limit = (gba->video.dispcnt & 7) >= 3 ? 0x00014000 : 0x00010000;
+            if (vaddr >= limit) {
+                break; /** Cannot Store8 to OBJ VRAM. */
             }
+            /** Write byte to both halves of the halfword. */
+            uint16_t hw = ((uint8_t)value) | ((uint8_t)value << 8);
+            STORE_16(hw, (address & 0x1FFFE), gba->video.vram);
+            break;
         }
-        if (memory->savedata.type == SAVE_FLASH512 || memory->savedata.type == SAVE_FLASH1M) {
-            cupid_savedata_write_flash(&memory->savedata, address & 0xFFFF, (uint8_t)value);
-        } else if (memory->savedata.type == SAVE_SRAM) {
-            if (memory->savedata.data) {
-                memory->savedata.data[address & (GBA_SIZE_SRAM - 1)] = value;
-                memory->savedata.dirty = true;
+        case GBA_REGION_OAM:
+            /** Cannot Store8 to OAM. */
+            break;
+        case GBA_REGION_ROM0:
+        case GBA_REGION_ROM0_EX:
+        case GBA_REGION_ROM1:
+        case GBA_REGION_ROM1_EX:
+        case GBA_REGION_ROM2:
+        case GBA_REGION_ROM2_EX:
+            /* The 16-bit cartridge bus repeats a byte on both lanes. GPIO sees
+             * the aligned halfword strobe after the ordinary bus wait. */
+            cupid_cartridge_gpio_write(gba, address & ~1u, (uint16_t)((uint8_t)value * 0x0101u));
+            wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
+            break;
+        case GBA_REGION_SRAM:
+        case GBA_REGION_SRAM_MIRROR:
+            wait = memory->waitstatesNonseq16[GBA_REGION_SRAM];
+            if (cupid_cartridge_tilt_write(gba, address, (uint8_t)value))
+                break;
+            if (memory->savedata.type == SAVE_AUTODETECT) {
+                if ((address & 0xFFFF) == FLASH_BASE_HI && (uint8_t)value == FLASH_COMMAND_START) {
+                    memory->savedata.type = SAVE_FLASH512;
+                    cupid_savedata_init_flash(&memory->savedata);
+                } else {
+                    cupid_savedata_init_sram(&memory->savedata);
+                }
             }
-        } else if (memory->savedata.type == SAVE_SRAM512) {
-            if (memory->savedata.data) {
-                memory->savedata.data[address & (GBA_SIZE_FLASH512 - 1)] = value;
-                memory->savedata.dirty = true;
+            if (memory->savedata.type == SAVE_FLASH512 || memory->savedata.type == SAVE_FLASH1M) {
+                cupid_savedata_write_flash(&memory->savedata, address & 0xFFFF, (uint8_t)value);
+            } else if (memory->savedata.type == SAVE_SRAM) {
+                if (memory->savedata.data) {
+                    memory->savedata.data[address & (GBA_SIZE_SRAM - 1)] = value;
+                    memory->savedata.dirty = true;
+                }
+            } else if (memory->savedata.type == SAVE_SRAM512) {
+                if (memory->savedata.data) {
+                    memory->savedata.data[address & (GBA_SIZE_FLASH512 - 1)] = value;
+                    memory->savedata.dirty = true;
+                }
             }
-        }
-        break;
-    default:
-        break;
+            break;
+        default:
+            break;
     }
 
     if (cycleCounter) {
@@ -990,12 +1146,12 @@ void cupid_memory_store8(struct CupidARM* cpu, uint32_t address, int8_t value, i
 /**
  * @brief Helpers.
  */
-
 /**
  * @brief Round up to next power of two.
  */
 static uint32_t cupid_to_pow2(uint32_t v) {
-    if (!v) return 0;
+    if (!v)
+        return 0;
     v--;
     v |= v >> 1;
     v |= v >> 2;
@@ -1008,15 +1164,18 @@ static uint32_t cupid_to_pow2(uint32_t v) {
 /**
  * @brief Load a ROM image into memory.
  */
-bool cupid_load_rom(struct CupidGBA* gba, const char* path) {
-    FILE* f = fopen(path, "rb");
+bool cupid_load_rom(struct CupidGBA *gba, const char *path) {
+    FILE *f = fopen(path, "rb");
     if (!f) {
         fprintf(stderr, "CUPID: Failed to open ROM: %s: %s\n", path, strerror(errno));
         return false;
     }
 
     /* Read a candidate before changing the currently attached cartridge. */
-    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return false; }
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return false;
+    }
     long fileSize = ftell(f);
 
     if (fileSize <= 0 || (size_t)fileSize > GBA_SIZE_ROM) {
@@ -1024,11 +1183,17 @@ bool cupid_load_rom(struct CupidGBA* gba, const char* path) {
         fclose(f);
         return false;
     }
-    if (fseek(f, 0, SEEK_SET) != 0) { fclose(f); return false; }
+    if (fseek(f, 0, SEEK_SET) != 0) {
+        fclose(f);
+        return false;
+    }
 
     size_t pristineSize = (size_t)fileSize;
-    uint8_t* candidate = calloc(1, GBA_SIZE_ROM);
-    if (!candidate) { fclose(f); return false; }
+    uint8_t *candidate = calloc(1, GBA_SIZE_ROM);
+    if (!candidate) {
+        fclose(f);
+        return false;
+    }
     const size_t readSize = fread(candidate, 1, pristineSize, f);
     const bool readFailed = ferror(f) != 0;
     const int closeResult = fclose(f);
@@ -1080,8 +1245,8 @@ bool cupid_load_rom(struct CupidGBA* gba, const char* path) {
         gba->memory.romID = (uint16_t)(gba->memory.rom[0xAC] | (gba->memory.rom[0xAD] << 8));
     }
 
-    printf("CUPID: Loaded ROM: %s (%zu bytes, mask=0x%08X)\n",
-           path, pristineSize, gba->memory.romMask);
+    printf("CUPID: Loaded ROM: %s (%zu bytes, mask=0x%08X)\n", path, pristineSize,
+           gba->memory.romMask);
     printf("CUPID: Title: \"%.12s\"  Code: \"%.4s\"\n", title, gameCode);
 
     /** If CPU is already initialized and PC is in ROM, re-arm active region. */
@@ -1104,30 +1269,32 @@ bool cupid_load_rom(struct CupidGBA* gba, const char* path) {
  *
  * Uses existing load32/store32 paths per register for correctness.
  */
-
 static inline int popcount16(int mask) {
     int c = 0;
     for (int i = 0; i < 16; i++) {
-        if (mask & (1 << i)) c++;
+        if (mask & (1 << i))
+            c++;
     }
     return c;
 }
 
-uint32_t cupid_memory_load_multiple(struct CupidARM* cpu, uint32_t address,
-                                    int mask, enum CupidLSMDirection direction,
-                                    int* cycleCounter)
-{
+uint32_t cupid_memory_load_multiple(struct CupidARM *cpu, uint32_t address, int mask,
+                                    enum CupidLSMDirection direction, int *cycleCounter) {
     unsigned count = mask ? (unsigned)popcount16(mask) : 16;
     uint32_t writeback = direction & LSM_D ? address - count * 4 : address + count * 4;
-    if (direction & LSM_D) address = writeback;
-    if ((direction & LSM_B) != ((direction & LSM_D) >> 1)) address += 4;
+    if (direction & LSM_D)
+        address = writeback;
+    if ((direction & LSM_B) != ((direction & LSM_D) >> 1))
+        address += 4;
     address &= 0xFFFFFFFC;
-    struct CupidGBA* gba = cpu->master;
+    struct CupidGBA *gba = cpu->master;
     int cycles = cycleCounter ? *cycleCounter : 0;
     bool first = true;
-    if (!mask) mask = 1 << ARM_PC;
+    if (!mask)
+        mask = 1 << ARM_PC;
     for (int i = 0; i < 16; i++) {
-        if (!(mask & (1 << i))) continue;
+        if (!(mask & (1 << i)))
+            continue;
         cpu->memory.dataSequential = !first;
         uint32_t val = cupid_memory_load32(cpu, address, cycleCounter ? &cycles : NULL);
         if (cycleCounter) {
@@ -1135,36 +1302,41 @@ uint32_t cupid_memory_load_multiple(struct CupidARM* cpu, uint32_t address,
             cycles--;
             unsigned region = address >> GBA_BASE_OFFSET;
             if (!cpu->memory.timed && !first && region < 16) {
-                cycles -= gba->memory.waitstatesNonseq32[region] - gba->memory.waitstatesSeq32[region];
+                cycles -=
+                    gba->memory.waitstatesNonseq32[region] - gba->memory.waitstatesSeq32[region];
             }
         }
         first = false;
         cpu->gprs[i] = (int32_t)val;
         address += 4;
     }
-    if (cycleCounter) *cycleCounter = cycles + 1;
+    if (cycleCounter)
+        *cycleCounter = cycles + 1;
     cpu->memory.dataSequential = false;
     return writeback;
 }
 
-uint32_t cupid_memory_store_multiple(struct CupidARM* cpu, uint32_t address,
-                                     int mask, enum CupidLSMDirection direction,
-                                     int* cycleCounter)
-{
+uint32_t cupid_memory_store_multiple(struct CupidARM *cpu, uint32_t address, int mask,
+                                     enum CupidLSMDirection direction, int *cycleCounter) {
     unsigned count = mask ? (unsigned)popcount16(mask) : 16;
     uint32_t writeback = direction & LSM_D ? address - count * 4 : address + count * 4;
-    if (direction & LSM_D) address = writeback;
-    if ((direction & LSM_B) != ((direction & LSM_D) >> 1)) address += 4;
+    if (direction & LSM_D)
+        address = writeback;
+    if ((direction & LSM_B) != ((direction & LSM_D) >> 1))
+        address += 4;
     address &= 0xFFFFFFFC;
-    struct CupidGBA* gba = cpu->master;
+    struct CupidGBA *gba = cpu->master;
     int cycles = cycleCounter ? *cycleCounter : 0;
     bool first = true;
-    if (!mask) mask = 1 << ARM_PC;
+    if (!mask)
+        mask = 1 << ARM_PC;
     for (int i = 0; i < 16; i++) {
-        if (!(mask & (1 << i))) continue;
+        if (!(mask & (1 << i)))
+            continue;
         int32_t val = CupidReadRegister(cpu, (unsigned)i);
         if (i == ARM_PC) {
-            val = (uint32_t)val + (cpu->executionMode == MODE_ARM ? WORD_SIZE_ARM : WORD_SIZE_THUMB);
+            val =
+                (uint32_t)val + (cpu->executionMode == MODE_ARM ? WORD_SIZE_ARM : WORD_SIZE_THUMB);
         }
         cpu->memory.dataSequential = !first;
         cupid_memory_store32(cpu, address, val, cycleCounter ? &cycles : NULL);
@@ -1175,19 +1347,21 @@ uint32_t cupid_memory_store_multiple(struct CupidARM* cpu, uint32_t address,
         first = false;
         address += 4;
     }
-    if (cycleCounter) *cycleCounter = cycles;
+    if (cycleCounter)
+        *cycleCounter = cycles;
     cpu->memory.dataSequential = false;
     return writeback;
 }
 
 /**
- * @brief Apply memory stall adjustment for wait cycles.
+ * @brief Retain internal clocks and mark the following opcode request.
  *
- * Currently pass-through; prefetch-buffer effects are not yet modeled here.
+ * Timed internal cycles request a nonsequential fetch. The prefetch unit
+ * separately supplies matching buffered or in-flight cartridge halfwords.
  */
-int32_t cupid_memory_stall(struct CupidARM* cpu, int32_t wait) {
+int32_t cupid_memory_stall(struct CupidARM *cpu, int32_t wait) {
     if (cpu->memory.timed && wait > 0) {
-        ((struct CupidGBA*)cpu->master)->memory.fetchNonseq = true;
+        ((struct CupidGBA *)cpu->master)->memory.fetchNonseq = true;
     }
     return wait;
 }

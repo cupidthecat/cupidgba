@@ -1,0 +1,133 @@
+{
+  "revision": "66f5f1d60cd7030b600606886c76f5c821ecaf9d",
+  "license_sha256": "b59a9ed235d76752c977f04116bc72155a14af48176bdbf50d7e5c29fca35aa7",
+  "cases": [
+    {
+      "name": "startup-line",
+      "path": "ppu/start_up.gba",
+      "sha256": "8c6592147a772de6d5099d065d1551d8c11fda8db2e1c5b61978c88c02b35976",
+      "checkpoint": "0x8000184",
+      "terminal": "0x80002fc",
+      "result_register": 12,
+      "observations": [
+        {
+          "address": "0x8000166",
+          "mode": "thumb",
+          "instruction": "0x297f",
+          "register": 1,
+          "value": "0x7f"
+        },
+        {
+          "address": "0x800016a",
+          "mode": "thumb",
+          "instruction": "0x2844",
+          "register": 0,
+          "value": "0x44"
+        }
+      ]
+    },
+    {
+      "name": "startup-vblank",
+      "path": "ppu/start_up_vbl.gba",
+      "sha256": "262e214c932a09b8b2937308bfe2bb4bc3cd9c26ac46fd518076cd07ff568c33",
+      "checkpoint": "0x8000184",
+      "terminal": "0x80002fc",
+      "result_register": 12,
+      "observations": [
+        {
+          "address": "0x8000166",
+          "mode": "thumb",
+          "instruction": "0x284e",
+          "register": 0,
+          "value": "0x4e"
+        },
+        {
+          "address": "0x800016a",
+          "mode": "thumb",
+          "instruction": "0x299e",
+          "register": 1,
+          "value": "0x9e"
+        }
+      ]
+    },
+    {
+      "name": "startup-irq",
+      "path": "ppu/start_up_vbl_irq.gba",
+      "sha256": "dae894499fadd6adf47ab3e21d45cad81c3003cce99727993b6df4d68e4625e4",
+      "checkpoint": "0x800024c",
+      "terminal": "0x80003c4",
+      "result_register": 7,
+      "observations": [
+        {
+          "address": "0x80001f0",
+          "mode": "arm",
+          "instruction": "0xe3570001",
+          "register": 7,
+          "value": "0x1"
+        },
+        {
+          "address": "0x8000210",
+          "mode": "arm",
+          "instruction": "0xe3500035",
+          "register": 0,
+          "value": "0x35"
+        },
+        {
+          "address": "0x8000218",
+          "mode": "arm",
+          "instruction": "0xe351009e",
+          "register": 1,
+          "value": "0x9e"
+        }
+      ]
+    },
+    {
+      "name": "startup-halt",
+      "path": "ppu/start_up_vbl_irq_halt.gba",
+      "sha256": "ee037a8f018b31fd1574c705c4445e580fd826c229b08e2174368c073b9d7d18",
+      "checkpoint": "0x800022c",
+      "terminal": "0x80003a4",
+      "result_register": 7,
+      "observations": [
+        {
+          "address": "0x80001d0",
+          "mode": "arm",
+          "instruction": "0xe3570001",
+          "register": 7,
+          "value": "0x1"
+        },
+        {
+          "address": "0x80001f0",
+          "mode": "arm",
+          "instruction": "0xe3500031",
+          "register": 0,
+          "value": "0x31"
+        },
+        {
+          "address": "0x80001f8",
+          "mode": "arm",
+          "instruction": "0xe351009e",
+          "register": 1,
+          "value": "0x9e"
+        }
+      ]
+    },
+    {
+      "name": "object-tail-normal",
+      "path": "ppu/Sprite_Last_VRAM_Access.gba",
+      "sha256": "ce51a7faf0e7f05822c958b483e766d3296884ddfea65cbfc364323a0cb42dc7",
+      "checkpoint": "0x08000330",
+      "terminal": "0x080004a8",
+      "result_register": 12,
+      "observations": [
+        {
+          "address": "0x0800031a",
+          "mode": "thumb",
+          "instruction": "0x2a8e",
+          "register": 2,
+          "value": "0x8e"
+        }
+      ]
+    }
+  ]
+}

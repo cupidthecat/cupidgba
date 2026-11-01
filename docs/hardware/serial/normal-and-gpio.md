@@ -20,8 +20,9 @@ elapsed time alone. Devices provide driven pin masks and levels through
 `cupid_serial_set_input`; `cupid_serial_set_output_callback` reports output
 levels and directions at emulated timestamps. Callers must dispatch preceding
 events before applying an input change. Native tests connect two core instances
-and exchange distinct 8-bit and 32-bit values. The SDL2 frontend does not yet
-provide a cable or network connection interface.
+and exchange distinct 8-bit and 32-bit values. The SDL2 frontend connects a pair
+through [local sessions](local-session.md). Network transport and physical
+multiplayer-cable wiring remain separate from that logical pin connection.
 
 In general-purpose mode, RCNT selects each pin's direction and output level.
 Input pins expose driven levels or their pull-up level. A falling SI input
@@ -57,6 +58,13 @@ return addresses, reset and clock wrap.
 Nine unchanged standalone cartridges pass their IRQ timer, received-data and
 one-clock start-bit comparisons with both BIOS paths. Four further HALT probes
 pass their timer and saved return-address comparisons with an external BIOS.
+The host checks all 24 encoded comparisons at their original issued Thumb
+instructions, the pre-display result and the completed terminal. A zero result
+alone is insufficient: some failure paths copy the measured byte, which can
+itself be zero. Owned instruction streams reproduce that false positive and a
+skipped comparison. Both fail the guarded runner while the matching control
+passes. Missing, duplicated, reordered and contradictory output is rejected.
+
 Those four observe firmware-internal addresses and require that BIOS input;
 the replacement firmware places some internal routines at different addresses.
 

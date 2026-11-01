@@ -14,8 +14,8 @@ if not 0x600 < len(image) < 0xF00:
 rows = ["/* SPDX-License-Identifier: GPL-3.0-or-later */",
         "/* Generated from music-callbacks.s; see the BIOS rebuilding guide. */",
         "static const uint8_t musicCallbacks[] = {"]
-for offset in range(0, len(image), 12):
-    rows.append("    " + ", ".join(f"0x{value:02X}" for value in image[offset:offset + 12]) + ",")
+for offset in range(0, len(image), 16):
+    rows.append("    " + ", ".join(f"0x{value:02X}" for value in image[offset:offset + 16]) + ",")
 rows.append("};")
 expected = ("\n".join(rows) + "\n").encode()
 target = Path(__file__).with_name("music-callbacks.inc")

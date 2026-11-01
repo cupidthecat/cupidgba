@@ -1,11 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-#include "cupid/gba.h"
-#include "cupid/isa-inlines.h"
 #include "../test.h"
 #include "caller.h"
+#include "cupid/gba.h"
+#include "cupid/isa-inlines.h"
 #include <math.h>
 
-static const char* externalBios;
+static const char *externalBios;
 static uint8_t externalImage[GBA_SIZE_BIOS];
 static bool externalImageLoaded;
 static unsigned observations;
@@ -30,22 +30,22 @@ struct Result {
 };
 
 struct AffineTrace {
-    struct CupidGBA* gba;
+    struct CupidGBA *gba;
     struct CupidTimingEvent sample, dma;
-    uint8_t* output;
+    uint8_t *output;
     unsigned width, count;
     uint64_t times[128];
     uint8_t values[128][272];
 };
 
-static uint32_t word(const uint8_t* p) {
+static uint32_t word(const uint8_t *p) {
     return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
 }
 
-static void observe_output(struct CupidTiming* timing, void* context, uint32_t late) {
+static void observe_output(struct CupidTiming *timing, void *context, uint32_t late) {
     (void)late;
-    struct AffineTrace* trace = context;
-    if (!trace->count || memcmp(trace->values[trace->count-1], trace->output, trace->width)) {
+    struct AffineTrace *trace = context;
+    if (!trace->count || memcmp(trace->values[trace->count - 1], trace->output, trace->width)) {
         CHECK(trace->count < 128);
         memcpy(trace->values[trace->count], trace->output, trace->width);
         trace->times[trace->count++] = cupid_timing_global_time(timing);
@@ -53,23 +53,23 @@ static void observe_output(struct CupidTiming* timing, void* context, uint32_t l
     cupid_timing_schedule(timing, &trace->sample, 1);
 }
 
-static void start_dma(struct CupidTiming* timing, void* context, uint32_t late) {
+static void start_dma(struct CupidTiming *timing, void *context, uint32_t late) {
     (void)timing;
     (void)late;
     cupid_io_write(context, REG_DMA0CNT_HI, 0xC400);
 }
 
-static void put16(uint8_t* p, uint16_t value) {
+static void put16(uint8_t *p, uint16_t value) {
     p[0] = (uint8_t)value;
     p[1] = (uint8_t)(value >> 8);
 }
 
-static void put32(uint8_t* p, uint32_t value) {
+static void put32(uint8_t *p, uint32_t value) {
     put16(p, (uint16_t)value);
     put16(p + 2, (uint16_t)(value >> 16));
 }
 
-static void encode_entry(uint8_t* data, const struct Entry* e, bool background) {
+static void encode_entry(uint8_t *data, const struct Entry *e, bool background) {
     if (background) {
         put32(data, e->xOrigin);
         put32(data + 4, e->yOrigin);
@@ -98,7 +98,7 @@ static int32_t sine(unsigned angle) {
     return (int32_t)(sin(angle * (3.14159265358979323846 / 128.0)) * 16384.0);
 }
 
-static void matrix(const struct Entry* e, int32_t result[4]) {
+static void matrix(const struct Entry *e, int32_t result[4]) {
     const int32_t s = sine(e->angle >> 8), c = sine((e->angle >> 8) + 64);
     result[0] = shifted_product(e->xScale, c);
     result[1] = -shifted_product(e->xScale, s);
@@ -106,8 +106,8 @@ static void matrix(const struct Entry* e, int32_t result[4]) {
     result[3] = shifted_product(e->yScale, c);
 }
 
-static struct CupidGBA* machine(const char* bios) {
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+static struct CupidGBA *machine(const char *bios) {
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba);
     cupid_gba_create(gba);
     if (bios) {
@@ -126,34 +126,31 @@ static struct CupidGBA* machine(const char* bios) {
     }
     cupid_gba_reset(gba);
     cupid_test_bios_caller(gba);
-    for (unsigned r = 0; r < 15; r++) gba->cpu.gprs[r] = (int32_t)(0x11220000 + r);
+    for (unsigned r = 0; r < 15; r++)
+        gba->cpu.gprs[r] = (int32_t)(0x11220000 + r);
     gba->cpu.gprs[ARM_SP] = GBA_SP_BASE_SYSTEM;
     return gba;
 }
 
-static void destroy(struct CupidGBA* gba) {
+static void destroy(struct CupidGBA *gba) {
     cupid_gba_destroy(gba);
     free(gba);
 }
 
-static uint64_t invoke(struct CupidGBA* gba, unsigned call, bool thumb) {
+static uint64_t invoke(struct CupidGBA *gba, unsigned call, bool thumb) {
     const uint32_t arm[] = {UINT32_C(0xEF000000) | call << 16, UINT32_C(0xEAFFFFFE)};
     const uint16_t narrow[] = {(uint16_t)(0xDF00 | call), 0xE7FE};
-    memcpy(gba->memory.iwram, thumb ? (const void*)narrow : (const void*)arm,
+    memcpy(gba->memory.iwram, thumb ? (const void *)narrow : (const void *)arm,
            thumb ? sizeof(narrow) : sizeof(arm));
     gba->cpu.cpsr.packed = 0xA000001F;
     _CupidSetMode(&gba->cpu, thumb ? MODE_THUMB : MODE_ARM);
     gba->cpu.gprs[ARM_PC] = GBA_BASE_IWRAM;
-    if (thumb) CupidThumbWritePC(&gba->cpu);
-    else CupidARMWritePC(&gba->cpu);
+    if (thumb)
+        CupidThumbWritePC(&gba->cpu);
+    else
+        CupidARMWritePC(&gba->cpu);
     const uint64_t start = cupid_timing_global_time(&gba->timing);
-    unsigned steps;
-    for (steps = 0; steps < 100000; steps++) {
-        cupid_gba_step(gba);
-        if (gba->cpu.executionMode == (thumb ? MODE_THUMB : MODE_ARM) &&
-            (uint32_t)gba->cpu.gprs[ARM_PC] == GBA_BASE_IWRAM + (thumb ? 4 : 8)) break;
-    }
-    CHECK(steps < 100000);
+    CHECK(cupid_test_bios_run_to_return(gba, thumb, GBA_BASE_IWRAM + (thumb ? 4 : 8), 100000));
     CHECK(gba->cpu.privilegeMode == MODE_SYS);
     CHECK((uint32_t)gba->cpu.cpsr.packed == (thumb ? 0xA000003F : 0xA000001F));
     for (unsigned r = 4; r < 15; r++) {
@@ -163,16 +160,16 @@ static uint64_t invoke(struct CupidGBA* gba, unsigned call, bool thumb) {
 }
 
 /* Configuration: Thumb, IWRAM/ROM source, EWRAM/VRAM/OAM destination, fast ROM. */
-static struct Result execute(const struct Fixture* f, unsigned configuration, const char* bios,
-                             struct AffineTrace* trace) {
+static struct Result execute(const struct Fixture *f, unsigned configuration, const char *bios,
+                             struct AffineTrace *trace) {
     const unsigned count = f->count <= INT32_MAX ? f->count : 0;
     CHECK(count <= 256);
     const bool thumb = configuration & 1;
     const bool interactions = configuration & 64;
     const unsigned sourceRegion = (configuration >> 1) & 3;
     const unsigned destinationRegion = (configuration >> 3) & 3;
-    struct CupidGBA* gba = machine(bios);
-    uint8_t* source;
+    struct CupidGBA *gba = machine(bios);
+    uint8_t *source;
     uint32_t sourceAddress;
     if (sourceRegion == 2) {
         gba->memory.rom = calloc(1, 0x4000);
@@ -193,14 +190,28 @@ static struct Result execute(const struct Fixture* f, unsigned configuration, co
         encode_entry(input + i * entrySize, &f->entries[i], f->call == 0x0E);
     }
     memcpy(source, input, sizeof(input));
-    uint8_t* output;
+    uint8_t *output;
     uint32_t outputAddress;
     unsigned outputSize = sizeof(expected), offset = 1024;
     switch (destinationRegion) {
-    case 0: output = gba->memory.iwram + 0x2C00; outputAddress = GBA_BASE_IWRAM + 0x2C00; break;
-    case 1: output = gba->memory.ewram + 0x2C00; outputAddress = GBA_BASE_EWRAM + 0x2C00; break;
-    case 2: output = (uint8_t*)gba->video.vram + 0x2C00; outputAddress = GBA_BASE_VRAM + 0x2C00; break;
-    default: output = (uint8_t*)&gba->video.oam; outputAddress = GBA_BASE_OAM; outputSize = 1024; offset = 128; break;
+        case 0:
+            output = gba->memory.iwram + 0x2C00;
+            outputAddress = GBA_BASE_IWRAM + 0x2C00;
+            break;
+        case 1:
+            output = gba->memory.ewram + 0x2C00;
+            outputAddress = GBA_BASE_EWRAM + 0x2C00;
+            break;
+        case 2:
+            output = (uint8_t *)gba->video.vram + 0x2C00;
+            outputAddress = GBA_BASE_VRAM + 0x2C00;
+            break;
+        default:
+            output = (uint8_t *)&gba->video.oam;
+            outputAddress = GBA_BASE_OAM;
+            outputSize = 1024;
+            offset = 128;
+            break;
     }
     memset(output, 0xA5, outputSize);
     memset(expected, 0xA5, sizeof(expected));
@@ -208,15 +219,16 @@ static struct Result execute(const struct Fixture* f, unsigned configuration, co
     uint32_t cursor = offset;
     const struct Entry replacement = {-77, 1234, -4567, 5678, 0xC5FF, 0x12345678, 0x87654321};
     for (unsigned i = 0; i < count; i++) {
-        const struct Entry* e = interactions && i == 7 ? &replacement : &f->entries[i];
+        const struct Entry *e = interactions && i == 7 ? &replacement : &f->entries[i];
         matrix(e, last);
         if (f->call == 0x0E) {
             CHECK(cursor + 16 <= outputSize);
-            for (unsigned p = 0; p < 4; p++) put16(expected + cursor + 2 * p, (uint16_t)last[p]);
+            for (unsigned p = 0; p < 4; p++)
+                put16(expected + cursor + 2 * p, (uint16_t)last[p]);
             const uint32_t x = e->xOrigin - (uint32_t)last[0] * (uint32_t)(int32_t)e->xCenter -
-                (uint32_t)last[1] * (uint32_t)(int32_t)e->yCenter;
+                               (uint32_t)last[1] * (uint32_t)(int32_t)e->yCenter;
             const uint32_t y = e->yOrigin - (uint32_t)last[2] * (uint32_t)(int32_t)e->xCenter -
-                (uint32_t)last[3] * (uint32_t)(int32_t)e->yCenter;
+                               (uint32_t)last[3] * (uint32_t)(int32_t)e->yCenter;
             put32(expected + cursor + 8, x);
             put32(expected + cursor + 12, y);
             cursor += 16;
@@ -246,16 +258,24 @@ static struct Result execute(const struct Fixture* f, unsigned configuration, co
         trace->sample.callback = observe_output;
         trace->sample.priority = 0x60;
         cupid_timing_schedule(&gba->timing, &trace->sample, 1);
-        const uint32_t handler[] = {
-            0xE3A00301, 0xE2800C02, 0xE1D010B2, 0xE1C010B2,
-            0xE59F2018, 0xE5923000, 0xE2833001, 0xE5823000,
-            0xE5923004, 0xE1833001, 0xE5823004, 0xE12FFF1E,
-            GBA_BASE_EWRAM + 0x2B00
-        };
+        const uint32_t handler[] = {0xE3A00301,
+                                    0xE2800C02,
+                                    0xE1D010B2,
+                                    0xE1C010B2,
+                                    0xE59F2018,
+                                    0xE5923000,
+                                    0xE2833001,
+                                    0xE5823000,
+                                    0xE5923004,
+                                    0xE1833001,
+                                    0xE5823004,
+                                    0xE12FFF1E,
+                                    GBA_BASE_EWRAM + 0x2B00};
         memcpy(gba->memory.iwram + 0x7000, handler, sizeof(handler));
         const uint32_t entry = GBA_BASE_IWRAM + 0x7000;
         memcpy(gba->memory.iwram + 0x7FFC, &entry, sizeof(entry));
-        for (unsigned i = 0; i < 64; i++) gba->memory.ewram[0x2A00+i] = (uint8_t)(i * 77 + 0x81);
+        for (unsigned i = 0; i < 64; i++)
+            gba->memory.ewram[0x2A00 + i] = (uint8_t)(i * 77 + 0x81);
         encode_entry(gba->memory.ewram + 0x2A00, &replacement, f->call == 0x0E);
         cupid_io_write(gba, REG_DMA0SAD_LO, 0x2A00);
         cupid_io_write(gba, REG_DMA0SAD_HI, 0x0200);
@@ -278,7 +298,8 @@ static struct Result execute(const struct Fixture* f, unsigned configuration, co
                 f->call, count, configuration, f->stride);
     }
     CHECK(!memcmp(output, expected, outputSize));
-    if (interactions) memcpy(input + 7 * entrySize, gba->memory.ewram + 0x2A00, 64);
+    if (interactions)
+        memcpy(input + 7 * entrySize, gba->memory.ewram + 0x2A00, 64);
     CHECK(!memcmp(source, input, sizeof(input)));
     CHECK((uint32_t)gba->cpu.gprs[0] == sourceAddress + count * entrySize);
     CHECK((uint32_t)gba->cpu.gprs[1] == outputAddress + cursor);
@@ -302,24 +323,28 @@ static struct Result execute(const struct Fixture* f, unsigned configuration, co
     return result;
 }
 
-static uint64_t qualify(const struct Fixture* f, unsigned configuration) {
+static uint64_t qualify(const struct Fixture *f, unsigned configuration) {
     struct AffineTrace builtInTrace, externalTrace;
     const struct Result builtIn = execute(f, configuration, NULL, &builtInTrace);
     if (externalBios) {
         const struct Result external = execute(f, configuration, externalBios, &externalTrace);
         if (builtIn.clocks != external.clocks) {
-            fprintf(stderr, "Affine clocks mismatch: call=%x count=%u configuration=%u: %llu / %llu\n",
-                    f->call, f->count, configuration,
-                    (unsigned long long)builtIn.clocks, (unsigned long long)external.clocks);
+            fprintf(stderr,
+                    "Affine clocks mismatch: call=%x count=%u configuration=%u: %llu / %llu\n",
+                    f->call, f->count, configuration, (unsigned long long)builtIn.clocks,
+                    (unsigned long long)external.clocks);
         }
         CHECK(builtIn.clocks == external.clocks);
         CHECK(!memcmp(builtIn.registers, external.registers, sizeof(builtIn.registers)));
         CHECK(builtIn.cpsr == external.cpsr && builtIn.timer == external.timer);
         CHECK(builtIn.requests == external.requests);
         if (configuration & 64) {
-            CHECK(builtInTrace.count == externalTrace.count && builtInTrace.width == externalTrace.width);
-            CHECK(!memcmp(builtInTrace.times, externalTrace.times, builtInTrace.count * sizeof(builtInTrace.times[0])));
-            CHECK(!memcmp(builtInTrace.values, externalTrace.values, builtInTrace.count * sizeof(builtInTrace.values[0])));
+            CHECK(builtInTrace.count == externalTrace.count &&
+                  builtInTrace.width == externalTrace.width);
+            CHECK(!memcmp(builtInTrace.times, externalTrace.times,
+                          builtInTrace.count * sizeof(builtInTrace.times[0])));
+            CHECK(!memcmp(builtInTrace.values, externalTrace.values,
+                          builtInTrace.count * sizeof(builtInTrace.values[0])));
         }
     }
     observations++;
@@ -348,13 +373,18 @@ static void complete_angle_range(void) {
     for (unsigned high = 0; high < 256; high++) {
         for (unsigned low = 0; low < 256; low++) {
             const unsigned angle = high * 256 + low;
-            f.entries[low] = (struct Entry){(int16_t)(angle * 257 + 73), (int16_t)(~(angle * 131)),
-                (int16_t)(angle ^ 0xA5A5), (int16_t)(angle * 251 + 0x1800), (uint16_t)angle,
-                UINT32_C(0x7FFFFF80) + angle * 997, UINT32_C(0x8000007B) - angle * 12347};
+            f.entries[low] = (struct Entry){(int16_t)(angle * 257 + 73),
+                                            (int16_t)(~(angle * 131)),
+                                            (int16_t)(angle ^ 0xA5A5),
+                                            (int16_t)(angle * 251 + 0x1800),
+                                            (uint16_t)angle,
+                                            UINT32_C(0x7FFFFF80) + angle * 997,
+                                            UINT32_C(0x8000007B) - angle * 12347};
         }
-        const unsigned configuration = (high & 1) | (high % 3) << 1 | (high % 3) << 3 |
-            (high & 2 ? 32 : 0);
-        for (f.call = firstCall; f.call <= lastCall; f.call++) qualify(&f, configuration);
+        const unsigned configuration =
+            (high & 1) | (high % 3) << 1 | (high % 3) << 3 | (high & 2 ? 32 : 0);
+        for (f.call = firstCall; f.call <= lastCall; f.call++)
+            qualify(&f, configuration);
     }
 }
 
@@ -362,7 +392,8 @@ static void memory_counts_and_object_strides(void) {
     const uint32_t counts[] = {0, 1, 3, UINT32_MAX, UINT32_C(0x80000000)};
     const uint32_t strides[] = {0, 1, 2, 3, 8, (uint32_t)-2, (uint32_t)-8};
     struct Fixture f = {0};
-    f.entries[0] = (struct Entry){INT16_MIN, INT16_MAX, INT16_MIN, INT16_MAX, 0x40FF, 0, UINT32_MAX};
+    f.entries[0] =
+        (struct Entry){INT16_MIN, INT16_MAX, INT16_MIN, INT16_MAX, 0x40FF, 0, UINT32_MAX};
     f.entries[1] = (struct Entry){-1, 1, -1, 1, 0x8000, UINT32_MAX, 0};
     f.entries[2] = (struct Entry){0, 0, 123, -456, 0xFFFF, 0x12345678, 0xFEDCBA98};
     for (unsigned source = 0; source < 3; source++) {
@@ -371,7 +402,8 @@ static void memory_counts_and_object_strides(void) {
                 for (unsigned c = 0; c < sizeof(counts) / sizeof(*counts); c++) {
                     f.count = counts[c];
                     for (f.call = firstCall; f.call <= lastCall; f.call++) {
-                        const unsigned limit = f.call == 0x0E ? 1 : sizeof(strides) / sizeof(*strides);
+                        const unsigned limit =
+                            f.call == 0x0E ? 1 : sizeof(strides) / sizeof(*strides);
                         for (unsigned s = 0; s < limit; s++) {
                             f.stride = strides[s];
                             qualify(&f, thumb | source << 1 | destination << 3);
@@ -388,9 +420,11 @@ static void output_bus_phases_timer_irq_and_dma(void) {
     f.count = 8;
     f.stride = 8;
     for (unsigned i = 0; i < 8; i++) {
-        f.entries[i] = (struct Entry){(int16_t)(257 + i * 131), (int16_t)(-513 - i * 257),
-            (int16_t)(12345 + i * 1024), (int16_t)(-32767 + i * 777), (uint16_t)(0x1980 + i * 817),
-            UINT32_C(0x7FFFFF80) + i * 997, UINT32_C(0x8000007B) - i * 12347};
+        f.entries[i] =
+            (struct Entry){(int16_t)(257 + i * 131),        (int16_t)(-513 - i * 257),
+                           (int16_t)(12345 + i * 1024),     (int16_t)(-32767 + i * 777),
+                           (uint16_t)(0x1980 + i * 817),    UINT32_C(0x7FFFFF80) + i * 997,
+                           UINT32_C(0x8000007B) - i * 12347};
     }
     for (f.call = firstCall; f.call <= lastCall; f.call++) {
         for (unsigned thumb = 0; thumb < 2; thumb++) {
@@ -400,12 +434,16 @@ static void output_bus_phases_timer_irq_and_dma(void) {
     }
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
     for (int argument = 1; argument < argc; argument++) {
-        if (!strcmp(argv[argument], "--external-bios") && argument + 1 < argc) externalBios = argv[++argument];
-        else if (!strcmp(argv[argument], "--background") && firstCall != lastCall) firstCall = lastCall = 0x0E;
-        else if (!strcmp(argv[argument], "--object") && firstCall != lastCall) firstCall = lastCall = 0x0F;
-        else return 2;
+        if (!strcmp(argv[argument], "--external-bios") && argument + 1 < argc)
+            externalBios = argv[++argument];
+        else if (!strcmp(argv[argument], "--background") && firstCall != lastCall)
+            firstCall = lastCall = 0x0E;
+        else if (!strcmp(argv[argument], "--object") && firstCall != lastCall)
+            firstCall = lastCall = 0x0F;
+        else
+            return 2;
     }
     RUN(signed_rounding_origins_and_caller_state);
     RUN(complete_angle_range);

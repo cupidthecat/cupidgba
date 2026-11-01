@@ -1,15 +1,17 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+#include "../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
-#include "../test.h"
 
 static void complete_dispatch_tables(void) {
-    for (unsigned i = 0; i < 4096; i++) CHECK(cupid_arm_table[i] != NULL);
-    for (unsigned i = 0; i < 1024; i++) CHECK(cupid_thumb_table[i] != NULL);
+    for (unsigned i = 0; i < 4096; i++)
+        CHECK(cupid_arm_table[i] != NULL);
+    for (unsigned i = 0; i < 1024; i++)
+        CHECK(cupid_thumb_table[i] != NULL);
 }
 
 static void swi_decode_and_exception(void) {
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba != NULL);
     cupid_gba_create(gba);
     cupid_gba_reset(gba);
@@ -28,16 +30,21 @@ static void swi_decode_and_exception(void) {
     free(gba);
 }
 
-static void execute(struct CupidGBA* gba, uint32_t opcode, bool thumb) {
+static void execute(struct CupidGBA *gba, uint32_t opcode, bool thumb) {
     _CupidSetMode(&gba->cpu, thumb ? MODE_THUMB : MODE_ARM);
     memcpy(gba->memory.iwram, &opcode, sizeof(opcode));
     gba->cpu.gprs[ARM_PC] = GBA_BASE_IWRAM;
-    if (thumb) { CupidThumbWritePC(&gba->cpu); cupid_thumb_step(&gba->cpu); }
-    else { CupidARMWritePC(&gba->cpu); cupid_arm_step(&gba->cpu); }
+    if (thumb) {
+        CupidThumbWritePC(&gba->cpu);
+        cupid_thumb_step(&gba->cpu);
+    } else {
+        CupidARMWritePC(&gba->cpu);
+        cupid_arm_step(&gba->cpu);
+    }
 }
 
 static void fixed_width_arithmetic(void) {
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba != NULL);
     cupid_gba_create(gba);
     cupid_gba_reset(gba);
@@ -69,13 +76,13 @@ static void fixed_width_arithmetic(void) {
 }
 
 static void thumb_store_base_in_list(void) {
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba != NULL);
     cupid_gba_create(gba);
     cupid_gba_reset(gba);
     gba->cpu.gprs[0] = 0x12345678;
     gba->cpu.gprs[1] = GBA_BASE_EWRAM + 1; /* Preserve low address bits in writeback. */
-    execute(gba, 0xC103, true); /* STMIA r1!, {r0, r1} */
+    execute(gba, 0xC103, true);            /* STMIA r1!, {r0, r1} */
     CHECK((uint32_t)gba->cpu.gprs[1] == GBA_BASE_EWRAM + 9);
     CHECK(cupid_memory_load32(&gba->cpu, GBA_BASE_EWRAM, NULL) == 0x12345678);
     CHECK(cupid_memory_load32(&gba->cpu, GBA_BASE_EWRAM + 4, NULL) == GBA_BASE_EWRAM + 9);
@@ -88,7 +95,7 @@ static void thumb_store_base_in_list(void) {
 }
 
 static void empty_multiple_loads_pc(void) {
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba != NULL);
     cupid_gba_create(gba);
     cupid_gba_reset(gba);
@@ -100,11 +107,13 @@ static void empty_multiple_loads_pc(void) {
     for (int direction = LSM_IA; direction <= LSM_DB; direction++) {
         uint32_t base = GBA_BASE_EWRAM + 256;
         uint32_t transfer = base;
-        if (direction & LSM_D) transfer -= 64;
-        if ((direction & LSM_B) != ((direction & LSM_D) >> 1)) transfer += 4;
+        if (direction & LSM_D)
+            transfer -= 64;
+        if ((direction & LSM_B) != ((direction & LSM_D) >> 1))
+            transfer += 4;
         cupid_memory_store32(&gba->cpu, transfer, 0x12345678, NULL);
         uint32_t result = cupid_memory_load_multiple(&gba->cpu, base + 1, 0,
-                                                    (enum CupidLSMDirection)direction, NULL);
+                                                     (enum CupidLSMDirection)direction, NULL);
         CHECK((uint32_t)gba->cpu.gprs[ARM_PC] == 0x12345678);
         CHECK(result == (direction & LSM_D ? base - 63 : base + 65));
     }
@@ -113,13 +122,18 @@ static void empty_multiple_loads_pc(void) {
 }
 
 static void arm_pc_alignment(void) {
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba != NULL);
     cupid_gba_create(gba);
     cupid_gba_reset(gba);
-    gba->cpu.gprs[ARM_PC] = GBA_BASE_IWRAM + 2;
-    CupidARMWritePC(&gba->cpu);
-    CHECK((uint32_t)gba->cpu.gprs[ARM_PC] == GBA_BASE_IWRAM + 4);
+    const uint32_t words[] = {0xE3A00017, 0xE3A01029};
+    memcpy(gba->memory.iwram, words, sizeof(words));
+    for (unsigned low = 0; low < 4; ++low) {
+        gba->cpu.gprs[ARM_PC] = GBA_BASE_IWRAM + low;
+        CupidARMWritePC(&gba->cpu);
+        CHECK((uint32_t)gba->cpu.gprs[ARM_PC] == GBA_BASE_IWRAM + (low & 2u) + 4);
+        CHECK(gba->cpu.prefetch[0] == words[0] && gba->cpu.prefetch[1] == words[1]);
+    }
     cupid_gba_destroy(gba);
     free(gba);
 }
@@ -129,12 +143,12 @@ static void block_transfers_charge_one_final_internal_cycle(void) {
     const uint64_t loadCycles[] = {6, 26};
     const uint64_t storeCycles[] = {5, 25};
     for (unsigned i = 0; i < 2; i++) {
-        struct CupidGBA* gba = calloc(1, sizeof(*gba));
+        struct CupidGBA *gba = calloc(1, sizeof(*gba));
         CHECK(gba);
         cupid_gba_create(gba);
         cupid_gba_reset(gba);
         const uint32_t values[] = {0x12345678, 0x9ABCDEF0, 0x13572468, 0xA5A5A5A5};
-        uint8_t* data = i ? gba->memory.ewram : gba->memory.iwram + 0x100;
+        uint8_t *data = i ? gba->memory.ewram : gba->memory.iwram + 0x100;
         memcpy(data, values, sizeof(values));
         gba->cpu.gprs[10] = regions[i];
         uint64_t before = cupid_timing_global_time(&gba->timing);

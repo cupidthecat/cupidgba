@@ -1,30 +1,32 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+#include "../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
-#include "../test.h"
 
-static struct CupidGBA* fresh(void) {
-    struct CupidGBA* gba = calloc(1, sizeof(*gba));
+static struct CupidGBA *fresh(void) {
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba != NULL);
     cupid_gba_create(gba);
     cupid_gba_reset(gba);
     return gba;
 }
 
-static void destroy(struct CupidGBA* gba) {
+static void destroy(struct CupidGBA *gba) {
     cupid_gba_destroy(gba);
     free(gba);
 }
 
 static void reserved_bits_do_not_enter_register_state(void) {
-    struct CupidGBA* gba = fresh();
+    struct CupidGBA *gba = fresh();
     cupid_io_write(gba, REG_SOUNDCNT_X, 0x80);
-    static const struct { uint32_t address; uint16_t mask; } registers[] = {
-        {REG_BG0CNT, 0xDFFF}, {REG_BG1CNT, 0xDFFF},
-        {REG_WININ, 0x3F3F}, {REG_WINOUT, 0x3F3F},
-        {REG_BLDCNT, 0x3FFF}, {REG_BLDALPHA, 0x1F1F},
-        {REG_SOUNDCNT_L, 0xFF77}, {REG_SOUNDCNT_H, 0x770F}
-    };
+
+    static const struct {
+        uint32_t address;
+        uint16_t mask;
+    } registers[] = {{REG_BG0CNT, 0xDFFF},     {REG_BG1CNT, 0xDFFF},    {REG_WININ, 0x3F3F},
+                     {REG_WINOUT, 0x3F3F},     {REG_BLDCNT, 0x3FFF},    {REG_BLDALPHA, 0x1F1F},
+                     {REG_SOUNDCNT_L, 0xFF77}, {REG_SOUNDCNT_H, 0x770F}};
+
     for (unsigned i = 0; i < sizeof(registers) / sizeof(registers[0]); i++) {
         uint32_t address = GBA_BASE_IO + registers[i].address;
         cupid_memory_store16(&gba->cpu, address, 0, NULL);
@@ -46,15 +48,16 @@ static void reserved_bits_do_not_enter_register_state(void) {
 }
 
 static void cpu_loads_write_only_and_unmapped_io(void) {
-    static const uint32_t offsets[] = {REG_BG0HOFS, 0x04E, 0x056, 0x08C,
-        REG_FIFO_A_LO, REG_FIFO_B_LO, REG_DMA0SAD_LO, REG_DMA3DAD_LO, 0x0E0, 0x3FC};
+    static const uint32_t offsets[] = {REG_BG0HOFS,   0x04E,         0x056,          0x08C,
+                                       REG_FIFO_A_LO, REG_FIFO_B_LO, REG_DMA0SAD_LO, REG_DMA3DAD_LO,
+                                       0x0E0,         0x3FC};
     static const uint32_t arm[] = {0xE5D01000, 0xE1D010B0, 0xE5901000};
     static const uint16_t thumb[] = {0x7801, 0x8801, 0x6801};
     static const uint32_t expected[] = {0xAD, 0xDEAD, 0xDEADDEAD};
     for (unsigned mode = 0; mode < 2; mode++) {
         for (unsigned width = 0; width < 3; width++) {
             for (unsigned i = 0; i < sizeof(offsets) / sizeof(offsets[0]); i++) {
-                struct CupidGBA* gba = fresh();
+                struct CupidGBA *gba = fresh();
                 /* Both prefetched slots contain the independent probe value. */
                 const uint32_t data = 0xDEADDEAD;
                 for (unsigned word = 0; word < 4; word++)
@@ -80,7 +83,7 @@ static void cpu_loads_write_only_and_unmapped_io(void) {
 }
 
 static void open_bus_lanes_and_dma_latch(void) {
-    struct CupidGBA* gba = fresh();
+    struct CupidGBA *gba = fresh();
     gba->cpu.prefetch[1] = 0x12345678;
     CHECK(cupid_memory_load8(&gba->cpu, GBA_BASE_IO + REG_FIFO_A_LO + 3, NULL) == 0x12);
     CHECK(cupid_memory_load16(&gba->cpu, GBA_BASE_IO + REG_DMA3SAD_HI, NULL) == 0x1234);
@@ -101,9 +104,9 @@ static void open_bus_lanes_and_dma_latch(void) {
 }
 
 static void zero_holes_and_fifo_reset_strobes(void) {
-    struct CupidGBA* gba = fresh();
-    static const uint32_t zero[] = {0x066, 0x06A, 0x06E, 0x076, 0x07A,
-        0x07E, 0x086, 0x08A, REG_DMA0CNT_LO, REG_DMA3CNT_LO};
+    struct CupidGBA *gba = fresh();
+    static const uint32_t zero[] = {0x066, 0x06A, 0x06E, 0x076,          0x07A,
+                                    0x07E, 0x086, 0x08A, REG_DMA0CNT_LO, REG_DMA3CNT_LO};
     gba->cpu.prefetch[1] = 0xDEADDEAD;
     for (unsigned i = 0; i < sizeof(zero) / sizeof(zero[0]); i++) {
         gba->memory.io[zero[i] >> 1] = 0xFFFF;
@@ -121,17 +124,18 @@ static void zero_holes_and_fifo_reset_strobes(void) {
 }
 
 static void post_flag_byte_writes_do_not_enter_power_states(void) {
-    struct CupidGBA* gba = fresh();
+    struct CupidGBA *gba = fresh();
     static const unsigned origins[] = {GBA_REGION_BIOS, GBA_REGION_IWRAM, GBA_REGION_ROM0};
     for (unsigned origin = 0; origin < sizeof(origins) / sizeof(origins[0]); origin++) {
-        for (unsigned old = 0; old < 2; old++) for (unsigned value = 0; value < 256; value++) {
-            gba->memory.activeRegion = (int)origins[origin];
-            gba->memory.io[REG_POSTFLG >> 1] = (uint16_t)old;
-            cupid_memory_store8(&gba->cpu, GBA_BASE_IO + REG_POSTFLG, (int8_t)value, NULL);
-            unsigned expected = origins[origin] == GBA_REGION_BIOS ? old | (value & 1) : old;
-            CHECK(cupid_memory_load8(&gba->cpu, GBA_BASE_IO + REG_POSTFLG, NULL) == expected);
-            CHECK(!gba->cpu.halted && !gba->stopped);
-        }
+        for (unsigned old = 0; old < 2; old++)
+            for (unsigned value = 0; value < 256; value++) {
+                gba->memory.activeRegion = (int)origins[origin];
+                gba->memory.io[REG_POSTFLG >> 1] = (uint16_t)old;
+                cupid_memory_store8(&gba->cpu, GBA_BASE_IO + REG_POSTFLG, (int8_t)value, NULL);
+                unsigned expected = origins[origin] == GBA_REGION_BIOS ? old | (value & 1) : old;
+                CHECK(cupid_memory_load8(&gba->cpu, GBA_BASE_IO + REG_POSTFLG, NULL) == expected);
+                CHECK(!gba->cpu.halted && !gba->stopped);
+            }
     }
     destroy(gba);
 }

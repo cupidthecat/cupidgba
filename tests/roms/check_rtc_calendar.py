@@ -3,6 +3,7 @@
 """Require complete guest date/time GPIO transfers and independent calendar records."""
 import argparse
 import calendar
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import re
 import struct
@@ -276,6 +277,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--runner', required=True)
     parser.add_argument('--bios')
+    parser.add_argument('--jobs', type=int, choices=(1, 2), default=1,
+                        help='Isolated cartridge processes; the default runs serially')
     parser.add_argument('--mode', choices=('arm', 'thumb'), required=True)
     parser.add_argument('--width', type=int, choices=(1, 2, 4), required=True)
     parser.add_argument('--lane', type=int, choices=(0, 1), default=0, help='Byte-store address lane; reads use the low byte')
@@ -283,23 +286,30 @@ def main():
     args = parser.parse_args()
     if args.lane and args.width != 1:
         parser.error('--lane requires byte accesses')
+    args.runner = str(Path(args.runner).resolve())
+    if args.bios:
+        args.bios = str(Path(args.bios).resolve())
     thumb = args.mode == 'thumb'
     with tempfile.TemporaryDirectory(prefix='cupidgba-rtc-calendar-') as directory:
         root = Path(directory)
         configurations = [(b, True, False, False) for b in range(3)]
         configurations += [(0, False, False, False), (0, True, True, False)]
         configurations += [(b, True, False, True) for b in range(3)]
-        for bank, present, wrong, rollover in configurations:
+
+        def check(configuration):
+            bank, present, wrong, rollover = configuration
+            case = root / f'{bank}-{int(present)}-{int(wrong)}-{int(rollover)}'
+            case.mkdir()
             image, expected = cartridge(thumb, args.width, bank, present, wrong, rollover, args.continued, args.lane)
             rows = 1 if rollover else 256
-            rom, ram = root / 'owned.gba', root / 'record.bin'
+            rom, ram = case / 'owned.gba', case / 'record.bin'
             rom.write_bytes(image)
             command = [args.runner, str(rom), '--frames', '120', '--steps', '5000000',
                        '--start-address', '0x08000000', '--terminal-address', '0x08000110',
                        '--expect-loop-register', '12', '--dump-ewram', str(ram)]
             if args.bios:
                 command += ['--bios', args.bios]
-            result = subprocess.run(command, capture_output=True, text=True, timeout=20)
+            result = subprocess.run(command, cwd=case, capture_output=True, text=True, timeout=20)
             failures = 256 if wrong else sum(value != 0 for value in expected) if not present else 0
             if result.returncode != bool(failures) or f'terminal=yes r12={failures} result={"FAIL" if failures else "PASS"}' not in result.stdout:
                 raise SystemExit('Calendar driver failed its complete terminal: ' + result.stdout + result.stderr)
@@ -316,11 +326,28 @@ def main():
                 elapsed = re.search(r'^frames=\d+ cycles=(\d+) steps=\d+ pc=[0-9a-f]+$', result.stdout, re.M)
                 if not elapsed or int(elapsed[1]) < 16777216:
                     raise SystemExit('Year rollover did not advance a complete RTC second')
-            print(f'PASS {args.mode} width={args.width} bank={bank} present={present} wrong_expected={wrong}: '
+            return (f'PASS {args.mode} width={args.width} bank={bank} present={present} wrong_expected={wrong}: '
                   f'{rows} complete date/time records, {len(expected)} serial bytes, {failures} expected failures'
                   + ('; complete one-second year rollover' if rollover else '')
                   + (f'; byte store lane={args.lane}' if args.width == 1 else '')
                   + ('; continued calendar frames' if args.continued else ''))
+
+        if args.jobs == 1:
+            for configuration in configurations:
+                print(check(configuration))
+        else:
+            # Each process owns its cartridge, output and working directory.
+            # Collect in original case order; every native result is checked
+            # before its completed record is published.
+            with ThreadPoolExecutor(max_workers=args.jobs) as executor:
+                pending = [executor.submit(check, configuration) for configuration in configurations]
+                try:
+                    for result in pending:
+                        print(result.result())
+                except BaseException:
+                    for result in pending:
+                        result.cancel()
+                    raise
 
 
 if __name__ == '__main__':

@@ -1,0 +1,14 @@
+{
+  "revision": "66f5f1d60cd7030b600606886c76f5c821ecaf9d",
+  "license_sha256": "b59a9ed235d76752c977f04116bc72155a14af48176bdbf50d7e5c29fca35aa7",
+  "case": {
+    "name": "object-tail",
+    "path": "ppu/Sprite_Last_VRAM_Access_Free.gba",
+    "sha256": "9d2da6076afbeb70d71ebd7c6f60d6420bddc8743fb984d204bfbea9addce8f4",
+    "checkpoint": "0x08000350",
+    "terminal": "0x080004c8",
+    "observations": [
+      {"address": "0x08000338", "mode": "thumb", "instruction": "0x2a78", "register": 2, "value": "0x78"}
+    ]
+  }
+}
