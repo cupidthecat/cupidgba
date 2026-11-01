@@ -308,7 +308,8 @@ struct CupidMemory {
     char waitstatesNonseq32[256];
     char waitstatesSeq32[256];
 
-    uint16_t ewramWaitControl; /**< High control halfword, with bits 0-7 unused */
+    uint16_t internalMemoryControl; /**< Low control latch, writable bits 0-3 and 5 */
+    uint16_t ewramWaitControl;      /**< High control halfword, with bits 0-7 unused */
 
     int activeRegion;      /**< Current fetch region (-1 = none) */
     uint32_t biosPrefetch; /**< BIOS read protection latch */
@@ -393,6 +394,8 @@ void cupid_prefetch_after_data(struct CupidGBA *gba);
 /** @name Waitstate Control */
 void cupid_memory_update_waitstates(struct CupidGBA *gba, uint16_t waitcnt);
 void cupid_memory_update_ewram_waitstates(struct CupidGBA *gba, uint16_t parameters);
+uint32_t cupid_memory_decode_address(const struct CupidMemory *memory, uint32_t address);
+void cupid_memory_update_internal_control(struct CupidGBA *gba, uint16_t value);
 
 /** @name ROM Loading */
 /* Load an image atomically at an idle CPU/bus boundary. Flush the previous

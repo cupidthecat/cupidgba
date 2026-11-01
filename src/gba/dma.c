@@ -35,9 +35,10 @@ static unsigned access_cycles(struct CupidMemory *memory, struct CupidDMA *dma, 
     dma->accessAddress = address;
     dma->gpioHalfCycles = 0;
     unsigned penalty = cupid_prefetch_before_data(dma->gba, address);
-    if (read && address < GBA_BASE_EWRAM)
+    const uint32_t decodedAddress = cupid_memory_decode_address(memory, address);
+    if (read && decodedAddress < GBA_BASE_EWRAM)
         return 1 + penalty;
-    unsigned region = address >> GBA_BASE_OFFSET;
+    unsigned region = decodedAddress >> GBA_BASE_OFFSET;
     dma->displayBeat = 0;
     if (region == GBA_REGION_PALETTE || region == GBA_REGION_VRAM)
         return 1 + penalty;
@@ -182,7 +183,7 @@ static void complete_channel(struct CupidGBA *gba, struct CupidDMA *dma, uint64_
 }
 
 static void read_value(struct CupidGBA *gba, struct CupidDMA *dma) {
-    if (dma->nextSource < GBA_BASE_EWRAM)
+    if (cupid_memory_decode_address(&gba->memory, dma->nextSource) < GBA_BASE_EWRAM)
         return;
     gba->performingDMA = 1 | (dma->id << 1);
     uint32_t value;

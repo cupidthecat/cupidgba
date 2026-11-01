@@ -42,6 +42,7 @@ void cupid_memory_capture_opcode(struct CupidARM *cpu, uint32_t address, unsigne
                                  uint32_t value) {
     struct CupidGBA *gba = cpu->master;
     struct CupidMemory *memory = &gba->memory;
+    address = cupid_memory_decode_address(memory, address);
     const unsigned region = address >> GBA_BASE_OFFSET;
     uint32_t input;
     memory->inputBusValid = false;
