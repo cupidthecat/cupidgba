@@ -192,3 +192,20 @@ for each nominal-read driver. `CUPID_TEST_BIOS` adds the external-firmware path.
 Missing-device controls fail the positive observations. These inputs use
 explicit guest entry and do not qualify BIOS boot. See the
 [parameter model and physical limits](../../hardware/cartridge/rtc.md).
+
+## Backup selection across entry points
+
+`platform.save-config` checks the shared startup parser and all 81 selection
+transitions. `runner.save-selection` runs owned guest transactions and independent
+battery reloads for each concrete save device. If a BIOS is configured,
+`runner.save-selection-external` repeats these checks with mapped external firmware
+and an explicit cartridge entry point; it does not qualify BIOS boot.
+`platform.save-selection` also runs the shipped SDL2 frontend with isolated
+single-console and linked batteries. Every successful guest run must finish,
+and every exported battery and response buffer is compared in full.
+
+Invalid names, conflicting Flash options and oversized forced-capacity inputs
+must fail before outputs change. Existing backup protocols, program delays,
+original ROM inputs and test deadlines are unchanged. The new groups have
+10-second headless/native limits and a 15-second combined frontend limit, with
+three seconds per subprocess.

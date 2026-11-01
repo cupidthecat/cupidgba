@@ -29,7 +29,7 @@ SRC_GBA      = src/gba/gba.c src/gba/memory.c src/gba/memory/feedback.c src/gba/
 SRC_CORE     = src/core/timing.c src/core/file.c src/platform/context.c
 SRC_RENDER   = src/gba/render/fetch.c src/gba/render/scanout.c src/gba/render/object-fetch.c
 SRC_PLATFORM = src/platform/main.c src/platform/local.c src/platform/window.c src/platform/audio.c src/platform/input.c \
-               src/platform/rtc.c src/platform/peripherals.c src/platform/rumble.c
+               src/platform/rtc.c src/platform/peripherals.c src/platform/save.c src/platform/rumble.c
 SRC_LINK     = src/link/cable.c
 
 SRCS = $(SRC_ARM) $(SRC_GBA) $(SRC_CORE) $(SRC_RENDER) $(SRC_PLATFORM) $(SRC_LINK)

@@ -217,3 +217,18 @@ clock, including the existing 300-frame startup allowance in the secondary
 elapsed-clock guard, without turning an incomplete video run into a pass. Existing files
 must survive startup failures. `CUPID_TEST_BIOS` adds the same explicit-entry
 profile with that image mapped; it does not qualify firmware startup.
+
+## Unsigned execution arguments
+
+Headless frame and step budgets, addresses, register indices, masks and input
+values accept unsigned decimal, `0x` hexadecimal and leading-zero octal text.
+Signs, leading or trailing whitespace, invalid digits and values beyond 64 bits
+are rejected before ROM loading or output creation. Each option still checks its
+own range. A whitespace-prefixed negative value can no longer become an enormous
+unsigned step budget through the C conversion routine.
+
+`runner.arguments-unit` checks 139 valid/invalid parser cases and preserves the
+output value on failure. `runner.arguments` exercises every numeric argument
+position through the real CLI, preserves all seven existing output files on
+rejection, and requires completed checkpoint/terminal controls for valid radices.
+The tests keep three-second subprocess and ten-second group deadlines.

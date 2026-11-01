@@ -2,14 +2,22 @@
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
 #include "cupid/platform/peripherals.h"
+#include "cupid/platform/save.h"
 #include <errno.h>
 #include <inttypes.h>
 
 static bool number(const char *text, uint64_t *value) {
+    /* strtoull accepts whitespace and a minus sign, including values that
+     * wrap to UINT64_MAX. Execution budgets and addresses are unsigned input. */
+    if (!text || text[0] < '0' || text[0] > '9')
+        return false;
     char *end;
     errno = 0;
-    *value = strtoull(text, &end, 0);
-    return !errno && text[0] && text[0] != '-' && !*end;
+    uint64_t parsed = strtoull(text, &end, 0);
+    if (errno || *end)
+        return false;
+    *value = parsed;
+    return true;
 }
 
 static bool screenshot(const uint32_t *pixels, const char *path) {
@@ -224,6 +232,7 @@ int main(int argc, char **argv) {
     uint64_t startAddress = 0;
     int expectedRegister = -1;
     bool sstFlash = false;
+    struct CupidPlatformSave saveSelection = {SAVE_AUTODETECT, FLASH_PROFILE_DEFAULT};
     int rtcPresence = -1;
     bool rtcSeedSet = false;
     struct CupidRTCDateTime rtcSeed = {0};
@@ -231,7 +240,10 @@ int main(int argc, char **argv) {
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--bios") && i + 1 < argc)
             bios = argv[++i];
-        else if (!strcmp(argv[i], "--flash-profile") && i + 1 < argc) {
+        else if ((!strcmp(argv[i], "--save-type") || !strcmp(argv[i], "-S")) && i + 1 < argc) {
+            if (!cupid_platform_save_parse(argv[++i], &saveSelection))
+                return 2;
+        } else if (!strcmp(argv[i], "--flash-profile") && i + 1 < argc) {
             if (strcmp(argv[++i], "sst39vf512"))
                 return 2;
             sstFlash = true;
@@ -351,7 +363,8 @@ int main(int argc, char **argv) {
                 stderr,
                 "Usage: %s ROM [--bios FILE] [--flash-profile sst39vf512] [--frames N] [--steps N] "
                 "[--key-event FRAME MASK] [--screenshot FILE.ppm] [--dump-vram FILE] [--dump-io "
-                "FILE] [--dump-ewram FILE] [--load-save FILE] [--dump-save FILE] "
+                "FILE] [--dump-ewram FILE] [--save-type TYPE] [--load-save FILE] [--dump-save "
+                "FILE] "
                 "[--rtc auto|on|off] [--rtc-time YYYY-MM-DDTHH:MM:SS] [--load-rtc FILE] "
                 "[--dump-rtc FILE] [--dump-audio "
                 "FILE] [--dump-rumble FILE] [--solar auto|on|off] [--sunlight 0..255] [--rumble "
@@ -367,6 +380,13 @@ int main(int argc, char **argv) {
     }
     if (!rom)
         return 2;
+    /* The legacy profile option remains valid, but conflicting hardware
+     * selections must fail independently of command-line option order. */
+    if (sstFlash) {
+        if (saveSelection.type != SAVE_AUTODETECT && saveSelection.type != SAVE_FLASH512)
+            return 2;
+        saveSelection = (struct CupidPlatformSave){SAVE_FLASH512, FLASH_PROFILE_SST39VF512};
+    }
     if (checkpointAddress && expectedRegister < 0)
         return 2;
     struct CupidGBA *gba = calloc(1, sizeof(*gba));
@@ -377,11 +397,8 @@ int main(int argc, char **argv) {
     uint32_t *pixels = NULL;
     if (!cupid_load_rom(gba, rom) || (bios && !cupid_load_bios(gba, bios)))
         goto cleanup;
-    if (sstFlash) {
-        cupid_savedata_force_type(&gba->memory.savedata, SAVE_FLASH512);
-        if (!cupid_savedata_set_flash_profile(&gba->memory.savedata, FLASH_PROFILE_SST39VF512))
-            goto cleanup;
-    }
+    if (!cupid_platform_save_configure(&gba->memory.savedata, &saveSelection))
+        goto cleanup;
     cupid_platform_peripherals_configure(gba, &peripherals);
     if (rtcPresence >= 0)
         cupid_cartridge_enable_rtc(gba, rtcPresence != 0);

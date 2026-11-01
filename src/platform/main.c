@@ -6,6 +6,7 @@
 #include "cupid/platform.h"
 #include "cupid/platform/peripherals.h"
 #include "cupid/platform/rtc.h"
+#include "cupid/platform/save.h"
 #include "local.h"
 #include <errno.h>
 #include <limits.h>
@@ -61,8 +62,9 @@ static void printUsage(const char *progname) {
             "       %s rom.gba --link peer.gba [--link third.gba] [--link fourth.gba] [--frames "
             "count]\n",
             progname);
-    fprintf(stderr, "\nSave types (GBA): sram, sram512, flash512, flash1m, sst39vf512, eeprom, "
-                    "eeprom512, none\n");
+    fprintf(stderr,
+            "\nSave types (GBA): auto, sram, sram512, flash512, flash1m, sst39vf512, eeprom, "
+            "eeprom512, none\n");
     fprintf(stderr, "\nRTC: --rtc auto|on|off  --rtc-time YYYY-MM-DDTHH:MM:SS\n");
     fprintf(stderr,
             "     --rtc-offline pause|wall (default: pause; wall includes powered-off time)\n");
@@ -88,6 +90,7 @@ int main(int argc, char *argv[]) {
     const char *romPath = NULL;
     const char *biosPath = NULL;
     const char *saveTypeStr = NULL;
+    struct CupidPlatformSave saveSelection = {SAVE_AUTODETECT, FLASH_PROFILE_DEFAULT};
     int scale = CUPID_DEFAULT_SCALE;
     int rtcPresence = -1;
     struct CupidRTCDateTime rtcSeed;
@@ -120,6 +123,10 @@ int main(int argc, char *argv[]) {
                 scale = 10;
         } else if (strcmp(argv[i], "-S") == 0 && i + 1 < argc) {
             saveTypeStr = argv[++i];
+            if (!cupid_platform_save_parse(saveTypeStr, &saveSelection)) {
+                fprintf(stderr, "Error: Unknown save type '%s'\n", saveTypeStr);
+                return 1;
+            }
         } else if ((!strcmp(argv[i], "--solar") || !strcmp(argv[i], "--rumble") ||
                     !strcmp(argv[i], "--gyro") || !strcmp(argv[i], "--tilt")) &&
                    i + 1 < argc) {
@@ -224,37 +231,14 @@ int main(int argc, char *argv[]) {
         cupid_cartridge_enable_rtc(&gba, rtcPresence != 0);
     cupid_platform_peripherals_configure(&gba, &peripherals);
 
-    /** Override save type if specified on CLI. */
-    if (saveTypeStr) {
-        enum CupidSaveType stype = SAVE_AUTODETECT;
-        if (strcmp(saveTypeStr, "sram") == 0)
-            stype = SAVE_SRAM;
-        else if (strcmp(saveTypeStr, "sram512") == 0)
-            stype = SAVE_SRAM512;
-        else if (strcmp(saveTypeStr, "flash512") == 0 || strcmp(saveTypeStr, "sst39vf512") == 0)
-            stype = SAVE_FLASH512;
-        else if (strcmp(saveTypeStr, "flash1m") == 0)
-            stype = SAVE_FLASH1M;
-        else if (strcmp(saveTypeStr, "eeprom") == 0)
-            stype = SAVE_EEPROM;
-        else if (strcmp(saveTypeStr, "eeprom512") == 0)
-            stype = SAVE_EEPROM512;
-        else if (strcmp(saveTypeStr, "none") == 0)
-            stype = SAVE_NONE;
-        else {
-            fprintf(stderr, "Warning: Unknown save type '%s', using auto-detect\n", saveTypeStr);
-        }
-        if (stype != SAVE_AUTODETECT) {
-            cupid_savedata_force_type(&gba.memory.savedata, stype);
-            if (!strcmp(saveTypeStr, "sst39vf512") &&
-                !cupid_savedata_set_flash_profile(&gba.memory.savedata, FLASH_PROFILE_SST39VF512)) {
-                fprintf(stderr, "Error: Cannot select Flash device '%s'\n", saveTypeStr);
-                cupid_gba_destroy(&gba);
-                return 1;
-            }
-            printf("Save type forced: %s\n", saveTypeStr);
-        }
+    /* Select the same backup hardware for single-console and linked runs. */
+    if (!cupid_platform_save_configure(&gba.memory.savedata, &saveSelection)) {
+        fprintf(stderr, "Error: Cannot configure save hardware\n");
+        cupid_gba_destroy(&gba);
+        return 1;
     }
+    if (saveTypeStr)
+        printf("Save type selected: %s\n", saveTypeStr);
 
     /** Load BIOS (optional). */
     if (biosPath) {

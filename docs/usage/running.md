@@ -18,6 +18,9 @@ for ordinary play. It also applies to [local sessions](../hardware/serial/local-
 
 The emulator detects save hardware from the ROM. `-S` overrides it with `sram`,
 `sram512`, `flash512`, `flash1m`, `sst39vf512`, `eeprom`, `eeprom512`, or `none`.
+`auto` retains ROM detection. Invalid names stop startup before any cartridge
+runs or battery file changes. Single-console and local sessions use the same
+selection rules.
 `sst39vf512` selects a fixed 64-KiB Flash device with its documented identity,
 command set and nominal programming intervals; see [save programming](../hardware/cartridge/programming.md).
 The SDL2 frontend
@@ -71,3 +74,18 @@ precedence over the loaded calendar. These options require an enabled RTC;
 use `--rtc on` when testing a cartridge without automatic RTC detection.
 See [reproducible RTC runs](../development/testing/runtime.md#deterministic-rtc-input-and-snapshots)
 for commands, validation and the distinction between batteries and save states.
+
+## Headless backup selection
+
+`cupidgba-headless --save-type TYPE` (also `-S TYPE`) accepts the same backup
+names as the frontend. Select the device before `--load-save FILE` restores
+its battery. Explicit capacities do not expand to accommodate a larger file;
+incompatible inputs fail before execution or output creation. With no override,
+the existing ROM detection and battery-size inference remain in effect.
+
+The older `--flash-profile sst39vf512` option remains supported. It implies
+64-KiB Flash and can accompany `--save-type auto`, `flash512`, or `sst39vf512`.
+Combining it with another device is an error in either argument order.
+`--dump-save FILE` exports committed battery bytes, not an in-progress program
+operation or emulator save state. Headless runs still never load or save an
+adjacent battery implicitly.

@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "local.h"
 #include "cupid/cable.h"
+#include "cupid/platform/save.h"
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,31 +59,6 @@ bool cupid_platform_render_local(struct CupidPlatform *platform, SDL_Texture *co
     return true;
 }
 
-static bool set_save_type(struct CupidGBA *gba, const char *name) {
-    if (!name)
-        return true;
-
-    static const struct {
-        const char *name;
-        enum CupidSaveType type;
-    } types[] = {{"sram", SAVE_SRAM},           {"sram512", SAVE_SRAM512},
-                 {"flash512", SAVE_FLASH512},   {"sst39vf512", SAVE_FLASH512},
-                 {"flash1m", SAVE_FLASH1M},     {"eeprom", SAVE_EEPROM},
-                 {"eeprom512", SAVE_EEPROM512}, {"none", SAVE_NONE}};
-
-    for (unsigned i = 0; i < sizeof(types) / sizeof(types[0]); ++i) {
-        if (strcmp(name, types[i].name))
-            continue;
-        cupid_savedata_force_type(&gba->memory.savedata, types[i].type);
-        if (!strcmp(name, "sst39vf512"))
-            return cupid_savedata_set_flash_profile(&gba->memory.savedata,
-                                                    FLASH_PROFILE_SST39VF512);
-        return true;
-    }
-    fprintf(stderr, "Error: Unknown save type '%s'\n", name);
-    return false;
-}
-
 static bool flush_saves(struct CupidGBA *const cores[], char paths[4][512],
                         struct CupidPlatformRTC rtc[], unsigned count) {
     bool ok = true;
@@ -112,6 +88,11 @@ int cupid_platform_run_local(const char *const paths[], unsigned count, const ch
                              const struct CupidLocalDevices *devices) {
     if (!paths || count < 2 || count > 4)
         return 1;
+    struct CupidPlatformSave saveSelection = {SAVE_AUTODETECT, FLASH_PROFILE_DEFAULT};
+    if (saveType && !cupid_platform_save_parse(saveType, &saveSelection)) {
+        fprintf(stderr, "Error: Unknown save type '%s'\n", saveType);
+        return 1;
+    }
     static const struct CupidLocalDevices defaults = {
         .rtcPresence = -1, .peripherals = CUPID_PLATFORM_PERIPHERALS_DEFAULT};
     if (!devices)
@@ -146,7 +127,8 @@ int cupid_platform_run_local(const char *const paths[], unsigned count, const ch
             goto cleanup;
         cupid_gba_create(cores[i]);
         ++created;
-        if (!cupid_load_rom(cores[i], paths[i]) || !set_save_type(cores[i], saveType))
+        if (!cupid_load_rom(cores[i], paths[i]) ||
+            !cupid_platform_save_configure(&cores[i]->memory.savedata, &saveSelection))
             goto cleanup;
         if (devices->rtcPresence >= 0)
             cupid_cartridge_enable_rtc(cores[i], devices->rtcPresence != 0);
