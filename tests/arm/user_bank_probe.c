@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+#include "../support/probe_run.h"
 #include "../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
@@ -28,52 +29,67 @@ static uint64_t bytes_hash(uint64_t value, const void *data, size_t size) {
     return value;
 }
 
+struct UserBankObservation {
+    const struct Observation *expected;
+    struct Result *result;
+    struct CupidTestProbeRun *execution;
+    void (*previous)(const struct CupidARM *, void *);
+    void *previousContext;
+};
+
+static void observe_user_bank_instruction(const struct CupidARM *cpu, void *context) {
+    struct UserBankObservation *observation = context;
+    if (observation->previous)
+        observation->previous(cpu, observation->previousContext);
+    const struct CupidGBA *gba = cpu->master;
+    const struct Observation *expected = observation->expected;
+    struct Result *result = observation->result;
+    bool arm = cpu->executionMode == MODE_ARM;
+    uint32_t pc = cupid_arm_instruction_address(cpu);
+    bool boundary = pc == expected->checkpoint || pc == expected->terminal;
+    for (unsigned g = 0; g < expected->guardCount; ++g) {
+        if (pc != expected->guards[g].address)
+            continue;
+        boundary = true;
+        result->valid &= arm && g == result->guards &&
+                         cpu->prefetch[0] == expected->guards[g].opcode &&
+                         cpu->cpsr.z == expected->guards[g].zero;
+        ++result->guards;
+        break;
+    }
+    /* These cartridges disable interrupts. Retain that requirement at actual
+     * issue after arbitration, rather than accepting a sampled prefetch. */
+    if (boundary)
+        result->valid &= !cpu->halted && !gba->stopped && !gba->irq.line && !gba->ie && !gba->ime;
+    if (pc == expected->checkpoint) {
+        result->valid &= !result->checkpoint && arm && cpu->privilegeMode == MODE_FIQ &&
+                         cpu->prefetch[0] == (0xE1A00000u | expected->resultRegister) &&
+                         cpu->gprs[expected->resultRegister] == 0 &&
+                         result->guards == expected->guardCount;
+        result->checkpoint = true;
+    }
+    if (pc == expected->terminal) {
+        result->valid &= arm && cpu->prefetch[0] == 0xEAFFFFFE && cpu->gprs[0] == 0;
+        observation->execution->terminalIssued = true;
+    }
+}
+
 static struct Result observe(struct CupidGBA *gba, const struct Observation *expected) {
     struct Result result = {.valid = true};
-    unsigned frames = 0;
-    for (unsigned steps = 0; steps < 150000000 && frames < 360 &&
-                             cupid_timing_global_time(&gba->timing) < UINT64_C(660) * 280896;
-         ++steps) {
-        struct CupidARM *cpu = &gba->cpu;
-        bool arm = cpu->executionMode == MODE_ARM;
-        uint32_t pc = (uint32_t)cpu->gprs[ARM_PC] - (arm ? 4u : 2u);
-        bool boundary = pc == expected->checkpoint || pc == expected->terminal;
-        for (unsigned g = 0; g < expected->guardCount; ++g) {
-            if (pc != expected->guards[g].address)
-                continue;
-            boundary = true;
-            result.valid &= arm && g == result.guards &&
-                            cpu->prefetch[0] == expected->guards[g].opcode &&
-                            cpu->cpsr.z == expected->guards[g].zero;
-            ++result.guards;
-            break;
-        }
-        /* These cartridges disable interrupts. Prove arbitration cannot replace
-         * a sampled instruction before calling the normal system step. */
-        if (boundary)
-            result.valid &=
-                !cpu->halted && !gba->stopped && !gba->irq.line && !gba->ie && !gba->ime;
-        if (pc == expected->checkpoint) {
-            result.valid &= !result.checkpoint && arm && cpu->privilegeMode == MODE_FIQ &&
-                            cpu->prefetch[0] == (0xE1A00000u | expected->resultRegister) &&
-                            cpu->gprs[expected->resultRegister] == 0 &&
-                            result.guards == expected->guardCount;
-            result.checkpoint = true;
-        }
-        if (pc == expected->terminal) {
-            result.valid &= arm && cpu->prefetch[0] == 0xEAFFFFFE && cpu->gprs[0] == 0;
-            cupid_gba_step(gba); /* Require the terminal branch to issue. */
-            result.terminal = cpu->executionMode == MODE_ARM &&
-                              (uint32_t)cpu->gprs[ARM_PC] == expected->terminal + 4 &&
-                              cpu->prefetch[0] == 0xEAFFFFFE;
-            break;
-        }
-        cupid_gba_step(gba);
-        if (gba->frameReady) {
-            ++frames;
-            gba->frameReady = false;
-        }
-    }
+    struct CupidTestProbeRun execution =
+        cupid_test_probe_begin(gba, expected->terminal, 360, UINT64_C(660) * 280896);
+    struct UserBankObservation observation = {.expected = expected,
+                                              .result = &result,
+                                              .execution = &execution,
+                                              .previous = gba->cpu.instructionObserver,
+                                              .previousContext =
+                                                  gba->cpu.instructionObserverContext};
+    gba->cpu.instructionObserver = observe_user_bank_instruction;
+    gba->cpu.instructionObserverContext = &observation;
+    cupid_gba_run_steps(gba, 150000000, cupid_test_probe_boundary, &execution);
+    gba->cpu.instructionObserver = observation.previous;
+    gba->cpu.instructionObserverContext = observation.previousContext;
+    result.terminal = execution.terminalCompleted;
     result.valid &= result.checkpoint && result.terminal && result.guards == expected->guardCount;
     uint64_t hash = UINT64_C(14695981039346656037), clock = cupid_timing_global_time(&gba->timing);
     hash = bytes_hash(hash, gba->cpu.gprs, sizeof(gba->cpu.gprs));
@@ -132,6 +148,11 @@ int cupid_test_user_bank_probe(int argc, char **argv) {
     return result.valid ? 0 : 1;
 }
 
+static void record_prior_observer(const struct CupidARM *cpu, void *context) {
+    (void)cpu;
+    ++*(unsigned *)context;
+}
+
 static struct Result owned(bool changedInput, unsigned check) {
     struct CupidGBA *gba = calloc(1, sizeof(*gba));
     CHECK(gba);
@@ -163,7 +184,16 @@ static struct Result owned(bool changedInput, unsigned check) {
         expected.guardCount = 2;
         expected.guards[1] = (struct Guard){GBA_BASE_IWRAM + 0x1018, 0x1A000000, true};
     }
+    unsigned issues = 0;
+    gba->cpu.instructionObserver = record_prior_observer;
+    gba->cpu.instructionObserverContext = &issues;
     struct Result result = observe(gba, &expected);
+    CHECK(issues == (changedInput ? 5u : 6u));
+    CHECK(gba->cpu.instructionObserver == record_prior_observer &&
+          gba->cpu.instructionObserverContext == &issues);
+    unsigned before = issues;
+    cupid_gba_step(gba);
+    CHECK(issues == before + 1);
     CHECK(result.checkpoint && result.terminal && gba->cpu.gprs[0] == 0);
     cupid_gba_destroy(gba);
     free(gba);
@@ -182,4 +212,5 @@ void cupid_test_user_bank_observer(void) {
     }
     puts("PASS user-bank observer: complete zero-result terminals, changed-input/opcode/missing "
          "controls rejected, state/clocks retained");
+    puts("PASS prior observer called once per issue, restored, and usable after probe return");
 }

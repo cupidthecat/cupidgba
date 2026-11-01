@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+#include "../support/probe_run.h"
 #include "cupid/gba.h"
 #include "instruction_probe.h"
 #include <errno.h>
@@ -12,6 +13,17 @@ static bool number(const char *text, uint32_t *value) {
         return false;
     *value = (uint32_t)parsed;
     return true;
+}
+
+struct SavedStatusRun {
+    struct CupidIssueProbe *probe;
+    struct CupidTestProbeRun execution;
+};
+
+static bool boundary(struct CupidGBA *gba, uint64_t steps, void *context) {
+    struct SavedStatusRun *run = context;
+    run->execution.terminalIssued = run->probe->terminal;
+    return cupid_test_probe_boundary(gba, steps, &run->execution);
 }
 
 int main(int argc, char **argv) {
@@ -70,24 +82,19 @@ int main(int argc, char **argv) {
         .expected = expected, .count = comparisons + 2, .output = stdout};
     gba->cpu.instructionObserver = cupid_test_observe_issue;
     gba->cpu.instructionObserverContext = &probe;
-    unsigned frames = 0, steps = 0;
+    struct SavedStatusRun run = {.probe = &probe,
+                                 .execution =
+                                     cupid_test_probe_begin(gba, expected[comparisons + 1].address,
+                                                            360, UINT64_C(660) * 280896)};
     /* Keep the original cartridge's guards. The terminal must issue through
      * the normal system step, including IRQ/HALT arbitration. */
-    while (!probe.terminal && frames < 360 && steps < 150000000 &&
-           cupid_timing_global_time(&gba->timing) < UINT64_C(660) * 280896) {
-        cupid_gba_step(gba);
-        ++steps;
-        if (gba->frameReady) {
-            ++frames;
-            gba->frameReady = false;
-        }
-    }
-    result = cupid_test_issue_probe_passed(&probe) ? 0 : 1;
+    cupid_gba_run_steps(gba, 150000000, boundary, &run);
+    result = cupid_test_issue_probe_passed(&probe) && run.execution.terminalCompleted ? 0 : 1;
     printf("issues=%u/%u checkpoint=%s terminal=%s result=%s\n", probe.seen, probe.count,
            probe.checkpoint ? "yes" : "no", probe.terminal ? "yes" : "no",
            result ? "FAIL" : "PASS");
-    printf("frames=%u cycles=%" PRIu64 " steps=%u\n", frames,
-           cupid_timing_global_time(&gba->timing), steps);
+    printf("frames=%" PRIu64 " cycles=%" PRIu64 " steps=%" PRIu64 "\n", run.execution.frames,
+           cupid_timing_global_time(&gba->timing), run.execution.steps);
 cleanup:
     cupid_gba_destroy(gba);
     free(gba);

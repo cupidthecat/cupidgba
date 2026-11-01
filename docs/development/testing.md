@@ -10,6 +10,11 @@ original scanline, VBlank, IRQ/HALT and normal texture-tail comparisons. They
 also verify which register the program uses to report its result. Configure
 `CUPID_DISPLAY_PROBE_DIR` and run `rom.display-*` for these five cartridges.
 
+The IRQ, saved-status, user-bank and generated-corpus probes share the
+[completion and deadline guard](frame-boundaries.md#cpu-probe-acceptance).
+Their owned regression inputs check late DMA-held terminals without changing
+any original input, expected result or execution budget.
+
 The affine, data-service and register-reset BIOS fixtures use the bounded-step
 runner to test their return address after every ordinary guest step. They keep
 the original 100,000-step limit and ten-second CTest deadlines. Checking the
@@ -202,7 +207,7 @@ equivalence with execution without a hook.
 
 With `CUPID_HALT_PROBE_DIR` and `CUPID_TEST_BIOS`, twelve additional
 `rom.irq-probe-*-external` cases require their 46 original comparison outcomes,
-CPU modes, opcodes, pre-display results and actually issued terminals. Original
+CPU modes, opcodes, pre-display results and issued, completed terminals. Original
 source and cartridge bytes are pinned; a byte-identical local rebuild locates
 the observations without changing the code. One input has a wide conditional
 guard encoding that is not a conditional branch on ARM7TDMI. Its observer
@@ -1093,7 +1098,8 @@ Set `CUPID_SAVED_STATUS_PROBE_DIR` to the private source directory containing
 external BIOS path. The checker verifies the pinned 2052-byte input, all five
 original ARM comparisons, their operands and privilege modes, the original
 display checkpoint and terminal instruction. Both result boundaries must issue
-with R12=0. The dedicated probe retains the 360-frame, 150-million-step,
+with R12=0, and the terminal must finish before the frame and clock limits.
+The dedicated probe retains the 360-frame, 150-million-step,
 660-frame clock ceiling and 90-second process limits. It does not change the
 generic headless runner's observation protocol or distribute the cartridge.
 

@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+#include "../support/probe_run.h"
 #include "../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
@@ -16,6 +17,7 @@ struct IRQExpectation {
 };
 
 struct IRQObservation {
+    struct CupidTestProbeRun execution;
     const struct IRQExpectation *expected;
     unsigned next;
     bool valid, checkpoint, terminal;
@@ -58,6 +60,7 @@ static void observe_irq_instruction(const struct CupidARM *cpu, void *context) {
     if (address == expected->terminal) {
         observation->valid &= !thumb && !cpu->gprs[12] && cpu->prefetch[0] == 0xEAFFFFFE;
         observation->terminal = true;
+        observation->execution.terminalIssued = true;
     }
 }
 
@@ -70,31 +73,21 @@ static uint64_t hash_bytes(uint64_t value, const void *data, size_t size) {
 
 static struct IRQObservation execute(struct CupidGBA *gba, const struct IRQExpectation *expected,
                                      unsigned budget, FILE *output) {
-    struct IRQObservation observation = {.expected = expected, .valid = true, .output = output};
+    struct IRQObservation observation = {
+        .execution = cupid_test_probe_begin(gba, expected->terminal, 360, UINT64_C(660) * 280896),
+        .expected = expected,
+        .valid = true,
+        .output = output};
     gba->cpu.instructionObserver = observe_irq_instruction;
     gba->cpu.instructionObserverContext = &observation;
-    unsigned frames = 0;
-    for (unsigned steps = 0; steps < budget && frames < 360 &&
-                             cupid_timing_global_time(&gba->timing) < UINT64_C(660) * 280896;
-         ++steps) {
-        cupid_gba_step(gba);
-        if (observation.terminal) {
-            /* The callback sees issue after IRQ/HALT arbitration. Require the
-             * original self-branch to complete, rather than just peek its PC. */
-            observation.valid &= gba->cpu.executionMode == MODE_ARM &&
-                                 cupid_arm_instruction_address(&gba->cpu) == expected->terminal &&
-                                 gba->cpu.prefetch[0] == 0xEAFFFFFE;
-            break;
-        }
-        if (gba->frameReady) {
-            ++frames;
-            gba->frameReady = false;
-        }
-    }
+    /* The callback sees issue after IRQ/HALT arbitration. Require the
+     * original self-branch to complete, rather than just peek its PC. */
+    cupid_gba_run_steps(gba, budget, cupid_test_probe_boundary, &observation.execution);
     gba->cpu.instructionObserver = NULL;
     gba->cpu.instructionObserverContext = NULL;
-    observation.valid &=
-        observation.checkpoint && observation.terminal && observation.next == expected->count;
+    observation.valid &= observation.checkpoint && observation.terminal &&
+                         observation.execution.terminalCompleted &&
+                         observation.next == expected->count;
     uint64_t hash = UINT64_C(14695981039346656037), clock = cupid_timing_global_time(&gba->timing);
     hash = hash_bytes(hash, gba->cpu.gprs, sizeof(gba->cpu.gprs));
     hash = hash_bytes(hash, gba->cpu.bankedRegisters, sizeof(gba->cpu.bankedRegisters));

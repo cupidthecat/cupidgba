@@ -32,10 +32,13 @@ Both operands at each result comparison are checked against that table, so
 matching corruption of the result and expected register cannot pass.
 
 Each cartridge requires 10,000 complete record loads, 30,000 original CMPs,
-30,000 original BNEs and an actually issued terminal. Missing or repeated sites,
+30,000 original BNEs and an issued, completed terminal within its frame and clock
+limits. Missing or repeated sites,
 wrong opcodes, failed comparisons and taken failure branches are rejected.
 The observer does not modify CPU state or advance emulated time. A complete
 EWRAM image is retained by the launcher during validation.
+The shared [probe completion guard](frame-boundaries.md#cpu-probe-acceptance)
+rejects late or unfinished zero-result terminals without changing those limits.
 
 `runner.cpu-corpus-observer` tests the host protocol with a complete synthetic
 transcript and sixteen invalid transcripts. These include incorrect modes,

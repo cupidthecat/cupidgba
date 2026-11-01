@@ -73,3 +73,43 @@ These are execution-boundary and capture guarantees. They do not establish
 pixel-pipeline accuracy or turn a bounded boot replay into a full-game test.
 Earlier comparisons made with the coalescing counter retain their original
 results; their reported frame counts are not treated as exact physical counts.
+
+## CPU probe acceptance
+
+The IRQ, saved-status, user-bank and generated-corpus runners share
+`tests/support/probe_run.h`. They sample the video frame counter at each
+ordinary CPU return, including its 32-bit wrap, and reject expired frame or
+clock limits before accepting a result. The IRQ, saved-status and user-bank
+probes allow the final ordinary step to complete the terminal. The corpus
+driver also enforces its launcher's existing strict 150-million-step ceiling.
+
+A terminal must issue through the instruction observer and return to its ARM
+self-branch pipeline with no unfinished instruction. A HALT-held refill can
+resume without inventing another issue observation. The user-bank observer
+also runs at actual issue, while retaining its interrupt-disabled requirement
+and any preceding observer installed by its caller. Original comparisons,
+register checks and input bytes are unchanged.
+
+These probe limits are acceptance checks at ordinary CPU return boundaries.
+A long DMA transfer can carry that return past a deadline; the result then
+fails. Use the headless presentation callback when execution must stop at the
+frame edge itself. The diagnostic `terminal=yes` field in the IRQ, saved-status
+and corpus tools still records issue; the process status and complete result
+checks determine success.
+
+`runner.probe-boundary-*` covers 1,024 predicate combinations, 3,584 actual
+terminal returns, 72 DMA-held deadline cases, eight HALT/wake pairs and eight
+unwoken deadline cases. It also checks zero budgets and accumulated return
+counts after resumption. The DMA cases complete two presentations in one
+ordinary return, including frame-counter and scheduler wrap.
+
+`runner.probe-adapters` compiles the four real entry points with tighter frame
+limits for owned inputs. Each must accept a complete terminal, reject an issued
+terminal whose DMA wait exceeds the frame budget, and reject a wrong expected
+result. The owned transport corpus visits all 10,000 records and all comparison
+sites; it tests the driver contract, not arithmetic accuracy. The pinned
+arithmetic corpora remain separate. Removing any caller's completion gate
+makes its owned late-terminal case pass incorrectly. Ten shared-guard mutations
+and all four caller-gate mutations are rejected by these tests. A separate
+corpus control rejects completion at its step ceiling. Three observer-ownership
+mutations reject lost chaining or restoration of the prior callback and context.

@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+#include "../support/probe_run.h"
 #include "cupid/gba.h"
 #include <inttypes.h>
 #include <stdio.h>
@@ -12,13 +13,14 @@ enum {
     CORPUS_TERMINAL = 0x080000F0,
     CORPUS_TABLE = 0x4D0,
     CORPUS_COUNT = 10000,
+    CORPUS_STEP_LIMIT = 150000000,
     CORPUS_BYTES = 203708
 };
 
 struct CorpusRun {
     struct CupidGBA *gba;
     unsigned entries, loads, comparisons, branches, phase;
-    uint64_t frames, steps;
+    struct CupidTestProbeRun execution;
     bool failed, terminal, quiet;
 };
 
@@ -34,6 +36,7 @@ static void corpus_failure(struct CorpusRun *run, const struct CupidARM *cpu, co
                "\n",
                run->entries, cupid_arm_instruction_address(cpu), reason, actual, expected);
     run->failed = true;
+    run->execution.rejected = true;
 }
 
 /* These sites belong to the immutable input program, including its original
@@ -84,6 +87,7 @@ static void observe_corpus(const struct CupidARM *cpu, void *context) {
     }
     if (pc == CORPUS_TERMINAL) {
         run->terminal = true;
+        run->execution.terminalIssued = true;
         if (opcode != 0xEAFFFFFE || run->phase || run->entries != CORPUS_COUNT ||
             run->loads != CORPUS_COUNT || run->comparisons != 3 * CORPUS_COUNT ||
             run->branches != 3 * CORPUS_COUNT)
@@ -127,15 +131,10 @@ static bool corpus_passed(const struct CorpusRun *run) {
            run->branches == 3 * CORPUS_COUNT;
 }
 
-static bool corpus_boundary(struct CupidGBA *gba, uint64_t steps, void *context) {
-    struct CorpusRun *run = context;
-    run->steps = steps;
-    if (gba->frameReady) {
-        ++run->frames;
-        gba->frameReady = false;
-    }
-    return !run->failed && !run->terminal && run->frames < 1500 &&
-           cupid_timing_global_time(&gba->timing) < UINT64_C(1500) * VIDEO_TOTAL_LENGTH;
+static bool corpus_run_passed(const struct CorpusRun *run) {
+    /* Keep the launcher's strict step ceiling in the driver too. */
+    return corpus_passed(run) && run->execution.terminalCompleted &&
+           run->execution.steps < CORPUS_STEP_LIMIT;
 }
 
 int main(int argc, char **argv) {
@@ -156,15 +155,17 @@ int main(int argc, char **argv) {
         corpus_word(gba->memory.rom + CORPUS_TABLE - 4) != CORPUS_COUNT)
         goto cleanup;
     cupid_gba_reset(gba);
-    struct CorpusRun run = {.gba = gba};
+    struct CorpusRun run = {.gba = gba,
+                            .execution = cupid_test_probe_begin(
+                                gba, CORPUS_TERMINAL, 1500, UINT64_C(1500) * VIDEO_TOTAL_LENGTH)};
     gba->cpu.instructionObserver = observe_corpus;
     gba->cpu.instructionObserverContext = &run;
-    cupid_gba_run_steps(gba, 150000000, corpus_boundary, &run);
-    bool passed = corpus_passed(&run);
+    cupid_gba_run_steps(gba, CORPUS_STEP_LIMIT, cupid_test_probe_boundary, &run.execution);
+    bool passed = corpus_run_passed(&run);
     printf("cases=%u/%u loads=%u comparisons=%u/%u branches=%u/%u terminal=%s "
            "frames=%" PRIu64 " steps=%" PRIu64 " cycles=%" PRIu64 " result=%s\n",
            run.entries, CORPUS_COUNT, run.loads, run.comparisons, 3 * CORPUS_COUNT, run.branches,
-           3 * CORPUS_COUNT, run.terminal ? "yes" : "no", run.frames, run.steps,
+           3 * CORPUS_COUNT, run.terminal ? "yes" : "no", run.execution.frames, run.execution.steps,
            cupid_timing_global_time(&gba->timing), passed ? "PASS" : "FAIL");
     FILE *file = fopen(argv[2], "wb");
     if (!file)

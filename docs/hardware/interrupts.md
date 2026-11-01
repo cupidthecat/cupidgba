@@ -136,7 +136,8 @@ See [CPU/DMA/IRQ interactions](cpu/dma-irq-interactions.md) and
 The additional observer group rejects skipped comparisons, wrong opcodes or
 modes and missing visits in owned ARM/Thumb streams that still report zero.
 The optional external-firmware IRQ profile requires all 46 original comparison
-outcomes across twelve cartridges and an actually issued terminal. The former
+outcomes across twelve cartridges and an issued, completed terminal within the
+probe limits. The former
 slow return timeout now reaches its three comparisons and passing terminal.
 Eleven cartridges pass. One retained failure reads `0xF4` instead of `0xF5`;
 its original wide guard encoding does not record that failure on ARM7TDMI,

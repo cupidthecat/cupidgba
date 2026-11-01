@@ -488,6 +488,23 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_runner_frames.py
         --runner $<TARGET_FILE:cupidgba-headless>)
     set_tests_properties(runner.frame-boundaries PROPERTIES TIMEOUT 30)
+    foreach(adapter RANGE 1 4)
+        add_executable(test_probe_adapter_${adapter} tests/platform/probe_adapter.c)
+        target_compile_definitions(test_probe_adapter_${adapter} PRIVATE CUPID_TEST_PROBE_ADAPTER=${adapter})
+        target_link_libraries(test_probe_adapter_${adapter} PRIVATE cupid_core)
+    endforeach()
+    target_sources(test_probe_adapter_2 PRIVATE tests/arm/instruction_probe.c)
+    add_test(NAME runner.probe-adapters COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_probe_adapters.py
+        --irq $<TARGET_FILE:test_probe_adapter_1> --status $<TARGET_FILE:test_probe_adapter_2>
+        --user-bank $<TARGET_FILE:test_probe_adapter_3> --corpus $<TARGET_FILE:test_probe_adapter_4>)
+    set_tests_properties(runner.probe-adapters PROPERTIES TIMEOUT 30)
+    add_executable(test_probe_run tests/platform/test_probe_run.c)
+    target_link_libraries(test_probe_run PRIVATE cupid_core)
+    foreach(group predicates execution dma halt)
+        add_test(NAME runner.probe-boundary-${group} COMMAND test_probe_run ${group})
+        set_tests_properties(runner.probe-boundary-${group} PROPERTIES TIMEOUT 30)
+    endforeach()
     add_executable(test_runner_terminal tests/platform/test_runner_terminal.c src/platform/peripherals.c)
     target_link_libraries(test_runner_terminal PRIVATE cupid_core)
     foreach(group issued arbitration suspended)

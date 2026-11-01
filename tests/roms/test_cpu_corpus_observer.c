@@ -86,6 +86,16 @@ static void transcript(unsigned fault) {
                 run.loads, run.comparisons, run.branches);
     CHECK(corpus_passed(&run) == (fault == 0));
     CHECK(run.failed || fault == 0 || fault == 14);
+    if (!fault) {
+        CHECK(!corpus_run_passed(&run));
+        run.execution.terminalCompleted = true;
+        run.execution.steps = CORPUS_STEP_LIMIT - 1;
+        CHECK(corpus_run_passed(&run));
+        run.execution.steps = CORPUS_STEP_LIMIT;
+        CHECK(!corpus_run_passed(&run));
+        run.execution.steps = CORPUS_STEP_LIMIT + 1;
+        CHECK(!corpus_run_passed(&run));
+    }
     free(gba->memory.rom);
     free(gba);
 }
