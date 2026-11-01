@@ -75,6 +75,7 @@ jobs:
           python3 tests/roms/check_thumb_stack.py --fetch --directory .local-research/test-roms
           python3 tests/roms/check_bus_feedback.py --fetch --directory .local-research/test-roms
           python3 tests/roms/check_cp14_probe.py --fetch --directory .local-research/test-roms
+          python3 tests/roms/check_object_tail_probe.py --fetch --directory .local-research/test-roms
           python3 tests/roms/check_serial_probe.py --fetch --directory .local-research/test-roms/serial
       - name: Configure
         run: |
@@ -89,6 +90,7 @@ jobs:
             -DCUPID_TEST_ROM_DIR=${{ github.workspace }}/.local-research/test-roms \
             -DCUPID_BUS_FEEDBACK_PROBE_DIR=${{ github.workspace }}/.local-research/test-roms \
             -DCUPID_CP14_PROBE_DIR=${{ github.workspace }}/.local-research/test-roms \
+            -DCUPID_OBJECT_TAIL_PROBE_DIR=${{ github.workspace }}/.local-research/test-roms \
             -DCUPID_SERIAL_PROBE_DIR=${{ github.workspace }}/.local-research/test-roms/serial \
             -DCUPID_PREFETCH_PROBE_DIR=${{ github.workspace }}/.local-research/test-roms \
             -DCUPID_CPU_CORPUS_DIR=${{ github.workspace }}/.local-research/test-roms/cpu-corpus
@@ -146,11 +148,16 @@ jobs:
           msystem: UCRT64
           update: true
           install: >-
+            git
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-cmake
             mingw-w64-ucrt-x86_64-ninja
             mingw-w64-ucrt-x86_64-SDL2
             mingw-w64-ucrt-x86_64-python
+      - name: Check source tools and comment spacing
+        run: |
+          python -c "import subprocess; subprocess.run(['git', '--version'], check=True)"
+          python tests/platform/check_comment_spacing.py
       - name: Fetch verified test inputs
         run: |
           python tests/roms/check_rom.py --fetch --directory .local-research/test-roms
@@ -164,6 +171,7 @@ jobs:
           python tests/roms/check_thumb_stack.py --fetch --directory .local-research/test-roms
           python tests/roms/check_bus_feedback.py --fetch --directory .local-research/test-roms
           python tests/roms/check_cp14_probe.py --fetch --directory .local-research/test-roms
+          python tests/roms/check_object_tail_probe.py --fetch --directory .local-research/test-roms
           python tests/roms/check_serial_probe.py --fetch --directory .local-research/test-roms/serial
       - name: Configure
         # Keep input fetching and CTest on the same installed interpreter.
@@ -173,6 +181,7 @@ jobs:
           -DCUPID_TEST_ROM_DIR="$(pwd)/.local-research/test-roms"
           -DCUPID_BUS_FEEDBACK_PROBE_DIR="$(pwd)/.local-research/test-roms"
           -DCUPID_CP14_PROBE_DIR="$(pwd)/.local-research/test-roms"
+          -DCUPID_OBJECT_TAIL_PROBE_DIR="$(pwd)/.local-research/test-roms"
           -DCUPID_SERIAL_PROBE_DIR="$(pwd)/.local-research/test-roms/serial"
           -DCUPID_PREFETCH_PROBE_DIR="$(pwd)/.local-research/test-roms"
           -DCUPID_CPU_CORPUS_DIR="$(pwd)/.local-research/test-roms/cpu-corpus"

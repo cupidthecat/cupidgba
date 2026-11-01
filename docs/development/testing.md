@@ -1,5 +1,11 @@
 # Testing
 
+The [object texture-tail checks](../hardware/render/object-tail.md) cover
+HBlank-free texture-port release separately from attribute fetching. Run
+`gba.object-tail-*` for the native renderer/CPU/DMA groups. The optional
+`rom.object-tail*` cases retain the original cartridge comparison and both
+result boundaries.
+
 CP14 register-transfer timing and original cartridge comparisons are covered in
 [CP14 transfers](../hardware/cpu/cp14.md). Run `arm.cp14-*`,
 `runner.cp14-probe-protocol`, `runner.status-observations` and `rom.cp14-transfer*`
@@ -7,7 +13,7 @@ for the native timing matrix and the original comparison guards.
 
 The serial and HALT cartridge checks retain their original 24 encoded
 comparisons, result-display entry and completed terminal. Run their owned
-protocol and execution controls with `ctest -R '^runner[.]serial-probe-'`.
+protocol and execution controls with `ctest -R '^runner[.](thumb-comparison-protocol|serial-probe-execution)$'`.
 The execution control demonstrates why a wrong zero measurement or a skipped
 comparison can leave a passing-looking result register. Both must be rejected.
 `runner.fifo-source-builder` checks isolated assembly, verified publication

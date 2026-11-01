@@ -63,6 +63,9 @@ the next line by a separate attribute, matrix and texture fetch engine.
 HBlank-free mode shortens the OBJ fetch budget; the vertical mosaic counter
 still advances at the line boundary and resets at the existing frame edge.
 Changing the budget does not restart the mosaic group or extend memory fetches.
+In HBlank-free mode, texture requests stop before the final attribute clocks.
+See [object texture-tail ownership](render/object-tail.md) for the separate
+port deadlines and their qualification.
 
 CupidGBA decodes OBJ shape 3 as an 8-by-8 texture for all four size fields.
 This selected logical policy uses the ordinary attribute, matrix and texture

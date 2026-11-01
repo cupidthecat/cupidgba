@@ -1,4 +1,4 @@
-"""Reject zero-result false positives and changed serial/HALT comparisons."""
+"""Reject changed Thumb comparisons, zero-result shortcuts and invalid serial inputs."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later
 import copy
@@ -11,13 +11,17 @@ import tempfile
 from unittest.mock import patch, call
 
 import check_serial_probe as probe
+import check_object_tail_probe as object_probe
 
-from check_serial_probe import require_result, verify_input
+from thumb_comparisons import require_result, verify_input
 
 
-class SerialProbeProtocol(unittest.TestCase):
+class ThumbComparisonProtocol(unittest.TestCase):
     def setUp(self):
         self.cases = json.loads(Path(__file__).with_name("serial-probes.json").read_text())["cases"]
+        self.cases.append(
+            json.loads(Path(__file__).with_name("object-tail-probe.json").read_text())["case"]
+        )
 
     def lines(self, case):
         lines = []
@@ -52,8 +56,8 @@ class SerialProbeProtocol(unittest.TestCase):
         return case, data
 
     def test_all_original_comparisons(self):
-        self.assertEqual(len(self.cases), 13)
-        self.assertEqual(sum(len(case["observations"]) for case in self.cases), 24)
+        self.assertEqual(len(self.cases), 14)
+        self.assertEqual(sum(len(case["observations"]) for case in self.cases), 25)
         for case in self.cases:
             require_result("\n".join(self.lines(case)), 0, case)
             synthetic_case, data = self.image(case)
@@ -226,6 +230,73 @@ class SerialProbeInputs(unittest.TestCase):
             with self.assertRaises(type(error)):
                 self.main("--fetch", "--test", "serial_time")
             self.assertFalse((self.directory / "serial_time.gba").exists())
+
+
+class ObjectTailInputs(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.directory = Path(self.temporary.name) / "inputs"
+        self.manifest = json.loads(
+            Path(object_probe.__file__).with_name("object-tail-probe.json").read_text()
+        )
+        self.case, self.data = ThumbComparisonProtocol().image(self.manifest["case"])
+        self.manifest["case"] = self.case
+        self.rom = self.directory / self.case["path"]
+
+    def main(self, *arguments):
+        with patch("check_object_tail_probe.json.loads", return_value=self.manifest), patch(
+            "sys.argv",
+            ["check_object_tail_probe.py", "--directory", str(self.directory), *arguments],
+        ):
+            object_probe.main()
+
+    @patch("check_object_tail_probe.subprocess.run")
+    @patch("check_object_tail_probe.download_verified")
+    def test_verified_download_preserves_notice_and_input(self, download, run):
+        download.side_effect = [b"license", self.data]
+        self.main("--fetch")
+        self.assertEqual(self.rom.read_bytes(), self.data)
+        self.assertEqual((self.directory / "object-tail-LICENSE.txt").read_bytes(), b"license")
+        base = (
+            "https://raw.githubusercontent.com/alyosha-tas/gba-tests/" + self.manifest["revision"]
+        )
+        self.assertEqual(
+            download.call_args_list,
+            [
+                call(base + "/LICENSE", self.manifest["license_sha256"]),
+                call(base + "/" + self.case["path"], self.case["sha256"]),
+            ],
+        )
+        run.assert_not_called()
+
+    @patch("check_object_tail_probe.download_verified")
+    def test_changed_existing_input_is_never_overwritten(self, download):
+        self.rom.parent.mkdir(parents=True)
+        self.rom.write_bytes(b"local input")
+        download.side_effect = [b"license", self.data]
+        with self.assertRaisesRegex(SystemExit, "Existing object-tail cartridge differs"):
+            self.main("--fetch")
+        self.assertEqual(self.rom.read_bytes(), b"local input")
+        self.assertFalse((self.directory / "object-tail-LICENSE.txt").exists())
+
+    @patch("check_object_tail_probe.download_verified")
+    def test_failed_download_or_contract_never_publishes(self, download):
+        for failure in [TimeoutError("transport failed"), b"wrong image"]:
+            download.side_effect = [b"license", failure]
+            with self.assertRaises((TimeoutError, ValueError)):
+                self.main("--fetch")
+            self.assertFalse(self.directory.exists())
+
+    @patch("check_object_tail_probe.subprocess.run")
+    def test_execution_requires_runner_and_verified_image(self, run):
+        with self.assertRaises(SystemExit):
+            self.main()
+        self.rom.parent.mkdir(parents=True)
+        self.rom.write_bytes(b"wrong image")
+        with self.assertRaises(ValueError):
+            self.main("--runner", "unused")
+        run.assert_not_called()
 
 
 if __name__ == "__main__":

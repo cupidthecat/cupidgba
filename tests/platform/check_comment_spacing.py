@@ -64,7 +64,14 @@ def supported(name):
 
 def source_paths(root):
     if (root / ".git").exists():
-        names = subprocess.check_output(["git", "ls-files", "-z"], cwd=root).decode().split("\0")
+        try:
+            names = (
+                subprocess.check_output(["git", "ls-files", "-z"], cwd=root).decode().split("\0")
+            )
+        except FileNotFoundError as error:
+            raise ValueError(
+                "Git is required to enumerate a checkout; install Git on PATH"
+            ) from error
     else:
         # Source archives need the same checks without a Git installation.
         names = [
@@ -105,10 +112,10 @@ def main():
     parser.add_argument("--fix", action="store_true", help="Remove detached-comment blank lines")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
-    names = source_paths(root)
-    if not names:
-        raise SystemExit("No C or Python source files found")
     try:
+        names = source_paths(root)
+        if not names:
+            raise ValueError("No C or Python source files found")
         check_files(root, names, args.fix)
     except ValueError as error:
         raise SystemExit(str(error)) from error

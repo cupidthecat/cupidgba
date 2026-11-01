@@ -8,7 +8,7 @@ import struct
 import subprocess
 import tempfile
 
-from check_serial_probe import require_result, verify_input
+from thumb_comparisons import require_result, verify_input
 
 
 def cartridge(value, skip):

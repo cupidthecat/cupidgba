@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "pipeline.h"
 
+enum { OBJECT_HBLANK_LIMIT = 964, OBJECT_HBLANK_TEXTURE_LIMIT = 960 };
+
 static uint16_t read_oam(struct CupidVideo *v, unsigned address, uint64_t time) {
     v->pipeline.oamAccess = time;
     return v->oam.raw[(address & 0x3FE) >> 1];
@@ -214,7 +216,10 @@ void cupid_pixel_object(struct CupidVideo *v, uint64_t time) {
         return;
     f->cycle = cycle;
     if (DISPCNT_OBJ_ENABLE(v->dispcnt) && !(f->cycle & 1)) {
-        fetch_texture(v, time);
+        /* HBlank-free releases the texture port before attribute fetching
+         * stops. Retain the latched line mode and the final OAM clocks. */
+        if (f->limit != OBJECT_HBLANK_LIMIT || cycle < OBJECT_HBLANK_TEXTURE_LIMIT)
+            fetch_texture(v, time);
         fetch_attributes(v, time);
     }
     ++f->cycle;
@@ -235,7 +240,7 @@ void cupid_pixel_object_begin(struct CupidVideo *v, uint64_t time) {
         f->deferWait = f->drawing = false;
         f->read = 0;
         f->write = 1;
-        f->limit = DISPCNT_HBLANK_FREE(v->dispcnt) ? 964 : VIDEO_HORIZONTAL_LENGTH;
+        f->limit = DISPCNT_HBLANK_FREE(v->dispcnt) ? OBJECT_HBLANK_LIMIT : VIDEO_HORIZONTAL_LENGTH;
         memset(f->pixels[f->buffer ^ 1], 0, sizeof(f->pixels[0]));
     }
 }
