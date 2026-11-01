@@ -61,7 +61,7 @@ endif()
 add_library(cupid_core STATIC
     src/arm/arm.c src/arm/isa-arm.c src/arm/isa-thumb.c
     src/core/timing.c src/core/file.c src/platform/context.c
-    src/gba/gba.c src/gba/memory.c src/gba/memory/feedback.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
+    src/gba/gba.c src/gba/memory.c src/gba/memory/feedback.c src/gba/cartridge/image.c src/gba/save/detection.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
     src/gba/audio.c src/gba/audio/wave.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c
     src/gba/hle-bios.c src/gba/bios/file.c src/gba/savedata.c src/gba/save/file.c
     src/gba/save/programming.c
@@ -565,6 +565,18 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_fifo_comparisons.py
         --runner $<TARGET_FILE:cupidgba-headless>)
     set_tests_properties(runner.fifo-comparisons PROPERTIES TIMEOUT 10)
+
+    add_executable(test_cartridge_image_failures tests/gba/cartridge/test_image_failures.c)
+    target_link_libraries(test_cartridge_image_failures PRIVATE cupid_core)
+    add_test(NAME gba.cartridge-image-failures COMMAND test_cartridge_image_failures ${CMAKE_CURRENT_BINARY_DIR})
+    set_tests_properties(gba.cartridge-image-failures PROPERTIES TIMEOUT 10)
+
+    add_executable(test_cartridge_ownership tests/gba/cartridge/test_ownership.c)
+    target_link_libraries(test_cartridge_ownership PRIVATE cupid_core)
+    foreach(group transitions events boundaries busy board)
+        add_test(NAME gba.cartridge-ownership-${group} COMMAND test_cartridge_ownership ${group} ${CMAKE_CURRENT_BINARY_DIR})
+        set_tests_properties(gba.cartridge-ownership-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
 
     add_executable(test_cartridge_image tests/gba/cartridge/test_image.c)
     target_link_libraries(test_cartridge_image PRIVATE cupid_core)

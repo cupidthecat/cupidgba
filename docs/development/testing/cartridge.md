@@ -73,7 +73,12 @@ propagation and partial-register effects unqualified.
 ## Image mapping and peripherals
 
 The `gba.cartridge-image-*` groups cover EEPROM address selection, complete
-DMA3 serial frames, original image size and replacement ownership. They retain
+DMA3 serial frames, original image size, replacement ownership and injected
+allocation/file failures. The five `gba.cartridge-ownership-*` groups check all
+49 detected and 49 explicit-device transitions, marker boundaries, pending-event cancellation and
+rebinding, busy/nonregular input, output-callback ordering and sensor ownership.
+Failure injection compiles the production transaction with wrapped host
+operations; it does not substitute an alternate loader. They retain
 the ten-second deadlines; see [cartridge image mapping](../../hardware/cartridge/image-mapping.md).
 
 Cartridge peripheral checks include `gba.solar-*`, `gba.cartridge-rumble`,

@@ -393,6 +393,9 @@ void cupid_memory_update_waitstates(struct CupidGBA *gba, uint16_t waitcnt);
 void cupid_memory_update_ewram_waitstates(struct CupidGBA *gba, uint16_t parameters);
 
 /** @name ROM Loading */
+/* Load an image atomically at an idle CPU/bus boundary. Flush the previous
+ * battery first: successful replacement creates fresh cartridge-owned storage.
+ * Reset the console before executing the newly attached image. */
 bool cupid_load_rom(struct CupidGBA *gba, const char *path);
 bool cupid_load_bios(struct CupidGBA *gba, const char *path);
 
