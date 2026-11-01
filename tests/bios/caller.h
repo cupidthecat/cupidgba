@@ -17,4 +17,29 @@ static inline void cupid_test_bios_caller(struct CupidGBA *gba) {
     gba->cpu.irqDisableLatch = false;
 }
 
+struct CupidTestBiosReturn {
+    uint32_t pc;
+    bool thumb, reached;
+};
+
+/* The runner visits the initial state and each ordinary step boundary. Ignore
+ * the initial visit: the previous fixture loops always executed a step first. */
+static inline bool cupid_test_bios_return_boundary(struct CupidGBA *gba, uint64_t steps,
+                                                   void *context) {
+    struct CupidTestBiosReturn *boundary = context;
+    boundary->reached = steps &&
+                        gba->cpu.executionMode == (boundary->thumb ? MODE_THUMB : MODE_ARM) &&
+                        (uint32_t)gba->cpu.gprs[ARM_PC] == boundary->pc;
+    return !boundary->reached;
+}
+
+/* Keep the same guest-step budget and post-step return test without switching
+ * to the host stack after every instruction. A return on the last step counts. */
+static inline bool cupid_test_bios_run_to_return(struct CupidGBA *gba, bool thumb, uint32_t pc,
+                                                 uint64_t limit) {
+    struct CupidTestBiosReturn boundary = {.pc = pc, .thumb = thumb};
+    cupid_gba_run_steps(gba, limit, cupid_test_bios_return_boundary, &boundary);
+    return boundary.reached;
+}
+
 #endif

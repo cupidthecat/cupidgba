@@ -190,14 +190,7 @@ static struct Result *execute(uint32_t flags, unsigned configuration, const char
         cupid_io_write(gba, REG_IME, 1);
     }
     const uint64_t start = cupid_timing_global_time(&gba->timing);
-    unsigned steps;
-    for (steps = 0; steps < 100000; steps++) {
-        cupid_gba_step(gba);
-        if (gba->cpu.executionMode == (thumb ? MODE_THUMB : MODE_ARM) &&
-            (uint32_t)gba->cpu.gprs[ARM_PC] == address + (thumb ? 4 : 8))
-            break;
-    }
-    CHECK(steps < 100000);
+    CHECK(cupid_test_bios_run_to_return(gba, thumb, address + (thumb ? 4 : 8), 100000));
     struct Result *result = calloc(1, sizeof(*result));
     CHECK(result);
     result->clocks = cupid_timing_global_time(&gba->timing) - start;

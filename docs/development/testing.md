@@ -1,5 +1,19 @@
 # Testing
 
+The affine, data-service and register-reset BIOS fixtures use the bounded-step
+runner to test their return address after every ordinary guest step. They keep
+the original 100,000-step limit and ten-second CTest deadlines. Checking the
+return inside the runner avoids a host stack switch after each instruction;
+it does not skip guest instructions, peripheral work or result assertions.
+A return on the final allowed step succeeds. An initial matching PC, a zero
+budget or a stopped machine cannot stand in for an executed return.
+
+`gba.bios-caller-boundaries` compares this path with repeated single stepping in
+576 ARM/Thumb cases, including wrong-mode targets, exhausted budgets and the
+external execution path. It checks issued-instruction traces, registers,
+prefetch, RAM, input-bus history, clocks and timer results. Controls that accept
+the initial visit, drop the mode check or shorten the budget are rejected.
+
 The [object texture-tail checks](../hardware/render/object-tail.md) cover
 HBlank-free texture-port release separately from attribute fetching. Run
 `gba.object-tail-*` for the native renderer/CPU/DMA groups. The optional

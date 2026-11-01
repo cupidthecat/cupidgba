@@ -150,14 +150,7 @@ static uint64_t invoke(struct CupidGBA *gba, unsigned call, bool thumb) {
     else
         CupidARMWritePC(&gba->cpu);
     const uint64_t start = cupid_timing_global_time(&gba->timing);
-    unsigned steps;
-    for (steps = 0; steps < 100000; steps++) {
-        cupid_gba_step(gba);
-        if (gba->cpu.executionMode == (thumb ? MODE_THUMB : MODE_ARM) &&
-            (uint32_t)gba->cpu.gprs[ARM_PC] == GBA_BASE_IWRAM + (thumb ? 4 : 8))
-            break;
-    }
-    CHECK(steps < 100000);
+    CHECK(cupid_test_bios_run_to_return(gba, thumb, GBA_BASE_IWRAM + (thumb ? 4 : 8), 100000));
     CHECK(gba->cpu.privilegeMode == MODE_SYS);
     CHECK((uint32_t)gba->cpu.cpsr.packed == (thumb ? 0xA000003F : 0xA000001F));
     for (unsigned r = 4; r < 15; r++) {
