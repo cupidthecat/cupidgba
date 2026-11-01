@@ -14,8 +14,9 @@ are rejected. Open, seek, allocation, short-read, trailing-byte, read-error and
 close failures leave the previous image, board, battery, scheduled programming
 operation and CPU mapping intact. The regular-file check rejects an ordinary
 pipe before opening it; it is not a guarantee against concurrent hostile
-filesystem changes. Candidate storage temporarily adds a 32 MiB allocation and
-the new backup capacity.
+filesystem changes. Candidate storage temporarily adds a 32 MiB visible allocation and
+the new backup capacity. A [paged image](paged-rom.md) also retains its complete
+source allocation, up to 64 MiB.
 
 A successful replacement owns fresh backup storage, including when the same
 image is loaded again. It redetects the device, fills allocated battery bytes
@@ -63,6 +64,7 @@ scheduler and active-cache state; successful controls still commit the image.
 All ten groups retain ten-second deadlines.
 
 These tests qualify the described software model, not complete cartridge or
-peripheral accuracy. ROM images remain limited to 32 MiB; larger paged boards
-and card-reader hardware are not implemented. Physical EEPROM framing and
+peripheral accuracy. Ordinary ROM images remain limited to 32 MiB; supported
+[paged boards](paged-rom.md) accept up to 64 MiB. Card-reader hardware is not
+implemented. Physical EEPROM framing and
 programming delays remain separate qualification work.

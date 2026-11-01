@@ -245,6 +245,8 @@ void cupid_memory_deinit(struct CupidGBA *gba) {
     mem->ewram = NULL;
     free(mem->iwram);
     mem->iwram = NULL;
+    free(mem->pagedROM.image);
+    memset(&mem->pagedROM, 0, sizeof(mem->pagedROM));
     free(mem->rom);
     mem->rom = NULL;
     free(mem->bios);
@@ -952,6 +954,8 @@ void cupid_memory_store32(struct CupidARM *cpu, uint32_t address, int32_t value,
         case GBA_REGION_ROM2:
         case GBA_REGION_ROM2_EX:
             wait += waitstatesRegion[address >> GBA_BASE_OFFSET];
+            if (cupid_paged_rom_write(gba, address, (uint32_t)value, 4))
+                break;
             cupid_cartridge_gpio_write(gba, address & ~3u, (uint16_t)value);
             cupid_cartridge_gpio_write(gba, (address & ~3u) + 2, (uint16_t)((uint32_t)value >> 16));
             break;
@@ -1008,8 +1012,9 @@ void cupid_memory_store16(struct CupidARM *cpu, uint32_t address, int16_t value,
         case GBA_REGION_ROM1:
         case GBA_REGION_ROM1_EX:
         case GBA_REGION_ROM2:
-            cupid_cartridge_gpio_write(gba, address & ~1u, (uint16_t)value);
             wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
+            if (!cupid_paged_rom_write(gba, address, (uint16_t)value, 2))
+                cupid_cartridge_gpio_write(gba, address & ~1u, (uint16_t)value);
             break;
         case GBA_REGION_ROM2_EX:
             /** EEPROM writes. */

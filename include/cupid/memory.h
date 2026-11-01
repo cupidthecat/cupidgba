@@ -6,6 +6,7 @@
 #define CUPID_MEMORY_H
 
 #include "cupid/arm.h"
+#include "cupid/paged-rom.h"
 #include "cupid/timing.h"
 #include "cupid/types.h"
 
@@ -278,6 +279,7 @@ struct CupidMemory {
     uint8_t *iwram;   /**< 32 KiB internal work RAM */
     uint16_t io[512]; /**< IO registers (1 KiB as uint16 array) */
     uint8_t *rom;     /**< Game Pak ROM */
+    struct CupidPagedROM pagedROM;
     size_t romSize;
     size_t romImageSize; /**< Original image bytes, before mapping padding */
     uint32_t romMask;

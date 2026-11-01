@@ -45,7 +45,7 @@ bool cupid_load_rom(struct CupidGBA *gba, const char *path) {
     }
     long fileSize = ftell(f);
 
-    if (fileSize <= 0 || (size_t)fileSize > GBA_SIZE_ROM) {
+    if (fileSize <= 0 || (size_t)fileSize > GBA_SIZE_PAGED_ROM) {
         fprintf(stderr, "CUPID: Invalid ROM size: %ld\n", fileSize);
         fclose(f);
         return false;
@@ -56,17 +56,40 @@ bool cupid_load_rom(struct CupidGBA *gba, const char *path) {
     }
 
     size_t pristineSize = (size_t)fileSize;
+    const bool paged = pristineSize > GBA_SIZE_ROM;
+    if (paged) {
+        uint8_t header[0xC0];
+        if (fread(header, 1, sizeof(header), f) != sizeof(header) || header[0xAC] != 'M' ||
+            fseek(f, 0, SEEK_SET) != 0) {
+            fclose(f);
+            return false;
+        }
+    }
     uint8_t *candidate = calloc(1, GBA_SIZE_ROM);
     if (!candidate) {
         fclose(f);
         return false;
     }
-    const size_t readSize = fread(candidate, 1, pristineSize, f);
+    struct CupidPagedROM page = {0};
+    if (paged) {
+        page.image = malloc(pristineSize);
+        if (!page.image) {
+            free(candidate);
+            fclose(f);
+            return false;
+        }
+        page.imageSize = pristineSize;
+    }
+    uint8_t *image = paged ? page.image : candidate;
+    const size_t readSize = fread(image, 1, pristineSize, f);
     const int trailingByte = fgetc(f);
     const bool readFailed = ferror(f) != 0 || trailingByte != EOF;
     const int closeResult = fclose(f);
-    if (readSize != pristineSize || readFailed || closeResult != 0) {
+    /* Identify the bytes actually read, not only the earlier header probe. */
+    if (readSize != pristineSize || readFailed || closeResult != 0 ||
+        (paged && image[0xAC] != 'M')) {
         fprintf(stderr, "CUPID: Failed ROM read: %zu / %zu\n", readSize, pristineSize);
+        free(page.image);
         free(candidate);
         return false;
     }
@@ -75,7 +98,8 @@ bool cupid_load_rom(struct CupidGBA *gba, const char *path) {
      * Every replacement owns a new device, even when the image is unchanged. */
     const bool freshSave = gba->memory.rom != NULL || gba->memory.savedata.type == SAVE_AUTODETECT;
     struct CupidSavedata prepared;
-    if (freshSave && !cupid_savedata_prepare_image(&prepared, candidate, pristineSize)) {
+    if (freshSave && !cupid_savedata_prepare_image(&prepared, image, pristineSize)) {
+        free(page.image);
         free(candidate);
         return false;
     }
@@ -87,7 +111,9 @@ bool cupid_load_rom(struct CupidGBA *gba, const char *path) {
         prepared.flashSectorEraseClocks = gba->memory.savedata.flashSectorEraseClocks;
         prepared.flashChipEraseClocks = gba->memory.savedata.flashChipEraseClocks;
     }
-    size_t mappedSize = pristineSize;
+    size_t mappedSize = paged ? GBA_SIZE_PAGED_VIEW : pristineSize;
+    if (paged)
+        cupid_paged_rom_reset(&page, candidate);
 
     /** 1 MiB ROMs (Classic NES series) appear as 4x mirrored. */
     if (pristineSize == 0x00100000) {
@@ -100,7 +126,7 @@ bool cupid_load_rom(struct CupidGBA *gba, const char *path) {
 
     /* Notify the old board's output owner before publishing new cartridge
      * state. No fallible operation follows this commit point. */
-    cupid_cartridge_attach(gba, candidate, pristineSize);
+    cupid_cartridge_attach(gba, image, pristineSize);
     if (freshSave) {
         cupid_savedata_deinit(&gba->memory.savedata);
         gba->memory.savedata = prepared;
@@ -109,6 +135,8 @@ bool cupid_load_rom(struct CupidGBA *gba, const char *path) {
         gba->memory.savedata.readyEvent.context = &gba->memory.savedata;
         cupid_savedata_bind_timing(&gba->memory.savedata, &gba->timing);
     }
+    free(gba->memory.pagedROM.image);
+    gba->memory.pagedROM = page;
     free(gba->memory.rom);
     gba->memory.rom = candidate;
     gba->memory.romSize = mappedSize;
@@ -152,7 +180,7 @@ bool cupid_load_rom(struct CupidGBA *gba, const char *path) {
     }
 
     /** Detect save type from ROM strings. */
-    cupid_savedata_detect_type(&gba->memory.savedata, gba->memory.rom, pristineSize);
+    cupid_savedata_detect_type(&gba->memory.savedata, image, pristineSize);
 
     return true;
 }

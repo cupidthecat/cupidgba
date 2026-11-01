@@ -61,7 +61,7 @@ endif()
 add_library(cupid_core STATIC
     src/arm/arm.c src/arm/isa-arm.c src/arm/isa-thumb.c
     src/core/timing.c src/core/file.c src/platform/context.c
-    src/gba/gba.c src/gba/memory.c src/gba/memory/feedback.c src/gba/cartridge/image.c src/gba/save/detection.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
+    src/gba/gba.c src/gba/memory.c src/gba/memory/feedback.c src/gba/cartridge/image.c src/gba/cartridge/paged-rom.c src/gba/save/detection.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
     src/gba/audio.c src/gba/audio/wave.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c
     src/gba/hle-bios.c src/gba/bios/file.c src/gba/savedata.c src/gba/save/file.c
     src/gba/save/programming.c
@@ -166,6 +166,9 @@ if(BUILD_TESTING)
     add_test(NAME rom.cartridge-peripherals COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_peripherals.py --runner $<TARGET_FILE:cupidgba-headless>)
     set_tests_properties(rom.cartridge-peripherals PROPERTIES TIMEOUT 30)
+    add_test(NAME rom.paged-cartridge COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_paged_rom.py --runner $<TARGET_FILE:cupidgba-headless>)
+    set_tests_properties(rom.paged-cartridge PROPERTIES TIMEOUT 30)
     add_test(NAME rom.cartridge-gyro COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_gyro.py --runner $<TARGET_FILE:cupidgba-headless>)
     set_tests_properties(rom.cartridge-gyro PROPERTIES TIMEOUT 30)
@@ -233,6 +236,10 @@ if(BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_tilt.py --runner $<TARGET_FILE:cupidgba-headless>
             --bios ${CUPID_TEST_BIOS})
         set_tests_properties(rom.cartridge-tilt-external PROPERTIES TIMEOUT 30)
+        add_test(NAME rom.paged-cartridge-external COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_paged_rom.py --runner $<TARGET_FILE:cupidgba-headless>
+            --bios ${CUPID_TEST_BIOS})
+        set_tests_properties(rom.paged-cartridge-external PROPERTIES TIMEOUT 30)
         add_test(NAME rom.cartridge-gyro-external COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_gyro.py --runner $<TARGET_FILE:cupidgba-headless>
             --bios ${CUPID_TEST_BIOS})
@@ -566,10 +573,19 @@ if(BUILD_TESTING)
         --runner $<TARGET_FILE:cupidgba-headless>)
     set_tests_properties(runner.fifo-comparisons PROPERTIES TIMEOUT 10)
 
+    add_executable(test_paged_rom tests/gba/cartridge/test_paged_rom.c)
+    target_link_libraries(test_paged_rom PRIVATE cupid_core)
+    foreach(group mapping registers invalid cpu dma loader)
+        add_test(NAME gba.paged-rom-${group} COMMAND test_paged_rom ${group} ${CMAKE_CURRENT_BINARY_DIR})
+        set_tests_properties(gba.paged-rom-${group} PROPERTIES TIMEOUT 20)
+    endforeach()
+
     add_executable(test_cartridge_image_failures tests/gba/cartridge/test_image_failures.c)
     target_link_libraries(test_cartridge_image_failures PRIVATE cupid_core)
     add_test(NAME gba.cartridge-image-failures COMMAND test_cartridge_image_failures ${CMAKE_CURRENT_BINARY_DIR})
     set_tests_properties(gba.cartridge-image-failures PROPERTIES TIMEOUT 10)
+    add_test(NAME gba.paged-rom-failures COMMAND test_cartridge_image_failures ${CMAKE_CURRENT_BINARY_DIR} paged)
+    set_tests_properties(gba.paged-rom-failures PROPERTIES TIMEOUT 20)
 
     add_executable(test_cartridge_ownership tests/gba/cartridge/test_ownership.c)
     target_link_libraries(test_cartridge_ownership PRIVATE cupid_core)

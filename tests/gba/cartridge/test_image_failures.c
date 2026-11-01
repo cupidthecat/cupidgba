@@ -5,7 +5,17 @@
 #include "cupid/gba.h"
 #include <errno.h>
 
-enum Failure { NONE, ROM_ALLOCATION, SAVE_ALLOCATION, SHORT_READ, READ_ERROR, EXTRA_BYTE, CLOSE };
+enum Failure {
+    NONE,
+    ROM_ALLOCATION,
+    SAVE_ALLOCATION,
+    SHORT_READ,
+    READ_ERROR,
+    EXTRA_BYTE,
+    CLOSE,
+    PAGED_ALLOCATION,
+    PAGED_HEADER
+};
 static enum Failure failure;
 
 static void *candidate_allocation(size_t count, size_t size) {
@@ -24,8 +34,19 @@ static void *backup_allocation(size_t size) {
     return malloc(size);
 }
 
+static void *page_allocation(size_t size) {
+    if (failure == PAGED_ALLOCATION) {
+        errno = ENOMEM;
+        return NULL;
+    }
+    return malloc(size);
+}
+
 static size_t candidate_read(void *data, size_t size, size_t count, FILE *file) {
-    return fread(data, size, failure == SHORT_READ ? count - 1 : count, file);
+    size_t read = fread(data, size, failure == SHORT_READ ? count - 1 : count, file);
+    if (failure == PAGED_HEADER && count > 0xC0 && read > 0xAC)
+        ((uint8_t *)data)[0xAC] = 'A';
+    return read;
 }
 
 static int candidate_error(FILE *file) {
@@ -50,6 +71,7 @@ static int candidate_close(FILE *file) {
 #undef malloc
 #define cupid_load_rom checked_load_rom
 #define calloc candidate_allocation
+#define malloc page_allocation
 #define fread candidate_read
 #define ferror candidate_error
 #define fgetc candidate_tail
@@ -57,6 +79,7 @@ static int candidate_close(FILE *file) {
 #include "../../../src/gba/cartridge/image.c"
 #undef cupid_load_rom
 #undef calloc
+#undef malloc
 #undef fread
 #undef ferror
 #undef fgetc
@@ -65,17 +88,31 @@ static int candidate_close(FILE *file) {
 #undef cupid_savedata_detect_type
 
 int main(int argc, char **argv) {
-    CHECK(argc == 2);
-    char path[1024];
-    int n = snprintf(path, sizeof(path), "%s/cartridge-image-failures.gba", argv[1]);
+    CHECK(argc == 2 || (argc == 3 && !strcmp(argv[2], "paged")));
+    const bool paged = argc == 3;
+    char path[1024], oldPath[1024];
+    int n = snprintf(path, sizeof(path), "%s/cartridge-image-failures-%s.gba", argv[1],
+                     paged ? "paged" : "ordinary");
     CHECK(n > 0 && (size_t)n < sizeof(path));
     uint8_t image[512] = {0};
     memcpy(image + 256, "FLASH_V", 7);
+    n = snprintf(oldPath, sizeof(oldPath), "%s/cartridge-image-failures-old.gba", argv[1]);
+    CHECK(n > 0 && (size_t)n < sizeof(oldPath));
+    if (paged) {
+        FILE *old = fopen(oldPath, "wb");
+        CHECK(old && fwrite(image, 1, sizeof(image), old) == sizeof(image));
+        CHECK(fclose(old) == 0);
+        image[0xAC] = 'M';
+    }
     FILE *file = fopen(path, "wb");
     CHECK(file && fwrite(image, 1, sizeof(image), file) == sizeof(image));
+    if (paged) {
+        CHECK(fseek(file, GBA_SIZE_ROM + 511, SEEK_SET) == 0);
+        CHECK(fputc(0xA5, file) != EOF);
+    }
     CHECK(fclose(file) == 0);
-    for (unsigned attached = 0; attached < 2; ++attached) {
-        for (failure = ROM_ALLOCATION; failure <= CLOSE; ++failure) {
+    for (unsigned attached = 0; attached < (paged ? 3u : 2u); ++attached) {
+        for (failure = ROM_ALLOCATION; failure <= (paged ? PAGED_HEADER : CLOSE); ++failure) {
             struct CupidGBA *gba = calloc(1, sizeof(*gba));
             CHECK(gba);
             cupid_gba_create(gba);
@@ -83,7 +120,7 @@ int main(int argc, char **argv) {
             cupid_timing_clear(&gba->timing);
             if (attached) {
                 /* The linked core uses ordinary host operations. */
-                CHECK(cupid_load_rom(gba, path));
+                CHECK(cupid_load_rom(gba, paged && attached == 1 ? oldPath : path));
                 const uint8_t value = 0x37;
                 cupid_savedata_begin_programming(&gba->memory.savedata, 7, 1, &value, 40);
                 gba->cpu.gprs[15] = GBA_BASE_ROM0 + 8;
@@ -119,6 +156,9 @@ int main(int argc, char **argv) {
     cupid_gba_destroy(gba);
     free(gba);
     CHECK(remove(path) == 0);
-    puts("PASS image failure atomicity: twelve injected failures and two successful commits");
+    if (paged)
+        CHECK(remove(oldPath) == 0);
+    printf("PASS image failure atomicity: %u injected failures and two successful commits\n",
+           paged ? 24u : 12u);
     return 0;
 }

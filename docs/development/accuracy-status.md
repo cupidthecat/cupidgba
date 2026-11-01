@@ -85,8 +85,9 @@ expected value changed.
   simulating physical corruption or lockup.
 - DMA still needs wider display-window edge, external Game Pak request and
   same-edge interaction coverage. Reserved source mode 3 uses a fixed source.
-- Cartridge images are limited to 32 MiB. Larger paged cartridges and card-reader
-  hardware are absent. EEPROM framing, chip-specific programming behavior and
+- Ordinary cartridge images support up to 32 MiB; the documented
+  [paged controller](../hardware/cartridge/paged-rom.md) supports up to 64 MiB.
+  Card-reader hardware is absent. EEPROM framing, chip-specific programming behavior and
   peripheral signal timing remain incompletely qualified. Image replacement
   now owns fresh backup storage and cancels the old device's events; see
   [image ownership](../hardware/cartridge/image-mapping.md).
