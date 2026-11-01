@@ -74,6 +74,7 @@ jobs:
           python3 tests/roms/check_thumb_exchange.py --fetch --directory .local-research/test-roms
           python3 tests/roms/check_thumb_stack.py --fetch --directory .local-research/test-roms
           python3 tests/roms/check_bus_feedback.py --fetch --directory .local-research/test-roms
+          python3 tests/roms/check_serial_probe.py --fetch --directory .local-research/test-roms/serial
       - name: Configure
         run: |
           sanitizer_flags=()
@@ -86,6 +87,7 @@ jobs:
             "${sanitizer_flags[@]}" \
             -DCUPID_TEST_ROM_DIR=${{ github.workspace }}/.local-research/test-roms \
             -DCUPID_BUS_FEEDBACK_PROBE_DIR=${{ github.workspace }}/.local-research/test-roms \
+            -DCUPID_SERIAL_PROBE_DIR=${{ github.workspace }}/.local-research/test-roms/serial \
             -DCUPID_PREFETCH_PROBE_DIR=${{ github.workspace }}/.local-research/test-roms \
             -DCUPID_CPU_CORPUS_DIR=${{ github.workspace }}/.local-research/test-roms/cpu-corpus
       - name: Build
@@ -159,6 +161,7 @@ jobs:
           python tests/roms/check_thumb_exchange.py --fetch --directory .local-research/test-roms
           python tests/roms/check_thumb_stack.py --fetch --directory .local-research/test-roms
           python tests/roms/check_bus_feedback.py --fetch --directory .local-research/test-roms
+          python tests/roms/check_serial_probe.py --fetch --directory .local-research/test-roms/serial
       - name: Configure
         # Keep input fetching and CTest on the same installed interpreter.
         run: >-
@@ -166,6 +169,7 @@ jobs:
           -DPython3_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')"
           -DCUPID_TEST_ROM_DIR="$(pwd)/.local-research/test-roms"
           -DCUPID_BUS_FEEDBACK_PROBE_DIR="$(pwd)/.local-research/test-roms"
+          -DCUPID_SERIAL_PROBE_DIR="$(pwd)/.local-research/test-roms/serial"
           -DCUPID_PREFETCH_PROBE_DIR="$(pwd)/.local-research/test-roms"
           -DCUPID_CPU_CORPUS_DIR="$(pwd)/.local-research/test-roms/cpu-corpus"
       - name: Build

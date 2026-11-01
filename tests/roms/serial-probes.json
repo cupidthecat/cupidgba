@@ -1,0 +1,317 @@
+{
+  "revision": "66f5f1d60cd7030b600606886c76f5c821ecaf9d",
+  "cases": [
+    {
+      "name": "serial_time",
+      "path": "serial_time.gba",
+      "sha256": "bae7c94d818df95caf5f2443dc4a2ca15c0868a52d5f89e04b75c875c9cf9af0",
+      "checkpoint": "0x80001fc",
+      "terminal": "0x8000374",
+      "requires_bios": false,
+      "observations": [
+        {
+          "address": "0x80001da",
+          "mode": "thumb",
+          "instruction": "0x2f98",
+          "register": 7,
+          "value": "0x98"
+        },
+        {
+          "address": "0x80001de",
+          "mode": "thumb",
+          "instruction": "0x2d02",
+          "register": 5,
+          "value": "0x2"
+        }
+      ],
+      "source_path": "Serial/serial_time.gba"
+    },
+    {
+      "name": "serial_time_2",
+      "path": "serial_time_2.gba",
+      "sha256": "c01fd6741759dbde664c7b32625dccd26374169a1b27f5db057488ffa4652a12",
+      "checkpoint": "0x80001fc",
+      "terminal": "0x8000374",
+      "requires_bios": false,
+      "observations": [
+        {
+          "address": "0x80001dc",
+          "mode": "thumb",
+          "instruction": "0x2f99",
+          "register": 7,
+          "value": "0x99"
+        },
+        {
+          "address": "0x80001e0",
+          "mode": "thumb",
+          "instruction": "0x2d02",
+          "register": 5,
+          "value": "0x2"
+        }
+      ],
+      "source_path": "Serial/serial_time_2.gba"
+    },
+    {
+      "name": "serial_time_3",
+      "path": "serial_time_3.gba",
+      "sha256": "7ce1dd69ff4fb9aee0f8da27c03c71ad210a42825d87e6303340e600718e3791",
+      "checkpoint": "0x8000200",
+      "terminal": "0x8000378",
+      "requires_bios": false,
+      "observations": [
+        {
+          "address": "0x80001de",
+          "mode": "thumb",
+          "instruction": "0x2f9a",
+          "register": 7,
+          "value": "0x9a"
+        },
+        {
+          "address": "0x80001e2",
+          "mode": "thumb",
+          "instruction": "0x2d02",
+          "register": 5,
+          "value": "0x2"
+        }
+      ],
+      "source_path": "Serial/serial_time_3.gba"
+    },
+    {
+      "name": "serial_time_2M",
+      "path": "serial_time_2M.gba",
+      "sha256": "d850b08132f35bb4bd86b756604a0d309df2619a1d78646cd87f28b8bf0e3138",
+      "checkpoint": "0x80001fc",
+      "terminal": "0x8000374",
+      "requires_bios": false,
+      "observations": [
+        {
+          "address": "0x80001da",
+          "mode": "thumb",
+          "instruction": "0x2fd8",
+          "register": 7,
+          "value": "0xd8"
+        },
+        {
+          "address": "0x80001de",
+          "mode": "thumb",
+          "instruction": "0x2d00",
+          "register": 5,
+          "value": "0x0"
+        }
+      ],
+      "source_path": "Serial/serial_time_2M.gba"
+    },
+    {
+      "name": "serial_time_2M_2",
+      "path": "serial_time_2M_2.gba",
+      "sha256": "7705764f85b2a733284bc8dbab92f597e7ab0f6faccd87ee1d5766f72400ecd7",
+      "checkpoint": "0x80001fc",
+      "terminal": "0x8000374",
+      "requires_bios": false,
+      "observations": [
+        {
+          "address": "0x80001dc",
+          "mode": "thumb",
+          "instruction": "0x2fd9",
+          "register": 7,
+          "value": "0xd9"
+        },
+        {
+          "address": "0x80001e0",
+          "mode": "thumb",
+          "instruction": "0x2d00",
+          "register": 5,
+          "value": "0x0"
+        }
+      ],
+      "source_path": "Serial/serial_time_2M_2.gba"
+    },
+    {
+      "name": "serial_time_2M_3",
+      "path": "serial_time_2M_3.gba",
+      "sha256": "47d1e8aa4c655e751ecfdacedd068a8d33821447a5487f8e59ec3746d40101e4",
+      "checkpoint": "0x8000200",
+      "terminal": "0x8000378",
+      "requires_bios": false,
+      "observations": [
+        {
+          "address": "0x80001de",
+          "mode": "thumb",
+          "instruction": "0x2fda",
+          "register": 7,
+          "value": "0xda"
+        },
+        {
+          "address": "0x80001e2",
+          "mode": "thumb",
+          "instruction": "0x2d00",
+          "register": 5,
+          "value": "0x0"
+        }
+      ],
+      "source_path": "Serial/serial_time_2M_3.gba"
+    },
+    {
+      "name": "serial_read_data",
+      "path": "serial_read_data.gba",
+      "sha256": "fde0c9fbcac6ecf35c586e090f53803094c8db6d300b69ccb602225635341c41",
+      "checkpoint": "0x80001f0",
+      "terminal": "0x8000368",
+      "requires_bios": false,
+      "observations": [
+        {
+          "address": "0x80001d0",
+          "mode": "thumb",
+          "instruction": "0x2fff",
+          "register": 7,
+          "value": "0xff"
+        },
+        {
+          "address": "0x80001d4",
+          "mode": "thumb",
+          "instruction": "0x2d0a",
+          "register": 5,
+          "value": "0xa"
+        }
+      ],
+      "source_path": "Serial/serial_read_data.gba"
+    },
+    {
+      "name": "serial_time_start_bit",
+      "path": "serial_time_start_bit.gba",
+      "sha256": "c9cdb4c11f58f1330935af90d1cd3324976358652abc82e89f0d2786ec73a46a",
+      "checkpoint": "0x80001c8",
+      "terminal": "0x8000340",
+      "requires_bios": false,
+      "observations": [
+        {
+          "address": "0x80001b0",
+          "mode": "thumb",
+          "instruction": "0x2f80",
+          "register": 7,
+          "value": "0x80"
+        }
+      ],
+      "source_path": "Serial/serial_time_start_bit.gba"
+    },
+    {
+      "name": "serial_time_start_bit_2",
+      "path": "serial_time_start_bit_2.gba",
+      "sha256": "b57c9ef0edc59df8a610f1582ca446dbfba2cd6bd4e1e9e9dc1488f0c49e07c3",
+      "checkpoint": "0x80001c8",
+      "terminal": "0x8000340",
+      "requires_bios": false,
+      "observations": [
+        {
+          "address": "0x80001b2",
+          "mode": "thumb",
+          "instruction": "0x2f00",
+          "register": 7,
+          "value": "0x0"
+        }
+      ],
+      "source_path": "Serial/serial_time_start_bit_2.gba"
+    },
+    {
+      "name": "halt_pc",
+      "path": "halt_pc.gba",
+      "sha256": "19ff7e328c0cf95fe663a2eb2eb6f9eae50e07a65da36ac74ec6c2c665a3b2a0",
+      "checkpoint": "0x80001ec",
+      "terminal": "0x8000364",
+      "requires_bios": true,
+      "observations": [
+        {
+          "address": "0x80001c6",
+          "mode": "thumb",
+          "instruction": "0x2ed7",
+          "register": 6,
+          "value": "0xd7"
+        },
+        {
+          "address": "0x80001cc",
+          "mode": "thumb",
+          "instruction": "0x2d74",
+          "register": 5,
+          "value": "0x74"
+        }
+      ],
+      "source_path": "irq/halt_pc.gba"
+    },
+    {
+      "name": "halt_pc_2",
+      "path": "halt_pc_2.gba",
+      "sha256": "eabb9f9505601ea670289ac3a458cf94e0e0a78e8475b5f8a5fcfc997628ef95",
+      "checkpoint": "0x80001ec",
+      "terminal": "0x8000364",
+      "requires_bios": true,
+      "observations": [
+        {
+          "address": "0x80001c6",
+          "mode": "thumb",
+          "instruction": "0x2ef0",
+          "register": 6,
+          "value": "0xf0"
+        },
+        {
+          "address": "0x80001cc",
+          "mode": "thumb",
+          "instruction": "0x2db8",
+          "register": 5,
+          "value": "0xb8"
+        }
+      ],
+      "source_path": "irq/halt_pc_2.gba"
+    },
+    {
+      "name": "halt_pc_3",
+      "path": "halt_pc_3.gba",
+      "sha256": "7493755c4506af294e552732862d05557c8b1280e21daa090b296f665550b797",
+      "checkpoint": "0x80001ec",
+      "terminal": "0x8000364",
+      "requires_bios": true,
+      "observations": [
+        {
+          "address": "0x80001c6",
+          "mode": "thumb",
+          "instruction": "0x2ef0",
+          "register": 6,
+          "value": "0xf0"
+        },
+        {
+          "address": "0x80001cc",
+          "mode": "thumb",
+          "instruction": "0x2d74",
+          "register": 5,
+          "value": "0x74"
+        }
+      ],
+      "source_path": "irq/halt_pc_3.gba"
+    },
+    {
+      "name": "halt_pc_4",
+      "path": "halt_pc_4.gba",
+      "sha256": "3d91c45881745a508c8c48aa789b5628ad82139f4471a2764973dd3d1dab6d04",
+      "checkpoint": "0x80001ec",
+      "terminal": "0x8000364",
+      "requires_bios": true,
+      "observations": [
+        {
+          "address": "0x80001c6",
+          "mode": "thumb",
+          "instruction": "0x2ef3",
+          "register": 6,
+          "value": "0xf3"
+        },
+        {
+          "address": "0x80001cc",
+          "mode": "thumb",
+          "instruction": "0x2db8",
+          "register": 5,
+          "value": "0xb8"
+        }
+      ],
+      "source_path": "irq/halt_pc_4.gba"
+    }
+  ],
+  "license_sha256": "b59a9ed235d76752c977f04116bc72155a14af48176bdbf50d7e5c29fca35aa7"
+}

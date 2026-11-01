@@ -212,11 +212,16 @@ python tests/roms/build_fifo_source.py --directory /path/to/local/source \
 The builder verifies all six source/include files, ignoring only carriage
 returns, and requires the complete expected output digest. It works from an
 isolated copy and refuses an output inside the source checkout or an existing
-file with different contents. Configure `CUPID_FIFO_SOURCE_ROM` with that output
-path alongside the original `CUPID_FIFO_PROBE_DIR`. Both BIOS selections retain
-the same frame, instruction and process guards. The preceding source-built
-qualification reads `0x62` at its first `0x68` comparison; it remains an open
-timing failure. The queue-capacity qualification below reruns the bundled images.
+file with different contents. Publication uses the complete verified temporary
+image, so a failed assembler, timeout or checksum mismatch cannot leave a
+partial result. Eight automated builder tests cover source mutation, line
+endings, output aliases, existing files, compiler failures and cleanup.
+
+Configure `CUPID_FIFO_SOURCE_ROM` with that output path alongside the original `CUPID_FIFO_PROBE_DIR`. Both BIOS selections retain
+the same frame, instruction and process guards. The source-built cartridge
+was rebuilt and rerun through both BIOS paths. Each reads `0x62` at its first `0x68` comparison; it remains an open
+timing failure. The queue-capacity qualification below covers the bundled
+images separately.
 
 The IRQ cartridge retains its original `0x008000AF` comparison with both live
 operands and both firmware paths. The combined queue and activation ordering

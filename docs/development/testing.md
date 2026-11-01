@@ -1,5 +1,28 @@
 # Testing
 
+The serial and HALT cartridge checks retain their original 24 encoded
+comparisons, result-display entry and completed terminal. Run their owned
+protocol and execution controls with `ctest -R '^runner[.]serial-probe-'`.
+The execution control demonstrates why a wrong zero measurement or a skipped
+comparison can leave a passing-looking result register. Both must be rejected.
+`runner.fifo-source-builder` checks isolated assembly, verified publication
+and preservation of existing inputs after compiler or checksum failures.
+
+Linux and Windows CI fetch the checksum-pinned serial inputs and their license
+notice, then run all nine built-in-BIOS serial cases. To fetch them locally:
+
+```sh
+python3 tests/roms/check_serial_probe.py --fetch --directory .local-research/serial
+cmake -S . -B build -DCUPID_SERIAL_PROBE_DIR="$PWD/.local-research/serial"
+ctest --test-dir build -R '^rom[.]serial-probe-' --output-on-failure
+```
+
+Supplying `CUPID_TEST_BIOS` repeats the nine cases with that authorized BIOS.
+The four HALT cartridges can also be run individually with
+`check_serial_probe.py --directory .local-research/serial --runner build/cupidgba-headless --bios /path/to/gba_bios.bin --test halt_pc`.
+The complete `CUPID_HALT_PROBE_DIR` profile additionally needs the separate
+IRQ corpus. BIOS files are never downloaded or distributed.
+
 CPU read feedback and its pinned DMA handover probes are described in
 [read feedback](../hardware/memory/read-feedback.md). The native groups are
 `gba.memory-feedback-*`; optional cartridge groups are `rom.bus-feedback-*`.

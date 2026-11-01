@@ -601,6 +601,16 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_bus_feedback_protocol.py)
     set_tests_properties(runner.bus-feedback-protocol PROPERTIES TIMEOUT 10)
 
+    add_test(NAME runner.serial-probe-protocol COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_serial_probe_protocol.py)
+    add_test(NAME runner.serial-probe-execution COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_serial_probe_execution.py
+        --runner $<TARGET_FILE:cupidgba-headless>)
+    add_test(NAME runner.fifo-source-builder COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_fifo_source_builder.py)
+    set_tests_properties(runner.serial-probe-protocol runner.serial-probe-execution
+        runner.fifo-source-builder PROPERTIES TIMEOUT 10)
+
     if(CUPID_BUS_FEEDBACK_PROBE_DIR)
         foreach(case cpu iwram oam protected signed-halfword unmapped)
             add_test(NAME rom.bus-feedback-${case} COMMAND ${Python3_EXECUTABLE}
