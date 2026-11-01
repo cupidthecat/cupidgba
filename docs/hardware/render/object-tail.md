@@ -47,13 +47,14 @@ Seven groups exercise 4,096 scenes:
 The scenes cover tile and bitmap display modes, both texture depths, live
 HBlank-free changes after latching, and four clock epochs crossing signed and
 unsigned counter boundaries. Every group rejects the preceding core. Shared
-Thumb comparison checks reject altered opcodes/immediates, wrong zero values,
+immediate-comparison checks reject altered opcodes/immediates, wrong zero values,
 missing or reordered observations, and incomplete result boundaries.
 
 The original cartridge qualifies the listed CPU boundary. The larger native
 matrices check the corresponding logical renderer and DMA model; they are not
 new physical captures of every affine, control-write or DMA phase. The pixel
-checks preserve the current direct fetch-to-pixel model. Physical captures of
-last-pixel output are still needed to distinguish that model from a possible
-internal pixel pipeline draining after the final texture request. Wider display
-accuracy requirements remain open.
+checks preserve direct fetch-to-pixel output as the selected compatibility
+policy. They do not establish whether physical hardware drains pending pixels
+after its final texture request. Wider display accuracy requirements remain
+open. The [normal-mode counterpart](display-startup.md) retains its original
+8Eh timer comparison through both firmware paths.

@@ -66,6 +66,8 @@ Changing the budget does not restart the mosaic group or extend memory fetches.
 In HBlank-free mode, texture requests stop before the final attribute clocks.
 See [object texture-tail ownership](render/object-tail.md) for the separate
 port deadlines and their qualification.
+The [display startup checks](render/display-startup.md) retain the original
+scanline, VBlank and IRQ/HALT comparisons through both firmware paths.
 
 CupidGBA decodes OBJ shape 3 as an 8-by-8 texture for all four size fields.
 This selected logical policy uses the ordinary attribute, matrix and texture

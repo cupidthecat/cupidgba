@@ -1,4 +1,4 @@
-"""Reject changed Thumb comparisons, zero-result shortcuts and invalid serial inputs."""
+"""Reject changed immediate comparisons, false-zero results and invalid inputs."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later
 import copy
@@ -13,14 +13,47 @@ from unittest.mock import patch, call
 import check_serial_probe as probe
 import check_object_tail_probe as object_probe
 
-from thumb_comparisons import require_result, verify_input
+from protocols.immediate import require_result, verify_input
 
 
-class ThumbComparisonProtocol(unittest.TestCase):
+def comparison_image(original):
+    case = copy.deepcopy(original)
+    terminal = int(case["terminal"], 16) - 0x08000000
+    checkpoint = int(case["checkpoint"], 16) - 0x08000000
+    data = bytearray(terminal + 4)
+    data[checkpoint : checkpoint + 44] = struct.pack(
+        "<11I",
+        0xE92D0003,
+        0xE3A00301,
+        0xE5901004,
+        0xE3110001,
+        0x1AFFFFFC,
+        0xE5901004,
+        0xE3110001,
+        0x0AFFFFFC,
+        0xE8BD0003,
+        0xE92D1FFF,
+        0xE1B0C000 | case.get("result_register", 12),
+    )
+    data[terminal - 4 : terminal + 4] = struct.pack("<2I", 0xE8BD1FFF, 0xEAFFFFFE)
+    for observation in case["observations"]:
+        offset = int(observation["address"], 16) - 0x08000000
+        width = 2 if observation["mode"] == "thumb" else 4
+        data[offset : offset + width] = int(observation["instruction"], 16).to_bytes(
+            width, "little"
+        )
+    case["sha256"] = hashlib.sha256(data).hexdigest()
+    return case, data
+
+
+class ImmediateComparisonProtocol(unittest.TestCase):
     def setUp(self):
         self.cases = json.loads(Path(__file__).with_name("serial-probes.json").read_text())["cases"]
         self.cases.append(
             json.loads(Path(__file__).with_name("object-tail-probe.json").read_text())["case"]
+        )
+        self.cases.extend(
+            json.loads(Path(__file__).with_name("display-probes.json").read_text())["cases"]
         )
 
     def lines(self, case):
@@ -29,38 +62,23 @@ class ThumbComparisonProtocol(unittest.TestCase):
             value = int(observation["value"], 16)
             lines.append(
                 f"observation={index} pc={int(observation['address'], 16):08x} "
-                f"mode=thumb opcode={int(observation['instruction'], 16):08x} "
+                f"mode={observation['mode']} opcode={int(observation['instruction'], 16):08x} "
                 f"r{observation['register']}={value:08x} expected={value:08x} result=PASS"
             )
         count = len(lines)
         return lines + [
             f"observations={count}/{count} result=PASS",
-            "checkpoint=yes r12=0 result=PASS",
-            "terminal=yes r12=0 result=PASS",
+            f"checkpoint=yes r{case.get('result_register', 12)}=0 result=PASS",
+            f"terminal=yes r{case.get('result_register', 12)}=0 result=PASS",
             f"terminal-issued=yes completed=yes pc={int(case['terminal'], 16):08x}",
         ]
 
-    def image(self, original):
-        case = copy.deepcopy(original)
-        terminal = int(case["terminal"], 16) - 0x08000000
-        checkpoint = int(case["checkpoint"], 16) - 0x08000000
-        data = bytearray(terminal + 4)
-        data[checkpoint : checkpoint + 16] = struct.pack(
-            "<4I", 0xE92D0003, 0xE3A00301, 0xE5901004, 0xE3110001
-        )
-        data[terminal : terminal + 4] = struct.pack("<I", 0xEAFFFFFE)
-        for observation in case["observations"]:
-            offset = int(observation["address"], 16) - 0x08000000
-            data[offset : offset + 2] = struct.pack("<H", int(observation["instruction"], 16))
-        case["sha256"] = hashlib.sha256(data).hexdigest()
-        return case, data
-
     def test_all_original_comparisons(self):
-        self.assertEqual(len(self.cases), 14)
-        self.assertEqual(sum(len(case["observations"]) for case in self.cases), 25)
+        self.assertEqual(len(self.cases), 19)
+        self.assertEqual(sum(len(case["observations"]) for case in self.cases), 36)
         for case in self.cases:
             require_result("\n".join(self.lines(case)), 0, case)
-            synthetic_case, data = self.image(case)
+            synthetic_case, data = comparison_image(case)
             verify_input(data, synthetic_case)
 
     def test_missing_duplicate_and_reordered_observations(self):
@@ -92,7 +110,7 @@ class ThumbComparisonProtocol(unittest.TestCase):
         for case in self.cases:
             text = "\n".join(self.lines(case))
             for old, new in [
-                ("mode=thumb", "mode=arm"),
+                (f"mode={case['observations'][0]['mode']}", "mode=wrong"),
                 ("opcode=", "opcode=ff"),
                 ("completed=yes", "completed=no"),
                 ("result=PASS", "result=FAIL"),
@@ -105,10 +123,13 @@ class ThumbComparisonProtocol(unittest.TestCase):
 
     def test_changed_input_even_with_updated_digest(self):
         for original in self.cases:
-            case, data = self.image(original)
+            case, data = comparison_image(original)
             for address in [
                 case["checkpoint"],
+                hex(int(case["checkpoint"], 16) + 16),
+                hex(int(case["checkpoint"], 16) + 40),
                 case["terminal"],
+                hex(int(case["terminal"], 16) - 4),
                 *[row["address"] for row in case["observations"]],
             ]:
                 altered = bytearray(data)
@@ -120,11 +141,11 @@ class ThumbComparisonProtocol(unittest.TestCase):
 
     def test_changed_comparison_contract(self):
         for original in self.cases:
-            case, data = self.image(original)
+            case, data = comparison_image(original)
             for field, value in [
                 ("register", 8),
                 ("value", "0x100"),
-                ("mode", "arm"),
+                ("mode", "wrong"),
                 ("address", "0x7fffffe"),
                 ("instruction", "0x2800"),
             ]:
@@ -135,6 +156,58 @@ class ThumbComparisonProtocol(unittest.TestCase):
             for observations in [[], case["observations"] * 2]:
                 with self.assertRaises(ValueError):
                     verify_input(data, dict(case, observations=observations))
+            empty = dict(case, observations=[])
+            with self.assertRaises(ValueError):
+                require_result("\n".join(self.lines(empty)), 0, empty)
+
+    def test_extra_conflicting_boundary_is_rejected(self):
+        for case in self.cases:
+            text = "\n".join(self.lines(case))
+            for extra in [
+                "checkpoint=yes r0=0 result=PASS",
+                "terminal=yes r0=0 result=PASS",
+                "observations=0/0 result=PASS",
+                "terminal-issued=no completed=no pc=00000000",
+            ]:
+                with self.assertRaises(ValueError):
+                    require_result(text + "\n" + extra, 0, case)
+
+    def test_result_register_must_match_original_code_and_both_boundaries(self):
+        for original in self.cases:
+            case, data = comparison_image(original)
+            register = case.get("result_register", 12)
+            wrong = 7 if register == 12 else 12
+            with self.assertRaises(ValueError):
+                verify_input(data, dict(case, result_register=wrong))
+            text = "\n".join(self.lines(case))
+            for boundary in ["checkpoint", "terminal"]:
+                changed = text.replace(
+                    f"{boundary}=yes r{register}=0", f"{boundary}=yes r{wrong}=0"
+                )
+                with self.assertRaises(ValueError):
+                    require_result(changed, 0, case)
+            for invalid in [-1, 13, 14, 15, True, "7"]:
+                with self.assertRaises(ValueError):
+                    verify_input(data, dict(case, result_register=invalid))
+
+    def test_arm_requires_unconditional_unrotated_comparison_and_non_pc_operand(self):
+        for original in self.cases:
+            if original["observations"][0]["mode"] != "arm":
+                continue
+            for mask in [0x10000000, 0x100, 0x01000000]:
+                case, data = comparison_image(original)
+                observation = case["observations"][0]
+                opcode = int(observation["instruction"], 16) ^ mask
+                observation["instruction"] = hex(opcode)
+                offset = int(observation["address"], 16) - 0x08000000
+                struct.pack_into("<I", data, offset, opcode)
+                case["sha256"] = hashlib.sha256(data).hexdigest()
+                with self.assertRaises(ValueError):
+                    verify_input(data, case)
+            case, data = comparison_image(original)
+            case["observations"][0]["register"] = 15
+            with self.assertRaises(ValueError):
+                verify_input(data, case)
 
 
 class SerialProbeInputs(unittest.TestCase):
@@ -240,7 +313,7 @@ class ObjectTailInputs(unittest.TestCase):
         self.manifest = json.loads(
             Path(object_probe.__file__).with_name("object-tail-probe.json").read_text()
         )
-        self.case, self.data = ThumbComparisonProtocol().image(self.manifest["case"])
+        self.case, self.data = comparison_image(self.manifest["case"])
         self.manifest["case"] = self.case
         self.rom = self.directory / self.case["path"]
 

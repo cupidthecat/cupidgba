@@ -1,5 +1,15 @@
 # Testing
 
+Published specifications and original test programs define known expectations.
+When they leave behavior unresolved, use common established behavior as a
+recorded compatibility choice. Keep conflicting hardware-test results visible;
+a selected policy does not turn an unresolved measurement into a passing test.
+
+The [display startup checks](../hardware/render/display-startup.md) require the
+original scanline, VBlank, IRQ/HALT and normal texture-tail comparisons. They
+also verify which register the program uses to report its result. Configure
+`CUPID_DISPLAY_PROBE_DIR` and run `rom.display-*` for these five cartridges.
+
 The affine, data-service and register-reset BIOS fixtures use the bounded-step
 runner to test their return address after every ordinary guest step. They keep
 the original 100,000-step limit and ten-second CTest deadlines. Checking the
@@ -27,7 +37,7 @@ for the native timing matrix and the original comparison guards.
 
 The serial and HALT cartridge checks retain their original 24 encoded
 comparisons, result-display entry and completed terminal. Run their owned
-protocol and execution controls with `ctest -R '^runner[.](thumb-comparison-protocol|serial-probe-execution)$'`.
+protocol and execution controls with `ctest -R '^runner[.]immediate-comparison-(protocol|execution)$'`.
 The execution control demonstrates why a wrong zero measurement or a skipped
 comparison can leave a passing-looking result register. Both must be rejected.
 `runner.fifo-source-builder` checks isolated assembly, verified publication

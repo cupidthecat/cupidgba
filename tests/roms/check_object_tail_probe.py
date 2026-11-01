@@ -8,7 +8,7 @@ from pathlib import Path
 import subprocess
 
 from fetch_inputs import download_verified
-from thumb_comparisons import require_result, verify_input
+from protocols.immediate import require_result, verify_input
 
 
 def main():

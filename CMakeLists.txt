@@ -21,6 +21,7 @@ set(CUPID_BIOS_MATH_SUITE_ROM "" CACHE FILEPATH "Locally built BIOS math registe
 set(CUPID_IO_SUITE_ROM "" CACHE FILEPATH "Locally built I/O register-read suite ROM")
 set(CUPID_SERIAL_SUITE_ROM "" CACHE FILEPATH "Locally built serial timing and register suite ROM")
 set(CUPID_RTC_STATE_ROM "" CACHE FILEPATH "Checksum-verified local RTC state corpus with RAM result transport")
+set(CUPID_DISPLAY_PROBE_DIR "" CACHE PATH "Root containing verified display startup and texture cartridges")
 set(CUPID_OBJECT_TAIL_PROBE_DIR "" CACHE PATH "Root containing the verified object texture-tail cartridge")
 set(CUPID_CP14_PROBE_DIR "" CACHE PATH "Root containing the checksum-verified CP14 timing cartridge")
 set(CUPID_SERIAL_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified serial cartridge probes")
@@ -629,14 +630,18 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_bus_feedback_protocol.py)
     set_tests_properties(runner.bus-feedback-protocol PROPERTIES TIMEOUT 10)
 
-    add_test(NAME runner.thumb-comparison-protocol COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_thumb_comparisons.py)
-    add_test(NAME runner.serial-probe-execution COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_serial_probe_execution.py
+    add_test(NAME runner.display-probe-inputs COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_display_inputs.py)
+    set_tests_properties(runner.display-probe-inputs PROPERTIES TIMEOUT 10)
+
+    add_test(NAME runner.immediate-comparison-protocol COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_immediate_comparisons.py)
+    add_test(NAME runner.immediate-comparison-execution COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_immediate_execution.py
         --runner $<TARGET_FILE:cupidgba-headless>)
     add_test(NAME runner.fifo-source-builder COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_fifo_source_builder.py)
-    set_tests_properties(runner.thumb-comparison-protocol runner.serial-probe-execution
+    set_tests_properties(runner.immediate-comparison-protocol runner.immediate-comparison-execution
         runner.fifo-source-builder PROPERTIES TIMEOUT 10)
 
     if(CUPID_BUS_FEEDBACK_PROBE_DIR)
@@ -1028,6 +1033,23 @@ if(BUILD_TESTING)
             set_tests_properties(gba.object-shape-${mode}-${transform} PROPERTIES TIMEOUT 30)
         endforeach()
     endforeach()
+
+    if(CUPID_DISPLAY_PROBE_DIR)
+        foreach(case startup-line startup-vblank startup-irq startup-halt object-tail-normal)
+            add_test(NAME rom.display-${case} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_display_probe.py
+                --directory ${CUPID_DISPLAY_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless>
+                --test ${case})
+            set_tests_properties(rom.display-${case} PROPERTIES TIMEOUT 100)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.display-${case}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_display_probe.py
+                    --directory ${CUPID_DISPLAY_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless>
+                    --test ${case} --bios ${CUPID_TEST_BIOS})
+                set_tests_properties(rom.display-${case}-external PROPERTIES TIMEOUT 100)
+            endif()
+        endforeach()
+    endif()
 
     add_executable(test_object_tail tests/gba/render/test_object_tail.c)
     target_link_libraries(test_object_tail PRIVATE cupid_core)
