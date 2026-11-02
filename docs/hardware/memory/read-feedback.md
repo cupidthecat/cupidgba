@@ -10,7 +10,7 @@ The halfword path distinguishes these ports:
 - OAM supplies its full aligned word, including the half not returned to the CPU.
 - IWRAM changes the selected halfword bank and retains the other bank's data.
   Timed CPU writes retain their addressed byte, halfword or word lanes. DMA
-  halfword and word writes retain the corresponding lanes as well.
+  halfword and word reads and writes retain the corresponding lanes as well.
 - The external halfword ports repeat the sampled halfword across the input word.
 - BIOS reads preserve the existing read-protection policy.
 - Unmapped reads do not drive a new value.
@@ -112,7 +112,7 @@ The cartridges retain a 360-frame, 150-million-step and 90-second process limit.
 ## Remaining limits
 
 This source-informed model covers mapped memory byte/halfword/word read
-feedback and IWRAM write-lane history. The added matrices check 2,496 scenes
+feedback and IWRAM write-lane history. The added matrices check 3,008 scenes
 through CPU instructions, DMA handover, remapping and four clock epochs, plus
 observer and legacy-interface ownership controls. They include GPIO/reader
 word assembly, backup byte expansion and address-driven reads beyond a small

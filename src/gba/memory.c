@@ -695,6 +695,8 @@ uint32_t cupid_memory_load16(struct CupidARM *cpu, uint32_t address, int *cycleC
             break;
         case GBA_REGION_IWRAM:
             LOAD_16(value, address & (GBA_SIZE_IWRAM - 2), memory->iwram);
+            if (gba->performingDMA)
+                cupid_memory_retain_iwram_lanes(gba, address, (uint16_t)value, 2);
             break;
         case GBA_REGION_IO:
             sync_io(cpu, cycleCounter);
@@ -977,7 +979,7 @@ void cupid_memory_store32(struct CupidARM *cpu, uint32_t address, int32_t value,
         case GBA_REGION_IWRAM:
             STORE_32(value, address & (GBA_SIZE_IWRAM - 4), memory->iwram);
             if (timedCounter || cycleCounter || gba->performingDMA)
-                cupid_memory_retain_iwram_write(gba, address, (uint32_t)value, 4);
+                cupid_memory_retain_iwram_lanes(gba, address, (uint32_t)value, 4);
             break;
         case GBA_REGION_IO:
             sync_io(cpu, cycleCounter);
@@ -1059,7 +1061,7 @@ void cupid_memory_store16(struct CupidARM *cpu, uint32_t address, int16_t value,
         case GBA_REGION_IWRAM:
             STORE_16(value, address & (GBA_SIZE_IWRAM - 2), memory->iwram);
             if (timedCounter || cycleCounter || gba->performingDMA)
-                cupid_memory_retain_iwram_write(gba, address, (uint16_t)value, 2);
+                cupid_memory_retain_iwram_lanes(gba, address, (uint16_t)value, 2);
             break;
         case GBA_REGION_IO:
             sync_io(cpu, cycleCounter);
@@ -1140,7 +1142,7 @@ void cupid_memory_store8(struct CupidARM *cpu, uint32_t address, int8_t value, i
         case GBA_REGION_IWRAM:
             ((int8_t *)memory->iwram)[address & (GBA_SIZE_IWRAM - 1)] = value;
             if (timedCounter || cycleCounter || gba->performingDMA)
-                cupid_memory_retain_iwram_write(gba, address, (uint8_t)value, 1);
+                cupid_memory_retain_iwram_lanes(gba, address, (uint8_t)value, 1);
             break;
         case GBA_REGION_IO:
             sync_io(cpu, cycleCounter);

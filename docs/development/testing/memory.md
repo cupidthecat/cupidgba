@@ -21,6 +21,12 @@ DMA writes. Local byte/halfword lanes must survive independently across all
 decoder configurations and four clock epochs. Untimed observers and reads from
 another device must preserve that local history.
 
+The `iwram-dma-reads` group adds 512 source histories across every DMA channel,
+read width, addressed bank, remapping control and four clock epochs. It checks
+local history separately from the repeated channel latch and destination, then
+reads the opposite bank through the timed CPU path. The preceding core fails
+the retained source-bank check.
+
 The `byte-ports` and `word-ports` groups add 1,664 handovers across eleven RAM,
 display and cartridge windows plus GPIO and reader ports. They require complete
 DMA latches and destination words, retained IWRAM history and correct CPU

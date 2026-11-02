@@ -723,6 +723,62 @@ static void byte_iwram(void) {
     printf("IWRAM signed/unsigned byte guest histories=%u\n", scenes);
 }
 
+/* DMA source reads retain local bank history independently of the repeated
+ * halfword on the channel latch. A later CPU read must see the other bank. */
+static void iwram_dma_reads(void) {
+    const uint64_t clocks[] = {0, INT32_MAX - 32u, UINT32_MAX - 32u, UINT64_C(0x300000000)};
+    const unsigned controls[] = {0x20, 0, 0x21, 1};
+    const uint32_t halfExpected[] = {0xA7C4E195, 0xA7C4E195, 0x8B725B36, 0x8B725B36};
+    unsigned scenes = 0;
+    for (unsigned epoch = 0; epoch < 4; epoch++)
+        for (unsigned map = 0; map < 4; map++)
+            for (unsigned channel = 0; channel < 4; channel++)
+                for (unsigned width = 2; width <= 4; width *= 2)
+                    for (unsigned lane = 0; lane < 4; lane++) {
+                        struct CupidGBA *g = machine(clocks[epoch]);
+                        seed(g, 0x02000200, 0xA7C45B36);
+                        start(g, 3, 0x02000200, 0x03000200);
+                        cupid_timing_tick(&g->timing, 11);
+                        const uint32_t raw = UINT32_C(0x8B72E195);
+                        memcpy(g->memory.iwram + 0x100, &raw, 4);
+                        cupid_memory_store16(&g->cpu, 0x04000800, (int16_t)controls[map], NULL);
+                        uint32_t address = 0x03008100;
+                        if (controls[map] & 1)
+                            address ^= 0x02000000;
+                        if (!(controls[map] & 0x20))
+                            address ^= 0x01000000;
+                        CHECK(cupid_memory_load32(&g->cpu, address, NULL) == raw);
+                        CHECK(g->memory.iwramBus == 0xA7C45B36);
+                        cupid_dma_write_sad(g, (int)channel, address + lane);
+                        cupid_dma_write_dad(g, (int)channel, 0x05000200);
+                        cupid_dma_write_cnt_lo(g, (int)channel, 1);
+                        cupid_dma_write_cnt(g, (int)channel, width == 4 ? 0x8400 : 0x8000);
+                        cupid_timing_tick(&g->timing, 32);
+                        const uint32_t history = width == 4 ? raw : halfExpected[lane];
+                        const uint32_t half = (raw >> ((lane & 2) * 8)) & 0xFFFF;
+                        const uint32_t latch = width == 4 ? raw : half | half << 16;
+                        CHECK(!g->memory.dmaRunning && !g->memory.dma[channel].enable);
+                        CHECK(g->memory.iwramBus == history);
+                        CHECK(g->memory.dma[channel].latch == latch && g->memory.dmaBus == latch);
+                        CHECK(g->memory.lastWasDMA && cupid_memory_open_bus(&g->cpu) == latch);
+                        CHECK((width == 4 ? cupid_memory_load32(&g->cpu, 0x05000200, NULL)
+                                          : cupid_memory_load16(&g->cpu, 0x05000200, NULL)) ==
+                              (width == 4 ? raw : half));
+                        /* Read the opposite bank: only this CPU bank may replace history. */
+                        const unsigned opposite = (lane & 2) ^ 2;
+                        int cycles = 0;
+                        g->cpu.memory.timed = true;
+                        CHECK(cupid_memory_load16(&g->cpu, address + opposite, &cycles) ==
+                              ((raw >> (opposite * 8)) & 0xFFFF));
+                        CHECK(g->memory.iwramBus == raw && g->memory.openBus == raw);
+                        CHECK(!g->memory.lastWasDMA);
+                        destroy(g);
+                        scenes++;
+                    }
+    CHECK(scenes == 512);
+    printf("IWRAM DMA source and subsequent CPU bank histories=%u\n", scenes);
+}
+
 static void iwram_writes(void) {
     const uint64_t clocks[] = {0, INT32_MAX - 32u, UINT32_MAX - 32u, UINT64_C(0x300000000)};
     const unsigned controls[] = {0x20, 0, 0x21, 1};
@@ -849,6 +905,8 @@ int main(int argc, char **argv) {
         RUN(fetch_irq);
     else if (!strcmp(argv[1], "byte-iwram"))
         RUN(byte_iwram);
+    else if (!strcmp(argv[1], "iwram-dma-reads"))
+        RUN(iwram_dma_reads);
     else if (!strcmp(argv[1], "iwram-writes"))
         RUN(iwram_writes);
     else if (!strcmp(argv[1], "byte-ports"))

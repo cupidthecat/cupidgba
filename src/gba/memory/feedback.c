@@ -22,7 +22,7 @@ static uint32_t merge_iwram_lanes(uint32_t retained, uint32_t address, uint32_t 
     return (retained & ~mask) | ((value << shift) & mask);
 }
 
-void cupid_memory_retain_iwram_write(struct CupidGBA *gba, uint32_t address, uint32_t value,
+void cupid_memory_retain_iwram_lanes(struct CupidGBA *gba, uint32_t address, uint32_t value,
                                      unsigned width) {
     gba->memory.iwramBus = merge_iwram_lanes(gba->memory.iwramBus, address, value, width);
 }
