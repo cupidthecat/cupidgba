@@ -34,7 +34,10 @@ destruction release it. No card, ROM or firmware bytes are distributed.
 The core retains the camera's MSB-first serial commands, ninth acknowledgement
 clocks, repeated starts, register mirrors and sequential indexing. The scanner
 uses normalized monochrome dots, three camera samples per dot, and an
-acknowledged scanline sequence. Power and clock controls gate that sequence.
+acknowledged scanline sequence. The reader's power and clock-enable bits gate
+that sequence; the console's WAITCNT PHI output and alternate clock rates are
+not yet connected to camera acquisition or the LED counter. Serial transactions
+also do not model the camera's unpowered electrical response.
 Per-block thresholds operate on monochrome brightness endpoints; the extrema
 registers retain the brightest block samples and darkest image sample.
 
@@ -51,8 +54,8 @@ not implemented. The normalized scan sequence is not a physical clock measuremen
 
 Before its first flash-bus access, a fresh erased sector receives generated
 default calibration with a valid checksum. A partly populated sector is preserved
-byte for byte. Initialization
-runs once per attached battery, so a later guest erase is not silently repaired.
+byte for byte. Initialization runs once per attached battery, so a later guest
+erase is not silently repaired.
 The original battery input file remains unchanged.
 
 ## Bus and regression coverage
