@@ -60,7 +60,7 @@ endif()
 
 add_library(cupid_core STATIC
     src/arm/arm.c src/arm/isa-arm.c src/arm/isa-thumb.c
-    src/core/timing.c src/core/file.c src/platform/context.c src/platform/key-script.c
+    src/core/timing.c src/core/file.c src/core/file-path.c src/platform/context.c src/platform/key-script.c src/platform/paths.c
     src/gba/gba.c src/gba/memory.c src/gba/memory/feedback.c src/gba/memory/control.c src/gba/cartridge/image.c src/gba/cartridge/paged-rom.c src/gba/save/detection.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
     src/gba/audio.c src/gba/audio/wave.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c
     src/gba/hle-bios.c src/gba/bios/file.c src/gba/savedata.c src/gba/save/file.c
@@ -527,6 +527,12 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_runner_checkpoint.py
         --runner $<TARGET_FILE:cupidgba-headless>)
     set_tests_properties(runner.checkpoint PROPERTIES TIMEOUT 10)
+    foreach(group inputs links outputs names writeback)
+        add_test(NAME runner.path-ownership-${group} COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_path_ownership.py
+            --runner $<TARGET_FILE:cupidgba-headless> --group ${group})
+        set_tests_properties(runner.path-ownership-${group} PROPERTIES TIMEOUT 30)
+    endforeach()
     add_test(NAME runner.observations COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_runner_observations.py
         --runner $<TARGET_FILE:cupidgba-headless>)
@@ -980,6 +986,13 @@ if(BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_frontend_frames.py
             --frontend $<TARGET_FILE:cupidgba> --observer $<TARGET_FILE:test_frontend_frames>)
         set_tests_properties(platform.frontend-frames PROPERTIES TIMEOUT 30)
+        foreach(group frontend-single frontend-local)
+            add_test(NAME platform.path-ownership-${group} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_path_ownership.py
+                --runner $<TARGET_FILE:cupidgba-headless> --frontend $<TARGET_FILE:cupidgba>
+                --group ${group})
+            set_tests_properties(platform.path-ownership-${group} PROPERTIES TIMEOUT 30)
+        endforeach()
         add_test(NAME platform.frontend-replay COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_frontend_replay.py
             --frontend $<TARGET_FILE:cupidgba> --runner $<TARGET_FILE:cupidgba-headless>)

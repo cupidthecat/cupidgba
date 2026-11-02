@@ -39,6 +39,13 @@ filesystem. An open Windows file can prevent replacement; closing the other
 application allows a retry. A path that exceeds the frontend's save-path buffer
 is rejected rather than truncated.
 
+Before execution, the frontend also checks derived save and enabled RTC paths
+against every ROM, BIOS, card and replay input, and against the other consoles'
+output paths. A collision stops startup without replacing any file. Shared
+read-only ROMs retain independent player battery paths. See
+[input and output ownership](../../usage/files.md) for explicit runner writeback
+and capture-path rules.
+
 Native regressions cover all capacities, two complete replacements and reloads,
 capacity expansion, explicit overrides, invalid input, companion-file collisions,
 protected files, open readers and recovery after a real delayed write error.

@@ -268,3 +268,29 @@ output value on failure. `runner.arguments` exercises every numeric argument
 position through the real CLI, preserves all seven existing output files on
 rejection, and requires completed checkpoint/terminal controls for valid radices.
 The tests keep three-second subprocess and ten-second group deadlines.
+
+## Input and output ownership
+
+Five `runner.path-ownership-*` groups exercise every capture type against ROM,
+BIOS, replay, card, save and RTC inputs, and every pair of output types. They
+preserve complete input and prior-output bytes on rejection. Existing hard links,
+directory aliases and normalized missing-file paths must produce the same
+decision. POSIX cases include direct symbolic links, FIFOs, dangling links and
+directory names containing backslashes. Windows cases include directory junctions,
+case aliases and trailing dots/spaces. Ordinary captures and repeated explicit
+save/RTC writeback remain required positive controls.
+Read-only snapshot destinations must retain their complete previous bytes.
+The POSIX writeback control also imposes a child-only 4 KiB file-size limit:
+writing a 32 KiB snapshot must fail while preserving the loaded 32 KiB battery.
+
+The two `platform.path-ownership-*` groups check derived save and RTC paths in
+single-console and two/three/four-console sessions. An owned ARM guest writes a
+real SRAM byte; each endpoint must persist its own complete battery while
+preserving the shared ROM. Disabled or absent persistence hardware must leave
+input files untouched, including ROM filenames with save/RTC extensions. The
+existing explicit BIOS validation and malformed-input checks retain their
+startup boundaries. All seven groups have thirty-second CTest deadlines and
+fifteen-second subprocess guards.
+
+These checks cover startup ownership. They do not lock paths against concurrent
+external replacement. See [file path rules](../../usage/files.md).

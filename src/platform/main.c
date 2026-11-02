@@ -5,6 +5,7 @@
 #include "cupid/gba.h"
 #include "cupid/platform.h"
 #include "cupid/platform/key-script.h"
+#include "cupid/platform/paths.h"
 #include "cupid/platform/peripherals.h"
 #include "cupid/platform/rtc.h"
 #include "cupid/platform/save.h"
@@ -250,7 +251,8 @@ int main(int argc, char *argv[]) {
                                               .peripherals = peripherals,
                                               .cardPaths = cards,
                                               .cardCount = cardCount,
-                                              .keyReplay = keyScript ? &replay : NULL};
+                                              .keyReplay = keyScript ? &replay : NULL,
+                                              .keyScriptPath = keyScript};
     int result;
     if (peerCount) {
         linked[0] = romPath;
@@ -279,6 +281,10 @@ static int run_console(const char *romPath, const char *biosPath, const char *sa
         fprintf(stderr, "Error: Save path is too long: %s\n", romPath);
         return 1;
     }
+
+    char rtcPath[sizeof(savePath)];
+    memcpy(rtcPath, savePath, strlen(savePath) + 1);
+    memcpy(rtcPath + strlen(rtcPath) - 4, ".rtc", 5);
 
     /** Create GBA instance. */
     struct CupidCardReader cardInput;
@@ -331,6 +337,20 @@ static int run_console(const char *romPath, const char *biosPath, const char *sa
         }
     }
 
+    struct CupidPlatformPath filePaths[5 + CUPID_CARD_QUEUE] = {
+        {romPath, CUPID_PATH_INPUT},
+        {biosPath, CUPID_PATH_INPUT},
+        {devices->keyScriptPath, CUPID_PATH_INPUT},
+        {saveSelection.type == SAVE_NONE ? NULL : savePath, CUPID_PATH_SAVE_OUTPUT},
+        {gba.cartridge.rtcPresent ? rtcPath : NULL, CUPID_PATH_RTC_OUTPUT}};
+    size_t filePathCount = 5;
+    for (unsigned i = 0; i < cardCount; ++i)
+        filePaths[filePathCount++] = (struct CupidPlatformPath){cards[i], CUPID_PATH_INPUT};
+    if (!cupid_platform_paths_validate(filePaths, filePathCount)) {
+        cupid_gba_destroy(&gba);
+        return 1;
+    }
+
     /** Reset system. */
     cupid_gba_reset(&gba);
     if (devices->keyReplay)
@@ -346,9 +366,6 @@ static int run_console(const char *romPath, const char *biosPath, const char *sa
         return 1;
     }
 
-    char rtcPath[sizeof(savePath)];
-    memcpy(rtcPath, savePath, strlen(savePath) + 1);
-    memcpy(rtcPath + strlen(rtcPath) - 4, ".rtc", 5);
     rtcConfig.path = rtcPath;
     struct CupidRTCDateTime hostDate;
     uint64_t hostStamp = 0;

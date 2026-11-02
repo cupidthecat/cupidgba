@@ -20,6 +20,7 @@ struct CupidLocalDevices {
     const char *const *cardPaths;
     unsigned cardCount;
     struct CupidKeyReplay *keyReplay;
+    const char *keyScriptPath;
 };
 
 int cupid_platform_run_local(const char *const paths[], unsigned count, const char *bios,

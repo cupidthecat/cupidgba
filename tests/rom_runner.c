@@ -3,9 +3,11 @@
  * @file rom_runner.c
  * @brief Bounded headless execution, guest observations and output capture.
  */
+#include "cupid/file.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
 #include "cupid/platform/key-script.h"
+#include "cupid/platform/paths.h"
 #include "cupid/platform/peripherals.h"
 #include "cupid/platform/save.h"
 #include <errno.h>
@@ -482,6 +484,25 @@ int main(int argc, char **argv) {
         gba->cpu.gprs[ARM_PC] = (int32_t)startAddress;
         CupidARMWritePC(&gba->cpu);
     }
+    struct CupidPlatformPath filePaths[13 + CUPID_CARD_QUEUE] = {
+        {rom, CUPID_PATH_INPUT},
+        {bios, CUPID_PATH_INPUT},
+        {keyScript, CUPID_PATH_INPUT},
+        {saveInput, CUPID_PATH_SAVE_INPUT},
+        {rtcInput, CUPID_PATH_RTC_INPUT},
+        {output, CUPID_PATH_OUTPUT},
+        {vramOutput, CUPID_PATH_OUTPUT},
+        {ioOutput, CUPID_PATH_OUTPUT},
+        {ewramOutput, CUPID_PATH_OUTPUT},
+        {saveOutput, CUPID_PATH_SAVE_OUTPUT},
+        {rtcOutput, CUPID_PATH_RTC_OUTPUT},
+        {audioOutput, CUPID_PATH_OUTPUT},
+        {motorOutput, CUPID_PATH_OUTPUT}};
+    size_t filePathCount = 13;
+    for (unsigned i = 0; i < cardCount; ++i)
+        filePaths[filePathCount++] = (struct CupidPlatformPath){cards[i], CUPID_PATH_INPUT};
+    if (!cupid_platform_paths_validate(filePaths, filePathCount))
+        goto cleanup;
     if (motorOutput) {
         motorTrace.file = fopen(motorOutput, "wb");
         if (!motorTrace.file) {
@@ -612,15 +633,10 @@ int main(int argc, char **argv) {
             result = 2;
             continue;
         }
-        FILE *file = fopen(dumpPaths[i], "wb");
-        if (!file) {
+        if (!cupid_file_replace(dumpPaths[i], dumpData[i], dumpSizes[i])) {
             perror(dumpPaths[i]);
             result = 2;
-            continue;
         }
-        bool written = fwrite(dumpData[i], 1, dumpSizes[i], file) == dumpSizes[i];
-        if (fclose(file) != 0 || !written)
-            result = 2;
     }
 cleanup:
     cupid_video_set_frame_callback(&gba->video, NULL, NULL);
