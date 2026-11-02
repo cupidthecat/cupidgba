@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file context.h
+ * @brief Internal execution-context lifecycle and switch interface.
+ *
+ * - Declare context creation, suspension, resumption and destruction.
+ * - Keep backend-specific context storage behind the interface.
+ */
 #ifndef CUPID_CONTEXT_H
 #define CUPID_CONTEXT_H
 

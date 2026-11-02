@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file context.c
+ * @brief Suspendable execution contexts for local emulator endpoints.
+ *
+ * - Preserve per-endpoint stacks across context switches.
+ * - Select the available native or portable context backend.
+ */
 #ifndef _WIN32
 #define _XOPEN_SOURCE 700
 #endif

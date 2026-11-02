@@ -1,4 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file user_bank_gpio.c
+ * @brief GPIO observations during user-bank instruction probes.
+ *
+ * - Provide cupid_test_user_bank_gpio.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

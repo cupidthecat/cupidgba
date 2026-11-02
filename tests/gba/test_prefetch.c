@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_prefetch.c
+ * @brief Game Pak queue filling, consumption and data-access interruption.
+ *
+ * - Check wait controls before fetch and after invalid jump.
+ * - Check initial fetch pending completion and cache consumption.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

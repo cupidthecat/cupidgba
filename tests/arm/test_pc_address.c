@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_pc_address.c
+ * @brief Logical PC alignment, branch exchange and data-load rotation.
+ *
+ * - Check refill keeps logical a1 and unrotated words.
+ * - Check pc operands and data rotation use distinct addresses.
+ */
 #include "../bios/caller.h"
 #include "../test.h"
 #include "cupid/gba.h"

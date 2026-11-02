@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file file.h
+ * @brief Exact file reads and staged replacement interface.
+ *
+ * - Validate regular-file inputs before reading complete payloads.
+ * - Replace output files through an exclusively created staging file.
+ */
 #ifndef CUPID_FILE_H
 #define CUPID_FILE_H
 #include "cupid/types.h"

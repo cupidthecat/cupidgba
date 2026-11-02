@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_mosaic_vertical.c
+ * @brief Vertical mosaic latches and scanline texture progression.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 #include "mosaic-vertical-rows.inc"

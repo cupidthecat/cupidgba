@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file instruction_probe.h
+ * @brief Issued-instruction operand observation and probe acceptance.
+ */
 #ifndef CUPID_TEST_INSTRUCTION_PROBE_H
 #define CUPID_TEST_INSTRUCTION_PROBE_H
 

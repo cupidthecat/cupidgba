@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_cp14_probe.py
+# @brief Check the original CP14 timing, read values and flag transfer at actual issue.
 """Check the original CP14 timing, read values and flag transfer at actual issue."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

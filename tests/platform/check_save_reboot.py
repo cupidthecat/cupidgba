@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_save_reboot.py
+# @brief Require all 32 independent reboot cases from two isolated native workers.
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Require all 32 independent reboot cases from two isolated native workers."""
 import argparse

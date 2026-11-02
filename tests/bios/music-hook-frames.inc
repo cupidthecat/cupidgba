@@ -1,3 +1,7 @@
+/**
+ * @file music-hook-frames.inc
+ * @brief Expected music callback observations from owned inputs.
+ */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Independent observations of owned inputs; see the music-player guide. */
 static const struct MusicExpected musicHookExpected[2][20] = {

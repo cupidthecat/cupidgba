@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file uart.c
+ * @brief UART transmit, receive, buffering and interrupt timing.
+ *
+ * - Advance start, payload, parity and stop-bit samples.
+ * - Publish data and status through UART register helpers.
+ */
 #include "uart.h"
 #include "cupid/gba.h"
 

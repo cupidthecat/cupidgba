@@ -1,3 +1,5 @@
+# @file test_thumb_exchange_protocol.py
+# @brief Keep partial or contradictory cartridge observations out of the result gate.
 """Keep partial or contradictory cartridge observations out of the result gate."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import json

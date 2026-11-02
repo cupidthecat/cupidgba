@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_dma_suite.py
+# @brief Check the transfer results of a locally built DMA suite with either BIOS path.
 """Check the transfer results of a locally built DMA suite with either BIOS path."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

@@ -1,3 +1,5 @@
+# @file comparisons.py
+# @brief Validate original comparison operands and completed cartridge result boundaries.
 """Validate original comparison operands and completed cartridge result boundaries."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

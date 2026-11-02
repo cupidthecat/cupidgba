@@ -1,4 +1,12 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file control.c
+ * @brief Internal-memory address decoding and live opcode-view rebinding.
+ *
+ * - Swap low memory windows and select the physical internal RAM alias.
+ * - Retain supported control bits without copying or clearing RAM.
+ * - Rebind future fetches while preserving pipeline samples and jump history.
+ */
 #include "cupid/gba.h"
 
 /* Decode the low 64 MiB before selecting a memory device. Bit zero swaps

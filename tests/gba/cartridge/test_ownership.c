@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_ownership.c
+ * @brief Cartridge replacement, backup ownership and event cancellation.
+ *
+ * - Check all backup transitions own fresh storage.
+ * - Check replacement cancels old events and rebinds new ones.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 #include <errno.h>

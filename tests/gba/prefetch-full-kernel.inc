@@ -1,3 +1,7 @@
+/**
+ * @file prefetch-full-kernel.inc
+ * @brief Guest kernel checks for full prefetch queues and ROM data flushes.
+ */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 static void full_queue_rom_data_flush_kernel(void) {
     const uint64_t clocks[] = {0, UINT32_MAX - 10u, UINT64_C(0x300000000)};

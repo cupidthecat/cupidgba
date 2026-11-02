@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_ppu_access.py
+# @brief Observe unchanged display-memory access sweeps in SRAM.
 """Observe unchanged display-memory access sweeps in SRAM."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

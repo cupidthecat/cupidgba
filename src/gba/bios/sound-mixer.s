@@ -1,3 +1,5 @@
+@ @file sound-mixer.s
+@ @brief Firmware frame mixing, channel callbacks and sample writes.
 @ SPDX-License-Identifier: GPL-3.0-or-later
 @ The frame mixer owns the work area while callbacks and sample writes run.
 .org 0x1DC4

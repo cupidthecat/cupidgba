@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_irq_clock_gpio.c
+ * @brief GPIO-triggered interrupt clocks and issued-instruction capture.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 

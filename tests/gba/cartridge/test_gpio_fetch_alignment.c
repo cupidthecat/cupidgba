@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_gpio_fetch_alignment.c
+ * @brief GPIO branch fetches and instruction alignment.
+ */
 /* Owned GPIO opcode-fetch controls. Cartridge, BIOS and battery files are
  * never loaded. Logical ARM A1 must not select another physical GPIO word. */
 #include "../../test.h"

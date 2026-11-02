@@ -1,4 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file probe_run.h
+ * @brief Headless probe lifecycle and terminal callback interface.
+ *
+ * - Provide cupid_test_probe_begin, cupid_test_probe_boundary.
+ */
 #ifndef CUPID_TEST_PROBE_RUN_H
 #define CUPID_TEST_PROBE_RUN_H
 

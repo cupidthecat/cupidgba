@@ -1,3 +1,10 @@
+/**
+ * @file serial.c
+ * @brief Serial mode selection, pin routing and clocked transfers.
+ *
+ * - Advance normal and multiplayer frames through scheduled edges.
+ * - Retain peer pin state and cancel transfers when control changes.
+ */
 #include "cupid/gba.h"
 #include "uart.h"
 

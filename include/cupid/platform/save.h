@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file save.h
+ * @brief Frontend backup-type selection and configuration interface.
+ *
+ * - Represent explicit save choices separately from automatic detection.
+ * - Declare argument parsing and transactional backup configuration.
+ */
 #ifndef CUPID_PLATFORM_SAVE_H
 #define CUPID_PLATFORM_SAVE_H
 

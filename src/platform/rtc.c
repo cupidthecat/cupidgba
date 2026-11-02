@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file rtc.c
+ * @brief Frontend RTC initialization, offline progression and persistence.
+ *
+ * - Combine battery state with an explicit seed or host-clock policy.
+ * - Load and save RTC state at frontend lifecycle boundaries.
+ */
 #include "cupid/platform/rtc.h"
 #include "cupid/gba.h"
 #include <errno.h>

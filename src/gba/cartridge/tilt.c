@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file tilt.c
+ * @brief Tilt sensor command decoding and captured axis reads.
+ *
+ * - Latch configured axis input through the cartridge command sequence.
+ * - Return the selected bytes without replacing live external input.
+ */
 #include "cupid/tilt.h"
 
 void cupid_tilt_reset(struct CupidTilt *tilt) {

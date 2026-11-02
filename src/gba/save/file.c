@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file file.c
+ * @brief Backup-file validation, capacity selection and persistence.
+ *
+ * - Load complete supported capacities before replacing live storage.
+ * - Persist backup data through checked file operations.
+ */
 #ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L
 #endif
@@ -151,6 +158,7 @@ bool cupid_savedata_load_file(struct CupidSavedata *save, const char *path) {
     save->command = FLASH_COMMAND_NONE;
     save->flashState = FLASH_STATE_RAW;
     save->readBitsRemaining = 0;
+    save->eepromAddressBits = 0;
     save->eepromWriteBits = 0;
     free(save->data);
     save->data = loaded;

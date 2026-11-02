@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file uart.h
+ * @brief Internal UART register and clocked-pin interface.
+ *
+ * - Declare control, data and receive-ready helpers.
+ * - Share UART event handling with serial mode selection.
+ */
 #ifndef CUPID_SERIAL_UART_INTERNAL_H
 #define CUPID_SERIAL_UART_INTERNAL_H
 

@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_rtc_active.c
+ * @brief RTC calendar and parameter reads during active serial frames.
+ */
 #include "../../test.h"
 #include "cupid/rtc.h"
 

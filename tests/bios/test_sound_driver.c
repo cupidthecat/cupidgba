@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_sound_driver.c
+ * @brief BIOS sound-driver channel headers and work-area behavior.
+ *
+ * - Check mode fields and all channel headers.
+ * - Check every frame counter and access guard.
+ */
 #include "../test.h"
 #include "caller.h"
 #include "cupid/gba.h"

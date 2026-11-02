@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file peripherals.c
+ * @brief Strict frontend peripheral parsing and core configuration.
+ *
+ * - Validate presence modes and external sensor sample ranges.
+ * - Apply explicit device choices and samples to the selected cartridge.
+ */
 #include "cupid/platform/peripherals.h"
 #include "cupid/gba.h"
 

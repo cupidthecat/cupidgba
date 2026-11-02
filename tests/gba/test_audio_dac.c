@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_audio_dac.c
+ * @brief Digital audio levels, bias writes and captured samples.
+ */
 #include "../bios/caller.h"
 #include "../test.h"
 #include "cupid/gba.h"

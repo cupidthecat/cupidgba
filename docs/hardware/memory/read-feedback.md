@@ -22,6 +22,20 @@ fetch regions retain the existing pipeline reconstruction. Untimed observer
 reads do not change either the CPU input or the IWRAM bank history. Reset clears
 both, and separate emulator instances own separate state.
 
+CPU word reads from BIOS, IWRAM and OAM publish their complete input before
+releasing the bus. An unaligned load returns the rotated register value while
+the retained input stays aligned. IWRAM also updates both local banks. BIOS
+protection is applied before publication, and addresses outside the BIOS
+storage do not drive a new input. These rules use the decoded device after
+internal-memory remapping. Observer reads with no cycle counter retain input
+and bank history.
+
+Byte reads from BIOS and OAM likewise retain the complete aligned input word.
+Byte selection and signed-load extension affect only the CPU register result.
+BIOS reads use the selected protected word when execution is outside the BIOS.
+This extends the same port-retention policy used for halfword reads; it does
+not infer byte behavior for IWRAM or the external ports.
+
 Opcode publication follows the actual sample, including untimed pipeline
 refills before timed execution. It does not guess an opcode before the memory
 read. Timed IRQ entry also samples its discarded fetch without executing the
@@ -53,6 +67,24 @@ Eighty IRQ-entry scenes require the discarded sample followed by both vector
 samples, while preserving entry clocks, return address, status and pipeline
 contents. Omitting the discarded read fails this group.
 
+The word handover group adds 768 scenes across BIOS, IWRAM and OAM, four
+mapping settings, four byte offsets, all DMA channels and four clock epochs.
+It checks the CPU return value separately from the complete DMA input and
+destination word. BIOS protection and RAM/OAM aliases remain enabled. The
+word ownership group covers timed and legacy cycle-counted reads, observer
+peeks, unmapped reads and reset. The handover group fails without word
+publication. This extends the existing input-retention model; the reference
+port widths and software checks do not establish new physical handover
+measurements.
+
+Byte checks add 512 DMA handovers using the same mapping, address, channel and
+clock matrix on BIOS/OAM. Another 256 scenes execute ARM and Thumb unsigned
+and signed byte loads, checking the register value, unchanged flags, full
+input word and BIOS protection. Ownership checks also include timed and
+legacy byte reads, observer isolation and undriven addresses. The byte
+handover check fails before byte publication is enabled. These are software
+regressions for the selected port model, not physical captures of byte reads.
+
 Six pinned original cartridges check CPU/DMA interaction, IWRAM, OAM, protected
 sources, odd signed-halfword loads and unmapped reads. The runner requires each
 original comparison instruction, its operand and the completed terminal. One
@@ -72,9 +104,11 @@ The cartridges retain a 360-frame, 150-million-step and 90-second process limit.
 
 ## Remaining limits
 
-This work covers halfword data-read feedback and the word transfers that seed
-IWRAM history. It does not establish a complete physical bus model. Byte and
-word CPU input feedback, register-specific I/O feedback, narrow IWRAM writes,
+This work covers halfword data-read feedback, byte data reads from BIOS/OAM,
+word data reads from the three 32-bit internal ports and the word transfers
+that seed IWRAM history. It does not establish a complete physical bus model.
+Byte feedback on IWRAM and external ports, word
+feedback from external ports, register-specific I/O feedback, narrow IWRAM writes,
 cross-region input history and other partially driven buses need separate
 qualification. The fast-RAM and BIOS/OAM fetch rules follow the documented
 [GBA unused-memory behavior](https://problemkaputt.de/gbatek.htm#gbaunpredictablethings);

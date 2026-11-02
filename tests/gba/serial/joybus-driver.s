@@ -1,3 +1,7 @@
+/**
+ * @file joybus-driver.s
+ * @brief Owned guest JOY bus command and register-transfer driver.
+ */
 /* Owned JOY peer driver. Entry registers select the receive/send/control
  * registers, an EWRAM result buffer, and the first expected receive word.
  * Each complete round checks the input, records it, sends its complement,

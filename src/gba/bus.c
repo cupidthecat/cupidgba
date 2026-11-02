@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file bus.c
+ * @brief CPU bus ownership, timed accesses and display-port arbitration.
+ *
+ * - Advance CPU phases while honoring DMA stalls and device readiness.
+ * - Publish fetch ownership boundaries and split display-memory beats.
+ */
 #include "cupid/gba.h"
 
 void cupid_bus_wait(struct CupidARM *cpu) {

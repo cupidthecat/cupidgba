@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_audio.c
+ * @brief Audio register writes, wave RAM windows and channel state.
+ *
+ * - Check wave banks use the full cpu window at each width.
+ * - Check powered off mode writes leave wave ram accessible.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

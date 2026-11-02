@@ -232,12 +232,15 @@ clock, before the existing IF register pipeline. That separate event repairs
 both IRQ-latch runs at their original `0x7B` comparison. Base and the separate
 source base still fail on both firmware paths. Their first timer reading
 remains `0x62` instead of `0x68`. These are remaining failures, not new expectations.
+The [timer-conflict trace](fifo-timer-conflict.md) records both CPU reads and
+the surrounding timer, request, DMA-write and release deadlines on each BIOS
+path, with its observation scope kept separate from physical timing evidence.
 Seven-word queue qualification repeats all nine bundled images with both BIOS
 paths. All eighteen complete outputs and exit statuses match the preceding
 storage model. Sixteen pass; the two bundled base runs retain the `0x62` versus
 `0x68` failure. This does not rerun or replace the separate source-built result.
 Every original input, comparison and execution guard remains required. The
 power, refill and access-width regressions cover their selected logical model;
-complete FIFO/DMA timing acceptance remains open in #76. Physical queue capacity,
+complete FIFO/DMA timing acceptance remains open in #8, #10 and #1. Physical queue capacity,
 overflow contents, lane latching, reset pipeline behavior and timer/DMA/IRQ
 edges remain unmeasured. See [DMA](../dma.md) and [audio timing](timing.md).

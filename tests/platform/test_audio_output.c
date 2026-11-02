@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_audio_output.c
+ * @brief Host audio interpolation, buffering and live device output.
+ *
+ * - Check interpolation follows captured clocks through ring wrap.
+ * - Check callback partitioning preserves pcm and clock position.
+ */
 #include "../test.h"
 #include "cupid/platform.h"
 #undef main

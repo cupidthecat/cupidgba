@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file gyro.c
+ * @brief Gyroscope sample capture and serial GPIO conversion.
+ *
+ * - Snapshot the configured sample at the converter control edge.
+ * - Shift converter output through clocked pin transitions.
+ */
 #include "cupid/gyro.h"
 
 void cupid_gyro_reset_bus(struct CupidGyro *gyro) {

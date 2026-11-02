@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file tilt.h
+ * @brief Tilt sensor input and command-latched axis interface.
+ *
+ * - Retain live axis input separately from captured readings.
+ * - Declare cartridge-port reads, commands and reset handling.
+ */
 #ifndef CUPID_TILT_H
 #define CUPID_TILT_H
 

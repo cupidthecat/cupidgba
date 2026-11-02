@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file prefetch.c
+ * @brief Game Pak prefetch queue and cartridge-bus ownership transitions.
+ *
+ * - Track buffered halfwords, partial fills and in-flight wait clocks.
+ * - Handle fetch consumption, stream restart and data-access interruption.
+ */
 #include "cupid/gba.h"
 
 void cupid_prefetch_update(struct CupidGBA *gba, uint64_t timestamp) {

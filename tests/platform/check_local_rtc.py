@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_local_rtc.py
+# @brief Require independent local RTC batteries, options and startup isolation.
 """Require independent local RTC batteries, options and startup isolation."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

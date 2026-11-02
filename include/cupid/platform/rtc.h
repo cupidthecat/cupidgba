@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file rtc.h
+ * @brief Frontend RTC seed, host-clock and battery-file configuration.
+ *
+ * - Retain explicit seeds, battery paths and sampled host-clock anchors.
+ * - Declare clock loading and persistence at frontend boundaries.
+ */
 #ifndef CUPID_PLATFORM_RTC_H
 #define CUPID_PLATFORM_RTC_H
 #include "cupid/rtc.h"

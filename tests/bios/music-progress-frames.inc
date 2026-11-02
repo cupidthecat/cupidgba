@@ -1,3 +1,7 @@
+/**
+ * @file music-progress-frames.inc
+ * @brief Expected music-player progression observations.
+ */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Independent bus-progress and retained-image observations. */
 static const struct MusicProgressResult musicProgressExpected[3][3] = {

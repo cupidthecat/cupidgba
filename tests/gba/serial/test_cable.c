@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_cable.c
+ * @brief Local cable transfers, endpoint progress and serial observations.
+ */
 #include "../../bios/caller.h"
 #include "../../test.h"
 #include "cable-driver.inc"

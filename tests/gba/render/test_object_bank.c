@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_object_bank.c
+ * @brief Object texture bank addressing and rendered pixel checks.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 #include "object-bank-rows.inc"

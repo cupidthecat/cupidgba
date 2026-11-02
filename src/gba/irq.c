@@ -1,3 +1,10 @@
+/**
+ * @file irq.c
+ * @brief Interrupt register writes, source availability and CPU-line timing.
+ *
+ * - Queue register visibility independently of source transitions.
+ * - Update HALT wake and CPU interrupt lines at their scheduled edges.
+ */
 #include "cupid/gba.h"
 
 /* A completing CPU edge samples the previously accepted input. Peripheral

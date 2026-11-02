@@ -1,8 +1,18 @@
 #!/usr/bin/env python3
+# @file generate_cable_driver.py
+# @brief Verify or generate the complete owned local-cable driver image.
 """Verify or generate the complete owned local-cable driver image."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse
 from pathlib import Path
+
+
+FILE_HEADER = (
+    '/**\n'
+    ' * @file cable-driver.inc\n'
+    ' * @brief Owned normal and multiplayer guest callers for local-cable checks.\n'
+    ' */\n'
+)
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('image', type=Path)
@@ -17,6 +27,7 @@ for offset in range(0, len(image), 16):
     lines.append('    ' + ', '.join(f'0x{value:02X}' for value in image[offset:offset + 16]) + ',')
 lines.append('};')
 expected = ('\n'.join(lines) + '\n').encode()
+expected = FILE_HEADER.encode() + expected
 target = Path(__file__).with_name('cable-driver.inc')
 if args.write:
     target.write_bytes(expected)

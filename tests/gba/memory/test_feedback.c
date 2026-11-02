@@ -1,4 +1,13 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_feedback.c
+ * @brief CPU data and opcode input regressions at memory and DMA boundaries.
+ *
+ * - Check mapped read handover through every DMA channel and clock wrap.
+ * - Separate aligned input from rotated or sign-extended register values.
+ * - Exercise BIOS protection, remapping, mirrors and observer isolation.
+ * - Retain IWRAM bank history across opcode fetches, DMA writes and IRQ entry.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
@@ -94,6 +103,61 @@ static void handover(void) {
     printf("halfword CPU/DMA handovers=%u\n", scenes);
 }
 
+/* A read on these ports retains aligned input before DMA owns it.
+ * Exercise the decoder as well as the public address and CPU return lanes. */
+static void read_handover(unsigned width) {
+    const uint64_t clocks[] = {0, INT32_MAX - 2u, UINT32_MAX - 2u, UINT64_C(0x300000000)};
+    const unsigned controls[] = {0x20, 0, 0x21, 1};
+    unsigned scenes = 0;
+    for (unsigned epoch = 0; epoch < 4; epoch++)
+        for (unsigned map = 0; map < 4; map++)
+            for (unsigned device = 0; device < 3; device++)
+                for (unsigned lane = 0; lane < 4; lane++)
+                    for (unsigned channel = 0; channel < 4; channel++) {
+                        if (width == 1 && device == 1)
+                            continue;
+                        struct CupidGBA *g = machine(clocks[epoch]);
+                        const uint32_t raw = UINT32_C(0x8172E3A4);
+                        const uint32_t protected = UINT32_C(0x59BC26D8);
+                        const bool active = (lane & 1) != 0;
+                        uint32_t address = device == 0   ? 0x100
+                                           : device == 1 ? 0x03008100
+                                                         : 0x07000500;
+                        if (device < 2 && (controls[map] & 1))
+                            address ^= 0x02000000;
+                        if (device == 1 && !(controls[map] & 0x20))
+                            address ^= 0x01000000;
+                        memcpy((uint8_t *)g->memory.bios + 0x100, &raw, 4);
+                        memcpy(g->memory.iwram + 0x100, &raw, 4);
+                        memcpy((uint8_t *)g->video.oam.raw + 0x100, &raw, 4);
+                        cupid_memory_store16(&g->cpu, 0x04000800, (int16_t)controls[map], NULL);
+                        g->memory.activeRegion = active ? GBA_REGION_BIOS : GBA_REGION_ROM0;
+                        g->memory.biosPrefetch = protected;
+                        const uint32_t expected = device == 0 && !active ? protected : raw;
+                        start(g, channel, 0x04001000, 0x05000200);
+                        cupid_timing_tick(&g->timing, 1);
+                        CHECK(!g->memory.dmaRunning);
+                        g->cpu.memory.timed = true;
+                        int cycles = 0;
+                        const uint32_t result =
+                            width == 4 ? cupid_memory_load32(&g->cpu, address + lane, &cycles)
+                                       : cupid_memory_load8(&g->cpu, address + lane, &cycles);
+                        CHECK(result == (width == 4 ? ROR(expected, lane * 8)
+                                                    : (expected >> (lane * 8)) & 255));
+                        CHECK(g->memory.inputBusValid && g->memory.openBus == expected);
+                        CHECK(g->memory.dmaRunning);
+                        cupid_bus_wait(&g->cpu);
+                        CHECK(g->memory.dma[channel].latch == expected);
+                        CHECK(cupid_memory_load32(&g->cpu, 0x05000200, NULL) == expected);
+                        CHECK(!g->memory.dmaRunning && !g->cpuBlocked);
+                        CHECK(g->memory.biosPrefetch == protected);
+                        destroy(g);
+                        scenes++;
+                    }
+    CHECK(scenes == (width == 4 ? 768 : 512));
+    printf("CPU/DMA handovers width=%u scenes=%u\n", width, scenes);
+}
+
 static void ownership(void) {
     struct CupidGBA *first = machine(0);
     struct CupidGBA *second = machine(0);
@@ -122,6 +186,92 @@ static void ownership(void) {
           first->memory.iwramBus == 0);
     destroy(first);
     destroy(second);
+}
+
+static void read_ownership(void) {
+    const uint32_t addresses[] = {0x100, 0x03000100, 0x07000100};
+    for (unsigned timed = 0; timed < 2; timed++)
+        for (unsigned width = 1; width <= 4; width += 3)
+            for (unsigned device = 0; device < 3; device++) {
+                if (width == 1 && device == 1)
+                    continue;
+                struct CupidGBA *g = machine(0);
+                const uint32_t word = UINT32_C(0x8172E3A4);
+                memcpy((uint8_t *)g->memory.bios + 0x100, &word, 4);
+                seed(g, 0x03000100, word);
+                seed(g, 0x07000100, word);
+                g->memory.activeRegion = GBA_REGION_BIOS;
+                g->cpu.memory.timed = timed != 0;
+                int cycles = 0;
+                CHECK((width == 4 ? cupid_memory_load32(&g->cpu, addresses[device] + 1, &cycles)
+                                  : cupid_memory_load8(&g->cpu, addresses[device] + 1, &cycles)) ==
+                      (width == 4 ? UINT32_C(0xA48172E3) : 0xE3));
+                CHECK(g->memory.inputBusValid && cupid_memory_open_bus(&g->cpu) == word);
+                const uint32_t banks = g->memory.iwramBus;
+                /* Neither debugger peeks nor an undriven low window replaces input. */
+                for (unsigned region = 0; region < 3; region++) {
+                    cupid_memory_load32(&g->cpu, addresses[region] + 3, NULL);
+                    cupid_memory_load8(&g->cpu, addresses[region] + 3, NULL);
+                }
+                CHECK(g->memory.iwramBus == banks && cupid_memory_open_bus(&g->cpu) == word);
+                cupid_memory_load32(&g->cpu, 0x01000001, &cycles);
+                cupid_memory_load32(&g->cpu, 0x00004003, &cycles);
+                cupid_memory_load8(&g->cpu, 0x01000001, &cycles);
+                cupid_memory_load8(&g->cpu, 0x00004003, &cycles);
+                CHECK(g->memory.iwramBus == banks && cupid_memory_open_bus(&g->cpu) == word);
+                cupid_gba_reset(g);
+                CHECK(!g->memory.inputBusValid && !g->memory.iwramBus);
+                destroy(g);
+            }
+}
+
+/* The instruction decoder narrows or sign-extends only the register result.
+ * Its BIOS/OAM input must remain the same aligned word for either opcode. */
+static void byte_guest(void) {
+    const uint64_t clocks[] = {0, INT32_MAX - 2u, UINT32_MAX - 2u, UINT64_C(0x300000000)};
+    unsigned scenes = 0;
+    for (unsigned epoch = 0; epoch < 4; epoch++)
+        for (unsigned device = 0; device < 2; device++)
+            for (unsigned execution = 0; execution < 2; execution++)
+                for (unsigned thumb = 0; thumb < 2; thumb++)
+                    for (unsigned sign = 0; sign < 2; sign++)
+                        for (unsigned lane = 0; lane < 4; lane++) {
+                            struct CupidGBA *g = machine(clocks[epoch]);
+                            const uint32_t raw = UINT32_C(0x8172E3A4);
+                            const uint32_t protected = UINT32_C(0x59BC26D8);
+                            const uint32_t arm[] = {sign ? 0xE19100D2 : 0xE5D10000, 0xE1A00000,
+                                                    0xE1A00000};
+                            const uint16_t narrow[] = {sign ? 0x5688 : 0x7808, 0x46C0, 0x46C0};
+                            memcpy((uint8_t *)g->memory.bios + 0x100, &raw, 4);
+                            memcpy((uint8_t *)g->video.oam.raw + 0x100, &raw, 4);
+                            uint8_t *code = execution ? g->memory.iwram : (uint8_t *)g->memory.bios;
+                            memcpy(code + 0x200, thumb ? (const void *)narrow : (const void *)arm,
+                                   thumb ? sizeof(narrow) : sizeof(arm));
+                            _CupidSetMode(&g->cpu, thumb ? MODE_THUMB : MODE_ARM);
+                            g->cpu.gprs[ARM_PC] = execution ? 0x03000200 : 0x200;
+                            g->cpu.gprs[1] = (device ? 0x07000500 : 0x100) + lane;
+                            g->cpu.gprs[2] = 0;
+                            g->cpu.memory.timed = true;
+                            if (thumb)
+                                CupidThumbWritePC(&g->cpu);
+                            else
+                                CupidARMWritePC(&g->cpu);
+                            g->memory.biosPrefetch = protected;
+                            const uint32_t status = g->cpu.cpsr.packed;
+                            cupid_gba_step(g);
+                            const uint32_t input = !device && execution ? protected : raw;
+                            const unsigned byte = (input >> (lane * 8)) & 255;
+                            const uint32_t expected = sign ? (uint32_t)(int32_t)(int8_t)byte : byte;
+                            CHECK((uint32_t)g->cpu.gprs[0] == expected);
+                            CHECK((uint32_t)g->cpu.cpsr.packed == status);
+                            CHECK(g->memory.inputBusValid &&
+                                  cupid_memory_open_bus(&g->cpu) == input);
+                            CHECK(g->memory.biosPrefetch == protected);
+                            destroy(g);
+                            scenes++;
+                        }
+    CHECK(scenes == 256);
+    printf("byte guest input scenes=%u\n", scenes);
 }
 
 static void bios(void) {
@@ -369,6 +519,14 @@ int main(int argc, char **argv) {
     CHECK(argc == 2);
     if (!strcmp(argv[1], "handover"))
         RUN(handover);
+    else if (!strcmp(argv[1], "word-handover"))
+        read_handover(4);
+    else if (!strcmp(argv[1], "byte-handover"))
+        read_handover(1);
+    else if (!strcmp(argv[1], "word-ownership"))
+        RUN(read_ownership);
+    else if (!strcmp(argv[1], "byte-guest"))
+        RUN(byte_guest);
     else if (!strcmp(argv[1], "ownership"))
         RUN(ownership);
     else if (!strcmp(argv[1], "bios"))

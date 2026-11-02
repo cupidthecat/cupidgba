@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_save_config.c
+ * @brief Frontend save selections and invalid-configuration isolation.
+ *
+ * - Check complete names and invalid inputs.
+ * - Check every selection after every detected type.
+ */
 #include "../test.h"
 #include "cupid/platform/save.h"
 #include <errno.h>

@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file image.c
+ * @brief ROM loading, cartridge replacement and image ownership.
+ *
+ * - Prepare image storage and board configuration before installation.
+ * - Transfer ownership and refresh memory views after a successful load.
+ */
 #include "../save/detection.h"
 #include "cupid/file.h"
 #include "cupid/gba.h"

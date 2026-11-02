@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_user_bank_probe.py
+# @brief Observe all original user-bank failure guards and result boundaries.
 """Observe all original user-bank failure guards and result boundaries."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

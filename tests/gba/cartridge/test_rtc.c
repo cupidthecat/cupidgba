@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_rtc.c
+ * @brief RTC calendar boundaries, serial commands and control fields.
+ *
+ * - Check formats use the hour flag and independent weekday.
+ * - Check midnight month leap and year boundaries.
+ */
 #include "../../test.h"
 #include "cupid/rtc.h"
 

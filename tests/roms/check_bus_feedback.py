@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_bus_feedback.py
+# @brief Require the original bus-input comparison and completed terminal of each pinned probe.
 """Require the original bus-input comparison and completed terminal of each pinned probe."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

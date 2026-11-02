@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_runner_checkpoint.py
+# @brief Require the runner to retain a result before later guest code overwrites it.
 """Require the runner to retain a result before later guest code overwrites it."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

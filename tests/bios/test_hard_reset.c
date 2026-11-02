@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_hard_reset.c
+ * @brief Firmware hard-reset startup prefixes and completed reset paths.
+ *
+ * - Check repeated reboot retains ownership and elapsed clocks.
+ * - Check cpu post flag strobes preserve the neighboring power register.
+ */
 #include "../test.h"
 #include "caller.h"
 #include "cupid/gba.h"

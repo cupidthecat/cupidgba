@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_math_copy.c
+ * @brief BIOS arithmetic boundaries and copy/fill results.
+ *
+ * - Check division boundaries and caller registers.
+ * - Check fast copy data register results.
+ */
 #include "../test.h"
 #include "caller.h"
 #include "cupid/gba.h"

@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file peripherals.h
+ * @brief Frontend cartridge-peripheral configuration and sample parsing.
+ *
+ * - Keep device-presence choices separate from external sample values.
+ * - Declare strict argument parsing and core configuration helpers.
+ */
 #ifndef CUPID_PLATFORM_PERIPHERALS_H
 #define CUPID_PLATFORM_PERIPHERALS_H
 #include "cupid/gyro.h"

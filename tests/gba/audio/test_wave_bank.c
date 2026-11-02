@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_wave_bank.c
+ * @brief Wave bank selection, sample rotation and CPU access windows.
+ *
+ * - Check patterns preserve rotation and cpu window.
+ * - Check bank writes select the next sample.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 

@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_rumble.c
+ * @brief Cartridge motor GPIO, output subscriptions and lifecycle.
+ *
+ * - Check port directions repeated writes and read control.
+ * - Check reset replacement subscription and destroy stop output.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 

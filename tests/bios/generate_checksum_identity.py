@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
+# @file generate_checksum_identity.py
+# @brief Reproduce the final additive identity word from the owned firmware image.
 """Reproduce the final additive identity word from the owned firmware image."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse
 from pathlib import Path
 import re
 import struct
+
+
+FILE_HEADER = (
+    '@ @file checksum-identity.inc\n'
+    '@ @brief Generated additive identity word for the complete replacement BIOS.\n'
+)
 
 
 IDENTITY = 0xBAAE187F
@@ -24,13 +32,14 @@ def main():
         raise SystemExit("Firmware identity requires exactly 16 KiB")
     words = struct.unpack("<4096I", image)
     final = (IDENTITY - sum(words[:-1])) & 0xFFFFFFFF
-    expected = f".word 0x{final:08X}\n"
+    expected = FILE_HEADER + f".word 0x{final:08X}\n"
     if args.write:
         INCLUDE.write_text(expected)
         print(f"Generated additive firmware identity word {final:08X}")
     else:
-        match = re.fullmatch(r"\.word 0x([0-9A-Fa-f]{8})\s*", INCLUDE.read_text())
-        if not match or int(match[1], 16) != final or words[-1] != final:
+        text = INCLUDE.read_text()
+        match = re.fullmatch(r"\.word 0x([0-9A-Fa-f]{8})\s*", text[len(FILE_HEADER):])
+        if text != expected or not match or int(match[1], 16) != final or words[-1] != final:
             raise SystemExit("Firmware additive identity word is stale")
         if sum(words) & 0xFFFFFFFF != IDENTITY:
             raise SystemExit("Firmware additive identity does not match")

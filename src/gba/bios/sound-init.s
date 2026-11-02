@@ -1,3 +1,5 @@
+@ @file sound-init.s
+@ @brief Firmware sound work-area attachment, FIFO and timer setup.
 @ SPDX-License-Identifier: GPL-3.0-or-later
 @ Attach a work area and start its timed FIFO, ring and timer configuration.
 .org 0x2A00

@@ -1,3 +1,7 @@
+/**
+ * @file raster-frames.inc
+ * @brief Expected complete raster frames for owned monochrome geometry.
+ */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Complete owned monochrome geometry frames, two texture periods. */
 static const uint64_t rasterFrames[2][198] = {

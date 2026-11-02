@@ -1,3 +1,5 @@
+@ @file checksum.s
+@ @brief Firmware word checksum service and returned address state.
 @ Read every firmware word, preserving the service's mask and address results.
 .org 0x1840
 .arm

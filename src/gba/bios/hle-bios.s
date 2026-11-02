@@ -1,3 +1,5 @@
+@ @file hle-bios.s
+@ @brief Replacement BIOS vectors, reset startup and software-interrupt dispatch.
 #define nop andeq r0, r0
 .syntax unified
 

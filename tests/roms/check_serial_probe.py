@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_serial_probe.py
+# @brief Require each original serial/HALT comparison and the completed result boundaries.
 """Require each original serial/HALT comparison and the completed result boundaries."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

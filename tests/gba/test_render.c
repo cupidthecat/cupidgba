@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_render.c
+ * @brief Pixel fetches, display latches, windows and color effects.
+ *
+ * - Check green swap exchanges only adjacent green components.
+ * - Check register changes affect only later scanout.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 

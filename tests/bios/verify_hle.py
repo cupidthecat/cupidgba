@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file verify_hle.py
+# @brief Verify replacement BIOS assembly against embedded firmware bytes.
 """Check that the preferred HLE assembly source reproduces the embedded bytes."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 from pathlib import Path

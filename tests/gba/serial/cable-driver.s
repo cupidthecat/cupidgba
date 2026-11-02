@@ -1,3 +1,7 @@
+/**
+ * @file cable-driver.s
+ * @brief Owned normal and multiplayer guest callers for local-cable checks.
+ */
 /* Owned normal and multiplayer callers. r0 is SIOCNT, r1 is the data port,
  * r2 is output RAM, r3 is the transmitted word, r4 is control and r5 is ID.
  * The normal master waits for the child's low SO before starting its clock.

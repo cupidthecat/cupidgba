@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_runner_arguments.py
+# @brief Reject signed, whitespace-prefixed and overflowing execution inputs before I/O.
 """Reject signed, whitespace-prefixed and overflowing execution inputs before I/O."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

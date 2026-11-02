@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_file.c
+ * @brief External BIOS input validation and unchanged firmware on failure.
+ *
+ * - Check rejected input preserves state.
+ * - Check invalid lengths preserve current firmware.
+ */
 #ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L
 #endif

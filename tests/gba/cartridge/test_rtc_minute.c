@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_rtc_minute.c
+ * @brief RTC minute carry, acknowledgement and retained output windows.
+ *
+ * - Check acknowledgement retains the carry signal on both sides of 10ms.
+ * - Check disable and enable use the original carry deadline.
+ */
 #include "../../test.h"
 #include "cupid/rtc.h"
 

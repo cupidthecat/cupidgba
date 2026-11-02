@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_raster.py
+# @brief Check source-derived raster pixels from unchanged, checksum-verified inputs.
 """Check source-derived raster pixels from unchanged, checksum-verified inputs."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

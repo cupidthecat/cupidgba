@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_runner_observations.py
+# @brief Reject zero-result terminals that did not satisfy their guest comparisons.
 """Reject zero-result terminals that did not satisfy their guest comparisons."""
 import argparse
 from pathlib import Path

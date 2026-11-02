@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_gyro.c
+ * @brief Gyroscope conversion frames, samples and cartridge ownership.
+ *
+ * - Check every converter value has a complete msb first frame.
+ * - Check input changes restart and reset keep snapshot ownership.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 

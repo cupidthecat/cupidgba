@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file cpu-raster.h
+ * @brief Guest instruction emission for CPU-driven raster regressions.
+ */
 #ifndef CUPID_TEST_CPU_RASTER_H
 #define CUPID_TEST_CPU_RASTER_H
 #include "../../test.h"

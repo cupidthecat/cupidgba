@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_serial_suite.py
+# @brief Require all counted serial timing and mode-specific register observations.
 """Require all counted serial timing and mode-specific register observations."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

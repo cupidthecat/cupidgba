@@ -1,3 +1,7 @@
+/**
+ * @file multiboot-peer-frames.inc
+ * @brief Expected peer rejection and readiness observations.
+ */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Independent rejection and readiness observations for owned peers. */
 static const struct DownloadExpected peerDownloadExpected[] = {

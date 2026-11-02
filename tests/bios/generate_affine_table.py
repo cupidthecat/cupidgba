@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
+# @file generate_affine_table.py
+# @brief Reproduce the signed 1.14 sine values used by the affine firmware.
 """Reproduce the signed 1.14 sine values used by the affine firmware."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 from decimal import Decimal, localcontext
 from pathlib import Path
 import argparse
+
+
+FILE_HEADER = (
+    '@ @file affine-sine.inc\n'
+    '@ @brief Generated signed 1.14 sine table for firmware affine transforms.\n'
+)
 
 
 def sine_values():
@@ -29,7 +37,7 @@ def render():
              "@ SPDX-License-Identifier: GPL-3.0-or-later"]
     for index in range(0, 256, 8):
         lines.append(".hword " + ", ".join(str(value) for value in values[index:index+8]))
-    return "\n".join(lines) + "\n"
+    return FILE_HEADER + "\n".join(lines) + "\n"
 
 
 if __name__ == "__main__":

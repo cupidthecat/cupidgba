@@ -1,3 +1,5 @@
+@ @file sound-driver.s
+@ @brief Firmware sound work-area services and FIFO DMA configuration.
 @ SPDX-License-Identifier: GPL-3.0-or-later
 @ Sound work-area and FIFO DMA changes execute through the ordinary CPU bus.
 .org 0x2600

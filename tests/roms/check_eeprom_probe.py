@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_eeprom_probe.py
+# @brief Observe the original result of a local EEPROM polling software probe.
 """Observe the original result of a local EEPROM polling software probe."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

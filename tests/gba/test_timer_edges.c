@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_timer_edges.c
+ * @brief Timer enable and overflow boundaries during guest execution.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 

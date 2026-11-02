@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_image_failures.c
+ * @brief Cartridge candidate read failures and ownership preservation.
+ */
 #include "../../../src/gba/save/detection.h"
 #include "../../test.h"
 #include "cupid/file.h"

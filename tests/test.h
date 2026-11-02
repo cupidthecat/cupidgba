@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test.h
+ * @brief Always-enabled regression assertions and test invocation helpers.
+ */
 #ifndef CUPID_TEST_H
 #define CUPID_TEST_H
 

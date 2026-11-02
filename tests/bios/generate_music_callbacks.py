@@ -1,8 +1,18 @@
 #!/usr/bin/env python3
+# @file generate_music_callbacks.py
+# @brief Generate or verify the byte image of the owned ARM/Thumb music callbacks.
 """Generate or verify the byte image of the owned ARM/Thumb music callbacks."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 from pathlib import Path
 import argparse
+
+
+FILE_HEADER = (
+    '/**\n'
+    ' * @file music-callbacks.inc\n'
+    ' * @brief Owned ARM/Thumb callback code for firmware music regressions.\n'
+    ' */\n'
+)
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("image", type=Path)
@@ -18,6 +28,7 @@ for offset in range(0, len(image), 16):
     rows.append("    " + ", ".join(f"0x{value:02X}" for value in image[offset:offset + 16]) + ",")
 rows.append("};")
 expected = ("\n".join(rows) + "\n").encode()
+expected = FILE_HEADER.encode() + expected
 target = Path(__file__).with_name("music-callbacks.inc")
 if args.write:
     target.write_bytes(expected)

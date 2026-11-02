@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_rtc_calendar.py
+# @brief Require complete guest date/time GPIO transfers and independent calendar records.
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Require complete guest date/time GPIO transfers and independent calendar records."""
 import argparse

@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_rtc_parameters.c
+ * @brief RTC parameter shifts, partial writes and command aborts.
+ *
+ * - Check partial parameter write changes the live shift register.
+ * - Check nominal parameter read still writes released input.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

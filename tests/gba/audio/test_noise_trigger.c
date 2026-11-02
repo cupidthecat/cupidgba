@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_noise_trigger.c
+ * @brief Noise triggers, retriggers and held output amplitude.
+ *
+ * - Check active retrigger reloads volume.
+ * - Check inactive restart clears old amplitude.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 

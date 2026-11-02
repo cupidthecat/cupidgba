@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_cpu_windows.c
+ * @brief CPU window-register writes observed through timed scanout.
+ */
 #include "cpu-raster.h"
 
 enum { PIXELS = GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT };

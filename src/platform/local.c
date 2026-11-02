@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file local.c
+ * @brief SDL local-session execution, presentation and save handling.
+ *
+ * - Run linked cores and present their captured frames together.
+ * - Flush per-endpoint saves through the configured session paths.
+ */
 #include "local.h"
 #include "cupid/cable.h"
 #include "cupid/platform/save.h"

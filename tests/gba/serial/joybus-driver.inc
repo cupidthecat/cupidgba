@@ -1,3 +1,7 @@
+/**
+ * @file joybus-driver.inc
+ * @brief Owned guest JOY bus command and register-transfer driver.
+ */
 /* Generated from joybus-driver.s; see the serial documentation. */
 static const uint8_t joybusDriver[] = {
     0x00, 0x30, 0xA0, 0xE3, 0xB0, 0x00, 0xD6, 0xE1, 0x02, 0x00, 0x10, 0xE3, 0xFC, 0xFF, 0xFF, 0x0A,

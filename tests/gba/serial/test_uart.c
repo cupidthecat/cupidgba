@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_uart.c
+ * @brief UART format combinations, buffering and pin sampling.
+ *
+ * - Check fifo capacity and flow control.
+ * - Check errors reject data and acknowledge on status read.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_rtc_state.py
+# @brief Observe the complete original result of a local RTC state corpus.
 """Observe the complete original result of a local RTC state corpus."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

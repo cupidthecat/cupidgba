@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_ppu.py
+# @brief Select the original display test menus and require their complete results.
 """Select the original display test menus and require their complete results."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

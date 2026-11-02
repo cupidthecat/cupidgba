@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_music_player.c
+ * @brief BIOS music-player service calls and channel state.
+ *
+ * - Check opening preserves payloads and bounds.
+ * - Check discovery writes exactly thirty six entries.
+ */
 #include "../test.h"
 #include "caller.h"
 #include "cupid/gba.h"

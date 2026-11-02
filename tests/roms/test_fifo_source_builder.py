@@ -1,3 +1,5 @@
+# @file test_fifo_source_builder.py
+# @brief Keep failed or altered source builds from replacing verified test inputs.
 """Keep failed or altered source builds from replacing verified test inputs."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_display_irq.c
+ * @brief Display interrupt deadlines and quiet request scheduling.
+ */
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
 #include <inttypes.h>

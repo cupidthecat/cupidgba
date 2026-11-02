@@ -1,3 +1,5 @@
+@ @file copy-fast.s
+@ @brief Firmware block-copy and fill service with a Thumb reset entry.
 @ SPDX-License-Identifier: GPL-3.0-or-later
 @ The Thumb reset helper enters the ordinary ARM block-fill routine directly.
 .balign 4, 0

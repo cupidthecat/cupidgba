@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_bus_suite.py
+# @brief Require every observation in the pinned local bus timing suite to pass.
 """Require every observation in the pinned local bus timing suite to pass."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

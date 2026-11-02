@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_fifo_refill.c
+ * @brief FIFO refill ordering and timer/DMA/IRQ request phases.
+ *
+ * - Check refill samples the queue before loading the staged word.
+ * - Check timer dma and irq edges follow the audio request phase.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 

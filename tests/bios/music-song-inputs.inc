@@ -1,3 +1,7 @@
+/**
+ * @file music-song-inputs.inc
+ * @brief Owned song and wave inputs for mapping and competing players.
+ */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Owned songs and waves exercise sequencing, mapping and competing players. */
 static unsigned music_scene_frames(unsigned scene) {

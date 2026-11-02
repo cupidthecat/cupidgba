@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_wave_advance.c
+ * @brief Bulk wave advancement against scalar sample stepping.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 

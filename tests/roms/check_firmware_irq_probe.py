@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_firmware_irq_probe.py
+# @brief Require the original firmware-return IRQ comparisons and issued result boundaries.
 """Require the original firmware-return IRQ comparisons and issued result boundaries."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

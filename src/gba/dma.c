@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file dma.c
+ * @brief DMA requests, bus phases, arbitration and completion signals.
+ *
+ * - Retain per-channel read latches and programmed transfer progress.
+ * - Separate activation, read/write strobes, bus release and completion IRQs.
+ */
 #include "cupid/gba.h"
 
 enum DMAPhase { DMA_IDLE, DMA_HEAD, DMA_READ, DMA_READ_HIGH, DMA_WRITE, DMA_WRITE_HIGH, DMA_TAIL };

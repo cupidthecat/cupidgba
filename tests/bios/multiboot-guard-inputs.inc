@@ -1,3 +1,7 @@
+/**
+ * @file multiboot-guard-inputs.inc
+ * @brief Download guard-field signatures and rejection observations.
+ */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 static void accumulate_guard_field(uint64_t *signature, uint64_t value) {
     for (unsigned byte = 0; byte < 8; byte++)

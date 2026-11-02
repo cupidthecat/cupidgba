@@ -1,3 +1,7 @@
+/**
+ * @file music-track-fields.inc
+ * @brief Expected track-field observations through music entry points.
+ */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Captures of owned track-field inputs through the exported entry. */
 static const struct MusicExpected musicTrackExpected[2][2][24] = {

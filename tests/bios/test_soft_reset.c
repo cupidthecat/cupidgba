@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_soft_reset.c
+ * @brief Soft-reset restart selection and DMA boundary ordering.
+ *
+ * - Check restart bytes and first entry instructions.
+ * - Check caller banks regions and waits.
+ */
 #include "../test.h"
 #include "caller.h"
 #include "cupid/gba.h"

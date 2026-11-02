@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_prefetch_probe.py
+# @brief Require the original pre-display result and terminal of a pinned cartridge.
 """Require the original pre-display result and terminal of a pinned cartridge."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

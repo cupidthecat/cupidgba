@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file registers.h
+ * @brief ARM register-bank read conflicts and data-phase release helpers.
+ *
+ * - Combine current and user-bank read drivers while user selection is active.
+ * - Keep writeback on the current bank and release selection on a data phase.
+ */
 #ifndef CUPID_REGISTERS_H
 #define CUPID_REGISTERS_H
 

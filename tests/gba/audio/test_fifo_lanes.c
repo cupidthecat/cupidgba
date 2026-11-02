@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_fifo_lanes.c
+ * @brief FIFO byte and halfword lane writes and sample playback.
+ *
+ * - Check every width appends one word and preserves the stage.
+ * - Check arm and thumb stores keep the existing bus clocks.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

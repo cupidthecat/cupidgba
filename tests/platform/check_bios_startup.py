@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_bios_startup.py
+# @brief Verify explicit BIOS selection and failure before startup.
 """Verify explicit BIOS selection and failure before startup."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

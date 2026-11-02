@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file gyro.h
+ * @brief Gyroscope converter state and GPIO pin interface.
+ *
+ * - Retain external input separately from the serial conversion snapshot.
+ * - Expose converter reset, sample selection and pin transitions.
+ */
 #ifndef CUPID_GYRO_H
 #define CUPID_GYRO_H
 

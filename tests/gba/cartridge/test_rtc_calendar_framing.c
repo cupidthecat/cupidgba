@@ -1,4 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_rtc_calendar_framing.c
+ * @brief RTC calendar payload framing and serial bit boundaries.
+ *
+ * - Check final edge and repeated frames.
+ */
 #include "../../test.h"
 #include "cupid/rtc.h"
 

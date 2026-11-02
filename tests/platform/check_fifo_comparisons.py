@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_fifo_comparisons.py
+# @brief Exercise pinned FIFO comparison qualification with an owned cartridge.
 """Exercise pinned FIFO comparison qualification with an owned cartridge."""
 import argparse
 import hashlib

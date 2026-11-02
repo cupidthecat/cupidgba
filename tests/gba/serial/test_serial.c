@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_serial.c
+ * @brief Normal serial clocks, pin patterns and received data.
+ *
+ * - Check external clock and input edges.
+ * - Check byte registers and mode access.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

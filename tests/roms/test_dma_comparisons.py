@@ -1,3 +1,5 @@
+# @file test_dma_comparisons.py
+# @brief Check DMA input provenance, both live operands and complete result records.
 """Check DMA input provenance, both live operands and complete result records."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_object_mosaic.c
+ * @brief Object mosaic counters, fetch budgets and frame boundaries.
+ *
+ * - Check counters outlive fetches and reset at frame end.
+ * - Check budget changes retain phase and clock wrap.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 

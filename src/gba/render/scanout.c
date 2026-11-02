@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file scanout.c
+ * @brief Timed window selection, layer composition and pixel publication.
+ *
+ * - Choose visible layers and apply palette and color effects.
+ * - Advance display windows and publish completed scanout pixels.
+ */
 #include "pipeline.h"
 
 static uint8_t window_control(const struct CupidVideo *v, unsigned x) {

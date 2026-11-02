@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file solar.c
+ * @brief Solar sensor counter and GPIO conversion.
+ *
+ * - Advance the sensor counter on accepted clock edges.
+ * - Compare the counter against the configured light-level sample.
+ */
 #include "cupid/solar.h"
 
 void cupid_solar_init(struct CupidSolar *solar) {

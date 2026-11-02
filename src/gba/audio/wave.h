@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file wave.h
+ * @brief Shared wave-channel sample-step helper.
+ *
+ * - Update sample position and held output for one wave step.
+ * - Share the transition logic with bulk wave advancement.
+ */
 #ifndef CUPID_AUDIO_WAVE_INTERNAL_H
 #define CUPID_AUDIO_WAVE_INTERNAL_H
 

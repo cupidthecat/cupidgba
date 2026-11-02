@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file build_fifo_source.py
+# @brief Build the pinned FIFO base source without replacing its bundled cartridge.
 """Build the pinned FIFO base source without replacing its bundled cartridge."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

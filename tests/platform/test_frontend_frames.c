@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_frontend_frames.c
+ * @brief Frontend polling, frame presentation and save-flush boundaries.
+ */
 #define SDL_MAIN_HANDLED
 #include "cupid/platform.h"
 #include <stdio.h>

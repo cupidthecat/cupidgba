@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_link.c
+ * @brief Cartridge RTC wake behavior across linked endpoints.
+ *
+ * - Check independent stopped oscillators.
+ * - Check rtc wake starts uart after peer clock.
+ */
 #include "../../test.h"
 #include "cupid/cable.h"
 

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_flash_driver.py
+# @brief Run owned Flash drivers through complete sector, bank and chip operations.
 """Run owned Flash drivers through complete sector, bank and chip operations."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_color.c
+ * @brief Blend and brightness component precision and saturation.
+ *
+ * - Check fractional vectors keep green precision and round once.
+ * - Check complete color endpoints and coefficient saturation.
+ */
 #include "../test.h"
 #include "cupid/render.h"
 

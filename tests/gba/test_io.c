@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_io.c
+ * @brief Register masks, open-bus lanes and write-only I/O behavior.
+ *
+ * - Check reserved bits do not enter register state.
+ * - Check cpu loads write only and unmapped io.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

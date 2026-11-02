@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_probe_adapters.py
+# @brief Exercise each production probe's completion gate with owned DMA-held terminals.
 """Exercise each production probe's completion gate with owned DMA-held terminals."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

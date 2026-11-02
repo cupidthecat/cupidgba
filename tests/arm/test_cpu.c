@@ -1,4 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_cpu.c
+ * @brief ARM and Thumb dispatch, arithmetic and memory-instruction regressions.
+ *
+ * - Check block transfers charge one final internal cycle.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

@@ -1,3 +1,5 @@
+@ @file affine-services.s
+@ @brief Firmware affine transforms and fixed-point trigonometric lookup.
 @ SPDX-License-Identifier: GPL-3.0-or-later
 @ Affine memory operations and signed multiplications use the CPU and bus clocks.
 .arm

@@ -1,3 +1,5 @@
+@ @file music-sequencer.s
+@ @brief Music tempo ticks, player chaining and live voice updates.
 @ SPDX-License-Identifier: GPL-3.0-or-later
 @ A frame chains prior players, advances tempo ticks, then updates live voices.
 .org 0x2120

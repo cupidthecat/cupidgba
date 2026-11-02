@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_saved_status_probe.py
+# @brief Require every unchanged saved-status comparison and both issued result boundaries.
 """Require every unchanged saved-status comparison and both issued result boundaries."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

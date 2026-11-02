@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file test_cpu_corpus_inputs.py
+# @brief Check CPU corpus input integrity without downloading or executing a ROM.
 """Check CPU corpus input integrity without downloading or executing a ROM."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import copy

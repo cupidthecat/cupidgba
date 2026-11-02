@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_rtc_stop.py
+# @brief Run a generated CupidGBA STOP/RTC integration probe with the replacement BIOS.
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Run a generated CupidGBA STOP/RTC integration probe with the replacement BIOS."""
 import argparse

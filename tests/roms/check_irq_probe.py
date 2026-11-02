@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_irq_probe.py
+# @brief Check original IRQ comparisons at their actual issued instruction sites.
 """Check original IRQ comparisons at their actual issued instruction sites."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse
@@ -7,16 +9,48 @@ import json
 from pathlib import Path
 import struct
 import subprocess
+from fetch_inputs import download_verified
+
+
+def fetch_cases(directory, manifest):
+    """Fetch pinned inputs without overwriting an altered cached cartridge."""
+    base = 'https://raw.githubusercontent.com/alyosha-tas/gba-tests/' + manifest['revision']
+    inputs = [('irq-probe-LICENSE.txt', '/LICENSE', manifest['license_sha256'])]
+    inputs += [(case['path'], '/irq/' + case['path'], case['sha256'])
+               for case in manifest['cases']]
+    # Reject conflicting cached inputs before publishing any new files.
+    for name, _, digest in inputs:
+        path = directory / name
+        if path.exists() and hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+            raise ValueError('Existing IRQ input checksum mismatch: ' + name)
+    directory.mkdir(parents=True, exist_ok=True)
+    for name, remote, digest in inputs:
+        path = directory / name
+        if path.exists():
+            continue
+        data = download_verified(base + remote, digest)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--directory', type=Path, required=True)
-    parser.add_argument('--runner', type=Path, required=True)
-    parser.add_argument('--bios', type=Path, required=True)
-    parser.add_argument('--test', required=True)
+    parser.add_argument('--runner', type=Path)
+    parser.add_argument('--bios', type=Path)
+    parser.add_argument('--test')
+    parser.add_argument('--fetch', action='store_true')
     args = parser.parse_args()
-    cases = json.loads(Path(__file__).with_name('irq-probes.json').read_text())['cases']
+    manifest = json.loads(Path(__file__).with_name('irq-probes.json').read_text())
+    if args.fetch:
+        try:
+            fetch_cases(args.directory, manifest)
+        except ValueError as error:
+            parser.error(str(error))
+        return
+    if not args.runner or not args.bios or not args.test:
+        parser.error('--runner, --bios and --test are required when not fetching')
+    cases = manifest['cases']
     case = next((case for case in cases if case['name'] == args.test), None)
     if case is None:
         parser.error('Unknown IRQ cartridge')

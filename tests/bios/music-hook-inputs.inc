@@ -1,3 +1,7 @@
+/**
+ * @file music-hook-inputs.inc
+ * @brief Owned callback setup and music hook observation inputs.
+ */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "music-callbacks.inc"
 

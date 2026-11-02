@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_tilt.c
+ * @brief Tilt command snapshots, axis ranges and cartridge-port widths.
+ *
+ * - Check complete axis range and retained snapshots.
+ * - Check command pair and reset preserve input ownership.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

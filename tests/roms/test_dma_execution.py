@@ -1,3 +1,5 @@
+# @file test_dma_execution.py
+# @brief Reject false-zero DMA results through the real checker and execution core.
 """Reject false-zero DMA results through the real checker and execution core."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

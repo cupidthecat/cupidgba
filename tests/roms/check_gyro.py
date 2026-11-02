@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_gyro.py
+# @brief Check complete generated ARM/Thumb gyroscope frames and zero overrun bits.
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Check complete generated ARM/Thumb gyroscope frames and zero overrun bits."""
 import argparse

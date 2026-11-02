@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_undefined.c
+ * @brief Undefined-instruction exception entry and source timing.
+ *
+ * - Check caller banks masks and return are preserved.
+ * - Check false predicates do not trap or charge internal cycles.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

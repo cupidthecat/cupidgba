@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_square_clock.c
+ * @brief Square-channel frequency changes and waveform phase.
+ *
+ * - Check repeated writes and retrigger.
+ * - Check silent envelopes keep clocking.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 

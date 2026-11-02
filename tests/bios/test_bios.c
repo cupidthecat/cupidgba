@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_bios.c
+ * @brief BIOS decompression and interrupt-wait regressions.
+ *
+ * - Check lz77 backreferences preserve high bits.
+ * - Check interrupt wait ready flags and return state.
+ */
 #include "../test.h"
 #include "caller.h"
 #include "cupid/gba.h"

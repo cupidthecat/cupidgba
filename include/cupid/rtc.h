@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file rtc.h
+ * @brief RTC calendar, serial protocol and output-signal state.
+ *
+ * - Retain calendar fields, command framing and oscillator state.
+ * - Declare time conversion, pin handling and output-deadline helpers.
+ */
 #ifndef CUPID_RTC_H
 #define CUPID_RTC_H
 

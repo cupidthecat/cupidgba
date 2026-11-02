@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_irq_pulses.c
+ * @brief Interrupt availability pulses and queued deadline ownership.
+ *
+ * - Check an accepted register value keeps its availability deadline.
+ * - Check halt can observe the one clock availability pulse.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

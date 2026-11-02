@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_paged_rom.c
+ * @brief Paged cartridge registers, backing ranges and visible windows.
+ *
+ * - Check mapping preserves complete window and backing.
+ * - Check register widths masks and aliases.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

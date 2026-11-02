@@ -1,3 +1,10 @@
+/**
+ * @file timing.c
+ * @brief Ordered event scheduling across the emulated clock timeline.
+ *
+ * - Maintain event deadlines, priorities and callback dispatch.
+ * - Support cancellation, rescheduling and wrapped clock comparisons.
+ */
 #include "cupid/timing.h"
 
 /* Timestamps wrap modulo 2^32. Deadlines must be within INT32_MAX cycles.

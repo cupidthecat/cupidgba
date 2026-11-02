@@ -1,3 +1,5 @@
+@ @file multiboot.s
+@ @brief Firmware serial download, rolling-key decoding and payload CRC.
 @ SPDX-License-Identifier: GPL-3.0-or-later
 @ Download words pass through serial registers, a rolling key and a bitwise CRC.
 .org 0x2D20

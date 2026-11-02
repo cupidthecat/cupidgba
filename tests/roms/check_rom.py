@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_rom.py
+# @brief Verify a pinned input before running its specified result protocol.
 """Verify a pinned input before running its specified result protocol."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

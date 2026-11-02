@@ -1,3 +1,7 @@
+/**
+ * @file music-song-frames.inc
+ * @brief Expected complete song-state observations from owned inputs.
+ */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Independent observations of owned inputs; see the music-player guide. */
 static const struct MusicExpected musicSongExpected[10][20] = {

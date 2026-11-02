@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_mosaic.c
+ * @brief Mosaic changes across timed display and texture fetches.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 #include "mosaic-lines.inc"

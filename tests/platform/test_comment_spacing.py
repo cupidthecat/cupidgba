@@ -1,3 +1,5 @@
+# @file test_comment_spacing.py
+# @brief Preserve source bytes except empty lines after standalone comments.
 """Preserve source bytes except empty lines after standalone comments."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

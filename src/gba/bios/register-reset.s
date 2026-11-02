@@ -1,3 +1,5 @@
+@ @file register-reset.s
+@ @brief Firmware reset-group RAM fills and timed device-register writes.
 @ SPDX-License-Identifier: GPL-3.0-or-later
 @ Reset groups expose their zero fills and device writes to the ordinary bus.
 .balign 4, 0

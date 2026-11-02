@@ -1,3 +1,10 @@
+/**
+ * @file serial.h
+ * @brief Serial modes, pin state and peer-exchange interfaces.
+ *
+ * - Represent normal, multiplayer, UART, GPIO and JOY bus state.
+ * - Declare timed transfers and external pin updates.
+ */
 #ifndef CUPID_SERIAL_H
 #define CUPID_SERIAL_H
 

@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_eeprom.c
+ * @brief EEPROM command framing, address selection and DMA transfers.
+ *
+ * - Check every address selects a complete block.
+ * - Check transfer width selects capacity before the address.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 #include <errno.h>
@@ -223,6 +230,74 @@ static void dma_retains_framing_data_and_clock_wrap(void) {
     puts("PASS 36 complete DMA write/read cases");
 }
 
+static void truncated_dma_frames_do_not_shift_the_address_width(void) {
+    unsigned cases = 0;
+    for (unsigned large = 0; large < 2; large++) {
+        for (unsigned capacity = 0; capacity < 2; capacity++) {
+            for (unsigned command = 0; command < 2; command++) {
+                unsigned bits = capacity ? 14 : 6;
+                uint16_t frame[81];
+                unsigned n = request(frame, bits, capacity ? 0x3FF : 0x3F, command == 0);
+                for (unsigned count = n - 1; count; count--) {
+                    struct CupidGBA *gba = machine(large != 0, 0);
+                    struct CupidSavedata *save = &gba->memory.savedata;
+                    cupid_savedata_force_type(save, capacity ? SAVE_EEPROM : SAVE_EEPROM512);
+                    memset(save->data, 0x5A, save->size);
+                    memcpy(gba->memory.ewram + 0x100, frame, n * sizeof(*frame));
+                    uint32_t port = large ? 0x0DFFFF00 : 0x0D001000;
+                    dma(gba, GBA_BASE_EWRAM + 0x100, port, count);
+                    CHECK(!save->programming && !save->dirty);
+                    CHECK(save->command == EEPROM_COMMAND_NULL && save->readBitsRemaining == 0);
+                    CHECK(cupid_memory_load16(&gba->cpu, port, NULL) == 1);
+                    cupid_timing_tick(&gba->timing, (int32_t)save->eepromProgramClocks);
+                    for (size_t i = 0; i < save->size; i++)
+                        CHECK(save->data[i] == 0x5A);
+
+                    /* A new complete transfer must recover without a reset. */
+                    unsigned recovery =
+                        request((uint16_t *)(gba->memory.ewram + 0x100), bits, 0, true);
+                    dma(gba, GBA_BASE_EWRAM + 0x100, port, recovery);
+                    CHECK(save->programming);
+                    CHECK(cupid_memory_load16(&gba->cpu, port, NULL) == 0);
+                    cupid_timing_tick(&gba->timing, (int32_t)save->eepromProgramClocks);
+                    CHECK(save->dirty && !memcmp(save->data, payload, 8));
+                    recovery = request((uint16_t *)(gba->memory.ewram + 0x100), bits, 0, false);
+                    dma(gba, GBA_BASE_EWRAM + 0x100, port, recovery);
+                    readback(save, payload);
+                    cupid_gba_destroy(gba);
+                    free(gba);
+                    cases++;
+                }
+            }
+        }
+    }
+    CHECK(cases == 352);
+    puts("PASS 352 truncated DMA frames and complete-transfer recovery cases");
+}
+
+static void manual_halfword_commands_do_not_replace_dma(void) {
+    for (unsigned capacity = 0; capacity < 2; capacity++) {
+        for (unsigned write = 0; write < 2; write++) {
+            struct CupidGBA *gba = machine(false, 0);
+            struct CupidSavedata *save = &gba->memory.savedata;
+            cupid_savedata_force_type(save, capacity ? SAVE_EEPROM : SAVE_EEPROM512);
+            uint16_t frame[81];
+            unsigned n = request(frame, capacity ? 14 : 6, 0, write != 0);
+            for (unsigned i = 0; i < n; i++)
+                cupid_memory_store16(&gba->cpu, 0x0D001000, (int16_t)frame[i], NULL);
+            CHECK(save->command == EEPROM_COMMAND_NULL && save->readBitsRemaining == 0);
+            CHECK(!save->programming && !save->dirty);
+            CHECK(cupid_memory_load16(&gba->cpu, 0x0D001000, NULL) == 1);
+            cupid_timing_tick(&gba->timing, (int32_t)save->eepromProgramClocks);
+            for (size_t i = 0; i < save->size; i++)
+                CHECK(save->data[i] == 0xFF);
+            cupid_gba_destroy(gba);
+            free(gba);
+        }
+    }
+    puts("PASS 4 manual halfword commands remain rejected");
+}
+
 static void reset_and_files_retain_the_selected_capacity(const char *directory) {
     char folder[1024], path[1100];
 #ifdef _WIN32
@@ -303,7 +378,10 @@ int main(int argc, char **argv) {
         every_read_address_returns_to_idle_without_writes();
     else if (!strcmp(argv[1], "dma"))
         dma_retains_framing_data_and_clock_wrap();
-    else if (!strcmp(argv[1], "persistence") && argc == 3)
+    else if (!strcmp(argv[1], "truncated")) {
+        truncated_dma_frames_do_not_shift_the_address_width();
+        manual_halfword_commands_do_not_replace_dma();
+    } else if (!strcmp(argv[1], "persistence") && argc == 3)
         reset_and_files_retain_the_selected_capacity(argv[2]);
     else
         return 2;

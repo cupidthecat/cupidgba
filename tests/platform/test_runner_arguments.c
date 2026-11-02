@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_runner_arguments.c
+ * @brief Strict headless-runner numeric argument parsing.
+ */
 #define main cupid_argument_runner_main
 #include "../rom_runner.c"
 #undef main

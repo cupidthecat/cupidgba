@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file irq.h
+ * @brief Interrupt register, availability and CPU-line pipeline state.
+ *
+ * - Keep queued register writes and signal transitions separate.
+ * - Declare timed requests, acknowledgements and line updates.
+ */
 #ifndef CUPID_IRQ_H
 #define CUPID_IRQ_H
 #include "cupid/timing.h"

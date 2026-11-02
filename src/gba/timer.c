@@ -1,3 +1,10 @@
+/**
+ * @file timer.c
+ * @brief Timer register latency, prescaler phase and overflow scheduling.
+ *
+ * - Keep reload and control writes on their accepted event edges.
+ * - Propagate overflows to cascaded timers, audio and interrupts.
+ */
 #include "cupid/gba.h"
 
 static const unsigned PRESCALE_BITS[4] = {0, 6, 8, 10};

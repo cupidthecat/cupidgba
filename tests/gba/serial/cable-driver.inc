@@ -1,3 +1,7 @@
+/**
+ * @file cable-driver.inc
+ * @brief Owned normal and multiplayer guest callers for local-cable checks.
+ */
 /* Generated from cable-driver.s; see the local connection documentation. */
 static const uint8_t cableDriver[] = {
     0x00, 0x60, 0xA0, 0xE3, 0xBC, 0x60, 0xC0, 0xE1, 0x08, 0x60, 0x84, 0xE3, 0xB0, 0x60, 0xC0, 0xE1,

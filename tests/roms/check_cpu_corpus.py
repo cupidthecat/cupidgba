@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_cpu_corpus.py
+# @brief Check every original record, comparison and branch of a pinned CPU corpus.
 """Check every original record, comparison and branch of a pinned CPU corpus."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

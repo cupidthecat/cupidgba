@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file cable.c
+ * @brief Shared-clock execution and pin exchange for local link sessions.
+ *
+ * - Suspend and resume emulator endpoints at cable boundaries.
+ * - Propagate serial outputs and synchronize peer transfer progress.
+ */
 #include "cupid/cable.h"
 #include "../platform/context.h"
 #include <stdlib.h>

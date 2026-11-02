@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
+# @file generate_music_table.py
+# @brief Reproduce the fixed-point semitone factors and octave indices.
 """Reproduce the fixed-point semitone factors and octave indices."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse
 from decimal import Decimal, ROUND_HALF_UP, localcontext
 from pathlib import Path
+
+
+FILE_HEADER = (
+    '@ @file music-pitch.inc\n'
+    '@ @brief Generated fixed-point semitone factors and octave indices.\n'
+)
 
 
 def factors():
@@ -21,7 +29,7 @@ def render():
         lines.append(".byte " + ", ".join(f"0x{value:02X}" for value in indices[start:start+12]))
     lines.extend([".balign 4, 0", "musicSemitoneFactors:"])
     lines.extend(f".word 0x{value:08X}" for value in factors())
-    return "\n".join(lines) + "\n"
+    return FILE_HEADER + "\n".join(lines) + "\n"
 
 
 if __name__ == "__main__":

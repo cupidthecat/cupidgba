@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_fifo_power.c
+ * @brief Sound-power transitions, FIFO writes and accepted DMA progress.
+ *
+ * - Check powered off writes do not enter either fifo.
+ * - Check arm and thumb stores obey the sound power state.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

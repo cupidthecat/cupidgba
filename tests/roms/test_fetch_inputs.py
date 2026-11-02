@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file test_fetch_inputs.py
+# @brief Fault-inject transport failures and verify test input integrity enforcement.
 """Fault-inject transport failures and verify test input integrity enforcement."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import faulthandler
@@ -11,16 +13,59 @@ import hashlib
 import http.client
 import io
 import unittest
+from pathlib import Path
+import tempfile
 from unittest.mock import patch
 import urllib.error
 
 from fetch_inputs import download_verified
+from check_irq_probe import fetch_cases
 
 
 class Downloads(unittest.TestCase):
     data = b"verified test data"
     digest = hashlib.sha256(data).hexdigest()
     url = "https://example.invalid/pinned-test"
+
+    def test_irq_corpus_fetch_retains_verified_inputs_and_license(self):
+        payloads = {
+            '/LICENSE': b'owned license',
+            '/irq/first.gba': b'first input',
+            '/irq/second.gba': b'second input',
+        }
+        base = 'https://raw.githubusercontent.com/alyosha-tas/gba-tests/' + 'a' * 40
+        manifest = {
+            'revision': 'a' * 40,
+            'license_sha256': hashlib.sha256(payloads['/LICENSE']).hexdigest(),
+            'cases': [
+                {'path': name, 'sha256': hashlib.sha256(payloads['/irq/' + name]).hexdigest()}
+                for name in ('first.gba', 'second.gba')
+            ],
+        }
+
+        def download(url, digest):
+            data = payloads[url.removeprefix(base)]
+            self.assertEqual(hashlib.sha256(data).hexdigest(), digest)
+            return data
+        with tempfile.TemporaryDirectory() as temporary, patch(
+            'check_irq_probe.download_verified', side_effect=download
+        ) as fetch:
+            directory = Path(temporary) / 'inputs'
+            fetch_cases(directory, manifest)
+            self.assertEqual(fetch.call_count, 3)
+            for name, data in [
+                ('irq-probe-LICENSE.txt', payloads['/LICENSE']),
+                ('first.gba', payloads['/irq/first.gba']),
+                ('second.gba', payloads['/irq/second.gba']),
+            ]:
+                self.assertEqual((directory / name).read_bytes(), data)
+            fetch_cases(directory, manifest)
+            self.assertEqual(fetch.call_count, 3)
+            (directory / 'first.gba').write_bytes(b'altered cache')
+            with self.assertRaisesRegex(ValueError, 'Existing IRQ input checksum mismatch'):
+                fetch_cases(directory, manifest)
+            self.assertEqual(fetch.call_count, 3)
+            self.assertEqual((directory / 'first.gba').read_bytes(), b'altered cache')
 
     @patch("fetch_inputs.time.sleep")
     @patch("fetch_inputs.urllib.request.urlopen")
