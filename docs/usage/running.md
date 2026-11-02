@@ -64,6 +64,51 @@ the next available one. Window focus loss releases keyboard holds. See
 [input handling](../hardware/input.md) for device ownership and regression
 coverage.
 
+## Headless input replays
+
+Use `--key-script FILE` for a longer sequence of frame-indexed button changes:
+
+```text
+# Frame  Pressed buttons
+0        0
+300      0x8  # Start
+312      0    # Release all buttons
+600      0x1  # A
+612      0
+```
+
+```sh
+./build/cupidgba-headless game.gba --key-script buttons.txt \
+  --frames 1800 --steps 180000000 --screenshot replay.ppm
+```
+
+Frame zero applies before guest execution. Later changes apply after the named
+number of completed video frames. Each mask replaces the complete held-button
+state and stays active until the next change. A zero mask releases every
+button. Changes on a frame that ends the run are not applied after that deadline.
+
+| Button | Mask | Button | Mask |
+| --- | --- | --- | --- |
+| A | `0x1` | B | `0x2` |
+| Select | `0x4` | Start | `0x8` |
+| Right | `0x10` | Left | `0x20` |
+| Up | `0x40` | Down | `0x80` |
+| R | `0x100` | L | `0x200` |
+
+Combine masks to hold several buttons, such as `0x11` for Right and A. Frames
+must be in nondecreasing order. Changes with the same frame retain file order;
+the last mask becomes active before guest execution continues. Decimal,
+`0x` hexadecimal and leading-zero octal numbers are accepted. Signs and numeric
+overflow are rejected. Blank lines and `#` comments are allowed, with LF or
+CRLF line endings and an optional final newline.
+
+Scripts allow up to 65,536 changes, 255 bytes per line excluding LF, and 16 MiB
+in total. The runner reads and validates the complete file before loading the
+cartridge or creating output. Invalid input leaves existing outputs untouched.
+Use one script per run; it cannot be combined with inline `--key-event FRAME MASK`
+options. Inline events retain their existing 64-change limit. Both forms use
+the same frame/step deadlines and CPU/DMA boundary handling.
+
 ## Headless RTC replays
 
 `cupidgba-headless` also accepts `--rtc auto|on|off` and `--rtc-time`.

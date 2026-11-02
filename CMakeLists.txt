@@ -106,7 +106,8 @@ if(CUPID_BUILD_FRONTEND)
     target_link_libraries(cupidgba PRIVATE cupid_link SDL2::SDL2)
 endif()
 
-add_executable(cupidgba-headless tests/rom_runner.c src/platform/peripherals.c src/platform/save.c)
+add_executable(cupidgba-headless tests/rom_runner.c tests/runner/key-script.c
+    src/platform/peripherals.c src/platform/save.c)
 target_link_libraries(cupidgba-headless PRIVATE cupid_core)
 
 include(CTest)
@@ -506,6 +507,12 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_runner_frames.py
         --runner $<TARGET_FILE:cupidgba-headless>)
     set_tests_properties(runner.frame-boundaries PROPERTIES TIMEOUT 30)
+    foreach(group valid invalid)
+        add_test(NAME runner.key-script-${group} COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_key_script.py
+            --runner $<TARGET_FILE:cupidgba-headless> --group ${group})
+        set_tests_properties(runner.key-script-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
     foreach(adapter RANGE 1 4)
         add_executable(test_probe_adapter_${adapter} tests/platform/probe_adapter.c)
         target_compile_definitions(test_probe_adapter_${adapter} PRIVATE CUPID_TEST_PROBE_ADAPTER=${adapter})
@@ -523,13 +530,15 @@ if(BUILD_TESTING)
         add_test(NAME runner.probe-boundary-${group} COMMAND test_probe_run ${group})
         set_tests_properties(runner.probe-boundary-${group} PROPERTIES TIMEOUT 30)
     endforeach()
-    add_executable(test_runner_terminal tests/platform/test_runner_terminal.c src/platform/peripherals.c src/platform/save.c)
+    add_executable(test_runner_terminal tests/platform/test_runner_terminal.c tests/runner/key-script.c
+        src/platform/peripherals.c src/platform/save.c)
     target_link_libraries(test_runner_terminal PRIVATE cupid_core)
     foreach(group issued arbitration suspended)
         add_test(NAME runner.terminal-${group} COMMAND test_runner_terminal ${group})
         set_tests_properties(runner.terminal-${group} PROPERTIES TIMEOUT 30)
     endforeach()
-    add_executable(test_runner_arguments tests/platform/test_runner_arguments.c src/platform/peripherals.c src/platform/save.c)
+    add_executable(test_runner_arguments tests/platform/test_runner_arguments.c tests/runner/key-script.c
+        src/platform/peripherals.c src/platform/save.c)
     target_link_libraries(test_runner_arguments PRIVATE cupid_core)
     add_test(NAME runner.arguments-unit COMMAND test_runner_arguments)
     set_tests_properties(runner.arguments-unit PROPERTIES TIMEOUT 10)
