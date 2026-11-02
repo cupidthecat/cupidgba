@@ -15,6 +15,20 @@ The `byte-handover` group adds 512 BIOS/OAM transfers. The `byte-guest` group
 executes 256 ARM/Thumb signed and unsigned byte loads, retaining the full
 input word independently of narrowing and sign extension in the CPU register.
 
+The `byte-iwram` and `iwram-writes` groups add 832 IWRAM histories: 256 CPU/DMA
+byte handovers, 64 signed/unsigned ARM/Thumb loads, 384 ARM/Thumb stores and 128
+DMA writes. Local byte/halfword lanes must survive independently across all
+decoder configurations and four clock epochs. Untimed observers and reads from
+another device must preserve that local history.
+
+The `byte-ports` and `word-ports` groups add 1,664 handovers across eleven RAM,
+display and cartridge windows plus GPIO and reader ports. They require complete
+DMA latches and destination words, retained IWRAM history and correct CPU
+rotation. Additional cycle-counted reads must supersede a preceding DMA driver;
+observer reads must preserve it. The preceding model fails the new read/write
+lane and port-publication controls. These are software regression matrices,
+not new electrical measurements.
+
 ## Prefetch boundaries
 
 Four `gba.prefetch-boundary-*` groups compare 37,632 boundary/miss/cache scene

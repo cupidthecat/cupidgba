@@ -515,6 +515,313 @@ static void fetch_irq(void) {
     printf("discarded IRQ opcode samples=%u\n", scenes);
 }
 
+static void ports_handover(unsigned width) {
+    const uint64_t clocks[] = {0, INT32_MAX - 2u, UINT32_MAX - 2u, UINT64_C(0x300000000)};
+    const uint32_t addresses[] = {0x02040020, 0x05000420, 0x06020020, 0x08000020,
+                                  0x09000020, 0x0A000020, 0x0B000020, 0x0C000020,
+                                  0x0D000020, 0x0E000020, 0x0F000020};
+    const uint32_t repeated[] = {0x95959595, 0xE1E1E1E1, 0x72727272, 0x8B8B8B8B};
+    unsigned scenes = 0;
+    for (unsigned epoch = 0; epoch < 4; epoch++)
+        for (unsigned device = 0; device < sizeof(addresses) / sizeof(addresses[0]); device++)
+            for (unsigned lane = 0; lane < 4; lane++)
+                for (unsigned channel = 0; channel < 4; channel++) {
+                    struct CupidGBA *g = machine(clocks[epoch]);
+                    seed(g, 0x02000200, 0xA7C45B36);
+                    start(g, 3, 0x02000200, 0x03000200);
+                    cupid_timing_tick(&g->timing, 11);
+                    CHECK(!g->memory.dmaRunning && g->memory.iwramBus == 0xA7C45B36);
+                    const uint32_t address = addresses[device];
+                    const unsigned region = address >> GBA_BASE_OFFSET;
+                    const bool backup = region >= GBA_REGION_SRAM;
+                    const bool absent =
+                        region >= GBA_REGION_ROM0 && region <= GBA_REGION_ROM2_EX && (region & 1);
+                    seed(g, address, 0x8B72E195);
+                    const uint8_t bytes[] = {0x95, 0xE1, 0x72, 0x8B};
+                    for (unsigned i = 0; i < 4; i++)
+                        cupid_memory_store8(&g->cpu, 0x0E000020 + i, (int8_t)bytes[i], NULL);
+                    const uint32_t raw = backup   ? repeated[lane]
+                                         : absent ? UINT32_C(0x00110010)
+                                                  : UINT32_C(0x8B72E195);
+                    const unsigned byte = (raw >> (lane * 8)) & 255;
+                    const uint32_t input = width == 4 ? raw : byte * UINT32_C(0x01010101);
+                    start(g, channel, 0x04001000, 0x05000200);
+                    cupid_timing_tick(&g->timing, 1);
+                    g->cpu.memory.timed = true;
+                    int cycles = 0;
+                    const uint32_t result =
+                        width == 4 ? cupid_memory_load32(&g->cpu, address + lane, &cycles)
+                                   : cupid_memory_load8(&g->cpu, address + lane, &cycles);
+                    CHECK(result == (width == 4 ? ROR(raw, lane * 8) : byte));
+                    CHECK(g->memory.inputBusValid && g->memory.openBus == input);
+                    CHECK(g->memory.iwramBus == 0xA7C45B36);
+                    CHECK(g->memory.dmaRunning);
+                    cupid_bus_wait(&g->cpu);
+                    CHECK(g->memory.dma[channel].latch == input);
+                    CHECK(cupid_memory_load32(&g->cpu, 0x05000200, NULL) == input);
+                    CHECK(!g->memory.dmaRunning && !g->cpuBlocked);
+                    CHECK(g->memory.iwramBus == 0xA7C45B36);
+                    destroy(g);
+                    scenes++;
+                }
+    CHECK(scenes == 704);
+    printf("memory-port CPU/DMA handovers width=%u scenes=%u\n", width, scenes);
+
+    /* A legacy cycle-counted CPU read also supersedes an earlier DMA value.
+     * Observer reads leave the last driver and local RAM history intact. */
+    const uint32_t observed[] = {0x02000020, 0x08000020, 0x0E000020};
+    for (unsigned device = 0; device < 3; device++) {
+        struct CupidGBA *g = machine(0);
+        seed(g, 0x02000200, 0xA7C45B36);
+        start(g, 3, 0x02000200, 0x03000200);
+        cupid_timing_tick(&g->timing, 11);
+        CHECK(g->memory.lastWasDMA);
+        if (device == 2)
+            cupid_memory_store8(&g->cpu, observed[device], (int8_t)0x95, NULL);
+        else
+            seed(g, observed[device], 0x8B72E195);
+        const uint32_t input =
+            width == 1 || device == 2 ? UINT32_C(0x95959595) : UINT32_C(0x8B72E195);
+        if (width == 1)
+            CHECK(cupid_memory_load8(&g->cpu, observed[device], NULL) == 0x95);
+        else
+            CHECK(cupid_memory_load32(&g->cpu, observed[device], NULL) == input);
+        CHECK(g->memory.lastWasDMA && g->memory.iwramBus == 0xA7C45B36);
+        int cycles = 0;
+        if (width == 1)
+            CHECK(cupid_memory_load8(&g->cpu, observed[device], &cycles) == 0x95);
+        else
+            CHECK(cupid_memory_load32(&g->cpu, observed[device], &cycles) == input);
+        CHECK(!g->memory.lastWasDMA && g->memory.inputBusValid);
+        CHECK(cupid_memory_open_bus(&g->cpu) == input && g->memory.iwramBus == 0xA7C45B36);
+        destroy(g);
+    }
+
+    scenes = 0;
+    for (unsigned epoch = 0; epoch < 4; epoch++)
+        for (unsigned board = 0; board < 2; board++)
+            for (unsigned lane = 0; lane < 4; lane++)
+                for (unsigned channel = 0; channel < 4; channel++) {
+                    struct CupidGBA *g = machine(clocks[epoch]);
+                    seed(g, 0x02000200, 0xA7C45B36);
+                    start(g, 3, 0x02000200, 0x03000200);
+                    cupid_timing_tick(&g->timing, 11);
+                    uint32_t address, raw;
+                    if (board) {
+                        cupid_cartridge_enable_card_reader(g, true);
+                        g->cartridge.cardReader.sensor[0] = 0xE195;
+                        g->cartridge.cardReader.sensor[1] = 0x8B72;
+                        address = 0x0DFC0000;
+                        raw = 0x8B72E195;
+                    } else {
+                        cupid_cartridge_enable_rumble(g, true);
+                        cupid_memory_store16(&g->cpu, 0x080000C8, 1, NULL);
+                        cupid_memory_store16(&g->cpu, 0x080000C6, 15, NULL);
+                        cupid_memory_store16(&g->cpu, 0x080000C4, 10, NULL);
+                        address = 0x080000C4;
+                        raw = 0x000F000A;
+                    }
+                    const unsigned byte = (raw >> (lane * 8)) & 255;
+                    const uint32_t input = width == 4 ? raw : byte * UINT32_C(0x01010101);
+                    start(g, channel, 0x04001000, 0x05000200);
+                    cupid_timing_tick(&g->timing, 1);
+                    g->cpu.memory.timed = true;
+                    int cycles = 0;
+                    const uint32_t result =
+                        width == 4 ? cupid_memory_load32(&g->cpu, address + lane, &cycles)
+                                   : cupid_memory_load8(&g->cpu, address + lane, &cycles);
+                    CHECK(result == (width == 4 ? ROR(raw, lane * 8) : byte));
+                    CHECK(g->memory.inputBusValid && g->memory.openBus == input);
+                    CHECK(g->memory.iwramBus == 0xA7C45B36);
+                    cupid_bus_wait(&g->cpu);
+                    CHECK(g->memory.dma[channel].latch == input);
+                    CHECK(cupid_memory_load32(&g->cpu, 0x05000200, NULL) == input);
+                    CHECK(g->memory.iwramBus == 0xA7C45B36);
+                    destroy(g);
+                    scenes++;
+                }
+    CHECK(scenes == 128);
+    printf("cartridge-port CPU/DMA handovers width=%u scenes=%u\n", width, scenes);
+}
+
+static void byte_iwram(void) {
+    const uint64_t clocks[] = {0, INT32_MAX - 2u, UINT32_MAX - 2u, UINT64_C(0x300000000)};
+    const unsigned controls[] = {0x20, 0, 0x21, 1};
+    const uint32_t expected[] = {0xA7C45BA4, 0xA7C4E336, 0xA7725B36, 0x81C45B36};
+    unsigned scenes = 0;
+    for (unsigned epoch = 0; epoch < 4; epoch++)
+        for (unsigned map = 0; map < 4; map++)
+            for (unsigned lane = 0; lane < 4; lane++)
+                for (unsigned channel = 0; channel < 4; channel++) {
+                    struct CupidGBA *g = machine(clocks[epoch]);
+                    seed(g, 0x02000200, 0xA7C45B36);
+                    start(g, 3, 0x02000200, 0x03000200);
+                    cupid_timing_tick(&g->timing, 11);
+                    CHECK(!g->memory.dmaRunning && g->memory.iwramBus == 0xA7C45B36);
+                    const uint32_t raw = UINT32_C(0x8172E3A4);
+                    memcpy(g->memory.iwram + 0x100, &raw, 4);
+                    cupid_memory_store16(&g->cpu, 0x04000800, (int16_t)controls[map], NULL);
+                    uint32_t address = 0x03008100;
+                    if (controls[map] & 1)
+                        address ^= 0x02000000;
+                    if (!(controls[map] & 0x20))
+                        address ^= 0x01000000;
+                    start(g, channel, 0x04001000, 0x05000200);
+                    cupid_timing_tick(&g->timing, 1);
+                    g->cpu.memory.timed = true;
+                    int cycles = 0;
+                    CHECK(cupid_memory_load8(&g->cpu, address + lane, &cycles) ==
+                          ((raw >> (lane * 8)) & 255));
+                    CHECK(g->memory.iwramBus == expected[lane]);
+                    CHECK(g->memory.inputBusValid && g->memory.openBus == expected[lane]);
+                    CHECK(g->memory.dmaRunning);
+                    cupid_bus_wait(&g->cpu);
+                    CHECK(g->memory.dma[channel].latch == expected[lane]);
+                    CHECK(cupid_memory_load32(&g->cpu, 0x05000200, NULL) == expected[lane]);
+                    CHECK(!g->memory.dmaRunning && !g->cpuBlocked);
+                    destroy(g);
+                    scenes++;
+                }
+    CHECK(scenes == 256);
+    printf("IWRAM byte CPU/DMA handovers=%u\n", scenes);
+
+    scenes = 0;
+    for (unsigned epoch = 0; epoch < 4; epoch++)
+        for (unsigned mode = 0; mode < 2; mode++)
+            for (unsigned sign = 0; sign < 2; sign++)
+                for (unsigned lane = 0; lane < 4; lane++) {
+                    struct CupidGBA *g = machine(clocks[epoch]);
+                    seed(g, 0x02000200, 0xA7C45B36);
+                    start(g, 3, 0x02000200, 0x03000200);
+                    cupid_timing_tick(&g->timing, 11);
+                    const uint32_t raw = UINT32_C(0x8172E3A4);
+                    memcpy(g->memory.iwram + 0x100, &raw, 4);
+                    const uint32_t arm[] = {sign ? 0xE19100D2 : 0xE5D10000, 0xE1A00000, 0xE1A00000};
+                    const uint16_t thumb[] = {sign ? 0x5688 : 0x7808, 0x46C0, 0x46C0};
+                    memcpy(g->memory.rom, mode ? (const void *)thumb : (const void *)arm,
+                           mode ? sizeof(thumb) : sizeof(arm));
+                    _CupidSetMode(&g->cpu, mode ? MODE_THUMB : MODE_ARM);
+                    g->cpu.gprs[ARM_PC] = GBA_BASE_ROM0;
+                    g->cpu.gprs[1] = (int32_t)(0x03000100 + lane);
+                    g->cpu.gprs[2] = 0;
+                    if (mode)
+                        CupidThumbWritePC(&g->cpu);
+                    else
+                        CupidARMWritePC(&g->cpu);
+                    const uint32_t status = g->cpu.cpsr.packed;
+                    cupid_gba_step(g);
+                    const unsigned byte = (raw >> (lane * 8)) & 255;
+                    CHECK((uint32_t)g->cpu.gprs[0] ==
+                          (sign ? (uint32_t)(int32_t)(int8_t)byte : byte));
+                    CHECK((uint32_t)g->cpu.cpsr.packed == status);
+                    CHECK(g->memory.iwramBus == expected[lane]);
+                    CHECK(g->memory.inputBusValid && g->memory.openBus == expected[lane]);
+                    destroy(g);
+                    scenes++;
+                }
+    CHECK(scenes == 64);
+    printf("IWRAM signed/unsigned byte guest histories=%u\n", scenes);
+}
+
+static void iwram_writes(void) {
+    const uint64_t clocks[] = {0, INT32_MAX - 32u, UINT32_MAX - 32u, UINT64_C(0x300000000)};
+    const unsigned controls[] = {0x20, 0, 0x21, 1};
+    const uint32_t byteExpected[] = {0xA7C45BA4, 0xA7C4A436, 0xA7A45B36, 0xA4C45B36};
+    const uint32_t halfExpected[] = {0xA7C4E3A4, 0xA7C4E3A4, 0xE3A45B36, 0xE3A45B36};
+    const uint32_t arm[] = {0xE5C01000, 0xE1C010B0, 0xE5801000};
+    const uint16_t thumb[] = {0x7001, 0x8001, 0x6001};
+    unsigned scenes = 0;
+    for (unsigned epoch = 0; epoch < 4; epoch++)
+        for (unsigned map = 0; map < 4; map++)
+            for (unsigned mode = 0; mode < 2; mode++)
+                for (unsigned width = 1, slot = 0; width <= 4; width *= 2, slot++)
+                    for (unsigned lane = 0; lane < 4; lane++) {
+                        struct CupidGBA *g = machine(clocks[epoch]);
+                        seed(g, 0x02000200, 0xA7C45B36);
+                        start(g, 3, 0x02000200, 0x03000100);
+                        cupid_timing_tick(&g->timing, 11);
+                        CHECK(g->memory.iwramBus == 0xA7C45B36);
+                        cupid_memory_store16(&g->cpu, 0x04000800, (int16_t)controls[map], NULL);
+                        uint32_t address = 0x03008100;
+                        if (controls[map] & 1)
+                            address ^= 0x02000000;
+                        if (!(controls[map] & 0x20))
+                            address ^= 0x01000000;
+                        _CupidSetMode(&g->cpu, mode ? MODE_THUMB : MODE_ARM);
+                        if (mode) {
+                            const uint16_t code[] = {thumb[slot], 0x46C0, 0x46C0};
+                            memcpy(g->memory.rom, code, sizeof(code));
+                            g->cpu.gprs[ARM_PC] = GBA_BASE_ROM0;
+                            CupidThumbWritePC(&g->cpu);
+                        } else {
+                            const uint32_t code[] = {arm[slot], 0xE1A00000, 0xE1A00000};
+                            memcpy(g->memory.rom, code, sizeof(code));
+                            g->cpu.gprs[ARM_PC] = GBA_BASE_ROM0;
+                            CupidARMWritePC(&g->cpu);
+                        }
+                        g->cpu.gprs[0] = (int32_t)(address + lane);
+                        g->cpu.gprs[1] = (int32_t)UINT32_C(0x91D2E3A4);
+                        cupid_gba_step(g);
+                        const uint32_t expected = width == 1   ? byteExpected[lane]
+                                                  : width == 2 ? halfExpected[lane]
+                                                               : UINT32_C(0x91D2E3A4);
+                        CHECK(g->memory.iwramBus == expected);
+                        uint32_t actual;
+                        memcpy(&actual, g->memory.iwram + 0x100, 4);
+                        CHECK(actual == expected);
+                        destroy(g);
+                        scenes++;
+                    }
+    CHECK(scenes == 384);
+    printf("IWRAM ARM/Thumb write histories=%u\n", scenes);
+
+    scenes = 0;
+    for (unsigned epoch = 0; epoch < 4; epoch++)
+        for (unsigned channel = 0; channel < 4; channel++)
+            for (unsigned width = 2; width <= 4; width *= 2)
+                for (unsigned lane = 0; lane < 4; lane++) {
+                    struct CupidGBA *g = machine(clocks[epoch]);
+                    seed(g, 0x02000200, 0xA7C45B36);
+                    start(g, 3, 0x02000200, 0x03000100);
+                    cupid_timing_tick(&g->timing, 11);
+                    seed(g, 0x02000300, 0x91D2E3A4);
+                    cupid_dma_write_sad(g, (int)channel, 0x02000300);
+                    cupid_dma_write_dad(g, (int)channel, 0x03000100 + lane);
+                    cupid_dma_write_cnt_lo(g, (int)channel, 1);
+                    cupid_dma_write_cnt(g, (int)channel, width == 4 ? 0x8400 : 0x8000);
+                    cupid_timing_tick(&g->timing, 32);
+                    CHECK(!g->memory.dma[channel].enable && !g->memory.dmaRunning);
+                    const uint32_t expected =
+                        width == 2 ? halfExpected[lane] : UINT32_C(0x91D2E3A4);
+                    CHECK(g->memory.iwramBus == expected);
+                    uint32_t actual;
+                    memcpy(&actual, g->memory.iwram + 0x100, 4);
+                    CHECK(actual == expected);
+                    destroy(g);
+                    scenes++;
+                }
+    CHECK(scenes == 128);
+    printf("IWRAM DMA write histories=%u\n", scenes);
+
+    struct CupidGBA *g = machine(0);
+    seed(g, 0x02000200, 0xA7C45B36);
+    start(g, 3, 0x02000200, 0x03000100);
+    cupid_timing_tick(&g->timing, 11);
+    cupid_memory_store8(&g->cpu, 0x03000100, (int8_t)0xA4, NULL);
+    CHECK(cupid_memory_load8(&g->cpu, 0x03000100, NULL) == 0xA4);
+    cupid_memory_store16(&g->cpu, 0x03000202, (int16_t)0xE3A4, NULL);
+    CHECK(g->memory.iwramBus == 0xA7C45B36);
+    seed(g, 0x07000100, 0x55667788);
+    int cycles = 0;
+    CHECK(cupid_memory_load32(&g->cpu, 0x07000100, &cycles) == 0x55667788);
+    CHECK(g->memory.iwramBus == 0xA7C45B36);
+    CHECK(cupid_memory_load8(&g->cpu, 0x03000100, &cycles) == 0xA4);
+    CHECK(g->memory.iwramBus == 0xA7C45BA4 && g->memory.openBus == 0xA7C45BA4);
+    cupid_gba_reset(g);
+    CHECK(!g->memory.iwramBus && !g->memory.inputBusValid);
+    destroy(g);
+}
+
 int main(int argc, char **argv) {
     CHECK(argc == 2);
     if (!strcmp(argv[1], "handover"))
@@ -540,6 +847,14 @@ int main(int argc, char **argv) {
         RUN(fetch_dma);
     else if (!strcmp(argv[1], "fetch-irq"))
         RUN(fetch_irq);
+    else if (!strcmp(argv[1], "byte-iwram"))
+        RUN(byte_iwram);
+    else if (!strcmp(argv[1], "iwram-writes"))
+        RUN(iwram_writes);
+    else if (!strcmp(argv[1], "byte-ports"))
+        ports_handover(1);
+    else if (!strcmp(argv[1], "word-ports"))
+        ports_handover(4);
     else
         CHECK(false);
     return 0;

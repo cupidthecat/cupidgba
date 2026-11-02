@@ -521,6 +521,7 @@ uint32_t cupid_memory_load32(struct CupidARM *cpu, uint32_t address, int *cycleC
         uint32_t value = cupid_memory_load16(cpu, aligned, NULL);
         cupid_bus_display_beat(cpu, aligned + 2, true);
         value |= cupid_memory_load16(cpu, aligned + 2, NULL) << 16;
+        cupid_memory_capture_word(gba, aligned, value);
         end_data_access(cpu, cycleCounter, true);
         return ROR(value, (address & 3) * 8);
     }
@@ -533,6 +534,7 @@ uint32_t cupid_memory_load32(struct CupidARM *cpu, uint32_t address, int *cycleC
         next_cartridge_halfword(cpu, aligned + 2);
         const uint32_t high = cupid_memory_loadU16(cpu, aligned + 2, NULL);
         cupid_prefetch_after_data(gba);
+        cupid_memory_capture_word(gba, aligned, low | high << 16);
         end_data_access(cpu, cycleCounter, true);
         return ROR(low | high << 16, (address & 3) * 8);
     }
@@ -896,7 +898,7 @@ uint32_t cupid_memory_load8(struct CupidARM *cpu, uint32_t address, int *cycleCo
     if (cupid_cartridge_gpio_read(gba, address & ~1u, &port))
         value = (port >> ((address & 1) * 8)) & 255;
     if (timedCounter || cycleCounter)
-        cupid_memory_capture_byte(gba, address);
+        cupid_memory_capture_byte(gba, address, (uint8_t)value);
     end_data_access(cpu, timedCounter, true);
     return value;
 }
@@ -975,7 +977,7 @@ void cupid_memory_store32(struct CupidARM *cpu, uint32_t address, int32_t value,
         case GBA_REGION_IWRAM:
             STORE_32(value, address & (GBA_SIZE_IWRAM - 4), memory->iwram);
             if (timedCounter || cycleCounter || gba->performingDMA)
-                memory->iwramBus = value;
+                cupid_memory_retain_iwram_write(gba, address, (uint32_t)value, 4);
             break;
         case GBA_REGION_IO:
             sync_io(cpu, cycleCounter);
@@ -1056,6 +1058,8 @@ void cupid_memory_store16(struct CupidARM *cpu, uint32_t address, int16_t value,
             break;
         case GBA_REGION_IWRAM:
             STORE_16(value, address & (GBA_SIZE_IWRAM - 2), memory->iwram);
+            if (timedCounter || cycleCounter || gba->performingDMA)
+                cupid_memory_retain_iwram_write(gba, address, (uint16_t)value, 2);
             break;
         case GBA_REGION_IO:
             sync_io(cpu, cycleCounter);
@@ -1135,6 +1139,8 @@ void cupid_memory_store8(struct CupidARM *cpu, uint32_t address, int8_t value, i
             break;
         case GBA_REGION_IWRAM:
             ((int8_t *)memory->iwram)[address & (GBA_SIZE_IWRAM - 1)] = value;
+            if (timedCounter || cycleCounter || gba->performingDMA)
+                cupid_memory_retain_iwram_write(gba, address, (uint8_t)value, 1);
             break;
         case GBA_REGION_IO:
             sync_io(cpu, cycleCounter);

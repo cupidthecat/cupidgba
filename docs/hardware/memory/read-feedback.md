@@ -9,7 +9,8 @@ The halfword path distinguishes these ports:
 
 - OAM supplies its full aligned word, including the half not returned to the CPU.
 - IWRAM changes the selected halfword bank and retains the other bank's data.
-  Timed CPU and DMA word transfers seed both bank values.
+  Timed CPU writes retain their addressed byte, halfword or word lanes. DMA
+  halfword and word writes retain the corresponding lanes as well.
 - The external halfword ports repeat the sampled halfword across the input word.
 - BIOS reads preserve the existing read-protection policy.
 - Unmapped reads do not drive a new value.
@@ -23,9 +24,11 @@ reads do not change either the CPU input or the IWRAM bank history. Reset clears
 both, and separate emulator instances own separate state.
 
 CPU word reads from BIOS, IWRAM and OAM publish their complete input before
-releasing the bus. An unaligned load returns the rotated register value while
-the retained input stays aligned. IWRAM also updates both local banks. BIOS
-protection is applied before publication, and addresses outside the BIOS
+releasing the bus. Ordinary RAM, display memory and cartridge reads also publish
+their assembled word, including the two-beat display/GPIO/reader paths and
+eight-bit backup expansion. An unaligned load returns the rotated register
+value while the retained input stays aligned. IWRAM also updates both local
+banks. BIOS protection is applied before publication, and addresses outside the BIOS
 storage do not drive a new input. These rules use the decoded device after
 internal-memory remapping. Observer reads with no cycle counter retain input
 and bank history.
@@ -33,8 +36,12 @@ and bank history.
 Byte reads from BIOS and OAM likewise retain the complete aligned input word.
 Byte selection and signed-load extension affect only the CPU register result.
 BIOS reads use the selected protected word when execution is outside the BIOS.
-This extends the same port-retention policy used for halfword reads; it does
-not infer byte behavior for IWRAM or the external ports.
+IWRAM byte reads replace their addressed byte and retain the other three local
+lanes. Byte reads from ordinary RAM, display memory and cartridge ports repeat
+their sampled byte across the input word. Sign extension changes the CPU result
+after publication. None of those other devices overwrites IWRAM's local history.
+A driven CPU read supersedes an earlier DMA value through both the timed and
+legacy cycle-counted interfaces; observer reads retain the previous driver.
 
 Opcode publication follows the actual sample, including untimed pipeline
 refills before timed execution. It does not guess an opcode before the memory
@@ -104,12 +111,16 @@ The cartridges retain a 360-frame, 150-million-step and 90-second process limit.
 
 ## Remaining limits
 
-This work covers halfword data-read feedback, byte data reads from BIOS/OAM,
-word data reads from the three 32-bit internal ports and the word transfers
-that seed IWRAM history. It does not establish a complete physical bus model.
-Byte feedback on IWRAM and external ports, word
-feedback from external ports, register-specific I/O feedback, narrow IWRAM writes,
-cross-region input history and other partially driven buses need separate
-qualification. The fast-RAM and BIOS/OAM fetch rules follow the documented
+This source-informed model covers mapped memory byte/halfword/word read
+feedback and IWRAM write-lane history. The added matrices check 2,496 scenes
+through CPU instructions, DMA handover, remapping and four clock epochs, plus
+observer and legacy-interface ownership controls. They include GPIO/reader
+word assembly, backup byte expansion and address-driven reads beyond a small
+ROM image. They do not establish a complete physical bus model.
+Register-specific I/O feedback, shared input-word effects of stores,
+undriven/partially driven peripheral bits and wider cross-region histories still
+need separate qualification. Device-specific EEPROM/flash protocols and physical
+sampling edges remain separate concerns.
+The fast-RAM and BIOS/OAM fetch rules follow the documented
 [GBA unused-memory behavior](https://problemkaputt.de/gbatek.htm#gbaunpredictablethings);
 the checks here are software regressions, not new physical hardware captures. Broader CPU, DMA and display timing requirements remain open.
