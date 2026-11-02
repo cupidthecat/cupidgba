@@ -182,6 +182,9 @@ void cupid_io_write(struct CupidGBA *gba, uint32_t addr, uint16_t value);
 void cupid_io_write32(struct CupidGBA *gba, uint32_t addr, uint32_t value);
 void cupid_io_write8(struct CupidGBA *gba, uint32_t addr, uint8_t value);
 uint16_t cupid_io_read(struct CupidGBA *gba, uint32_t addr);
+/* Read once and identify whether the selected register drives a port sample.
+ * NULL metadata retains the ordinary observer interface. */
+uint16_t cupid_io_read_input(struct CupidGBA *gba, uint32_t addr, bool *driven);
 void cupid_raise_irq(struct CupidGBA *gba, enum CupidIRQ irq, uint32_t cyclesLate);
 void cupid_raise_irq_at(struct CupidGBA *gba, enum CupidIRQ irq, uint64_t timestamp);
 void cupid_test_irq(struct CupidGBA *gba, uint32_t cyclesLate);
