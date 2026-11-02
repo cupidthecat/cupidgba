@@ -159,3 +159,29 @@ words, both instruction-width changes and BIOS/RAM exception returns,
 uncached page boundaries and DMA/timer/IRQ interactions across clock wrap.
 They also write wait controls before the first fetch, after a firmware reset
 and after an invalid jump, then require the configured costs on a valid fetch.
+
+## Internal memory mapping
+
+The seven `gba.internal-memory-control-*` groups check the low control latch
+and all four documented device maps. Register checks cover all 256 I/O banks,
+all low-byte values and byte/halfword/word writes. Storage checks compare both
+complete RAM buffers after each write, read back all lanes and check aliases
+through the end of each 16-MiB window. BIOS checks retain protection and reject
+writes in both locations.
+
+Timed reads, writes and fetches cover every selected RAM window at four clock
+epochs. Another 64 block-transfer cases cover all four address directions,
+sparse register lists, physical RAM wrapping, virtual writeback and timed or
+untimed cycle accounting. The pipeline group executes 480 ARM/Thumb mapping
+changes, covering all
+three store widths and transitions between distinct mapped devices. It checks
+that the two queued instructions survive while later instructions come from
+the new device. DMA checks include both widths, valid and protected sources,
+all RAM destinations, untouched trailing bytes and the exact release clock.
+Halfword and opcode feedback retain the other internal-RAM input bank.
+
+Run `ctest --test-dir build -R gba.internal-memory-control --output-on-failure`.
+Each group has a ten-second deadline. All seven groups reject the preceding
+core. These tests qualify the selected documented model; they are not physical
+measurements of remap propagation or undocumented control-bit effects. See
+[the mapping model](../../hardware/memory/internal-control.md).

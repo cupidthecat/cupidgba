@@ -61,7 +61,7 @@ endif()
 add_library(cupid_core STATIC
     src/arm/arm.c src/arm/isa-arm.c src/arm/isa-thumb.c
     src/core/timing.c src/core/file.c src/platform/context.c
-    src/gba/gba.c src/gba/memory.c src/gba/memory/feedback.c src/gba/cartridge/image.c src/gba/cartridge/paged-rom.c src/gba/save/detection.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
+    src/gba/gba.c src/gba/memory.c src/gba/memory/feedback.c src/gba/memory/control.c src/gba/cartridge/image.c src/gba/cartridge/paged-rom.c src/gba/save/detection.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
     src/gba/audio.c src/gba/audio/wave.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c
     src/gba/hle-bios.c src/gba/bios/file.c src/gba/savedata.c src/gba/save/file.c
     src/gba/save/programming.c
@@ -461,6 +461,13 @@ if(BUILD_TESTING)
     add_executable(test_io tests/gba/test_io.c)
     target_link_libraries(test_io PRIVATE cupid_core)
     add_test(NAME gba.io COMMAND test_io)
+    add_executable(test_internal_memory_control tests/gba/memory/test_control.c)
+    target_link_libraries(test_internal_memory_control PRIVATE cupid_core)
+    foreach(group registers storage protection timing pipeline dma feedback)
+        add_test(NAME gba.internal-memory-control-${group} COMMAND test_internal_memory_control ${group})
+        set_tests_properties(gba.internal-memory-control-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
     add_executable(test_ewram_wait_control tests/gba/test_ewram_wait_control.c)
     target_link_libraries(test_ewram_wait_control PRIVATE cupid_core)
     foreach(group registers guest fetch data dma owners readback decode pipeline writes)

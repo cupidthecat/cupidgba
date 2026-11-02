@@ -39,7 +39,7 @@ static void begin_data_access(struct CupidARM *cpu, uint32_t address, unsigned w
     cpu->cycles += *cycles;
     *cycles = 0;
     cupid_bus_wait(cpu);
-    unsigned region = address >> GBA_BASE_OFFSET;
+    unsigned region = cupid_memory_decode_address(memory, address) >> GBA_BASE_OFFSET;
     if (region >= GBA_REGION_PALETTE && region <= GBA_REGION_OAM) {
         /* Display waits come from the live PPU port. Cartridge/RAM wait
          * tables and sequential hints do not select its ready edge. Keep
@@ -146,6 +146,7 @@ const char GBA_ROM_WAITSTATES_SEQ[6] = {2, 1, 4, 1, 8, 1};
  */
 void cupid_memory_init(struct CupidGBA *gba) {
     struct CupidMemory *mem = &gba->memory;
+    mem->internalMemoryControl = 0x20;
 
     if (!mem->ewram)
         mem->ewram = calloc(1, GBA_SIZE_EWRAM);
@@ -205,6 +206,7 @@ void cupid_memory_reset(struct CupidGBA *gba) {
     }
     memset(mem->io, 0, sizeof(mem->io));
 
+    mem->internalMemoryControl = 0x20;
     mem->ewramWaitControl = 0x0D00;
 
     /** Initialize default wait states. */
@@ -371,7 +373,8 @@ uint32_t cupid_memory_open_bus(struct CupidARM *cpu) {
         return gba->memory.openBus;
     value = cpu->prefetch[1];
     if (cpu->executionMode == MODE_THUMB) {
-        switch (cpu->gprs[ARM_PC] >> GBA_BASE_OFFSET) {
+        switch (cupid_memory_decode_address(&gba->memory, (uint32_t)cpu->gprs[ARM_PC]) >>
+                GBA_BASE_OFFSET) {
             case GBA_REGION_BIOS:
             case GBA_REGION_OAM:
                 value <<= 16;
@@ -403,9 +406,11 @@ uint32_t cupid_memory_open_bus(struct CupidARM *cpu) {
 void cupid_memory_set_active_region(struct CupidARM *cpu, uint32_t address) {
     struct CupidGBA *gba = cpu->master;
     struct CupidMemory *memory = &gba->memory;
+    const uint32_t virtualAddress = address;
+    address = cupid_memory_decode_address(memory, address);
     int newRegion = address >> GBA_BASE_OFFSET;
 
-    gba->lastJump = address;
+    gba->lastJump = virtualAddress;
     memory->lastPrefetchedPc = 0;
 
     /** Fast path: same region, only adjust mask alignment. */
@@ -526,6 +531,7 @@ uint32_t cupid_memory_load32(struct CupidARM *cpu, uint32_t address, int *cycleC
     int wait = 0;
     char *waitstatesRegion = memory->waitstatesNonseq32;
 
+    address = cupid_memory_decode_address(memory, address);
     switch (address >> GBA_BASE_OFFSET) {
         case GBA_REGION_BIOS:
             if (address < GBA_SIZE_BIOS) {
@@ -645,6 +651,7 @@ uint32_t cupid_memory_load16(struct CupidARM *cpu, uint32_t address, int *cycleC
     uint32_t value = 0;
     int wait = 0;
 
+    address = cupid_memory_decode_address(memory, address);
     switch (address >> GBA_BASE_OFFSET) {
         case GBA_REGION_BIOS:
             if (address < GBA_SIZE_BIOS) {
@@ -756,6 +763,7 @@ uint32_t cupid_memory_load8(struct CupidARM *cpu, uint32_t address, int *cycleCo
     uint32_t value = 0;
     int wait = 0;
 
+    address = cupid_memory_decode_address(memory, address);
     switch (address >> GBA_BASE_OFFSET) {
         case GBA_REGION_BIOS:
             if (address < GBA_SIZE_BIOS) {
@@ -914,6 +922,7 @@ void cupid_memory_store32(struct CupidARM *cpu, uint32_t address, int32_t value,
     int wait = 0;
     char *waitstatesRegion = memory->waitstatesNonseq32;
 
+    address = cupid_memory_decode_address(memory, address);
     switch (address >> GBA_BASE_OFFSET) {
         case GBA_REGION_EWRAM:
             STORE_32(value, address & (GBA_SIZE_EWRAM - 4), memory->ewram);
@@ -990,6 +999,7 @@ void cupid_memory_store16(struct CupidARM *cpu, uint32_t address, int16_t value,
     }
     int wait = 0;
 
+    address = cupid_memory_decode_address(memory, address);
     switch (address >> GBA_BASE_OFFSET) {
         case GBA_REGION_EWRAM:
             STORE_16(value, address & (GBA_SIZE_EWRAM - 2), memory->ewram);
@@ -1064,6 +1074,7 @@ void cupid_memory_store8(struct CupidARM *cpu, uint32_t address, int8_t value, i
         cupid_video_sync(&gba->video);
     int wait = 0;
 
+    address = cupid_memory_decode_address(memory, address);
     switch (address >> GBA_BASE_OFFSET) {
         case GBA_REGION_EWRAM:
             ((int8_t *)memory->ewram)[address & (GBA_SIZE_EWRAM - 1)] = value;
@@ -1183,7 +1194,7 @@ uint32_t cupid_memory_load_multiple(struct CupidARM *cpu, uint32_t address, int 
         if (cycleCounter) {
             /* LDM has one final internal cycle, not one after each word. */
             cycles--;
-            unsigned region = address >> GBA_BASE_OFFSET;
+            unsigned region = cupid_memory_decode_address(&gba->memory, address) >> GBA_BASE_OFFSET;
             if (!cpu->memory.timed && !first && region < 16) {
                 cycles -=
                     gba->memory.waitstatesNonseq32[region] - gba->memory.waitstatesSeq32[region];
@@ -1223,7 +1234,7 @@ uint32_t cupid_memory_store_multiple(struct CupidARM *cpu, uint32_t address, int
         }
         cpu->memory.dataSequential = !first;
         cupid_memory_store32(cpu, address, val, cycleCounter ? &cycles : NULL);
-        unsigned region = address >> GBA_BASE_OFFSET;
+        unsigned region = cupid_memory_decode_address(&gba->memory, address) >> GBA_BASE_OFFSET;
         if (cycleCounter && !cpu->memory.timed && !first && region < 16) {
             cycles -= gba->memory.waitstatesNonseq32[region] - gba->memory.waitstatesSeq32[region];
         }

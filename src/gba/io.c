@@ -84,6 +84,10 @@ void cupid_io_init(struct CupidGBA *gba) {
  * storage for read-only or self-managed registers.
  */
 void cupid_io_write(struct CupidGBA *gba, uint32_t addr, uint16_t value) {
+    if (addr < 0x01000000 && (addr & 0xFFFEu) == REG_MEMCNT_LO) {
+        cupid_memory_update_internal_control(gba, value);
+        return;
+    }
     if (ewram_wait_port(addr)) {
         cupid_memory_update_ewram_waitstates(gba, value);
         return;
@@ -549,6 +553,7 @@ void cupid_io_write(struct CupidGBA *gba, uint32_t addr, uint16_t value) {
  */
 void cupid_io_write32(struct CupidGBA *gba, uint32_t addr, uint32_t value) {
     if (addr < 0x01000000 && (addr & 0xFFFCu) == REG_MEMCNT_LO) {
+        cupid_io_write(gba, addr & ~3u, (uint16_t)value);
         cupid_io_write(gba, (addr & ~3u) + 2, (uint16_t)(value >> 16));
         return;
     }
@@ -564,6 +569,11 @@ void cupid_io_write32(struct CupidGBA *gba, uint32_t addr, uint32_t value) {
 }
 
 void cupid_io_write8(struct CupidGBA *gba, uint32_t addr, uint8_t value) {
+    if (addr < 0x01000000 && (addr & 0xFFFEu) == REG_MEMCNT_LO) {
+        if (!(addr & 1))
+            cupid_memory_update_internal_control(gba, value);
+        return;
+    }
     if (ewram_wait_port(addr)) {
         if (addr & 1)
             cupid_memory_update_ewram_waitstates(gba, (uint16_t)value << 8);
@@ -636,10 +646,9 @@ void cupid_io_write8(struct CupidGBA *gba, uint32_t addr, uint8_t value) {
  * @brief Read a 16-bit IO register.
  */
 uint16_t cupid_io_read(struct CupidGBA *gba, uint32_t addr) {
-    /* Normal RAM mapping has low control value 0020h. Disable/remapping
-     * writes retain their existing unsupported behavior. */
+    /* Both control halfwords use the exceptional 64 KiB mirror decode. */
     if (addr < 0x01000000 && (addr & 0xFFFCu) == REG_MEMCNT_LO)
-        return (addr & 2) ? gba->memory.ewramWaitControl : 0x0020;
+        return (addr & 2) ? gba->memory.ewramWaitControl : gba->memory.internalMemoryControl;
     if (addr >= GBA_SIZE_IO) {
         return (uint16_t)(cupid_memory_open_bus(&gba->cpu) >> ((addr & 2) * 8));
     }

@@ -14,11 +14,10 @@ Later fetches, data accesses and DMA use the updated timing.
 
 ## Limits
 
-The low control halfword returns the normal enabled-RAM value; its
-disable/remapping writes remain unsupported. Timing value 15 reads back as
-written while the tables retain their last valid timing. This selected policy
-does not model physical RAM failure. RAM disable/remapping, model-specific
-timing failures and full hardware qualification remain open.
+The low halfword selects [internal memory mapping](internal-control.md).
+Timing value 15 reads back as written while the tables retain their last valid
+timing. This policy does not model physical RAM failure. Model-specific timing
+failures and full hardware qualification remain open.
 
 ## Checks
 

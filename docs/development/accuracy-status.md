@@ -80,9 +80,11 @@ expected value changed.
 - CPU input feedback and bus-latch coverage are not complete for every byte,
   word, partial-lane and instruction interaction. The complete 2020-observation
   timing matrix and the original prefetch cases do not exhaust those states.
-- Internal RAM-disable/remapping behavior is not implemented. Invalid EWRAM
-  timing values retain the documented compatibility policy rather than
-  simulating physical corruption or lockup.
+- [Internal memory remapping](../hardware/memory/internal-control.md) now uses
+  a shared CPU/DMA decoder, retained BIOS protection and live opcode rebinding.
+  Its selected device timing and same-edge behavior still need independent
+  hardware qualification. Invalid EWRAM timing values retain the existing
+  compatibility policy without simulating physical corruption or lockup.
 - DMA still needs wider display-window edge, external Game Pak request and
   same-edge interaction coverage. Reserved source mode 3 uses a fixed source.
 - Ordinary cartridge images support up to 32 MiB; the documented
