@@ -10,7 +10,10 @@ CPU read feedback and its pinned DMA handover probes are described in
 The `word-handover` group checks 768 CPU/DMA transfers from the 32-bit internal
 ports, including remapping, protection, rotation, mirrors and clock wrap.
 The `word-ownership` group checks observer isolation, unmapped reads and reset
-with both timed and legacy cycle-counted CPU accesses.
+with both timed and legacy cycle-counted CPU word and byte accesses.
+The `byte-handover` group adds 512 BIOS/OAM transfers. The `byte-guest` group
+executes 256 ARM/Thumb signed and unsigned byte loads, retaining the full
+input word independently of narrowing and sign extension in the CPU register.
 
 ## Prefetch boundaries
 

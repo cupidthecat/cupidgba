@@ -1,5 +1,23 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file feedback.c
+ * @brief CPU input retention across data reads, opcode fetches and DMA handover.
+ *
+ * - Capture aligned port data before CPU rotation or sign extension.
+ * - Keep IWRAM halfword banks separate from the shared input word.
+ * - Preserve BIOS protection and full-word OAM sampling on narrow reads.
+ * - Publish opcode samples after the fetch and before CPU bus release.
+ */
 #include "cupid/gba.h"
+
+/* Byte selection happens after these 32-bit ports supply input. Reuse their
+ * halfword sampling rules, which retain the full BIOS/OAM word and apply
+ * BIOS protection. Do not infer byte-lane behavior for the other devices. */
+void cupid_memory_capture_byte(struct CupidGBA *gba, uint32_t address) {
+    const unsigned region = address >> GBA_BASE_OFFSET;
+    if (region == GBA_REGION_BIOS || region == GBA_REGION_OAM)
+        cupid_memory_capture_halfword(gba, address, 0);
+}
 
 /* A word read from a 32-bit device drives every input lane. The caller
  * supplies the decoded address and publishes before CPU alignment rotation

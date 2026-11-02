@@ -1,6 +1,12 @@
 /**
  * @file memory.c
  * @brief GBA memory bus, region switching and BIOS buffer setup.
+ *
+ * - Decode internal-memory mapping before selecting storage and protection.
+ * - Advance timed CPU data phases and synchronize I/O and display requests.
+ * - Preserve physical input before load rotation and register narrowing.
+ * - Route cartridge, backup and peripheral accesses through their devices.
+ * - Rebind opcode views and waits when execution changes memory regions.
  */
 #include "cupid/gba.h"
 #include "cupid/registers.h"
@@ -857,6 +863,8 @@ uint32_t cupid_memory_load8(struct CupidARM *cpu, uint32_t address, int *cycleCo
     uint16_t port;
     if (cupid_cartridge_gpio_read(gba, address & ~1u, &port))
         value = (port >> ((address & 1) * 8)) & 255;
+    if (timedCounter || cycleCounter)
+        cupid_memory_capture_byte(gba, address);
     end_data_access(cpu, timedCounter, true);
     return value;
 }

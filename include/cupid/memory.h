@@ -1,6 +1,10 @@
 /**
  * @file memory.h
  * @brief GBA memory map and bus definitions.
+ *
+ * - Define device windows, capacities and the owned memory/bus state.
+ * - Retain CPU input, IWRAM bank history and DMA transfer phases.
+ * - Declare data access, opcode sampling, remapping and wait-control APIs.
  */
 #ifndef CUPID_MEMORY_H
 #define CUPID_MEMORY_H
@@ -332,6 +336,7 @@ void cupid_memory_capture_opcode(struct CupidARM *cpu, uint32_t address, unsigne
                                  uint32_t value);
 void cupid_memory_capture_halfword(struct CupidGBA *gba, uint32_t address, uint16_t value);
 void cupid_memory_capture_word(struct CupidGBA *gba, uint32_t address, uint32_t value);
+void cupid_memory_capture_byte(struct CupidGBA *gba, uint32_t address);
 void cupid_memory_init(struct CupidGBA *gba);
 void cupid_memory_reset(struct CupidGBA *gba);
 void cupid_memory_deinit(struct CupidGBA *gba);

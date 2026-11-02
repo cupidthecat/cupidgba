@@ -30,6 +30,12 @@ storage do not drive a new input. These rules use the decoded device after
 internal-memory remapping. Observer reads with no cycle counter retain input
 and bank history.
 
+Byte reads from BIOS and OAM likewise retain the complete aligned input word.
+Byte selection and signed-load extension affect only the CPU register result.
+BIOS reads use the selected protected word when execution is outside the BIOS.
+This extends the same port-retention policy used for halfword reads; it does
+not infer byte behavior for IWRAM or the external ports.
+
 Opcode publication follows the actual sample, including untimed pipeline
 refills before timed execution. It does not guess an opcode before the memory
 read. Timed IRQ entry also samples its discarded fetch without executing the
@@ -71,6 +77,14 @@ publication. This extends the existing input-retention model; the reference
 port widths and software checks do not establish new physical handover
 measurements.
 
+Byte checks add 512 DMA handovers using the same mapping, address, channel and
+clock matrix on BIOS/OAM. Another 256 scenes execute ARM and Thumb unsigned
+and signed byte loads, checking the register value, unchanged flags, full
+input word and BIOS protection. Ownership checks also include timed and
+legacy byte reads, observer isolation and undriven addresses. The byte
+handover check fails before byte publication is enabled. These are software
+regressions for the selected port model, not physical captures of byte reads.
+
 Six pinned original cartridges check CPU/DMA interaction, IWRAM, OAM, protected
 sources, odd signed-halfword loads and unmapped reads. The runner requires each
 original comparison instruction, its operand and the completed terminal. One
@@ -90,9 +104,10 @@ The cartridges retain a 360-frame, 150-million-step and 90-second process limit.
 
 ## Remaining limits
 
-This work covers halfword data-read feedback, word data reads from the three
-32-bit internal ports and the word transfers that seed IWRAM history.
-It does not establish a complete physical bus model. Byte feedback, word
+This work covers halfword data-read feedback, byte data reads from BIOS/OAM,
+word data reads from the three 32-bit internal ports and the word transfers
+that seed IWRAM history. It does not establish a complete physical bus model.
+Byte feedback on IWRAM and external ports, word
 feedback from external ports, register-specific I/O feedback, narrow IWRAM writes,
 cross-region input history and other partially driven buses need separate
 qualification. The fast-RAM and BIOS/OAM fetch rules follow the documented
