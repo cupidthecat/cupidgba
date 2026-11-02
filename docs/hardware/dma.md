@@ -125,8 +125,10 @@ Physical request propagation and control writes coincident with activation
 remain outside this qualification.
 
 HBlank requests run on visible lines and VBlank requests run on entry to line
-160. The current display-request model services channel 3 at HBlank on lines
-2–161 and disables it at line 162.
+160. The current display-request model latches channel 3's enabled custom mode
+when line 162 advances to line 163. It requests transfers three clocks into
+lines 2–161 of the following frame and disables the channel on entry to line
+162. This selected window model does not establish every physical latch edge.
 
 ## Evidence and remaining limits
 

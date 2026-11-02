@@ -5,23 +5,59 @@
  *
  * - Capture aligned port data before CPU rotation or sign extension.
  * - Keep IWRAM halfword banks separate from the shared input word.
+ * - Retain addressed IWRAM write lanes without publishing CPU store output.
  * - Preserve BIOS protection and full-word OAM sampling on narrow reads.
  * - Publish opcode samples after the fetch and before CPU bus release.
  */
 #include "cupid/gba.h"
+#include <assert.h>
+
+static uint32_t merge_iwram_lanes(uint32_t retained, uint32_t address, uint32_t value,
+                                  unsigned width) {
+    assert(width == 1 || width == 2 || width == 4);
+    if (width == 4)
+        return value;
+    const unsigned shift = (address & (4 - width)) * 8;
+    const uint32_t mask = (width == 1 ? UINT32_C(0xFF) : UINT32_C(0xFFFF)) << shift;
+    return (retained & ~mask) | ((value << shift) & mask);
+}
+
+void cupid_memory_retain_iwram_lanes(struct CupidGBA *gba, uint32_t address, uint32_t value,
+                                     unsigned width) {
+    gba->memory.iwramBus = merge_iwram_lanes(gba->memory.iwramBus, address, value, width);
+}
+
+static bool external_data_port(unsigned region) {
+    return region == GBA_REGION_EWRAM || region == GBA_REGION_PALETTE ||
+           region == GBA_REGION_VRAM ||
+           (region >= GBA_REGION_ROM0 && region <= GBA_REGION_SRAM_MIRROR);
+}
+
+static void publish_input(struct CupidMemory *memory, uint32_t value) {
+    memory->openBus = value;
+    memory->inputBusValid = true;
+    memory->lastWasDMA = false;
+}
 
 /* Byte selection happens after these 32-bit ports supply input. Reuse their
  * halfword sampling rules, which retain the full BIOS/OAM word and apply
- * BIOS protection. Do not infer byte-lane behavior for the other devices. */
-void cupid_memory_capture_byte(struct CupidGBA *gba, uint32_t address) {
+ * BIOS protection. IWRAM updates its addressed byte in the retained banks;
+ * other mapped data ports repeat the sampled byte across the input word. */
+void cupid_memory_capture_byte(struct CupidGBA *gba, uint32_t address, uint8_t value) {
     const unsigned region = address >> GBA_BASE_OFFSET;
-    if (region == GBA_REGION_BIOS || region == GBA_REGION_OAM)
+    if (region == GBA_REGION_IWRAM) {
+        struct CupidMemory *memory = &gba->memory;
+        memory->iwramBus = merge_iwram_lanes(memory->iwramBus, address, value, 1);
+        publish_input(memory, memory->iwramBus);
+    } else if (region == GBA_REGION_BIOS || region == GBA_REGION_OAM)
         cupid_memory_capture_halfword(gba, address, 0);
+    else if (external_data_port(region)) {
+        publish_input(&gba->memory, (uint32_t)value * UINT32_C(0x01010101));
+    }
 }
 
-/* A word read from a 32-bit device drives every input lane. The caller
- * supplies the decoded address and publishes before CPU alignment rotation
- * and bus release. Narrow external ports keep their existing feedback path. */
+/* Publish the assembled data word before CPU rotation and bus release.
+ * The value includes any separate bus samples and eight-bit expansion. */
 void cupid_memory_capture_word(struct CupidGBA *gba, uint32_t address, uint32_t value) {
     struct CupidMemory *memory = &gba->memory;
     switch (address >> GBA_BASE_OFFSET) {
@@ -35,10 +71,11 @@ void cupid_memory_capture_word(struct CupidGBA *gba, uint32_t address, uint32_t 
         case GBA_REGION_OAM:
             break;
         default:
-            return;
+            if (!external_data_port(address >> GBA_BASE_OFFSET))
+                return;
+            break;
     }
-    memory->openBus = value;
-    memory->inputBusValid = true;
+    publish_input(memory, value);
 }
 
 /* Capture input pins before CPU alignment rotation or sign extension. The
@@ -51,8 +88,7 @@ void cupid_memory_capture_halfword(struct CupidGBA *gba, uint32_t address, uint1
     if (region == GBA_REGION_IWRAM) {
         /* Only the selected sixteen-bit bank changes on a halfword read.
          * A preceding word transfer can leave different data in each bank. */
-        const unsigned shift = (address & 2) * 8;
-        input = (memory->iwramBus & ~(UINT32_C(0xFFFF) << shift)) | (uint32_t)value << shift;
+        input = merge_iwram_lanes(memory->iwramBus, address, value, 2);
         memory->iwramBus = input;
     } else if (region == GBA_REGION_OAM) {
         /* OAM presents its aligned word, even for a narrow CPU request. */
@@ -70,8 +106,7 @@ void cupid_memory_capture_halfword(struct CupidGBA *gba, uint32_t address, uint1
          * feedback is not yet qualified, so retain its existing read path. */
         return;
     }
-    memory->openBus = input;
-    memory->inputBusValid = true;
+    publish_input(memory, input);
 }
 
 /* Fast RAM fetches update one sixteen-bit bank in Thumb state. Its other
@@ -102,6 +137,5 @@ void cupid_memory_capture_opcode(struct CupidARM *cpu, uint32_t address, unsigne
     } else {
         return;
     }
-    memory->openBus = input;
-    memory->inputBusValid = true;
+    publish_input(memory, input);
 }
