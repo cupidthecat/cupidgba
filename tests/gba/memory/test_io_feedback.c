@@ -186,47 +186,53 @@ static void observers(void) {
     printf("untimed I/O observer scenes=%u\n", scenes);
 }
 
-/* The UART status read acknowledges its error and the data read consumes one
- * queued byte. Input publication must reuse those samples without rereading. */
+/* The UART status read acknowledges its error and a data read consumes one
+ * available byte. With one byte queued, word status must precede the pop. */
 static void read_once(void) {
     const uint64_t clocks[] = {0, INT32_MAX - 2u, UINT32_MAX - 2u, UINT64_C(0x300000000)};
     unsigned scenes = 0;
     for (unsigned epoch = 0; epoch < 4; ++epoch)
-        for (unsigned width = 1; width <= 4; width *= 2)
-            for (unsigned lane = 0; lane < (width == 4 ? 4u : 2u); ++lane)
-                for (unsigned channel = 0; channel < 4; ++channel) {
-                    struct CupidGBA *g = machine(clocks[epoch]);
-                    cupid_io_write(g, REG_RCNT, 0);
-                    cupid_io_write(g, REG_SIOCNT, 0x3983);
-                    CHECK(cupid_serial_mode(&g->serial) == SERIAL_UART);
-                    prior_dma(g);
-                    const uint8_t bytes[] = {0x5A, 0xC3, 0x96, 0x4D};
-                    memcpy(g->serial.uart.receiveFIFO, bytes, sizeof(bytes));
-                    g->serial.uart.receiveHead = 0;
-                    g->serial.uart.receiveCount = 4;
-                    g->serial.uart.error = true;
-                    start(g, channel, 0x04001000, 0x02000100);
-                    cupid_timing_tick(&g->timing, 1);
-                    uint32_t word = width == 4 ? 0x005A39C3 : 0x005A0000;
-                    unsigned portLane = width == 4 ? lane : 2 + lane;
-                    const uint32_t expected = sample(word, portLane, width);
-                    int cycles = 0;
-                    CHECK(read_port(g, 0x04000128 + portLane, width, &cycles) ==
-                          result(word, portLane, width));
-                    CHECK(cycles == 1 && g->memory.inputBusValid);
-                    CHECK(g->memory.openBus == expected && !g->memory.lastWasDMA);
-                    CHECK(g->serial.uart.receiveCount == 3 && g->serial.uart.receiveHead == 1);
-                    CHECK(g->serial.uart.error == (width != 4));
-                    cupid_bus_wait(&g->cpu);
-                    CHECK(cupid_memory_load32(&g->cpu, 0x02000100, NULL) == expected);
-                    CHECK(g->memory.dma[channel].latch == expected);
-                    CHECK(cupid_io_read(g, REG_SIOMLT_SEND) == 0xC3);
-                    CHECK(g->serial.uart.receiveCount == 2 && g->serial.uart.receiveHead == 2);
-                    CHECK(g->memory.openBus == expected && g->memory.lastWasDMA);
-                    destroy(g);
-                    ++scenes;
-                }
-    CHECK(scenes == 128);
+        for (unsigned queued = 0; queued <= 4; ++queued)
+            for (unsigned width = 1; width <= 4; width *= 2)
+                for (unsigned lane = 0; lane < (width == 4 ? 4u : 2u); ++lane)
+                    for (unsigned channel = 0; channel < 4; ++channel) {
+                        struct CupidGBA *g = machine(clocks[epoch]);
+                        cupid_io_write(g, REG_RCNT, 0);
+                        cupid_io_write(g, REG_SIOCNT, 0x3983);
+                        CHECK(cupid_serial_mode(&g->serial) == SERIAL_UART);
+                        prior_dma(g);
+                        const uint8_t bytes[] = {0x5A, 0xC3, 0x96, 0x4D};
+                        memcpy(g->serial.uart.receiveFIFO, bytes, sizeof(bytes));
+                        g->serial.uart.receiveHead = 0;
+                        g->serial.uart.receiveCount = queued;
+                        g->serial.uart.error = true;
+                        start(g, channel, 0x04001000, 0x02000100);
+                        cupid_timing_tick(&g->timing, 1);
+                        const uint32_t data = queued ? 0x5A : 0;
+                        const uint32_t status = queued ? 0x39C3 : 0x39E3;
+                        uint32_t word = (data << 16) | (width == 4 ? status : 0);
+                        unsigned portLane = width == 4 ? lane : 2 + lane;
+                        const uint32_t expected = sample(word, portLane, width);
+                        int cycles = 0;
+                        CHECK(read_port(g, 0x04000128 + portLane, width, &cycles) ==
+                              result(word, portLane, width));
+                        CHECK(cycles == 1 && g->memory.inputBusValid);
+                        CHECK(g->memory.openBus == expected && !g->memory.lastWasDMA);
+                        CHECK(g->serial.uart.receiveCount == (queued ? queued - 1 : 0));
+                        CHECK(g->serial.uart.receiveHead == (queued ? 1u : 0u));
+                        CHECK(g->serial.uart.error == (width != 4));
+                        cupid_bus_wait(&g->cpu);
+                        CHECK(!g->memory.dmaRunning && !g->cpuBlocked);
+                        CHECK(cupid_memory_load32(&g->cpu, 0x02000100, NULL) == expected);
+                        CHECK(g->memory.dma[channel].latch == expected);
+                        CHECK(cupid_io_read(g, REG_SIOMLT_SEND) == (queued > 1 ? 0xC3 : 0));
+                        CHECK(g->serial.uart.receiveCount == (queued > 1 ? queued - 2 : 0));
+                        CHECK(g->serial.uart.receiveHead == (queued > 1 ? 2u : queued ? 1u : 0u));
+                        CHECK(g->memory.openBus == expected && g->memory.lastWasDMA);
+                        destroy(g);
+                        ++scenes;
+                    }
+    CHECK(scenes == 640);
     printf("single-sample UART I/O handovers=%u\n", scenes);
 }
 
