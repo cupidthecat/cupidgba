@@ -6,6 +6,7 @@
  * - Shift camera commands MSB first, with separate data and acknowledgement clocks.
  * - Preserve queued optical input across camera reset and free it on board removal.
  * - Bound every sensor read and schedule the selected LED/IRQ delay on console time.
+ * - Retain exposure progress across PHI rate changes and clock gating.
  */
 #include "cupid/gba.h"
 #include "internal.h"
@@ -27,6 +28,8 @@ static void cancel_irq(struct CupidCardReader *reader) {
         struct CupidGBA *gba = reader->irqEvent.context;
         cupid_timing_deschedule(&gba->timing, &reader->irqEvent);
     }
+    reader->irqActive = false;
+    reader->irqRemaining = reader->irqRate = 0;
 }
 
 void cupid_card_reader_reset(struct CupidCardReader *reader) {
@@ -234,16 +237,51 @@ bool cupid_card_reader_read_port(struct CupidCardReader *reader, uint32_t addres
     return true;
 }
 
-static bool scanning(const struct CupidCardReader *reader) {
+static unsigned clock_rate(const struct CupidGBA *gba) {
+    const unsigned phi = (gba->memory.io[REG_WAITCNT >> 1] >> 11) & 3;
+    const unsigned control = gba->cartridge.cardReader.control[0];
+    /* Four exposure units per PHI period retain fractional progress when
+     * switching between the console's /1, /2 and /4 clock outputs. */
+    return phi && (control & (CONTROL_PHI | CONTROL_POWER)) == (CONTROL_PHI | CONTROL_POWER)
+               ? 1u << (phi - 1)
+               : 0;
+}
+
+static bool scanning(const struct CupidGBA *gba) {
+    const struct CupidCardReader *reader = &gba->cartridge.cardReader;
     return (reader->control[0] & (CONTROL_SCAN | CONTROL_PHI | CONTROL_POWER)) ==
-           (CONTROL_SCAN | CONTROL_PHI | CONTROL_POWER);
+               (CONTROL_SCAN | CONTROL_PHI | CONTROL_POWER) &&
+           clock_rate(gba);
+}
+
+static void reschedule_irq(struct CupidGBA *gba) {
+    struct CupidCardReader *reader = &gba->cartridge.cardReader;
+    if (!reader->irqActive)
+        return;
+    const uint64_t now = cupid_timing_global_time(&gba->timing);
+    const uint64_t elapsed = now - reader->irqClock;
+    if (reader->irqRate) {
+        if (elapsed >= (reader->irqRemaining + reader->irqRate - 1) / reader->irqRate)
+            reader->irqRemaining = 0;
+        else
+            reader->irqRemaining -= (uint32_t)elapsed * reader->irqRate;
+    }
+    reader->irqClock = now;
+    reader->irqRate = clock_rate(gba);
+    cupid_timing_deschedule(&gba->timing, &reader->irqEvent);
+    if (reader->irqRate)
+        cupid_timing_schedule(
+            &gba->timing, &reader->irqEvent,
+            (int32_t)((reader->irqRemaining + reader->irqRate - 1) / reader->irqRate));
 }
 
 static void scan_irq(struct CupidTiming *timing, void *context, uint32_t late) {
     (void)late;
     struct CupidGBA *gba = context;
-    if (scanning(&gba->cartridge.cardReader) &&
-        (gba->cartridge.cardReader.control[0] & CONTROL_LED))
+    struct CupidCardReader *reader = &gba->cartridge.cardReader;
+    reader->irqActive = false;
+    reader->irqRemaining = reader->irqRate = 0;
+    if (scanning(gba) && (reader->control[0] & CONTROL_LED))
         cupid_raise_irq_at(gba, IRQ_GAMEPAK, cupid_timing_global_time(timing));
 }
 
@@ -287,11 +325,24 @@ static void read_line(struct CupidGBA *gba) {
                                                          .callback = scan_irq,
                                                          .name = "Card reader line interrupt",
                                                          .priority = 0x40};
-        if (!cupid_timing_is_scheduled(&gba->timing, &reader->irqEvent)) {
+        if (!reader->irqActive) {
             const unsigned duration = reader->led < 0x2000 ? reader->led : 0x2000;
-            cupid_timing_schedule(&gba->timing, &reader->irqEvent, (int32_t)(duration * 2));
+            /* The selected LED counter divides PHI by two: eight quarter-PHI
+             * units per count, or two console clocks at the nominal rate. */
+            reader->irqRemaining = duration * 8;
+            reader->irqClock = cupid_timing_global_time(&gba->timing);
+            reader->irqRate = 0;
+            reader->irqActive = true;
+            reschedule_irq(gba);
         }
     }
+}
+
+void cupid_card_reader_update_clock(struct CupidGBA *gba) {
+    reschedule_irq(gba);
+    struct CupidCardReader *reader = &gba->cartridge.cardReader;
+    if (scanning(gba) && (reader->control[0] & CONTROL_LED) && !(reader->control[1] & 2))
+        read_line(gba);
 }
 
 bool cupid_card_reader_write_port(struct CupidGBA *gba, uint32_t address, uint8_t value) {
@@ -305,7 +356,15 @@ bool cupid_card_reader_write_port(struct CupidGBA *gba, uint32_t address, uint8_
     switch (address & 63) {
         case 48: {
             const uint8_t old = reader->control[0];
-            reader->control[0] = serial_control(reader, value & 127);
+            if (value & CONTROL_POWER)
+                reader->control[0] = serial_control(reader, value & 127);
+            else {
+                /* An unpowered camera cannot consume a serial command.
+                 * Keep the host's output latch without inventing input bias. */
+                reader->control[0] = value & 127;
+                reader->serialState = SERIAL_IDLE;
+                reader->serialBits = reader->serialByte = reader->command = 0;
+            }
             if (!(old & CONTROL_SCAN) && (value & CONTROL_SCAN)) {
                 if (reader->scanX > 0)
                     next_card(reader);
@@ -313,15 +372,15 @@ bool cupid_card_reader_write_port(struct CupidGBA *gba, uint32_t address, uint8_
                 reader->scanY = 0;
                 begin_image(reader);
             }
-            if (!scanning(reader) || !(reader->control[0] & CONTROL_LED))
+            if ((reader->control[0] & (CONTROL_POWER | CONTROL_SCAN | CONTROL_LED)) !=
+                (CONTROL_POWER | CONTROL_SCAN | CONTROL_LED))
                 cancel_irq(reader);
-            if (scanning(reader) && (reader->control[0] & CONTROL_LED) && !(reader->control[1] & 2))
-                read_line(gba);
+            cupid_card_reader_update_clock(gba);
             break;
         }
         case 49:
             reader->control[1] = 0x80 | (value & 0x30) | (reader->control[1] & value & 2);
-            if (scanning(reader) && !(reader->control[1] & 2)) {
+            if (scanning(gba) && !(reader->control[1] & 2)) {
                 const unsigned height =
                     ((unsigned)reader->camera[0x14] << 8) | reader->camera[0x15];
                 if (++reader->scanY == height) {

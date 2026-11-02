@@ -26,6 +26,7 @@ static struct CupidGBA *machine(unsigned epoch) {
     gba->memory.romImageSize = 4096;
     gba->memory.romMask = 4095;
     cupid_cartridge_enable_card_reader(gba, true);
+    cupid_io_write(gba, REG_WAITCNT, 0x1800);
     return gba;
 }
 
@@ -539,6 +540,132 @@ static void thresholds(void) {
     destroy(gba);
 }
 
+static void clocks(void) {
+    unsigned histories = 0;
+    for (unsigned epoch = 0; epoch < 4; epoch++) {
+        for (unsigned rate = 0; rate < 4; rate++) {
+            struct CupidGBA *gba = machine(epoch);
+            cupid_io_write(gba, REG_WAITCNT, (uint16_t)(rate << 11));
+            cupid_memory_store8(&gba->cpu, control0 + 2, 8, NULL);
+            pins(gba, 0x78);
+            if (!rate) {
+                CHECK(!(gba->cartridge.cardReader.control[1] & 2));
+                CHECK(
+                    !cupid_timing_is_scheduled(&gba->timing, &gba->cartridge.cardReader.irqEvent));
+                cupid_timing_tick(&gba->timing, 100);
+                CHECK(!(gba->irq.pendingIF & IRQ_GAMEPAK));
+                cupid_io_write(gba, REG_WAITCNT, 0x1800);
+            }
+            CHECK(gba->cartridge.cardReader.control[1] & 2);
+            const unsigned delay = rate ? 64u >> (rate - 1) : 16;
+            cupid_timing_tick(&gba->timing, (int32_t)delay - 1);
+            CHECK(!(gba->irq.pendingIF & IRQ_GAMEPAK));
+            cupid_timing_tick(&gba->timing, 1);
+            CHECK(gba->irq.pendingIF & IRQ_GAMEPAK);
+            CHECK(!(gba->irqf & IRQ_GAMEPAK));
+            cupid_timing_tick(&gba->timing, 1);
+            CHECK(gba->irqf & IRQ_GAMEPAK);
+            destroy(gba);
+            histories++;
+        }
+        for (unsigned old = 1; old <= 3; old++)
+            for (unsigned next = 0; next <= 3; next++) {
+                struct CupidGBA *gba = machine(epoch);
+                cupid_io_write(gba, REG_WAITCNT, (uint16_t)(old << 11));
+                cupid_memory_store8(&gba->cpu, control0 + 2, 8, NULL);
+                pins(gba, 0x78);
+                cupid_timing_tick(&gba->timing, 5);
+                cupid_io_write(gba, REG_WAITCNT, (uint16_t)(next << 11));
+                if (!next) {
+                    CHECK(gba->cartridge.cardReader.control[1] & 2);
+                    CHECK(!cupid_timing_is_scheduled(&gba->timing,
+                                                     &gba->cartridge.cardReader.irqEvent));
+                    cupid_timing_tick(&gba->timing, 100);
+                    CHECK(!(gba->irq.pendingIF & IRQ_GAMEPAK));
+                    cupid_io_write(gba, REG_WAITCNT, 0x1000);
+                }
+                const unsigned speed = next ? 1u << (next - 1) : 2;
+                const unsigned remaining = 64 - 5 * (1u << (old - 1));
+                const unsigned delay = (remaining + speed - 1) / speed;
+                cupid_timing_tick(&gba->timing, (int32_t)delay - 1);
+                CHECK(!(gba->irq.pendingIF & IRQ_GAMEPAK));
+                cupid_timing_tick(&gba->timing, 1);
+                CHECK(gba->irq.pendingIF & IRQ_GAMEPAK);
+                destroy(gba);
+                histories++;
+            }
+        struct CupidGBA *gba = machine(epoch);
+        cupid_memory_store8(&gba->cpu, control0 + 2, 8, NULL);
+        pins(gba, 0x78);
+        cupid_timing_tick(&gba->timing, 5);
+        pins(gba, 0x58);
+        CHECK(gba->cartridge.cardReader.control[1] & 2);
+        cupid_timing_tick(&gba->timing, 100);
+        CHECK(!(gba->irq.pendingIF & IRQ_GAMEPAK));
+        pins(gba, 0x78);
+        cupid_timing_tick(&gba->timing, 10);
+        CHECK(!(gba->irq.pendingIF & IRQ_GAMEPAK));
+        cupid_timing_tick(&gba->timing, 1);
+        CHECK(gba->irq.pendingIF & IRQ_GAMEPAK);
+        destroy(gba);
+        histories++;
+
+        gba = machine(epoch);
+        cupid_memory_store8(&gba->cpu, control0 + 2, 8, NULL);
+        pins(gba, 0x78);
+        cupid_timing_tick(&gba->timing, 5);
+        gba->ie = IRQ_GAMEPAK | IRQ_KEYPAD;
+        cupid_gba_stop(gba);
+        CHECK(gba->stopped);
+        const uint64_t before = cupid_timing_global_time(&gba->timing);
+        CHECK(cupid_gba_advance_stopped_time(gba, 100) == 100);
+        CHECK(gba->stopped && cupid_timing_global_time(&gba->timing) == before);
+        CHECK(!(gba->irq.pendingIF & IRQ_GAMEPAK));
+        cupid_gba_wake_stop(gba, IRQ_KEYPAD);
+        CHECK(!gba->stopped);
+        cupid_timing_tick(&gba->timing, 10);
+        CHECK(!(gba->irq.pendingIF & IRQ_GAMEPAK));
+        cupid_timing_tick(&gba->timing, 1);
+        CHECK(gba->irq.pendingIF & IRQ_GAMEPAK);
+        destroy(gba);
+        histories++;
+    }
+    CHECK(histories == 72);
+    printf("card-reader PHI gating/rate histories=%u\n", histories);
+}
+
+static void power(void) {
+    for (unsigned supply = 0; supply <= 1; supply++) {
+        struct CupidGBA *gba = machine(0);
+        const unsigned enable = supply ? 0x60 : 0x20;
+        pins(gba, enable | 7);
+        pins(gba, enable | 6);
+        pins(gba, enable | 4);
+        const uint8_t bytes[] = {0x22, 0x30, 0xA5};
+        for (unsigned i = 0; i < sizeof(bytes); i++) {
+            for (int bit = 7; bit >= 0; bit--) {
+                const unsigned data = enable | 4 | ((bytes[i] >> bit) & 1);
+                pins(gba, data);
+                pins(gba, data | 2);
+                pins(gba, data);
+            }
+            pins(gba, enable);
+            pins(gba, enable | 2);
+            pins(gba, enable);
+            pins(gba, enable | 4);
+        }
+        CHECK(gba->cartridge.cardReader.camera[0x30] == (supply ? 0xA5 : 0));
+        pins(gba, 0x24);
+        CHECK(gba->cartridge.cardReader.serialBits == 0);
+        CHECK(gba->cartridge.cardReader.command == 0);
+        write_camera(gba, 0x30, 0x5A);
+        uint8_t value;
+        read_camera(gba, 0x30, &value, 1);
+        CHECK(value == 0x5A);
+        destroy(gba);
+    }
+}
+
 int main(int argc, char **argv) {
     CHECK(argc == 2);
     if (!strcmp(argv[1], "serial"))
@@ -563,6 +690,10 @@ int main(int argc, char **argv) {
         RUN(opcodes);
     else if (!strcmp(argv[1], "registers"))
         RUN(registers);
+    else if (!strcmp(argv[1], "clocks"))
+        RUN(clocks);
+    else if (!strcmp(argv[1], "power"))
+        RUN(power);
     else
         CHECK(false);
     return 0;

@@ -33,6 +33,10 @@ struct CupidCardReader {
     unsigned queueHead, queueCount;
     bool calibrationChecked;
     struct CupidTimingEvent irqEvent;
+    uint64_t irqClock;
+    uint32_t irqRemaining; /**< Quarter-PHI exposure units, retained while clock-gated. */
+    unsigned irqRate;
+    bool irqActive;
 };
 
 void cupid_card_reader_init(struct CupidCardReader *reader);
@@ -45,5 +49,6 @@ bool cupid_card_reader_write(struct CupidCardReader *reader, uint32_t address, u
 bool cupid_card_reader_read_port(struct CupidCardReader *reader, uint32_t address, uint8_t *value);
 bool cupid_card_reader_write_port(struct CupidGBA *gba, uint32_t address, uint8_t value);
 void cupid_card_reader_calibrate(struct CupidGBA *gba);
+void cupid_card_reader_update_clock(struct CupidGBA *gba);
 
 #endif

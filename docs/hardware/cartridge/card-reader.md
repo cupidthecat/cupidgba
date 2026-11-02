@@ -34,23 +34,26 @@ destruction release it. No card, ROM or firmware bytes are distributed.
 The core retains the camera's MSB-first serial commands, ninth acknowledgement
 clocks, repeated starts, register mirrors and sequential indexing. The scanner
 uses normalized monochrome dots, three camera samples per dot, and an
-acknowledged scanline sequence. The reader's power and clock-enable bits gate
-that sequence; the console's WAITCNT PHI output and alternate clock rates are
-not yet connected to camera acquisition or the LED counter. Serial transactions
-also do not model the camera's unpowered electrical response.
+acknowledged scanline sequence. The reader's power and clock-enable bits and
+the console's WAITCNT PHI output gate that sequence. An unpowered camera ignores
+serial commands; the electrical response of its input pins is not modeled.
 Per-block thresholds operate on monochrome brightness endpoints; the extrema
 registers retain the brightest block samples and darkest image sample.
 
 The scanline flag publishes with the logical line. The selected interrupt delay
-is twice the LED-duration count, capped at `0x4000` console clocks. An owned
-scheduler event delivers the Game Pak signal through the existing interrupt
-pipeline. Disabling or resetting the camera cancels an undelivered signal;
-an already accepted controller signal remains accepted.
+is twice the LED-duration count, capped at `0x4000` console clocks at the nominal
+PHI setting. The selected counter divides PHI by two, so the slower WAITCNT
+outputs scale that delay by two or four. Clock gating pauses the counter;
+rate changes retain fractional exposure progress. An owned scheduler event
+delivers the Game Pak signal through the existing interrupt pipeline. Turning
+off power, scan or LED control, or resetting the camera, cancels an undelivered
+signal. An already accepted controller signal remains accepted.
 
 This is a source-informed software model. Continuous camera acquisition,
 missed-line/overrun behavior, analogue exposure and physical polarity remain
 unqualified. Camera type 2 and unused serial-register combination mirrors are
-not implemented. The normalized scan sequence is not a physical clock measurement.
+not implemented. The normalized scan sequence and selected clock-divider model
+are not physical measurements; electrical edge alignment remains unqualified.
 
 Before its first flash-bus access, a fresh erased sector receives generated
 default calibration with a valid checksum. A partly populated sector is preserved
@@ -68,6 +71,9 @@ replace an already buffered instruction.
 Native groups check serial transactions, register widths, scan flags and IRQs,
 complete DMA payloads, queue ownership, calibration preservation, thresholds,
 separate word strobes and mutable prefetched input across four clock epochs.
+Clock controls cover all PHI settings, fractional progress across rate changes,
+both clock gates, paused deadlines and unpowered serial writes. The preceding
+model fails the disabled-clock and unpowered-write controls.
 Format controls independently reconstruct raw bytes, verify error-information
 syndromes and checksums, and reject malformed images without touching output.
 Unused fragment padding is deterministic; reduced short strips retain their
