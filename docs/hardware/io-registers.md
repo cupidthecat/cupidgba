@@ -23,6 +23,24 @@ remains available until the next timed CPU access completes the handover.
 Explicit zero-filled holes in the sound register block and DMA transfer counts
 return zero. They remain distinct from addresses that do not drive the bus.
 
+## CPU input retention
+
+The selected input model publishes the value already sampled from a readable
+register before releasing the CPU data phase. Byte samples repeat across the
+four input lanes, halfword samples repeat across both halves, and word samples
+retain the assembled low/high register pair. Alignment rotation applies to the
+CPU result after this publication. Local IWRAM bank history remains independent.
+
+The register dispatch returns its drive decision with the sampled value. Zero
+holes publish zero; write-only and unmapped ports retain their existing read
+phase and input policy. A register is read once, including UART data consumption
+and status acknowledgement. Word reads collect the low halfword before the high
+halfword. Untimed observer and DMA reads use their existing access paths.
+
+These rules qualify a software retention policy for readable registers. They do
+not establish the electrical drive of each reserved bit, shared store-input
+effects or a complete history across undriven reads following DMA.
+
 The pinned local register-read suite retains all 130 original expectations and
 runs through either BIOS path. Native regressions add reads at all three widths
 in both instruction modes, distinct bus lanes, DMA handover, masked subsystem

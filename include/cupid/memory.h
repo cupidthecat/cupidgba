@@ -338,6 +338,7 @@ void cupid_memory_capture_opcode(struct CupidARM *cpu, uint32_t address, unsigne
 void cupid_memory_capture_halfword(struct CupidGBA *gba, uint32_t address, uint16_t value);
 void cupid_memory_capture_word(struct CupidGBA *gba, uint32_t address, uint32_t value);
 void cupid_memory_capture_byte(struct CupidGBA *gba, uint32_t address, uint8_t value);
+void cupid_memory_capture_io(struct CupidGBA *gba, uint32_t value, unsigned width);
 /* Retain the addressed local RAM lanes of a timed 1-, 2- or 4-byte access. */
 void cupid_memory_retain_iwram_lanes(struct CupidGBA *gba, uint32_t address, uint32_t value,
                                      unsigned width);

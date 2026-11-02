@@ -226,3 +226,21 @@ Interrupt regressions cover register visibility, byte masks and acknowledgements
 successive IRQ line changes, HALT wake-up with IME clear, the CPU's sampled
 CPSR mask, Thumb exception return, ARM/Thumb MMIO access widths, DMA completion
 bits for all four channels, and late dispatch across clock wrap.
+## Readable I/O input handover
+
+The six `gba.io-feedback-*` groups exercise 3,296 native scenes through the
+memory callbacks and real DMA transfers. The byte, halfword and word groups each
+cover 960 scenes: fifteen register pairs, four address lanes, all four DMA
+channels and four clock epochs spanning counter wrap. They check CPU rotation,
+the aligned input sample, the waiting DMA's destination and latch, and retained
+local IWRAM history.
+
+The floating-port group preserves the existing read-phase policy in 108 scenes.
+The 180 observer scenes require untimed reads to leave CPU input and local RAM
+history intact. Another 128 scenes seed an owned UART receive queue, read its
+data and acknowledged status at every access width, and require exactly one
+consumed byte before DMA handover. The next queued byte remains available.
+
+These checks use ten-second CTest deadlines. They qualify the selected register
+retention model, not physical pin behavior or complete instruction timing. See
+[I/O input retention](../../hardware/io-registers.md#cpu-input-retention).

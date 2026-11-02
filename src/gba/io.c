@@ -648,10 +648,20 @@ void cupid_io_write8(struct CupidGBA *gba, uint32_t addr, uint8_t value) {
  * @brief Read a 16-bit IO register.
  */
 uint16_t cupid_io_read(struct CupidGBA *gba, uint32_t addr) {
+    return cupid_io_read_input(gba, addr, NULL);
+}
+
+/* Return the register's existing value and its drive decision together. This
+ * keeps read-to-clear ports and live counters to one device read per access. */
+uint16_t cupid_io_read_input(struct CupidGBA *gba, uint32_t addr, bool *driven) {
+    if (driven)
+        *driven = true;
     /* Both control halfwords use the exceptional 64 KiB mirror decode. */
     if (addr < 0x01000000 && (addr & 0xFFFCu) == REG_MEMCNT_LO)
         return (addr & 2) ? gba->memory.ewramWaitControl : gba->memory.internalMemoryControl;
     if (addr >= GBA_SIZE_IO) {
+        if (driven)
+            *driven = false;
         return (uint16_t)(cupid_memory_open_bus(&gba->cpu) >> ((addr & 2) * 8));
     }
     addr &= ~1u;
@@ -707,6 +717,8 @@ uint16_t cupid_io_read(struct CupidGBA *gba, uint32_t addr) {
         case REG_WIN1V:
         case REG_MOSAIC:
         case REG_BLDY:
+            if (driven)
+                *driven = false;
             return (uint16_t)(cupid_memory_open_bus(&gba->cpu) >> ((addr & 2) * 8));
 
         case REG_WININ:
@@ -751,6 +763,8 @@ uint16_t cupid_io_read(struct CupidGBA *gba, uint32_t addr) {
         case REG_FIFO_A_HI:
         case REG_FIFO_B_LO:
         case REG_FIFO_B_HI:
+            if (driven)
+                *driven = false;
             return (uint16_t)(cupid_memory_open_bus(&gba->cpu) >> ((addr & 2) * 8));
 
         /** DMA. */
@@ -771,6 +785,8 @@ uint16_t cupid_io_read(struct CupidGBA *gba, uint32_t addr) {
         case REG_DMA3SAD_HI:
         case REG_DMA3DAD_LO:
         case REG_DMA3DAD_HI:
+            if (driven)
+                *driven = false;
             return (uint16_t)(cupid_memory_open_bus(&gba->cpu) >> ((addr & 2) * 8));
 
         /** DMA CNT_LO is write-only; reads return 0. */
@@ -865,6 +881,8 @@ uint16_t cupid_io_read(struct CupidGBA *gba, uint32_t addr) {
 
         default:
             /** Unmapped I/O does not drive the bus. */
+            if (driven)
+                *driven = false;
             return (uint16_t)(cupid_memory_open_bus(&gba->cpu) >> ((addr & 2) * 8));
     }
 }

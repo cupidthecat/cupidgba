@@ -7,6 +7,7 @@
  * - Keep IWRAM halfword banks separate from the shared input word.
  * - Retain addressed IWRAM write lanes without publishing CPU store output.
  * - Preserve BIOS protection and full-word OAM sampling on narrow reads.
+ * - Publish readable I/O data once, using the register's drive decision.
  * - Publish opcode samples after the fetch and before CPU bus release.
  */
 #include "cupid/gba.h"
@@ -37,6 +38,19 @@ static void publish_input(struct CupidMemory *memory, uint32_t value) {
     memory->openBus = value;
     memory->inputBusValid = true;
     memory->lastWasDMA = false;
+}
+
+/* I/O supplies the value sampled by the existing register dispatch. Publish
+ * only a driven CPU read; observer and DMA reads do not enter this path. */
+void cupid_memory_capture_io(struct CupidGBA *gba, uint32_t value, unsigned width) {
+    assert(width == 1 || width == 2 || width == 4);
+    if (width == 1)
+        value = (value & UINT32_C(0xFF)) * UINT32_C(0x01010101);
+    else if (width == 2) {
+        value &= UINT32_C(0xFFFF);
+        value |= value << 16;
+    }
+    publish_input(&gba->memory, value);
 }
 
 /* Byte selection happens after these 32-bit ports supply input. Reuse their
@@ -102,8 +116,8 @@ void cupid_memory_capture_halfword(struct CupidGBA *gba, uint32_t address, uint1
             input = memory->biosPrefetch;
         }
     } else if (region == 1 || region >= 16 || region == GBA_REGION_IO) {
-        /* Unmapped reads do not drive new input. Register-specific I/O
-         * feedback is not yet qualified, so retain its existing read path. */
+        /* Unmapped reads do not drive new input. I/O publishes through the
+         * register dispatch's separate drive decision. */
         return;
     }
     publish_input(memory, input);

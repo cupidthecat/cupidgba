@@ -545,6 +545,7 @@ uint32_t cupid_memory_load32(struct CupidARM *cpu, uint32_t address, int *cycleC
         cycleCounter = NULL;
     }
     uint32_t value = 0;
+    bool ioDriven = false;
     int wait = 0;
     char *waitstatesRegion = memory->waitstatesNonseq32;
 
@@ -570,11 +571,17 @@ uint32_t cupid_memory_load32(struct CupidARM *cpu, uint32_t address, int *cycleC
             if (timedCounter || cycleCounter || gba->performingDMA)
                 memory->iwramBus = value;
             break;
-        case GBA_REGION_IO:
+        case GBA_REGION_IO: {
             sync_io(cpu, cycleCounter);
-            value = cupid_io_read(gba, address & GBA_OFFSET_MASK & ~3) |
-                    ((uint32_t)cupid_io_read(gba, (address & GBA_OFFSET_MASK & ~1) | 2) << 16);
+            bool lowDriven, highDriven;
+            const uint16_t low =
+                cupid_io_read_input(gba, address & GBA_OFFSET_MASK & ~3, &lowDriven);
+            const uint16_t high =
+                cupid_io_read_input(gba, (address & GBA_OFFSET_MASK & ~1) | 2, &highDriven);
+            value = low | (uint32_t)high << 16;
+            ioDriven = lowDriven || highDriven;
             break;
+        }
         case GBA_REGION_PALETTE:
             LOAD_32(value, address & (GBA_SIZE_PALETTE - 4), gba->video.palette);
             wait += waitstatesRegion[GBA_REGION_PALETTE];
@@ -652,8 +659,12 @@ uint32_t cupid_memory_load32(struct CupidARM *cpu, uint32_t address, int *cycleC
         if (cupid_cartridge_gpio_read(gba, aligned + 2, &high))
             value = (value & 0xFFFF) | (uint32_t)high << 16;
     }
-    if (timedCounter || cycleCounter)
-        cupid_memory_capture_word(gba, address, value);
+    if (timedCounter || cycleCounter) {
+        if (ioDriven)
+            cupid_memory_capture_io(gba, value, 4);
+        else
+            cupid_memory_capture_word(gba, address, value);
+    }
     end_data_access(cpu, timedCounter, true);
     int rotate = (address & 3) << 3;
     return ROR(value, rotate);
@@ -674,6 +685,7 @@ uint32_t cupid_memory_load16(struct CupidARM *cpu, uint32_t address, int *cycleC
         cycleCounter = NULL;
     }
     uint32_t value = 0;
+    bool ioDriven = false;
     int wait = 0;
 
     address = cupid_memory_decode_address(memory, address);
@@ -700,7 +712,7 @@ uint32_t cupid_memory_load16(struct CupidARM *cpu, uint32_t address, int *cycleC
             break;
         case GBA_REGION_IO:
             sync_io(cpu, cycleCounter);
-            value = cupid_io_read(gba, address & (GBA_OFFSET_MASK - 1));
+            value = cupid_io_read_input(gba, address & (GBA_OFFSET_MASK - 1), &ioDriven);
             break;
         case GBA_REGION_PALETTE:
             LOAD_16(value, address & (GBA_SIZE_PALETTE - 2), gba->video.palette);
@@ -768,8 +780,12 @@ uint32_t cupid_memory_load16(struct CupidARM *cpu, uint32_t address, int *cycleC
     uint16_t port;
     if (cupid_cartridge_gpio_read(gba, address & ~1u, &port))
         value = port;
-    if (timedCounter || cycleCounter)
-        cupid_memory_capture_halfword(gba, address, (uint16_t)value);
+    if (timedCounter || cycleCounter) {
+        if (ioDriven)
+            cupid_memory_capture_io(gba, value, 2);
+        else
+            cupid_memory_capture_halfword(gba, address, (uint16_t)value);
+    }
     end_data_access(cpu, timedCounter, true);
     int rotate = (address & 1) << 3;
     return ROR(value, rotate);
@@ -795,6 +811,7 @@ uint32_t cupid_memory_load8(struct CupidARM *cpu, uint32_t address, int *cycleCo
         cycleCounter = NULL;
     }
     uint32_t value = 0;
+    bool ioDriven = false;
     int wait = 0;
 
     address = cupid_memory_decode_address(memory, address);
@@ -819,9 +836,9 @@ uint32_t cupid_memory_load8(struct CupidARM *cpu, uint32_t address, int *cycleCo
             break;
         case GBA_REGION_IO:
             sync_io(cpu, cycleCounter);
-            value =
-                (cupid_io_read(gba, address & (GBA_OFFSET_MASK & ~1u)) >> ((address & 1) << 3)) &
-                0xFF;
+            value = (cupid_io_read_input(gba, address & (GBA_OFFSET_MASK & ~1u), &ioDriven) >>
+                     ((address & 1) << 3)) &
+                    0xFF;
             break;
         case GBA_REGION_PALETTE:
             value = ((uint8_t *)gba->video.palette)[address & (GBA_SIZE_PALETTE - 1)];
@@ -899,8 +916,12 @@ uint32_t cupid_memory_load8(struct CupidARM *cpu, uint32_t address, int *cycleCo
     uint16_t port;
     if (cupid_cartridge_gpio_read(gba, address & ~1u, &port))
         value = (port >> ((address & 1) * 8)) & 255;
-    if (timedCounter || cycleCounter)
-        cupid_memory_capture_byte(gba, address, (uint8_t)value);
+    if (timedCounter || cycleCounter) {
+        if (ioDriven)
+            cupid_memory_capture_io(gba, value, 1);
+        else
+            cupid_memory_capture_byte(gba, address, (uint8_t)value);
+    }
     end_data_access(cpu, timedCounter, true);
     return value;
 }
