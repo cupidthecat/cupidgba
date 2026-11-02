@@ -99,6 +99,19 @@ requires Python 3 and SDL2. No game, BIOS or save input is distributed. See
 
 ## Bounded game replays
 
+`runner.key-script-valid` checks a guest KEYINPUT read before the first frame
+and frame-indexed DMA reads while another DMA holds the CPU. File and inline
+inputs must produce identical execution output, complete EWRAM, completed-frame
+screenshots and audio bytes. The group also checks duplicate-frame ordering,
+65,536 events, maximum line/file sizes, empty scripts, numeric bases, future
+events and both common line endings.
+
+`runner.key-script-invalid` checks 26 malformed-file and conflicting-option
+cases. Every case must fail before ROM loading, preserve the input bytes and
+leave all seven requested output files unchanged. Both groups have ten-second
+CTest deadlines and three-second process guards. See
+[input replay format](../../usage/running.md#headless-input-replays).
+
 To run another authorized input for a fixed number of frames:
 
 ```sh

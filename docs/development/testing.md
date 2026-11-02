@@ -21,6 +21,10 @@ does. This keeps the clocked renderer within the existing observer deadlines;
 both sanitizers and fatal error reporting remain enabled. The separate
 unoptimized native profile keeps the default Debug flags.
 
+GitHub runs the full matrix for pull requests, pushes to `main`, and tags.
+Open a draft pull request for branch qualification. A branch update then has
+one matrix run, while the merged result receives its own checks on `main`.
+
 The optional ROM checks use pinned manifests of CPU, memory, timer and DMA tests.
 Fetch the inputs, then configure their location:
 

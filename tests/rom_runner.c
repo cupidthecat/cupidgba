@@ -7,6 +7,7 @@
 #include "cupid/isa-inlines.h"
 #include "cupid/platform/peripherals.h"
 #include "cupid/platform/save.h"
+#include "runner/key-script.h"
 #include <errno.h>
 #include <inttypes.h>
 
@@ -50,11 +51,6 @@ struct MotorTrace {
     bool failed;
 };
 
-struct KeyEvent {
-    uint64_t frame;
-    uint16_t keys;
-};
-
 struct RunState {
     struct CupidGBA *gba;
     uint32_t *pixels;
@@ -63,7 +59,7 @@ struct RunState {
     int expectedRegister;
     bool terminal, terminalIssued, checkpoint, done;
     uint32_t checkpointValue, terminalIssuedAddress, terminalLogicalPC;
-    const struct KeyEvent *keyEvents;
+    const struct CupidKeyEvent *keyEvents;
     unsigned keyEventCount, nextKeyEvent;
 };
 
@@ -213,10 +209,11 @@ static void audio_sample(void *context, uint64_t clock, int16_t left, int16_t ri
 }
 
 int main(int argc, char **argv) {
-    struct KeyEvent keyEvents[64];
+    struct CupidKeyEvent keyEvents[64];
     unsigned keyEventCount = 0;
     struct InstructionObservations observations = {0};
     const char *rom = NULL;
+    const char *keyScript = NULL;
     const char *bios = NULL;
     const char *output = NULL;
     const char *vramOutput = NULL;
@@ -347,7 +344,11 @@ int main(int argc, char **argv) {
             if (keyEventCount == 64 || !number(argv[++i], &frame) || !number(argv[++i], &keys) ||
                 keys > 0x3FF || (keyEventCount && frame < keyEvents[keyEventCount - 1].frame))
                 return 2;
-            keyEvents[keyEventCount++] = (struct KeyEvent){frame, (uint16_t)keys};
+            keyEvents[keyEventCount++] = (struct CupidKeyEvent){frame, (uint16_t)keys};
+        } else if (!strcmp(argv[i], "--key-script") && i + 1 < argc) {
+            if (keyScript)
+                return 2;
+            keyScript = argv[++i];
         } else if (!strcmp(argv[i], "--frames") && i + 1 < argc) {
             if (!number(argv[++i], &frames) || !frames || frames > 100000)
                 return 2;
@@ -366,7 +367,8 @@ int main(int argc, char **argv) {
             fprintf(
                 stderr,
                 "Usage: %s ROM [--bios FILE] [--flash-profile sst39vf512] [--frames N] [--steps N] "
-                "[--key-event FRAME MASK] [--screenshot FILE.ppm] [--dump-vram FILE] [--dump-io "
+                "[--key-event FRAME MASK] [--key-script FILE] [--screenshot FILE.ppm] [--dump-vram "
+                "FILE] [--dump-io "
                 "FILE] [--dump-ewram FILE] [--save-type TYPE] [--load-save FILE] [--dump-save "
                 "FILE] "
                 "[--rtc auto|on|off] [--rtc-time YYYY-MM-DDTHH:MM:SS] [--load-rtc FILE] "
@@ -393,9 +395,15 @@ int main(int argc, char **argv) {
     }
     if (checkpointAddress && expectedRegister < 0)
         return 2;
-    struct CupidGBA *gba = calloc(1, sizeof(*gba));
-    if (!gba)
+    struct CupidKeyEvent *scriptEvents = NULL;
+    if (keyScript &&
+        (keyEventCount || !cupid_runner_read_keys(keyScript, &scriptEvents, &keyEventCount)))
         return 2;
+    struct CupidGBA *gba = calloc(1, sizeof(*gba));
+    if (!gba) {
+        free(scriptEvents);
+        return 2;
+    }
     cupid_gba_create(gba);
     int result = 2;
     uint32_t *pixels = NULL;
@@ -474,7 +482,7 @@ int main(int argc, char **argv) {
                            .terminalAddress = terminalAddress,
                            .checkpointAddress = checkpointAddress,
                            .expectedRegister = expectedRegister,
-                           .keyEvents = keyEvents,
+                           .keyEvents = scriptEvents ? scriptEvents : keyEvents,
                            .keyEventCount = keyEventCount};
     cupid_video_set_frame_callback(&gba->video, frame_output, &run);
     observations.run = &run;
@@ -577,5 +585,6 @@ cleanup:
     cupid_gba_destroy(gba);
     free(pixels);
     free(gba);
+    free(scriptEvents);
     return result;
 }
