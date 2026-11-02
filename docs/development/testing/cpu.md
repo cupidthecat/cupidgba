@@ -87,6 +87,24 @@ guest cannot silently skip failure recording. The slow-return case passes;
 the `0xF4` versus `0xF5` comparison remains a failure. The original execution
 guards and 90-second process deadline remain, with 100 seconds in CTest.
 
+Fetch the checksum-pinned IRQ cartridges and their license with:
+
+```sh
+python3 tests/roms/check_irq_probe.py --fetch --directory .local-research/irq-inputs
+cmake -S . -B build-irq -DCUPID_BUILD_FRONTEND=OFF \
+  -DCUPID_HALT_PROBE_DIR="$PWD/.local-research/irq-inputs" \
+  -DCUPID_TEST_BIOS=/path/to/gba-bios.bin
+cmake --build build-irq --target test_irq_clock
+ctest --test-dir build-irq -R '^rom.irq-probe-' --output-on-failure
+```
+
+This fetch supplies the twelve IRQ inputs; the four separate HALT inputs
+still need their own local files when running the complete HALT profile.
+Existing files with different bytes are rejected and preserved. Repeated
+fetches retain verified cached inputs. The IRQ selection currently reports
+eleven passes and the original branch/IRQ failure; the command does not mark
+that failure as expected or change its comparison.
+
 ## Generated instruction corpus
 
 The five optional `rom.cpu-corpus-*` groups check 50,000 generated ARM/Thumb

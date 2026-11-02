@@ -238,6 +238,6 @@ storage model. Sixteen pass; the two bundled base runs retain the `0x62` versus
 `0x68` failure. This does not rerun or replace the separate source-built result.
 Every original input, comparison and execution guard remains required. The
 power, refill and access-width regressions cover their selected logical model;
-complete FIFO/DMA timing acceptance remains open in #76. Physical queue capacity,
+complete FIFO/DMA timing acceptance remains open in #8, #10 and #1. Physical queue capacity,
 overflow contents, lane latching, reset pipeline behavior and timer/DMA/IRQ
 edges remain unmeasured. See [DMA](../dma.md) and [audio timing](timing.md).
