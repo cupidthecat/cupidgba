@@ -42,14 +42,14 @@ def publish(path, data):
             temporary.unlink(missing_ok=True)
 
 
-def fetch_cases(manifest, cases, directory):
+def fetch_cases(manifest, cases, directory, verify=verify_input):
     base = "https://raw.githubusercontent.com/alyosha-tas/gba-tests/" + manifest["revision"]
     pending = []
     # Validate existing cartridges before downloading or publishing anything.
     for case in cases:
         path = input_path(directory, case["path"])
         if path.exists():
-            verify_input(path.read_bytes(), case)
+            verify(path.read_bytes(), case)
         else:
             pending.append((path, case))
     notice_path = input_path(directory, "display-probes-LICENSE.txt")
@@ -63,7 +63,7 @@ def fetch_cases(manifest, cases, directory):
     files = [(notice_path, notice)]
     for path, case in pending:
         data = download_verified(base + "/" + case["path"], case["sha256"])
-        verify_input(data, case)
+        verify(data, case)
         files.append((path, data))
     # A failed download leaves the existing corpus intact. Each new file is
     # published only after all requested bytes and comparison contracts pass.
