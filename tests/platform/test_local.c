@@ -130,6 +130,14 @@ static void input(void) {
     CHECK(cores[0]->cartridge.tilt.inputX == CUPID_TILT_NEUTRAL);
     CHECK(cores[0]->cartridge.tilt.inputY == CUPID_TILT_NEUTRAL);
     CHECK(cores[1]->cartridge.gyro.sample == 1000 && cores[1]->cartridge.tilt.inputX == 1000);
+    platforms[0].scriptedKeys = true;
+    cores[0]->keysActive = 4;
+    key(SDL_SCANCODE_Z, true);
+    CHECK(cupid_platform_poll_local(platforms, cores, 4, &focus, &connected));
+    CHECK(cores[0]->keysActive == 4 && cores[2]->keysActive == 2);
+    key(SDL_SCANCODE_Z, false);
+    CHECK(cupid_platform_poll_local(platforms, cores, 4, &focus, &connected));
+    CHECK(cores[0]->keysActive == 4 && cores[2]->keysActive == 2);
     for (unsigned i = 0; i < 4; ++i) {
         SDL_GameControllerClose(platforms[i].controller);
         SDL_JoystickClose(joysticks[i]);

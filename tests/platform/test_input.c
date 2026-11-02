@@ -296,6 +296,26 @@ static void combined_input_reaches_keypad_irq_and_wakes_stop(void) {
     finish(&f);
 }
 
+static void replay_owns_buttons_while_sdl_keeps_window_controls(void) {
+    struct Fixture f = fixture();
+    f.platform.scriptedKeys = true;
+    f.gba->keysActive = 4;
+    cupid_io_write(f.gba, REG_KEYCNT, 0x4001);
+    key(SDL_SCANCODE_Z, true);
+    control(f.joystick, 0, true);
+    poll(&f);
+    expect(&f, 4);
+    CHECK(!((f.gba->irq.pendingIF | f.gba->irqf) & IRQ_KEYPAD));
+    key(SDL_SCANCODE_Z, false);
+    control(f.joystick, 0, false);
+    poll(&f);
+    expect(&f, 4);
+    key(SDL_SCANCODE_ESCAPE, true);
+    CHECK(!cupid_platform_poll_events(&f.platform, f.gba));
+    expect(&f, 4);
+    finish(&f);
+}
+
 int main(int argc, char **argv) {
     if (argc != 2)
         return 2;
@@ -309,6 +329,8 @@ int main(int argc, char **argv) {
         RUN(selected_instance_focus_detach_and_reconnect);
     else if (!strcmp(argv[1], "irq"))
         RUN(combined_input_reaches_keypad_irq_and_wakes_stop);
+    else if (!strcmp(argv[1], "replay"))
+        RUN(replay_owns_buttons_while_sdl_keeps_window_controls);
     else
         return 2;
     return 0;

@@ -59,6 +59,7 @@ struct CupidPlatform {
     int scale;
 
     bool running;
+    bool scriptedKeys; /**< Replay owns guest buttons; SDL still handles window controls. */
 };
 
 /** @name API */

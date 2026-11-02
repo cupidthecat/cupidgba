@@ -9,6 +9,7 @@
 #ifndef CUPID_LOCAL_H
 #define CUPID_LOCAL_H
 #include "cupid/platform.h"
+#include "cupid/platform/key-script.h"
 #include "cupid/platform/peripherals.h"
 #include "cupid/platform/rtc.h"
 
@@ -18,6 +19,7 @@ struct CupidLocalDevices {
     struct CupidPlatformPeripherals peripherals;
     const char *const *cardPaths;
     unsigned cardCount;
+    struct CupidKeyReplay *keyReplay;
 };
 
 int cupid_platform_run_local(const char *const paths[], unsigned count, const char *bios,
@@ -27,6 +29,8 @@ bool cupid_platform_local_save_path(const char *rom, unsigned player, char *out,
 
 struct CupidLocalFrames {
     uint32_t *pixels[4];
+    struct CupidGBA *replayCore;
+    struct CupidKeyReplay *keyReplay;
 };
 
 void cupid_platform_capture_local_frame(void *context, unsigned player, const uint32_t *pixels,

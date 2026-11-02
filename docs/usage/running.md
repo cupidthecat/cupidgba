@@ -69,7 +69,7 @@ the next available one. Window focus loss releases keyboard holds. See
 [input handling](../hardware/input.md) for device ownership and regression
 coverage.
 
-## Headless input replays
+## Input replays
 
 Use `--key-script FILE` for a longer sequence of frame-indexed button changes:
 
@@ -85,12 +85,21 @@ Use `--key-script FILE` for a longer sequence of frame-indexed button changes:
 ```sh
 ./build/cupidgba-headless game.gba --key-script buttons.txt \
   --frames 1800 --steps 180000000 --screenshot replay.ppm
+./build/cupidgba game.gba --key-script buttons.txt --frames 1800
 ```
 
 Frame zero applies before guest execution. Later changes apply after the named
 number of completed video frames. Each mask replaces the complete held-button
 state and stays active until the next change. A zero mask releases every
-button. Changes on a frame that ends the run are not applied after that deadline.
+button. The headless runner leaves changes at its final video-frame deadline
+unapplied. The SDL2 frontend applies changes as video frames complete within
+its paced intervals; `--frames` still counts those intervals, including STOP.
+
+Replay owns the GBA buttons, so live keyboard and controller buttons do not
+overwrite the script. Escape and window controls still work. In local linked
+play, the script feeds the first console. STOP freezes the video-frame timeline;
+a later scripted change waits until an independent hardware source wakes the
+console. Frame-indexed scripts cannot themselves schedule that future wake.
 
 | Button | Mask | Button | Mask |
 | --- | --- | --- | --- |
@@ -108,11 +117,12 @@ overflow are rejected. Blank lines and `#` comments are allowed, with LF or
 CRLF line endings and an optional final newline.
 
 Scripts allow up to 65,536 changes, 255 bytes per line excluding LF, and 16 MiB
-in total. The runner reads and validates the complete file before loading the
-cartridge or creating output. Invalid input leaves existing outputs untouched.
-Use one script per run; it cannot be combined with inline `--key-event FRAME MASK`
-options. Inline events retain their existing 64-change limit. Both forms use
-the same frame/step deadlines and CPU/DMA boundary handling.
+in total. Both frontends read and validate the complete regular file before
+loading the cartridge or creating output. Invalid input leaves existing outputs
+untouched. Use one script per run. The headless runner also accepts inline
+`--key-event FRAME MASK` options, with a 64-change limit; inline events cannot
+be combined with a file. Both headless forms retain the same frame/step
+deadlines and CPU/DMA boundary handling.
 
 ## Headless RTC replays
 

@@ -5,9 +5,9 @@
  */
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
+#include "cupid/platform/key-script.h"
 #include "cupid/platform/peripherals.h"
 #include "cupid/platform/save.h"
-#include "runner/key-script.h"
 #include <errno.h>
 #include <inttypes.h>
 
@@ -420,8 +420,8 @@ int main(int argc, char **argv) {
     if (cardCount && peripherals.cardReaderPresence == 0)
         return 2;
     struct CupidKeyEvent *scriptEvents = NULL;
-    if (keyScript &&
-        (keyEventCount || !cupid_runner_read_keys(keyScript, &scriptEvents, &keyEventCount)))
+    if (keyScript && (keyEventCount ||
+                      !cupid_platform_read_key_script(keyScript, &scriptEvents, &keyEventCount)))
         return 2;
     struct CupidCardReader cardInput;
     cupid_card_reader_init(&cardInput);

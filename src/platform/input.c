@@ -224,10 +224,11 @@ bool cupid_platform_poll_events(struct CupidPlatform *plat, struct CupidGBA *gba
     }
     /* Controller state is sampled from its selected handle. Keyboard, button
      * and stick holds combine without releasing another source's key. */
-    gba->keysActive = plat->keyboardKeys | controller_keys(plat);
-
-    /** Test keypad IRQ after key state changes. */
-    cupid_gba_test_keypad_irq(gba);
+    if (!plat->scriptedKeys) {
+        gba->keysActive = plat->keyboardKeys | controller_keys(plat);
+        /** Test keypad IRQ after key state changes. */
+        cupid_gba_test_keypad_irq(gba);
+    }
 
     return true;
 }
@@ -328,8 +329,10 @@ bool cupid_platform_poll_local(struct CupidPlatform *platforms, struct CupidGBA 
         }
     }
     for (unsigned i = 0; i < count; ++i) {
-        cores[i]->keysActive = platforms[i].keyboardKeys | controller_keys(&platforms[i]);
-        cupid_gba_test_keypad_irq(cores[i]);
+        if (!platforms[i].scriptedKeys) {
+            cores[i]->keysActive = platforms[i].keyboardKeys | controller_keys(&platforms[i]);
+            cupid_gba_test_keypad_irq(cores[i]);
+        }
         cupid_platform_rumble_refresh(&platforms[i]);
     }
     return true;
