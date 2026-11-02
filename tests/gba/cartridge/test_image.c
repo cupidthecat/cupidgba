@@ -76,7 +76,10 @@ static void large_images_keep_rom_reads_and_ignore_unselected_writes(void) {
         cupid_memory_store16(&gba->cpu, 0x0DFFFF00, 1, NULL);
         CHECK(gba->memory.savedata.type ==
               (types[t] == SAVE_AUTODETECT ? SAVE_EEPROM512 : types[t]));
-        CHECK(gba->memory.savedata.command == EEPROM_COMMAND_PENDING);
+        /* Port selection still detects EEPROM, but a single CPU write cannot
+         * start a DMA-framed serial command. */
+        CHECK(gba->memory.savedata.command == EEPROM_COMMAND_NULL);
+        CHECK(!gba->memory.savedata.programming && !gba->memory.savedata.dirty);
         destroy(gba);
     }
 }

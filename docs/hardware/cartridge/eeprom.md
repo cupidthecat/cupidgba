@@ -16,6 +16,18 @@ the first 512 bytes and initializes the added bytes to `FF`. Explicit save-type
 choices and capacities loaded from compatible save files remain available.
 Six-bit commands retain an inferred 512-byte capacity.
 
+After capacity selection, the decoder counts six or fourteen address bits
+independently of the remaining DMA count. A truncated transfer cannot shorten
+the address and reinterpret address bits as a complete payload. Ending DMA
+before the address, payload and stop bit are complete returns the decoder to
+idle without starting programming or a read response. A subsequent complete
+transfer works without resetting the machine.
+
+CPU halfword writes cannot replace the DMA command stream. CPU halfword reads
+can still poll the ready bit while programming runs. The documented command
+lengths and DMA requirement are described in
+[GBATEK](https://problemkaputt.de/gbatek.htm#gbacartbackupeeprom).
+
 The command returns to idle after the last data bit of a read. All response
 bits are zero or one. Address decoding does not change the existing
 [cartridge port selection](image-mapping.md), DMA phases, or
@@ -23,9 +35,10 @@ bits are zero or one. Address decoding does not change the existing
 
 ## Regression coverage
 
-Five native groups cover 16,448 complete write/read address cases, 16,384
+Six native groups cover 16,448 complete write/read address cases, 16,384
 read-only address cases, 2,176 capacity selections, 36 complete DMA3 transfers,
-and three save/reset/load cases. They check every fourteen-bit address,
+352 truncated DMA3 frames with complete-transfer recovery, four rejected
+manual halfword commands, and three save/reset/load cases. They check every fourteen-bit address,
 both capacities, preserved surrounding bytes, all response bits, return to
 idle, small and large cartridge mappings, and both scheduler clock boundaries.
 The file checks compare the complete saved image and retain capacity through
@@ -35,8 +48,10 @@ either save capacity; they do not establish electrical cancellation behavior.
 
 Write/read fixtures wait for the configured programming interval before
 comparing the complete data. These checks qualify the address and capacity
-model. Physical alias captures, chip-specific durations, malformed transfer
-lengths, interrupted commands and electrical wire behavior remain unqualified.
+model and rejection of every shorter command length for an explicitly selected
+capacity. Physical alias captures, chip-specific durations, overlong frames,
+capacity inference from malformed commands, transfers cancelled before their
+programmed count, and electrical wire behavior remain unqualified.
 Writes and ready polling use [save programming](programming.md); its default
 durations are estimates. Complete cartridge accuracy remains open under
 [issue 1](https://github.com/cupidthecat/cupidgba/issues/1).

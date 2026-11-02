@@ -622,7 +622,7 @@ if(BUILD_TESTING)
 
     add_executable(test_eeprom tests/gba/save/test_eeprom.c)
     target_link_libraries(test_eeprom PRIVATE cupid_core)
-    foreach(group addresses capacity reads dma)
+    foreach(group addresses capacity reads dma truncated)
         add_test(NAME gba.eeprom-${group} COMMAND test_eeprom ${group})
         set_tests_properties(gba.eeprom-${group} PROPERTIES TIMEOUT 10)
     endforeach()

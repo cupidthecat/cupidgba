@@ -231,6 +231,7 @@ struct CupidSavedata {
 
     /** EEPROM serial protocol */
     int8_t readBitsRemaining;
+    uint8_t eepromAddressBits; /**< Address bits still required by the selected capacity */
     uint32_t readAddress;
     uint32_t writeAddress;
 

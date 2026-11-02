@@ -28,6 +28,7 @@ void cupid_savedata_reset(struct CupidSavedata *savedata) {
     savedata->command = FLASH_COMMAND_NONE;
     savedata->flashState = FLASH_STATE_RAW;
     savedata->readBitsRemaining = 0;
+    savedata->eepromAddressBits = 0;
     savedata->eepromWriteBits = 0;
     if (savedata->data && (savedata->type == SAVE_FLASH512 || savedata->type == SAVE_FLASH1M)) {
         savedata->flashBank = 0;
@@ -149,6 +150,7 @@ void cupid_savedata_init_eeprom(struct CupidSavedata *savedata) {
     memset(savedata->data, 0xFF, size);
     savedata->command = EEPROM_COMMAND_NULL;
     savedata->readBitsRemaining = 0;
+    savedata->eepromAddressBits = 0;
     printf("CUPID: Savedata initialized as EEPROM %s\n",
            savedata->type == SAVE_EEPROM ? "8K" : "512B");
 }
@@ -347,12 +349,18 @@ void cupid_savedata_write_eeprom(struct CupidSavedata *savedata, uint16_t value,
         /** Read header, bit 0/1 of the 2-bit command prefix. */
         case EEPROM_COMMAND_NULL:
         default:
-            savedata->command = (enum CupidSavedataCommand)(value & 0x1);
+            savedata->command =
+                writeSize > 1 ? (enum CupidSavedataCommand)(value & 0x1) : EEPROM_COMMAND_NULL;
             break;
         case EEPROM_COMMAND_PENDING:
+            if (writeSize <= 1) {
+                savedata->command = EEPROM_COMMAND_NULL;
+                break;
+            }
             savedata->command =
                 (enum CupidSavedataCommand)(((int)savedata->command << 1) | (value & 0x1));
             _selectEepromCapacity(savedata, writeSize, savedata->command == EEPROM_COMMAND_WRITE);
+            savedata->eepromAddressBits = savedata->type == SAVE_EEPROM ? 14 : 6;
             if (savedata->command == EEPROM_COMMAND_WRITE) {
                 savedata->writeAddress = 0;
                 savedata->eepromWriteBits = 0;
@@ -364,21 +372,24 @@ void cupid_savedata_write_eeprom(struct CupidSavedata *savedata, uint16_t value,
 
         /** Write command: address bits, then 64 data bits, then stop bit. */
         case EEPROM_COMMAND_WRITE:
-            if (writeSize > 65) {
-                /** Still receiving address bits. */
+            if (writeSize <= 1) {
+                /* Ending DMA cannot turn an address or payload bit into the
+                 * missing stop bit of an incomplete command. */
+                if (!savedata->eepromAddressBits && savedata->eepromWriteBits == 64) {
+                    cupid_savedata_begin_programming(savedata, (savedata->writeAddress - 64) >> 3,
+                                                     8, savedata->eepromData,
+                                                     savedata->eepromProgramClocks);
+                }
+                savedata->eepromAddressBits = 0;
+                savedata->command = EEPROM_COMMAND_NULL;
+            } else if (savedata->eepromAddressBits) {
+                /** The selected chip consumes six or fourteen address bits. */
+                savedata->eepromAddressBits--;
                 savedata->writeAddress <<= 1;
                 savedata->writeAddress |= (value & 0x1) << 6;
                 /* The physical block decoder retains six or ten address bits;
                  * the 8-KiB protocol still consumes all fourteen wire bits. */
                 savedata->writeAddress &= (uint32_t)(savedata->size - 1) << 3;
-            } else if (writeSize == 1) {
-                /* The stop bit accepts the complete block and starts programming. */
-                if (savedata->eepromWriteBits == 64) {
-                    cupid_savedata_begin_programming(savedata, (savedata->writeAddress - 64) >> 3,
-                                                     8, savedata->eepromData,
-                                                     savedata->eepromProgramClocks);
-                }
-                savedata->command = EEPROM_COMMAND_NULL;
             } else if (savedata->eepromWriteBits < 64 &&
                        (savedata->writeAddress >> 3) < savedata->size) {
                 savedata->eepromData[savedata->eepromWriteBits / 8] |=
@@ -388,18 +399,23 @@ void cupid_savedata_write_eeprom(struct CupidSavedata *savedata, uint16_t value,
             }
             break;
 
-        /** Read command: receiving address bits until stop bit. */
+        /** Read command: fixed address width followed by the stop bit. */
         case EEPROM_COMMAND_READ_PENDING:
-            if (writeSize > 1) {
+            if (writeSize <= 1) {
+                if (!savedata->eepromAddressBits) {
+                    savedata->readBitsRemaining = 68;
+                    savedata->command = EEPROM_COMMAND_READ;
+                } else {
+                    savedata->eepromAddressBits = 0;
+                    savedata->command = EEPROM_COMMAND_NULL;
+                }
+            } else if (savedata->eepromAddressBits) {
+                savedata->eepromAddressBits--;
                 savedata->readAddress <<= 1;
                 if (value & 0x1) {
                     savedata->readAddress |= 0x40;
                 }
                 savedata->readAddress &= (uint32_t)(savedata->size - 1) << 3;
-            } else {
-                /** Stop bit, switch to read mode. */
-                savedata->readBitsRemaining = 68;
-                savedata->command = EEPROM_COMMAND_READ;
             }
             break;
 
