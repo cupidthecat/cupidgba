@@ -53,9 +53,12 @@ static void wait_controls_before_fetch_and_after_invalid_jump(void) {
         CHECK(gba);
         cupid_gba_create(gba);
         if (configuration == 1) {
-            /* Reset an attached firmware path without fetching an instruction. */
+            /* Console reset primes BIOS; inspect the earlier platform-only
+             * reset boundary before its vector prefetch selects a region. */
             gba->memory.fullBios = 1;
             cupid_gba_reset(gba);
+            CHECK(gba->memory.activeRegion == GBA_REGION_BIOS);
+            cupid_memory_reset(gba);
         } else if (configuration == 2) {
             cupid_memory_set_active_region(&gba->cpu, GBA_BASE_IWRAM);
             cupid_memory_set_active_region(&gba->cpu, 0x01000000);

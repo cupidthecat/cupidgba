@@ -286,15 +286,16 @@ static void _cupidGBAReset(struct CupidARM *cpu) {
     gba->keysLast = 0x0400;
 
     /**
-     * PC and pipeline are already set by cupid_arm_reset (CupidARMWritePC)
-     * before this callback is invoked. PC = BASE_RESET + WORD_SIZE_ARM.
+     * The CPU primes its reset-vector pipeline after this callback prepares
+     * the memory decoder, firmware and device state.
      */
 }
 
 /**
  * @brief Apply post-boot state at the reset vector.
  *
- * Sets System mode and stack banks, vcount = 0x7E, POSTFLG = 1 and entry PC.
+ * Sets System mode and stack banks, display position, POSTFLG, entry PC and
+ * the protected BIOS input left by the completed reset routine.
  * Only acts if PC is still at the reset vector (start of BIOS).
  */
 void cupid_gba_skip_bios(struct CupidGBA *gba) {
@@ -334,6 +335,8 @@ void cupid_gba_skip_bios(struct CupidGBA *gba) {
 
     /** Flush the pipeline so the CPU fetches from the new PC. */
     CupidARMWritePC(cpu);
+    /* Fast entry also retains the reset routine's final prefetched ARM word. */
+    gba->memory.biosPrefetch = 0xE129F000;
 }
 
 /**

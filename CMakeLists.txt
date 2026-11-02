@@ -1106,7 +1106,7 @@ if(BUILD_TESTING)
 
     if(CUPID_REGISTER_PROBE_DIR)
         foreach(case banked-stm-alu palette-byte-writes vram-byte-writes timer-disable-edge
-                bios-copy-timing bios-dma-timing long-dma-timing thumb-empty-push)
+                bios-copy-timing bios-dma-timing long-dma-timing thumb-empty-push bios-protected-input)
             add_test(NAME rom.register-${case} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_register_probe.py
                 --directory ${CUPID_REGISTER_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless> --test ${case})
@@ -1171,6 +1171,12 @@ if(BUILD_TESTING)
 
     add_executable(test_fast_boot tests/gba/test_fast_boot.c)
     target_link_libraries(test_fast_boot PRIVATE cupid_core)
+    add_executable(test_boot_feedback tests/gba/memory/test_boot_feedback.c)
+    target_link_libraries(test_boot_feedback PRIVATE cupid_core)
+    foreach(group entry reads guard firmware)
+        add_test(NAME gba.boot-feedback-${group} COMMAND test_boot_feedback ${group})
+        set_tests_properties(gba.boot-feedback-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
     foreach(group RANGE 0 3)
         add_test(NAME gba.fast-boot-phase-${group} COMMAND test_fast_boot ${group})
         set_tests_properties(gba.fast-boot-phase-${group} PROPERTIES TIMEOUT 30)

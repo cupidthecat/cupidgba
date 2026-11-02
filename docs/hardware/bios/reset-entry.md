@@ -6,6 +6,12 @@ state is clear. The active privilege bank and sampled IRQ mask agree with
 that control state before the first firmware instruction executes. Firmware
 can change the masks and initialize its own stacks during boot.
 
+The platform reset callback prepares memory and firmware before the CPU fills
+the reset-vector pipeline. This clears a previous low-memory remapping before
+any new opcode is sampled and establishes BIOS data-read permission before
+the first instruction. Firmware can begin with a sequential data load; it
+does not need an initial branch to repair the cached region.
+
 This follows the reset control defined in the
 [ARM7TDMI Technical Reference Manual](https://documentation-service.arm.com/static/5e8e1323fd977155116a3129).
 Other register values after hardware reset are indeterminate. CupidGBA clears
@@ -16,6 +22,21 @@ The built-in fast entry applies a post-boot state: ARM System mode with control
 byte `0x1F`, the System, IRQ and Supervisor stacks, and the selected initial
 display phase and POST flag. Those settings belong to the explicit BIOS skip
 path. A skip request with PC away from the reset vector leaves the CPU alone.
+
+Fast entry retains `0xE129F000` as the protected BIOS input left by the reset
+routine. The initializer installs this word after the entry pipeline refill,
+so leaving the reset region cannot replace it with an unexecuted reset-vector
+prefetch. Protected byte, halfword and word reads select and rotate its lanes
+through the normal memory callbacks. An ordinary external BIOS boot continues
+to populate the latch from executed firmware fetches.
+
+The original protected-read cartridge checks the startup word and the words
+retained after a software interrupt, inside an interrupt handler and after its
+return. Both BIOS paths must execute all four comparisons and complete both
+result boundaries. The fast-entry regressions also cover repeated reset,
+cartridge and RAM entry, all protected addresses at three widths, and a skip
+request outside the reset vector. These checks add no elapsed boot clocks or
+timer-divider calibration.
 
 The four `arm.reset-entry-*` groups use owned instructions to read the first
 guest-visible CPSR, cover all seven prior privilege modes, both instruction

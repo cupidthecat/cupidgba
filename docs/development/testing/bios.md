@@ -1,5 +1,24 @@
 # BIOS checks
 
+Four `gba.boot-feedback-*` groups check the protected BIOS input left by fast
+entry. They cover cartridge and RAM entry, repeated reset, the reset-vector
+skip guard, and ordinary firmware latch updates. The read group checks all
+16,384 BIOS addresses at byte, halfword and word widths through both fast-entry
+routes: 98,304 callback results, including unaligned lane rotations. Each group
+retains a ten-second deadline.
+
+The firmware group executes eight signed, unsigned and unaligned first-load
+instructions through four preceding low-memory mappings. The 32 owned cases
+require the correct first opcode, loaded value, ARM Supervisor control and
+next instruction address. A previous remapping supplies deliberately different
+RAM code so stale reset prefetch cannot pass as valid firmware execution.
+
+The [original register probes](register-probes.md) also require the four
+protected-read comparisons at startup and SWI/IRQ boundaries. Both operands,
+their original constant construction, the pre-display result and a completed
+terminal branch are required. This qualifies the selected retained input;
+physical power-on history and divider phase remain outside this scope.
+
 [Testing overview](../testing.md). Run commands from the repository root.
 
 ## Caller return boundaries

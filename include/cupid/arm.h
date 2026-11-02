@@ -145,6 +145,7 @@ struct CupidARMMemory {
 
 /** @name Interrupt / Event Handler Callbacks */
 struct CupidARMInterruptHandler {
+    /* Prepare the platform memory map before reset-vector prefetch. */
     void (*reset)(struct CupidARM *cpu);
     void (*processEvents)(struct CupidARM *cpu);
     void (*swi16)(struct CupidARM *cpu, int immediate);

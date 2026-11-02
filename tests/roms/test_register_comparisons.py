@@ -23,6 +23,16 @@ from test_immediate_comparisons import comparison_image
 def owned_image(original):
     case, data = comparison_image(original)
     for item in case["observations"]:
+        if "constant_setup" in item:
+            setup = int(item["constant_setup"], 16) - 0x08000000
+            second = item["second_register"]
+            value = int(item["value"], 16)
+            for index in range(4):
+                prefix = 0xE3A00000 if index == 0 else 0xE3800000 | second << 16
+                rotate = (16 - index * 4) % 16
+                opcode = prefix | second << 12 | rotate << 8 | (value >> (index * 8) & 255)
+                struct.pack_into("<I", data, setup + index * 4, opcode)
+            continue
         if "literal_load" not in item:
             continue
         setup = int(item["literal_load"], 16) - 0x08000000
@@ -66,8 +76,8 @@ class RegisterComparisons(unittest.TestCase):
         self.cases = self.manifest["cases"]
 
     def test_original_contracts(self):
-        self.assertEqual(len(self.cases), 10)
-        self.assertEqual(sum(len(c["observations"]) for c in self.cases), 36)
+        self.assertEqual(len(self.cases), 11)
+        self.assertEqual(sum(len(c["observations"]) for c in self.cases), 40)
         for original in self.cases:
             case, data = owned_image(original)
             verify_input(data, case)
@@ -145,6 +155,33 @@ class RegisterComparisons(unittest.TestCase):
                                       ("--bios", str(bios.resolve()))]:
                     self.assertEqual(command[command.index(option) + 1], value)
                 self.assertEqual(run.call_args.kwargs["timeout"], 90)
+
+    def test_constant_bytes_registers_flags_and_instruction_order(self):
+        original = next(c for c in self.cases if c["name"] == "bios-protected-input")
+        case, data = owned_image(original)
+        for item in case["observations"]:
+            setup = int(item["constant_setup"], 16) - 0x08000000
+            for index in range(4):
+                for mask in [1, 1 << 12, 1 << 20, 1 << 28]:
+                    altered = bytearray(data)
+                    offset = setup + index * 4
+                    opcode = int.from_bytes(altered[offset:offset + 4], "little") ^ mask
+                    struct.pack_into("<I", altered, offset, opcode)
+                    changed = copy.deepcopy(case)
+                    changed["sha256"] = hashlib.sha256(altered).hexdigest()
+                    with self.assertRaises(ValueError):
+                        verify_input(altered, changed)
+        for key, value in [("constant_setup", "0x7fffffc"), ("constant_setup", "0x80000fe"),
+                           ("constant_setup", "0x8000110"), ("literal", "0x8000000"),
+                           ("literal_shift", 1), ("value", "0x0")]:
+            changed = copy.deepcopy(case)
+            changed["observations"][0][key] = value
+            with self.assertRaises(ValueError):
+                verify_input(data, changed)
+        changed = copy.deepcopy(case)
+        changed["observations"] = [case["observations"][0]] * 2
+        with self.assertRaises(ValueError):
+            verify_input(data, changed)
 
     def test_missing_firmware_precondition_never_launches_core(self):
         argv = ["check_register_probe.py", "--directory", "unused", "--runner", "unused",

@@ -155,11 +155,6 @@ void cupid_arm_reset(struct CupidARM *cpu) {
     cpu->executionMode = MODE_THUMB;
     _CupidSetMode(cpu, MODE_ARM);
 
-    /** Fill the initial prefetch pipeline from address 0 (reset vector).
-     * Updates the program counter before the reset callback.
-     */
-    CupidARMWritePC(cpu);
-
     cpu->cycles = 0;
     cpu->nextEvent = 0;
     cpu->halted = 0;
@@ -168,6 +163,9 @@ void cupid_arm_reset(struct CupidARM *cpu) {
     if (cpu->irqh.reset) {
         cpu->irqh.reset(cpu);
     }
+    /* Platform reset prepares the memory map and firmware before the first
+     * vector fetch. Priming earlier can retain stale opcodes or protection. */
+    CupidARMWritePC(cpu);
 }
 
 /** @name Exception Entry

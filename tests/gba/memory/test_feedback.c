@@ -181,9 +181,19 @@ static void ownership(void) {
     cupid_bus_fetch(&first->cpu, 0x02000000, 4, false);
     CHECK(!first->memory.inputBusValid);
     cupid_bus_finish(&first->cpu);
-    cupid_gba_reset(first);
+    /* Platform reset clears retained data before console reset refills the
+     * firmware pipeline. Check both boundaries rather than erasing that fetch. */
+    cupid_memory_reset(first);
     CHECK(!first->memory.inputBusValid && first->memory.openBus == 0 &&
           first->memory.iwramBus == 0);
+    first->memory.fullBios = true;
+    cupid_gba_reset(first);
+    CHECK(first->memory.activeRegion == GBA_REGION_BIOS);
+    CHECK(first->memory.inputBusValid && first->memory.iwramBus == 0);
+    uint32_t resetWord;
+    LOAD_32(resetWord, 4, first->memory.bios);
+    CHECK(first->memory.openBus == resetWord);
+    CHECK(first->cpu.prefetch[1] == resetWord);
     destroy(first);
     destroy(second);
 }
