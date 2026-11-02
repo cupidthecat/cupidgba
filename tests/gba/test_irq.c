@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_irq.c
+ * @brief Interrupt register visibility, signal stages and HALT wake.
+ *
+ * - Check register visibility and signal stages.
+ * - Check byte masks and acknowledgements.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

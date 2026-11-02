@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_eeprom.c
+ * @brief EEPROM command framing, address selection and DMA transfers.
+ *
+ * - Check every address selects a complete block.
+ * - Check transfer width selects capacity before the address.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 #include <errno.h>

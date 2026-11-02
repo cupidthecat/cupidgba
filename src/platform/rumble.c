@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file rumble.c
+ * @brief SDL controller rumble driven by cartridge motor output.
+ *
+ * - Renew short host effects while the emulated motor is enabled.
+ * - Stop host output on motor disable or frontend shutdown.
+ */
 #include "cupid/platform.h"
 
 /* A short host effect is renewed while the emulated motor remains enabled.

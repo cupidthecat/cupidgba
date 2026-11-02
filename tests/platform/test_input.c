@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_input.c
+ * @brief Keyboard/controller input, attachment and removal behavior.
+ *
+ * - Check all bindings retain digital directions.
+ * - Check release order and complete mixed masks.
+ */
 #define SDL_MAIN_HANDLED
 #include "../test.h"
 #include "cupid/platform.h"

@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file local.h
+ * @brief Local-session frame capture and host-device interfaces.
+ *
+ * - Group endpoint presentation and device state for linked play.
+ * - Declare session execution, rendering and save-path helpers.
+ */
 #ifndef CUPID_LOCAL_H
 #define CUPID_LOCAL_H
 #include "cupid/platform.h"

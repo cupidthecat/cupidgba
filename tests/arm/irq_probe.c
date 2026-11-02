@@ -1,4 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file irq_probe.c
+ * @brief IRQ source-cartridge execution and instruction-boundary observation.
+ *
+ * - Provide cupid_test_irq_source_probe, cupid_test_irq_source_observer.
+ */
 #include "../support/probe_run.h"
 #include "../test.h"
 #include "cupid/gba.h"

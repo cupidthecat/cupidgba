@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_dma_probe.py
+# @brief Require every original DMA comparison and both completed result boundaries.
 """Require every original DMA comparison and both completed result boundaries."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

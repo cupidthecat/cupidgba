@@ -1,3 +1,5 @@
+# @file check_runner_status.py
+# @brief Require masked status at actual issue without accepting a zero-result shortcut.
 """Require masked status at actual issue without accepting a zero-result shortcut."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

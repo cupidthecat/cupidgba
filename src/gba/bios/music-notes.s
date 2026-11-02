@@ -1,3 +1,5 @@
+@ @file music-notes.s
+@ @brief Music voice allocation, priority and owning-track linkage.
 @ SPDX-License-Identifier: GPL-3.0-or-later
 @ Note allocation respects release state, priority and the owning track list.
 .org 0x3800

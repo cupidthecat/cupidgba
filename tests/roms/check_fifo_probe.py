@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_fifo_probe.py
+# @brief Require the issued comparisons and both original results of a pinned cartridge.
 """Require the issued comparisons and both original results of a pinned cartridge."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

@@ -1,3 +1,7 @@
+/**
+ * @file object-bank-rows.inc
+ * @brief Expected eight-pixel object texture rows at bank boundaries.
+ */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Complete eight-pixel rows for the owned bank-boundary texture. */
 static const uint16_t bankRows[2][2][3][8] = {

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_runner_rtc.py
+# @brief Check deterministic RTC inputs, guest calendar reads and explicit battery snapshots.
 """Check deterministic RTC inputs, guest calendar reads and explicit battery snapshots."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

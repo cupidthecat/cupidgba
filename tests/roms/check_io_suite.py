@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_io_suite.py
+# @brief Require every observation in the pinned local I/O register-read suite.
 """Require every observation in the pinned local I/O register-read suite."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file cpu_corpus_runner.c
+ * @brief Generated CPU corpus execution and issued-result comparisons.
+ */
 #include "../support/probe_run.h"
 #include "cupid/gba.h"
 #include <inttypes.h>

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_cpu_interaction_probe.py
+# @brief Check the original comparisons and result boundaries of a CPU/DMA/IRQ cartridge.
 """Check the original comparisons and result boundaries of a CPU/DMA/IRQ cartridge."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_blank_scanout.c
+ * @brief Forced-blank scanout and complete-frame comparisons.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 

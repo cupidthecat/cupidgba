@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file test_raster_output.py
+# @brief Check exact raster host encoding without running or changing a cartridge.
 """Check exact raster host encoding without running or changing a cartridge."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 from contextlib import redirect_stdout

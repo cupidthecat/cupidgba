@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_raster.c
+ * @brief Timed display snapshots and complete raster frames.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 #include "raster-frames.inc"

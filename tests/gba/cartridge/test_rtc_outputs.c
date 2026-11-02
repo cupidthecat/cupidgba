@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_rtc_outputs.c
+ * @brief RTC divider waveforms, alarm selection and output deadlines.
+ *
+ * - Check every frequency has two edges per period.
+ * - Check combined frequency deadlines match the complete waveform.
+ */
 #include "../../test.h"
 #include "cupid/rtc.h"
 #include <limits.h>

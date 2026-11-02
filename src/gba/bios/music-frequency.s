@@ -1,3 +1,5 @@
+@ @file music-frequency.s
+@ @brief Fixed-point MIDI frequency interpolation and pitch tables.
 @ MIDI conversion interpolates adjacent fixed-point semitone factors.
 .org 0x18D8
 .thumb

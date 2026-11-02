@@ -1,3 +1,5 @@
+@ @file music-jump-table.s
+@ @brief Music command dispatch targets and guarded table layout.
 @ SPDX-License-Identifier: GPL-3.0-or-later
 @ The source guard admits this table and the remaining BIOS data range.
 .org 0x3738

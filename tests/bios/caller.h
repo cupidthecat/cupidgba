@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file caller.h
+ * @brief BIOS caller setup and checked service-return helpers.
+ *
+ * - Provide cupid_test_bios_caller, cupid_test_bios_return_boundary,
+ *   cupid_test_bios_run_to_return.
+ */
 #ifndef CUPID_TEST_BIOS_CALLER_H
 #define CUPID_TEST_BIOS_CALLER_H
 

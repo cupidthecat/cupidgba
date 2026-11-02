@@ -1,3 +1,5 @@
+# @file test_display_inputs.py
+# @brief Check publication, caching and failure handling for the display cartridge corpus.
 """Check publication, caching and failure handling for the display cartridge corpus."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

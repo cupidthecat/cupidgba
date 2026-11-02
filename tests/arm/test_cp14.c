@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_cp14.c
+ * @brief Coprocessor instruction decoding and timing regressions.
+ *
+ * - Check r15 updates only condition flags.
+ * - Check predicates gate all register effects.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

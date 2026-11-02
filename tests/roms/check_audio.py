@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_audio.py
+# @brief Observe source-defined signals from the unchanged local audio cartridge.
 """Observe source-defined signals from the unchanged local audio cartridge."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

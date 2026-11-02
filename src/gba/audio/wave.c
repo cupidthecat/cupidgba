@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file wave.c
+ * @brief Bulk advancement of wave-channel sample and bank state.
+ *
+ * - Advance wave position from elapsed sample clocks.
+ * - Retain the same sample rotation across grouped clock updates.
+ */
 #include "wave.h"
 
 void cupid_audio_wave_advance(struct CupidAudioWaveChannel *wave, uint64_t steps) {

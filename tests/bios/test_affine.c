@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_affine.c
+ * @brief BIOS affine transforms, fixed-point results and output writes.
+ *
+ * - Check signed rounding origins and caller state.
+ * - Check memory counts and object strides.
+ */
 #include "../test.h"
 #include "caller.h"
 #include "cupid/gba.h"

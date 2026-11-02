@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_video_cable.c
+ * @brief Shared display-clock state across linked emulator endpoints.
+ */
 #include "../test.h"
 #include "cupid/cable.h"
 #include "cupid/isa-inlines.h"

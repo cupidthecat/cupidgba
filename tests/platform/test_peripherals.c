@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_peripherals.c
+ * @brief Peripheral argument parsing, live controls and controller rumble.
+ *
+ * - Check configuration and strict input parsing.
+ * - Check gyro input parsing and live controls.
+ */
 #define SDL_MAIN_HANDLED
 #include "../test.h"
 #include "cupid/platform.h"

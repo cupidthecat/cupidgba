@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_paged_rom.py
+# @brief Draw a complete owned image from the upper half of a paged cartridge.
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Draw a complete owned image from the upper half of a paged cartridge."""
 

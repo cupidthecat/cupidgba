@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file cartridge.h
+ * @brief Cartridge GPIO devices, board selection and battery ownership.
+ *
+ * - Group RTC, solar, gyro, tilt and rumble state per cartridge.
+ * - Declare pin routing, lifecycle and battery persistence interfaces.
+ */
 #ifndef CUPID_CARTRIDGE_H
 #define CUPID_CARTRIDGE_H
 

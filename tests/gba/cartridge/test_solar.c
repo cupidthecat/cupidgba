@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_solar.c
+ * @brief Solar converter clocks, light samples and shared RTC pins.
+ *
+ * - Check all levels and counter converter wrap.
+ * - Check instruction driver and physical windows.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

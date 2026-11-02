@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_completion.c
+ * @brief DMA completion signals, register edges and channel handover.
+ *
+ * - Check completion has its own signal and register edges.
+ * - Check accepted completion survives control changes but not reset.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 

@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file paged-rom.h
+ * @brief Paged cartridge backing storage and window-control interface.
+ *
+ * - Retain controller selection alongside the complete image backing.
+ * - Declare controller reset and register-write handling.
+ */
 #ifndef CUPID_PAGED_ROM_H
 #define CUPID_PAGED_ROM_H
 #include "cupid/types.h"

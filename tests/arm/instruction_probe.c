@@ -1,4 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file instruction_probe.c
+ * @brief Issued-instruction operand observation and probe acceptance.
+ *
+ * - Provide cupid_test_observe_issue, cupid_test_issue_probe_passed.
+ */
 #include "instruction_probe.h"
 #include <inttypes.h>
 

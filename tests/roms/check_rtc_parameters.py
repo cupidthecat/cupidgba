@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_rtc_parameters.py
+# @brief Observe live RTC parameter writes through complete guest GPIO/IRQ drivers.
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Observe live RTC parameter writes through complete guest GPIO/IRQ drivers."""
 import argparse

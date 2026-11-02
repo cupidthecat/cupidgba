@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_multiboot.c
+ * @brief Multiboot transfer framing, downloaded payloads and CRC checks.
+ */
 #include "../test.h"
 #include "caller.h"
 #include "cupid/gba.h"

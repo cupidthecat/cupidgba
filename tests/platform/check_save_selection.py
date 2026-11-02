@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_save_selection.py
+# @brief Require explicit backup selection, guest transactions and independent reloads.
 """Require explicit backup selection, guest transactions and independent reloads."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

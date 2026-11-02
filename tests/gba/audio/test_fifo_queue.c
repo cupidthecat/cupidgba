@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_fifo_queue.c
+ * @brief FIFO queue wrapping, staged data and lane replacement.
+ *
+ * - Check rotations reuse seven storage words.
+ * - Check overflowing writes discard the queue and keep the stage.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 

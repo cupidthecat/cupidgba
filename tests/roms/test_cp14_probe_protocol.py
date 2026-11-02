@@ -1,3 +1,5 @@
+# @file test_cp14_probe_protocol.py
+# @brief Reject altered CP14 expectations and incomplete timing/value/flag observations.
 """Reject altered CP14 expectations and incomplete timing/value/flag observations."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

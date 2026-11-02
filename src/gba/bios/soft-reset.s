@@ -1,3 +1,5 @@
+@ @file soft-reset.s
+@ @brief Firmware restart selection, work-area clearing and stack reset.
 @ SPDX-License-Identifier: GPL-3.0-or-later
 @ Latch the restart byte before clearing the BIOS work area and reset stacks.
 .arm

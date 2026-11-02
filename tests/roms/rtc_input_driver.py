@@ -1,3 +1,5 @@
+# @file rtc_input_driver.py
+# @brief Build an owned ARM/Thumb reader for an externally supplied RTC calendar.
 """Build an owned ARM/Thumb reader for an externally supplied RTC calendar."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

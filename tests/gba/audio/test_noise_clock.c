@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_noise_clock.c
+ * @brief Noise-channel rate changes and polynomial clock progression.
+ *
+ * - Check disabled shifts retain the pending clock.
+ * - Check envelopes recompute from the held bit.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 

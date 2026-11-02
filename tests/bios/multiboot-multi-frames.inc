@@ -1,3 +1,7 @@
+/**
+ * @file multiboot-multi-frames.inc
+ * @brief Expected complete multiplayer download wire transcripts.
+ */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Independent full multiplayer wire-transcript observations. */
 static const struct DownloadExpected multiDownloadExpected[] = {

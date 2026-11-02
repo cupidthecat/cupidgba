@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_io_address.c
+ * @brief I/O address-bank decoding and CPU byte-read addresses.
+ *
+ * - Check upper banks keep their address.
+ * - Check cpu byte loads keep their address.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

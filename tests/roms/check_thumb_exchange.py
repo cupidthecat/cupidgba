@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_thumb_exchange.py
+# @brief Require the original Thumb branch, ARM comparison and issued result terminal.
 """Require the original Thumb branch, ARM comparison and issued result terminal."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

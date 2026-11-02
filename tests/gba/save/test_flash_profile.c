@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_flash_profile.c
+ * @brief Flash profile selection, command acceptance and image state.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

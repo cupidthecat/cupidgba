@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file pipeline.h
+ * @brief Shared pixel-pipeline state accessors and layer helpers.
+ *
+ * - Decode display control and forced-blank state for rendering stages.
+ * - Combine submitted layers through shared pipeline interfaces.
+ */
 #ifndef CUPID_PIXEL_PIPELINE_H
 #define CUPID_PIXEL_PIPELINE_H
 

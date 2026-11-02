@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_multiplayer.c
+ * @brief Multiplayer master/slave words and ordered transfer publication.
+ *
+ * - Check master words publish in order.
+ * - Check slave frames latch local words.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 

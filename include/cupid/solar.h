@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file solar.h
+ * @brief Solar converter counter and GPIO pin interface.
+ *
+ * - Keep the external light level separate from bus-reset state.
+ * - Declare input updates, counter clocks and output-pin sampling.
+ */
 #ifndef CUPID_SOLAR_H
 #define CUPID_SOLAR_H
 

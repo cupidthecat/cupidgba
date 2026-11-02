@@ -1,3 +1,5 @@
+@ @file music-commands.s
+@ @brief Music track command decoding and guarded operand reads.
 @ SPDX-License-Identifier: GPL-3.0-or-later
 @ Track commands consume their operands through the firmware's source guard.
 .org 0x2AB0

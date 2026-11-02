@@ -1,3 +1,7 @@
+/**
+ * @file music-sequence.inc
+ * @brief Owned music sequence inputs and sequencer observations.
+ */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Independent captures of the owned song, wave and input sequence. */
 struct MusicExpected {

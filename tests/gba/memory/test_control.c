@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_control.c
+ * @brief Internal-memory remapping, protection, timing and pipeline views.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

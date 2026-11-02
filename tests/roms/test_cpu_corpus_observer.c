@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_cpu_corpus_observer.c
+ * @brief CPU corpus observer transcripts and acceptance boundaries.
+ */
 #define main corpus_runner_main
 #include "cpu_corpus_runner.c"
 #undef main

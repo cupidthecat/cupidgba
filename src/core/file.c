@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file file.c
+ * @brief Regular-file reads and staged persistent-file replacement.
+ *
+ * - Reject incomplete or oversized payloads in exact reads.
+ * - Flush an exclusively created stage before replacing the destination.
+ */
 #ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L
 #endif

@@ -1,3 +1,5 @@
+# @file test_immediate_execution.py
+# @brief Exercise ARM/Thumb zero-result false positives with owned instruction streams.
 """Exercise ARM/Thumb zero-result false positives with owned instruction streams."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

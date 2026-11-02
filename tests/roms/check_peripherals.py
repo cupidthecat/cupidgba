@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_peripherals.py
+# @brief Run generated ARM/Thumb solar and motor driver cartridges.
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Run generated ARM/Thumb solar and motor driver cartridges."""
 import argparse

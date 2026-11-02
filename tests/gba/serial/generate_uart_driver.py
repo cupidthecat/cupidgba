@@ -1,7 +1,17 @@
 #!/usr/bin/env python3
+# @file generate_uart_driver.py
+# @brief Generate or verify the embedded image of the owned UART driver.
 """Generate or verify the embedded image of the owned UART driver."""
 from pathlib import Path
 import argparse
+
+
+FILE_HEADER = (
+    '/**\n'
+    ' * @file uart-driver.inc\n'
+    ' * @brief Owned ARM/Thumb guest UART transmit and receive driver.\n'
+    ' */\n'
+)
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("image", type=Path)
@@ -16,6 +26,7 @@ for offset in range(0, len(image), 16):
     rows.append("    " + ", ".join(f"0x{value:02X}" for value in image[offset:offset + 16]) + ",")
 rows.append("};")
 expected = ("\n".join(rows) + "\n").encode()
+expected = FILE_HEADER.encode() + expected
 target = Path(__file__).with_name("uart-driver.inc")
 if args.write:
     target.write_bytes(expected)

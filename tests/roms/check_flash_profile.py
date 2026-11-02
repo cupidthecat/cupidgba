@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_flash_profile.py
+# @brief Exercise explicit Flash selection with an owned cartridge driver.
 """Exercise explicit Flash selection with an owned cartridge driver."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

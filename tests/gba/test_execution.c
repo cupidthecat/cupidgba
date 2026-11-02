@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_execution.c
+ * @brief Core frame execution, HALT wake and lifecycle behavior.
+ */
 #include "../test.h"
 #include "cupid/cable.h"
 #include "cupid/isa-inlines.h"

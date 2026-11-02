@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file test_fetch_prefetch.py
+# @brief Check pinned prefetch input selection and reject failed or altered downloads.
 """Check pinned prefetch input selection and reject failed or altered downloads."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import faulthandler

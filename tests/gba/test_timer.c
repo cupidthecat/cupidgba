@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_timer.c
+ * @brief Timer register latency, prescaler phase and reload edges.
+ *
+ * - Check register latency and frozen counter.
+ * - Check global prescaler phase and live changes.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 

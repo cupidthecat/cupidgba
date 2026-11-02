@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file save.c
+ * @brief Frontend backup-selection parsing and transactional configuration.
+ *
+ * - Map accepted save names to supported backup selections.
+ * - Apply validated choices without changing state on invalid input.
+ */
 #include "cupid/platform/save.h"
 #include <errno.h>
 

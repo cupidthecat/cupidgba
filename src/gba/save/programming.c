@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file programming.c
+ * @brief Timed flash and EEPROM programming operations.
+ *
+ * - Retain accepted operation scope until its ready deadline.
+ * - Publish completion and polling state through scheduled device events.
+ */
 #include "cupid/gba.h"
 
 static uint64_t now(const struct CupidSavedata *save) {

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_console.py
+# @brief Check the visible result text of checksum-verified hardware test ROMs.
 """Check the visible result text of checksum-verified hardware test ROMs."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

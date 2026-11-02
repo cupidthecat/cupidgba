@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_wave_output.c
+ * @brief Wave volume changes and retained output samples.
+ *
+ * - Check volume writes rescale the held sample.
+ * - Check stopped trigger rescales the retained sample.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 

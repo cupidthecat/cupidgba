@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_rtc_config.c
+ * @brief Frontend RTC seeds, offline time and battery configuration.
+ *
+ * - Check first launch and explicit seed are deterministic.
+ * - Check offline elapsed time keeps game clock offset and weekday.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 #include "cupid/platform/rtc.h"

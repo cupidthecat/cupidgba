@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file battery.c
+ * @brief RTC battery-file encoding, validation and persistence.
+ *
+ * - Validate checksums and calendar state before replacing live state.
+ * - Save battery data separately from ordinary cartridge backup storage.
+ */
 #include "cupid/file.h"
 #include "cupid/gba.h"
 #include <errno.h>

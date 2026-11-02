@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_file.c
+ * @brief Backup-file capacities, staged replacement and persistence failures.
+ *
+ * - Check exclusive staging preserves an existing companion.
+ * - Check every save capacity round trips complete replacements.
+ */
 #ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L
 #endif

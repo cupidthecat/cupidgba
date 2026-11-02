@@ -1,3 +1,10 @@
+/**
+ * @file test_observer.c
+ * @brief Passive instruction observation across arbitration and banked operands.
+ *
+ * - Check streams are passive and include failed predicates.
+ * - Check arbitration refills and reset do not fabricate issue.
+ */
 #include "../bios/caller.h"
 #include "../test.h"
 #include "cupid/gba.h"

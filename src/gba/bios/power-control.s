@@ -1,3 +1,5 @@
+@ @file power-control.s
+@ @brief Firmware sleep entry, timed control writes and SWI return.
 @ Sleep entrypoints share the timed byte strobe and ordinary SWI return.
 .org 0x1800
 .arm

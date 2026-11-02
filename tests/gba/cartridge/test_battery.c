@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_battery.c
+ * @brief RTC battery persistence, checksums and rejected state isolation.
+ *
+ * - Check reject without changing battery.
+ * - Check roundtrip uses a separate bound battery and clock anchor.
+ */
 #ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L
 #endif

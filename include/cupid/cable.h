@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file cable.h
+ * @brief Local link-cable lifecycle and shared-clock execution interface.
+ *
+ * - Connect emulator endpoints through one cable state.
+ * - Run shared session clocks and expose completed-frame observation hooks.
+ */
 #ifndef CUPID_CABLE_H
 #define CUPID_CABLE_H
 #include "cupid/gba.h"

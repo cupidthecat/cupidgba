@@ -1,3 +1,5 @@
+# @file test_immediate_comparisons.py
+# @brief Reject changed immediate comparisons, false-zero results and invalid inputs.
 """Reject changed immediate comparisons, false-zero results and invalid inputs."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

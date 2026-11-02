@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_user_bank.c
+ * @brief User-bank register transfers and operand-phase ownership.
+ *
+ * - Check arithmetic operands and writeback.
+ * - Check memory address data and swap phases.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

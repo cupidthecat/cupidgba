@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_format.py
+# @brief Check tracked C source and headers against the repository clang-format style.
 """Check tracked C source and headers against the repository clang-format style."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

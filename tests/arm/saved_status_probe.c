@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file saved_status_probe.c
+ * @brief Saved-status cartridge execution and checked return boundaries.
+ */
 #include "../support/probe_run.h"
 #include "cupid/gba.h"
 #include "instruction_probe.h"

@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_local.c
+ * @brief Local-session input, frame capture and audio playback.
+ */
 #define SDL_MAIN_HANDLED
 #include "../../src/platform/local.h"
 #include "../test.h"

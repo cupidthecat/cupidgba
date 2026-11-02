@@ -1,3 +1,5 @@
+@ @file data-services.s
+@ @brief Firmware data transformation and decompression service routines.
 @ Utility services run through the ordinary CPU, bus and peripheral scheduler.
 .org UTILITY_SOURCE_OFFSET - 8
 .thumb

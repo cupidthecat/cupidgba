@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_bios_math_suite.py
+# @brief Require all register observations from the pinned local BIOS math suite.
 """Require all register observations from the pinned local BIOS math suite."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

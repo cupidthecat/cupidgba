@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_irq_probe.py
+# @brief Check original IRQ comparisons at their actual issued instruction sites.
 """Check original IRQ comparisons at their actual issued instruction sites."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_object_tail.c
+ * @brief Object texture-tail accesses, affine pixels and bus clocks.
+ */
 #include "../../../src/gba/render/pipeline.h"
 #include "../../test.h"
 

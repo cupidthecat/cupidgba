@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file test_fetch_inputs.py
+# @brief Fault-inject transport failures and verify test input integrity enforcement.
 """Fault-inject transport failures and verify test input integrity enforcement."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import faulthandler

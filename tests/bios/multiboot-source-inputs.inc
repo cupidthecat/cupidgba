@@ -1,3 +1,7 @@
+/**
+ * @file multiboot-source-inputs.inc
+ * @brief Owned download source inputs and audio observation helpers.
+ */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 static void consume_download_audio(void *context, uint64_t clock, int16_t left, int16_t right) {
     (void)clock;

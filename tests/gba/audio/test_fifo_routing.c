@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_fifo_routing.c
+ * @brief FIFO request routing, channel source selection and reconfiguration.
+ *
+ * - Check request lines depend on source enable and timing.
+ * - Check destination history does not rewire a request.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 

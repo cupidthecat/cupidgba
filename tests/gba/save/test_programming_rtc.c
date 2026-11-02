@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_programming_rtc.c
+ * @brief Backup programming events alongside cartridge RTC progression.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 #include <string.h>

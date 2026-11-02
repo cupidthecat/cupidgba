@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_rtc_stop.c
+ * @brief RTC oscillator progression and console wake from STOP.
+ *
+ * - Check calendar advances while system peripherals and deadlines are frozen.
+ * - Check each divider wakes at its release and uses the resumed irq pipeline.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

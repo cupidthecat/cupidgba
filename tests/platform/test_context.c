@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_context.c
+ * @brief Local execution-context stacks and context switching.
+ */
 #include "../test.h"
 #include "context.h"
 

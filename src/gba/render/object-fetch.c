@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file object-fetch.c
+ * @brief Object attribute, texture and pixel-submission pipeline.
+ *
+ * - Fetch object attributes and apply shape, transform and texture addressing.
+ * - Submit fetched object pixels within the available display work.
+ */
 #include "pipeline.h"
 
 enum { OBJECT_HBLANK_LIMIT = 964, OBJECT_HBLANK_TEXTURE_LIMIT = 960 };

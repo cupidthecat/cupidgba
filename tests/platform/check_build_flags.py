@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_build_flags.py
+# @brief Check the effective optimization of every configured compiler command.
 """Check the effective optimization of every configured compiler command."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

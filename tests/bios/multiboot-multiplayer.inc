@@ -1,3 +1,7 @@
+/**
+ * @file multiboot-multiplayer.inc
+ * @brief Owned multiplayer download peer state and responses.
+ */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 struct MultiDownloadPeer {
     struct CupidGBA *gba;

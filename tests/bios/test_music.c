@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_music.c
+ * @brief BIOS music-frequency interpolation and wave-memory access.
+ *
+ * - Check interpolation clamps and caller banks.
+ * - Check wave reads use alignment region and wait controls.
+ */
 #include "../test.h"
 #include "caller.h"
 #include "cupid/gba.h"

@@ -1,3 +1,5 @@
+@ @file hard-reset.s
+@ @brief Firmware warm-reboot entry, request masking and work-bank reset.
 @ SPDX-License-Identifier: GPL-3.0-or-later
 @ Warm reboot masks requests, resets the BIOS work banks and starts firmware.
 .arm

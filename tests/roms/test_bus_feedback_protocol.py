@@ -1,3 +1,5 @@
+# @file test_bus_feedback_protocol.py
+# @brief Reject incomplete or contradictory bus comparison results.
 """Reject incomplete or contradictory bus comparison results."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

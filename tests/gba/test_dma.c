@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_dma.c
+ * @brief DMA phases, control latches, stepping and repeat behavior.
+ *
+ * - Check phases sample reads and publish writes.
+ * - Check masks counts and enable latches.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

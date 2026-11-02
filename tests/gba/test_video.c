@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_video.c
+ * @brief Display status, IRQ deadlines and scanline/frame transitions.
+ *
+ * - Check flags and irqs have separate deadlines.
+ * - Check match writes masks and frame edges.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 

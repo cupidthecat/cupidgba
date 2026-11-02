@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_display_probe.py
+# @brief Require the original display startup, IRQ, HALT and texture-tail comparisons.
 """Require the original display startup, IRQ, HALT and texture-tail comparisons."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_fast_boot.c
+ * @brief Fast-entry execution and frame-clock checks.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 #include <inttypes.h>

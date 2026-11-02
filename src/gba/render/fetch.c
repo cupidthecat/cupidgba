@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file fetch.c
+ * @brief Timed text, affine and bitmap background fetches.
+ *
+ * - Read map and texture data at their pixel-pipeline stages.
+ * - Retain fetched values independently of later display-memory writes.
+ */
 #include "pipeline.h"
 
 uint16_t cupid_pixel_read_background(struct CupidVideo *v, uint32_t address, uint64_t time) {

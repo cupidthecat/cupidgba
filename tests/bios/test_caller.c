@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_caller.c
+ * @brief Repeated BIOS calls and retained caller-state observations.
+ */
 #include "../test.h"
 #include "caller.h"
 #include "cupid/isa-inlines.h"

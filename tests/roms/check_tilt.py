@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_tilt.py
+# @brief Require complete ARM/Thumb X/Y observations at the documented frame cadence.
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Require complete ARM/Thumb X/Y observations at the documented frame cadence."""
 import argparse

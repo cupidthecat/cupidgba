@@ -1,3 +1,7 @@
+/**
+ * @file music-callbacks.inc
+ * @brief Owned ARM/Thumb callback code for firmware music regressions.
+ */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Generated from music-callbacks.s; see the BIOS rebuilding guide. */
 static const uint8_t musicCallbacks[] = {

@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_programming.c
+ * @brief Flash and EEPROM programming deadlines and polling state.
+ *
+ * - Check eeprom acceptance and ready have owned deadlines.
+ * - Check flash polling and data follow operation scope.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

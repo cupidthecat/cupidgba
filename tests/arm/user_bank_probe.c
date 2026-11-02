@@ -1,4 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file user_bank_probe.c
+ * @brief User-bank source-cartridge execution and issued operands.
+ *
+ * - Provide cupid_test_user_bank_probe, cupid_test_user_bank_observer.
+ */
 #include "../support/probe_run.h"
 #include "../test.h"
 #include "cupid/gba.h"

@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_probe_run.c
+ * @brief Runner probes across predicates, instruction execution and DMA.
+ */
 #include "../support/probe_run.h"
 #include "../test.h"
 #include "cupid/isa-inlines.h"

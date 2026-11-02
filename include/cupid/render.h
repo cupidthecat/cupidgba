@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file render.h
+ * @brief Fixed-point blend, brightness and color-component helpers.
+ *
+ * - Retain the extra green component bit until final color packing.
+ * - Keep blend and brightness component precision in shared helpers.
+ */
 #ifndef CUPID_RENDER_H
 #define CUPID_RENDER_H
 

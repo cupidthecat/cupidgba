@@ -1,3 +1,7 @@
+/**
+ * @file music-playback.inc
+ * @brief Expected music playback state and timestamped PCM observations.
+ */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Independent complete state and timestamped PCM observations. Elapsed frame
  * endpoints include the final three-clock idle branch and the following call;

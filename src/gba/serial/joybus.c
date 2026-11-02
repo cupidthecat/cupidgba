@@ -1,3 +1,10 @@
+/**
+ * @file joybus.c
+ * @brief JOY bus command processing and register transfer.
+ *
+ * - Decode reset, status, receive and transmit commands.
+ * - Update command-visible data and interrupt state.
+ */
 #include "cupid/gba.h"
 
 size_t cupid_serial_joybus_command(struct CupidSerial *serial, const uint8_t *request,

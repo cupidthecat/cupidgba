@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_bus_page_probe.py
+# @brief Require every original CPU/DMA page-boundary result from a fixed input.
 """Require every original CPU/DMA page-boundary result from a fixed input."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

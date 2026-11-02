@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_gpio_bytes.c
+ * @brief GPIO byte values and physical write strobes.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 

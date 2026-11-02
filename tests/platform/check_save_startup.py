@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_save_startup.py
+# @brief Reject invalid save and RTC input before the frontend starts emulation.
 """Reject invalid save and RTC input before the frontend starts emulation."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

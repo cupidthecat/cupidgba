@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_rtc_irq.c
+ * @brief RTC output changes and cartridge interrupt propagation.
+ *
+ * - Check steady edges enter the irq pipeline through the board inverter.
+ * - Check held minute output releases on a complete control write.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

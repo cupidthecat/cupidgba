@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_rom_bus.c
+ * @brief Cartridge read lanes, CPU loads, DMA words and EEPROM selection.
+ *
+ * - Check reads cover every address lane.
+ * - Check dma reads publish halfwords and words.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

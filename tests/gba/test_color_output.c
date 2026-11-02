@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_color_output.c
+ * @brief Framebuffer color conversion and complete bitmap output.
+ *
+ * - Check every input keeps channels opaque alpha and full intensity.
+ * - Check complete bitmap frames cover every color and unused high bit.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 

@@ -1,3 +1,7 @@
+/**
+ * @file mosaic-vertical-rows.inc
+ * @brief Expected Gray-code row geometry for vertical mosaic checks.
+ */
 /* Complete expected geometry for owned Gray-code row textures.
  * Every stored row code defines eight thirty-pixel black/white stripes. */
 struct VerticalExpected {

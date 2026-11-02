@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file rtc.c
+ * @brief RTC calendar progression, command framing and output signals.
+ *
+ * - Advance calendar fields and oscillator-derived output deadlines.
+ * - Handle serial commands, parameter shifts and alarm state.
+ */
 #include "cupid/rtc.h"
 #include <limits.h>
 

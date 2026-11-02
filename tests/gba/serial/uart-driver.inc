@@ -1,3 +1,7 @@
+/**
+ * @file uart-driver.inc
+ * @brief Owned ARM/Thumb guest UART transmit and receive driver.
+ */
 /* Generated from uart-driver.s; see the serial documentation. */
 static const uint8_t uartDriver[] = {
     0x00, 0x70, 0xA0, 0xE3, 0xBC, 0x70, 0xC0, 0xE1, 0x03, 0x7A, 0xA0, 0xE3, 0xB0, 0x70, 0xC0, 0xE1,

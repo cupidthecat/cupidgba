@@ -1,3 +1,7 @@
+/**
+ * @file music-progress.inc
+ * @brief Owned music progression inputs and observation helpers.
+ */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 struct MusicProgress {
     struct CupidTimingEvent event;

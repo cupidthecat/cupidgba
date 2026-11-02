@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_prefetch_restart.c
+ * @brief Prefetch disable/restart and page-crossing guest execution.
+ *
+ * - Check disabled misses and retained hits.
+ * - Check guest disable then page crossing.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

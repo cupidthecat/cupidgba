@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file file.c
+ * @brief Validated external BIOS loading and live firmware installation.
+ *
+ * - Read a complete regular BIOS file before changing core ownership.
+ * - Rebind an active BIOS opcode view after successful installation.
+ */
 #include "cupid/gba.h"
 #include <errno.h>
 #include <inttypes.h>

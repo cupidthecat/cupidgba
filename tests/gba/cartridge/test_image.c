@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_image.c
+ * @brief Cartridge image mapping, decoded ports and DMA access.
+ *
+ * - Check large images keep rom reads and ignore unselected writes.
+ * - Check dma commands only reach the decoded port.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file paged-rom.c
+ * @brief Paged cartridge window mapping and controller writes.
+ *
+ * - Copy selected backing ranges into the visible cartridge window.
+ * - Apply register masks and reset controller selection.
+ */
 #include "cupid/gba.h"
 
 static void copy_window(const struct CupidPagedROM *page, uint8_t *view) {

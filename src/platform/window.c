@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file window.c
+ * @brief SDL window, renderer and framebuffer presentation lifecycle.
+ *
+ * - Create and release host video resources.
+ * - Upload completed core frames and present them at the selected scale.
+ */
 #include "cupid/platform.h"
 #include <stdio.h>
 #include <string.h>

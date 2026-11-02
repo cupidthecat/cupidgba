@@ -1,4 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_register_reset.c
+ * @brief BIOS register-reset masks and device side effects.
+ *
+ * - Check all masks return state and device effects.
+ */
 #include "../test.h"
 #include "caller.h"
 #include "cupid/gba.h"

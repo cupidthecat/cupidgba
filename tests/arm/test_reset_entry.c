@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_reset_entry.c
+ * @brief Reset entry, banked state and first firmware instructions.
+ *
+ * - Check external reset control and first instruction.
+ * - Check fast entry retains post boot control and stacks.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

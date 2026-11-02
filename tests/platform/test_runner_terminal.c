@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_runner_terminal.c
+ * @brief Issued-instruction terminals across arbitration and suspension.
+ */
 #define main cupid_bounded_runner_main
 #include "../rom_runner.c"
 #undef main

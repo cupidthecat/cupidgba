@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file probe_adapter.c
+ * @brief Probe lifecycle adapter and checked runner boundaries.
+ */
 #include "../support/probe_run.h"
 #include <errno.h>
 #include <inttypes.h>

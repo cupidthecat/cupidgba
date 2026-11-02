@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_object_tail_probe.py
+# @brief Require the original sprite texture-tail timer comparison and result boundaries.
 """Require the original sprite texture-tail timer comparison and result boundaries."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

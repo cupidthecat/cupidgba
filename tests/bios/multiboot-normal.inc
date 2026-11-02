@@ -1,3 +1,7 @@
+/**
+ * @file multiboot-normal.inc
+ * @brief Expected complete normal-mode download wire transcripts.
+ */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Independent full wire-transcript observations for the owned downloads. */
 struct DownloadExpected {

@@ -1,3 +1,7 @@
+/**
+ * @file multiboot-bus-inputs.inc
+ * @brief Owned download bus observations and peripheral-interaction inputs.
+ */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 struct DownloadBusWatch {
     struct CupidGBA *gba;

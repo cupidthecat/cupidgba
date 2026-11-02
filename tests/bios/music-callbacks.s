@@ -1,3 +1,7 @@
+/**
+ * @file music-callbacks.s
+ * @brief Owned ARM/Thumb callback code for firmware music regressions.
+ */
 @ SPDX-License-Identifier: GPL-3.0-or-later
 @ Owned callbacks loaded at 02018000h. R0-R2 and callee registers are retained.
 .syntax unified

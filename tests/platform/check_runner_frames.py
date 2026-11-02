@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_runner_frames.py
+# @brief Check frame deadlines and immutable screenshots across a long DMA wait.
 """Check frame deadlines and immutable screenshots across a long DMA wait."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

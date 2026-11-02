@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_checksum.c
+ * @brief BIOS checksum results and caller-stack preservation.
+ *
+ * - Check changed words and read only guest access.
+ * - Check timer dma irq masks and callback deadlines.
+ */
 #include "../test.h"
 #include "caller.h"
 #include "cupid/gba.h"

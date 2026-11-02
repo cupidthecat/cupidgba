@@ -1,3 +1,7 @@
+/**
+ * @file sound-frames.inc
+ * @brief Expected sound-driver output for owned synthetic waves and scenes.
+ */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Captures use the owned synthetic waves and scene parameters. */
 struct SoundFrameExpected {

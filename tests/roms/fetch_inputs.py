@@ -1,3 +1,5 @@
+# @file fetch_inputs.py
+# @brief Download immutable test inputs without accepting incomplete or altered data.
 """Download immutable test inputs without accepting incomplete or altered data."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import hashlib

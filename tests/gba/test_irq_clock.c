@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_irq_clock.c
+ * @brief CPU instruction clocks and interrupt observation history.
+ *
+ * - Check ready edges and visible registers.
+ * - Check unclocked pulses and latched stage ownership.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

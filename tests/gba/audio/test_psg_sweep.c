@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_psg_sweep.c
+ * @brief Square-channel sweep triggers, clocks and negate history.
+ *
+ * - Check unwritten sweep register stays disabled after reset.
+ * - Check scheduled sweep preserves stereo waveform and clock.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 

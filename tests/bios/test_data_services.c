@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_data_services.c
+ * @brief BIOS data-service input decoding and complete output checks.
+ *
+ * - Check unpack widths offsets and complete words.
+ * - Check lz literals overlap and displacements.
+ */
 #include "../test.h"
 #include "caller.h"
 #include "cupid/gba.h"

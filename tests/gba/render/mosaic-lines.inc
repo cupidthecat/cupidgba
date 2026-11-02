@@ -1,3 +1,7 @@
+/**
+ * @file mosaic-lines.inc
+ * @brief Expected one-hot background and object mosaic strip geometry.
+ */
 /* Complete expected geometry for owned one-hot background and OBJ strips.
  * Each set bit denotes one white pixel; the remaining pixels are black. */
 struct MosaicExpected {

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_comment_spacing.py
+# @brief Keep standalone C and Python comments attached to the code below them.
 """Keep standalone C and Python comments attached to the code below them."""
 
 # SPDX-License-Identifier: GPL-3.0-or-later

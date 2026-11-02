@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_frontend_frames.py
+# @brief Check bounded single-console runs through ordinary frontend battery paths.
 """Check bounded single-console runs through ordinary frontend battery paths."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_runner_save.py
+# @brief Check explicit backup input through guest reads and independent processes.
 """Check explicit backup input through guest reads and independent processes."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

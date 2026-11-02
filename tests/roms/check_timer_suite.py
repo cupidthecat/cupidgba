@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_timer_suite.py
+# @brief Check a locally built timer and IRQ suite with either BIOS path.
 """Check a locally built timer and IRQ suite with either BIOS path."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

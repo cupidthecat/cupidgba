@@ -1,3 +1,10 @@
+/**
+ * @file test_joybus.c
+ * @brief JOY bus commands, data registers and completion state.
+ *
+ * - Check commands preserve independent flags.
+ * - Check complete payloads and buffer ownership.
+ */
 #include "../../bios/caller.h"
 #include "../../test.h"
 #include "cupid/gba.h"

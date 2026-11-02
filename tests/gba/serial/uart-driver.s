@@ -1,3 +1,7 @@
+/**
+ * @file uart-driver.s
+ * @brief Owned ARM/Thumb guest UART transmit and receive driver.
+ */
 /* Owned UART driver. r0/r1 select control/data, r2/r3 are source/destination,
  * r4/r5 hold the byte counts and r6 selects the UART configuration. Each
  * iteration sends when capacity permits and drains an available receive byte.

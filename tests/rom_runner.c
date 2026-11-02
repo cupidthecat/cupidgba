@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file rom_runner.c
+ * @brief Bounded headless execution, guest observations and output capture.
+ */
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"
 #include "cupid/platform/peripherals.h"

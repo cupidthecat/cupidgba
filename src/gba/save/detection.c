@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file detection.c
+ * @brief Backup signature detection and fresh image-state preparation.
+ *
+ * - Identify supported backup families from cartridge image contents.
+ * - Prepare backup ownership before a new cartridge is installed.
+ */
 #include "detection.h"
 #include <errno.h>
 

@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_irq_registers.c
+ * @brief Queued interrupt-register values and display-write timing.
+ *
+ * - Check independently queued registers.
+ * - Check timed display register writes.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 #include <string.h>

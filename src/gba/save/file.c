@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file file.c
+ * @brief Backup-file validation, capacity selection and persistence.
+ *
+ * - Load complete supported capacities before replacing live storage.
+ * - Persist backup data through checked file operations.
+ */
 #ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L
 #endif

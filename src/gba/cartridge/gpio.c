@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file gpio.c
+ * @brief Cartridge GPIO routing, device lifecycle and RTC wake scheduling.
+ *
+ * - Combine device pin outputs with direction and data latches.
+ * - Schedule RTC signal changes and notify subscribed rumble output.
+ */
 #include "cupid/gba.h"
 
 static void prefetch_sample(struct CupidTiming *timing, void *context, uint32_t late);

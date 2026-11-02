@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_gpio.c
+ * @brief GPIO directions, word lanes and timed cartridge-port accesses.
+ *
+ * - Check directions latches input and pristine cartridge.
+ * - Check word lanes opcode fetch and read control.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 #include "cupid/isa-inlines.h"

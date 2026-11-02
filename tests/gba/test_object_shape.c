@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_object_shape.c
+ * @brief Object shape decoding and complete rendered pixels.
+ */
 #include "../test.h"
 #include "cupid/gba.h"
 

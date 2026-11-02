@@ -1,4 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_fifo_destinations.c
+ * @brief FIFO requests with programmed non-FIFO DMA destinations.
+ *
+ * - Check requests retain the programmed non fifo destination.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 

@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_uart_guest.c
+ * @brief Guest UART instruction driver and externally driven serial pins.
+ */
 #include "../../bios/caller.h"
 #include "../../test.h"
 #include "cupid/gba.h"

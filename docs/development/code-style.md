@@ -4,6 +4,18 @@ Use the repository's `.clang-format` for C source, headers and C fixture
 includes. [Building](building.md#c-formatting) explains the pinned formatter
 and the check used by CI. Assembly includes keep their assembler syntax.
 
+Give each C source/header, Python script, assembly source and source include
+a file header near the top. Use `@file` with the actual filename and `@brief`
+with a concrete description of its role. Add short bullets when timing,
+ownership or several responsibilities need explanation. Keep the description
+consistent with the current code and its verification limits.
+
+C files and C includes use a `/** ... */` block. Python uses `# @file` and
+`# @brief` comments, preserving its shebang and module docstring. Assembly
+uses its accepted comment syntax. Keep existing license notices intact.
+Generated includes emit their headers from the generator too; retain exact
+fixture reconstruction checks and verify that assembled bytes stay unchanged.
+
 Use block comments consistently:
 
 - `/* ... */` explains implementation choices, invariants and test intent.

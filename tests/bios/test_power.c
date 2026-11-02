@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_power.c
+ * @brief BIOS sleep controls, wake conditions and caller restoration.
+ *
+ * - Check complete control bytes and upper aliases.
+ * - Check caller masks banks and clock wrap.
+ */
 #include "../test.h"
 #include "caller.h"
 #include "cupid/gba.h"

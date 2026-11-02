@@ -1,4 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_pages.c
+ * @brief DMA cartridge-page addressing and programmed source strobes.
+ *
+ * - Check pages follow the preceding programmed strobe.
+ */
 #include "../../test.h"
 #include "cupid/gba.h"
 

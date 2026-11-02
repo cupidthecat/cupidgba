@@ -1,3 +1,5 @@
+@ @file music-player.s
+@ @brief Firmware music-player entry points and track-array ownership.
 @ SPDX-License-Identifier: GPL-3.0-or-later
 @ Players attach a frame callback and own an array of 80-byte tracks.
 .org 0x194C

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @file check_local_startup.py
+# @brief Run local consoles with isolated batteries and reject unsafe startup inputs.
 """Run local consoles with isolated batteries and reject unsafe startup inputs."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse

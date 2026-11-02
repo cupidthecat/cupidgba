@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+/**
+ * @file test_timing.c
+ * @brief Event ordering, cancellation, lateness and clock wrap.
+ *
+ * - Check clock observer runs after due callbacks without a deadline.
+ * - Check clock observer changes update next deadline.
+ */
 #include "../test.h"
 #include "cupid/timing.h"
 
