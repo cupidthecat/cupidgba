@@ -2,6 +2,24 @@
 
 [Testing overview](../testing.md). Run commands from the repository root.
 
+## Card reader
+
+`gba.card-reader-*` checks the camera serial bus, port widths, scan flags and
+interrupt delivery, DMA payloads, calibration ownership, thresholds, word
+strobes and mutable instruction-prefetch samples. `gba.card-formats-*` checks
+owned raw/data/BMP conversions, error-information syndromes, checksums,
+deterministic padding and malformed-input preservation. `platform.card-files`
+requires atomic multi-strip staging and ownership transfer through full queues
+and file failures.
+
+`runner.card-input` runs owned ARM and Thumb scanner/DMA programs for two
+completed frames, including deterministic repeats and a guest-side bad-payload
+control. It checks complete EWRAM and backup images, read-only battery/card
+inputs, invalid-option/output preservation and SDL2 save persistence when the
+frontend is built. These fixtures require no external cartridge or firmware
+input. Retail reader firmware and physical scan timing remain unqualified; see
+[the selected model](../../hardware/cartridge/card-reader.md).
+
 ## EEPROM and save programming
 
 `CUPID_EEPROM_PROBE_ROM` adds a checksum-verified local EEPROM software corpus.

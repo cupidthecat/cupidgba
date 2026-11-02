@@ -94,11 +94,13 @@ void cupid_cartridge_init(struct CupidGBA *gba) {
     rumble_output(gba, false);
     cupid_cartridge_prefetch_cancel(gba);
     cupid_timing_deschedule(&gba->timing, &gba->cartridge.rtcInterruptEvent);
+    cupid_card_reader_deinit(&gba->cartridge.cardReader);
     memset(&gba->cartridge, 0, sizeof(gba->cartridge));
     cupid_rtc_init(&gba->cartridge.rtc, cupid_timing_global_time(&gba->timing));
     cupid_solar_init(&gba->cartridge.solar);
     cupid_gyro_init(&gba->cartridge.gyro);
     cupid_tilt_init(&gba->cartridge.tilt);
+    cupid_card_reader_init(&gba->cartridge.cardReader);
     gba->cartridge.prefetchEvent = (struct CupidTimingEvent){.context = gba,
                                                              .callback = prefetch_sample,
                                                              .name = "Cartridge prefetch sample",
@@ -115,6 +117,7 @@ void cupid_cartridge_deinit(struct CupidGBA *gba) {
     gba->cartridge.rumbleContext = NULL;
     cupid_cartridge_prefetch_cancel(gba);
     cupid_timing_deschedule(&gba->timing, &gba->cartridge.rtcInterruptEvent);
+    cupid_card_reader_deinit(&gba->cartridge.cardReader);
 }
 
 void cupid_cartridge_enable_rtc(struct CupidGBA *gba, bool enabled) {
@@ -147,6 +150,47 @@ void cupid_cartridge_enable_tilt(struct CupidGBA *gba, bool enabled) {
 
 bool cupid_cartridge_set_tilt_sample(struct CupidGBA *gba, uint16_t x, uint16_t y) {
     return cupid_tilt_set_sample(&gba->cartridge.tilt, x, y);
+}
+
+void cupid_cartridge_enable_card_reader(struct CupidGBA *gba, bool enabled) {
+    cupid_cartridge_prefetch_cancel(gba);
+    gba->cartridge.cardReaderPresent = enabled;
+    if (!enabled) {
+        cupid_card_reader_deinit(&gba->cartridge.cardReader);
+        cupid_card_reader_init(&gba->cartridge.cardReader);
+    }
+    gba->cpu.memory.readOpcode =
+        enabled || gba->cartridge.readable ? cupid_cartridge_fetch_opcode : NULL;
+}
+
+bool cupid_cartridge_queue_card(struct CupidGBA *gba, const void *data, size_t size) {
+    return gba->cartridge.cardReaderPresent &&
+           cupid_card_reader_queue(&gba->cartridge.cardReader, data, size);
+}
+
+bool cupid_cartridge_card_address(const struct CupidGBA *gba, uint32_t address) {
+    return gba->cartridge.cardReaderPresent && gba->memory.rom && address >= 0x0DF80000 &&
+           address < 0x0DFE0000;
+}
+
+bool cupid_cartridge_card_read(struct CupidGBA *gba, uint32_t address, uint16_t *value) {
+    return gba->cartridge.cardReaderPresent && gba->memory.rom &&
+           cupid_card_reader_read(&gba->cartridge.cardReader, address, value);
+}
+
+bool cupid_cartridge_card_write(struct CupidGBA *gba, uint32_t address, uint16_t value) {
+    return gba->cartridge.cardReaderPresent && gba->memory.rom &&
+           cupid_card_reader_write(&gba->cartridge.cardReader, address, value);
+}
+
+bool cupid_cartridge_card_read_port(struct CupidGBA *gba, uint32_t address, uint8_t *value) {
+    return gba->cartridge.cardReaderPresent && gba->memory.rom &&
+           cupid_card_reader_read_port(&gba->cartridge.cardReader, address, value);
+}
+
+bool cupid_cartridge_card_write_port(struct CupidGBA *gba, uint32_t address, uint8_t value) {
+    return gba->cartridge.cardReaderPresent && gba->memory.rom &&
+           cupid_card_reader_write_port(gba, address, value);
 }
 
 static bool tilt_address(const struct CupidGBA *gba, uint32_t address) {
@@ -230,6 +274,11 @@ void cupid_cartridge_attach(struct CupidGBA *gba, const uint8_t *rom, size_t siz
             gba->cartridge.tiltPresent = (boards[i].devices & TILT) != 0;
             break;
         }
+        gba->cartridge.cardReaderPresent = !memcmp(rom + 0xAC, "PEAJ", 4) ||
+                                           !memcmp(rom + 0xAC, "PSAJ", 4) ||
+                                           !memcmp(rom + 0xAC, "PSAE", 4);
+        if (gba->cartridge.cardReaderPresent)
+            detected = false;
     }
     cupid_cartridge_enable_rtc(gba, detected);
 }
@@ -245,6 +294,9 @@ void cupid_cartridge_reset_bus(struct CupidGBA *gba) {
     cupid_solar_reset_bus(&gba->cartridge.solar);
     cupid_gyro_reset_bus(&gba->cartridge.gyro);
     cupid_tilt_reset(&gba->cartridge.tilt);
+    cupid_card_reader_reset(&gba->cartridge.cardReader);
+    if (gba->cartridge.cardReaderPresent)
+        gba->cpu.memory.readOpcode = cupid_cartridge_fetch_opcode;
     cupid_cartridge_rtc_reschedule(gba);
 }
 
@@ -304,8 +356,9 @@ bool cupid_cartridge_gpio_write(struct CupidGBA *gba, uint32_t address, uint16_t
         case 0xC8:
             gba->cartridge.readable = value & 1;
             gba->cartridge.opcodeValid = false;
-            gba->cpu.memory.readOpcode =
-                gba->cartridge.readable ? cupid_cartridge_fetch_opcode : NULL;
+            gba->cpu.memory.readOpcode = gba->cartridge.readable || gba->cartridge.cardReaderPresent
+                                             ? cupid_cartridge_fetch_opcode
+                                             : NULL;
             return true;
         default:
             return false;
@@ -330,7 +383,7 @@ bool cupid_cartridge_gpio_write(struct CupidGBA *gba, uint32_t address, uint16_t
 
 bool cupid_cartridge_fetch_opcode(struct CupidARM *cpu, uint32_t address, unsigned width,
                                   uint32_t *value) {
-    /* Interworking can retain ARM A1 in the logical stream. GPIO selects
+    /* Interworking can retain ARM A1 in the logical stream. Board ports select
      * the aligned opcode word, including any value captured at its strobes. */
     address &= ~(width - 1u);
     struct CupidGBA *gba = cpu->master;
@@ -340,6 +393,24 @@ bool cupid_cartridge_fetch_opcode(struct CupidARM *cpu, uint32_t address, unsign
             *value = gba->cartridge.opcodeValue;
             return true;
         }
+    }
+    uint16_t card;
+    if (cupid_cartridge_card_read(gba, address, &card)) {
+        struct CupidCartridge *cart = &gba->cartridge;
+        *value = 0;
+        for (unsigned half = 0; half < width / 2; half++) {
+            const uint32_t source = address + half * 2;
+            const unsigned slot = (source >> 1) & 7;
+            uint16_t data;
+            if ((cart->cardPrefetchMask & (1u << slot)) &&
+                cart->cardPrefetchAddress[slot] == source) {
+                data = cart->cardPrefetchValue[slot];
+                cart->cardPrefetchMask &= (uint8_t)~(1u << slot);
+            } else
+                data = half ? (uint16_t)cupid_memory_loadU16(cpu, source, NULL) : card;
+            *value |= (uint32_t)data << (half * 16);
+        }
+        return true;
     }
     if (!cupid_cartridge_gpio_address(gba, address))
         return false;
@@ -367,38 +438,42 @@ void cupid_cartridge_prefetch_cancel(struct CupidGBA *gba) {
         cupid_timing_deschedule(&gba->timing, &cart->prefetchEvent);
     cart->prefetchScheduled = false;
     cart->prefetchMask = 0;
+    cart->cardPrefetchMask = 0;
 }
 
 void cupid_cartridge_prefetch_schedule(struct CupidGBA *gba) {
     struct CupidCartridge *cart = &gba->cartridge;
     const struct CupidPrefetch *unit = &gba->memory.prefetchUnit;
-    if (cart->prefetchScheduled || !cart->readable || !unit->active || !unit->remaining ||
-        (unit->width != 2 && unit->width != 4))
+    if (cart->prefetchScheduled || (!cart->readable && !cart->cardReaderPresent) || !unit->active ||
+        !unit->remaining || (unit->width != 2 && unit->width != 4))
         return;
     if (unit->busy && unit->fetchKind != CUPID_PREFETCH_PENDING)
         return;
-    /* Only the next sixteen physical ROM bytes can enter this FIFO. */
-    const uint32_t physical = unit->tail & (GBA_SIZE_ROM - 1);
-    if (physical > 0xC8 || physical + 16 <= 0xC4)
-        return;
     const uint32_t base = unit->tail & ~(uint32_t)(GBA_SIZE_ROM - 1);
     const unsigned capacity = 8;
-    for (unsigned slot = 0; slot < 3; slot++) {
-        const uint32_t address = base + 0xC4 + slot * 2;
-        if (address < unit->tail || !cupid_cartridge_gpio_address(gba, address) ||
-            (cart->prefetchBase == base && (cart->prefetchMask & (1u << slot))))
-            continue;
-        const unsigned distance = (address - unit->tail) / 2;
-        if (unit->count + distance >= capacity)
+    /* Only the next sixteen physical ROM bytes can enter the eight slots.
+     * Decode each prospective strobe before scheduling a mutable port sample. */
+    for (unsigned distance = 0; unit->count + distance < capacity; distance++) {
+        const uint32_t address = unit->tail + distance * 2;
+        if (cupid_cartridge_card_address(gba, address)) {
+            const unsigned slot = (address >> 1) & 7;
+            if ((cart->cardPrefetchMask & (1u << slot)) &&
+                cart->cardPrefetchAddress[slot] == address)
+                continue;
+        } else if (cart->readable && cupid_cartridge_gpio_address(gba, address)) {
+            const unsigned slot = ((address & (GBA_SIZE_ROM - 2)) - 0xC4) / 2;
+            if (cart->prefetchBase == base && (cart->prefetchMask & (1u << slot)))
+                continue;
+            if (cart->prefetchBase != base) {
+                cart->prefetchBase = base;
+                cart->prefetchMask = 0;
+            }
+        } else
             continue;
         uint64_t when = unit->epoch + unit->remaining + (uint64_t)distance * unit->duty;
         /* Never reconstruct a past sample from the provider's current level. */
         if (when < cupid_timing_global_time(&gba->timing))
             continue;
-        if (cart->prefetchBase != base) {
-            cart->prefetchBase = base;
-            cart->prefetchMask = 0;
-        }
         cart->prefetchAddress = address;
         cart->prefetchScheduled = true;
         cupid_timing_schedule_absolute(&gba->timing, &cart->prefetchEvent, (int32_t)(uint32_t)when);
@@ -413,15 +488,21 @@ static void prefetch_sample(struct CupidTiming *timing, void *context, uint32_t 
     struct CupidCartridge *cart = &gba->cartridge;
     const struct CupidPrefetch *unit = &gba->memory.prefetchUnit;
     cart->prefetchScheduled = false;
-    if (!cart->readable || !unit->active ||
+    if ((!cart->readable && !cart->cardReaderPresent) || !unit->active ||
         (unit->busy && unit->fetchKind != CUPID_PREFETCH_PENDING))
         return;
     uint16_t value;
-    if (!cupid_cartridge_gpio_read(gba, cart->prefetchAddress, &value))
+    if (cupid_cartridge_card_read(gba, cart->prefetchAddress, &value)) {
+        const unsigned slot = (cart->prefetchAddress >> 1) & 7;
+        cart->cardPrefetchAddress[slot] = cart->prefetchAddress;
+        cart->cardPrefetchValue[slot] = value;
+        cart->cardPrefetchMask |= (uint8_t)(1u << slot);
+    } else if (cupid_cartridge_gpio_read(gba, cart->prefetchAddress, &value)) {
+        const unsigned slot = ((cart->prefetchAddress & (GBA_SIZE_ROM - 2)) - 0xC4) / 2;
+        cart->prefetchPorts[slot] = value;
+        cart->prefetchMask |= (uint8_t)(1u << slot);
+    } else
         return;
-    const unsigned slot = ((cart->prefetchAddress & (GBA_SIZE_ROM - 2)) - 0xC4) / 2;
-    cart->prefetchPorts[slot] = value;
-    cart->prefetchMask |= (uint8_t)(1u << slot);
     /* PENDING freezes the fill counter while the CPU waits for that access.
      * Its epoch and remaining clocks still identify the original strobes. */
     if (!unit->busy)
@@ -431,18 +512,19 @@ static void prefetch_sample(struct CupidTiming *timing, void *context, uint32_t 
 
 bool cupid_cartridge_fetch_bus(struct CupidGBA *gba, uint32_t address, unsigned width,
                                unsigned cycles) {
-    /* Select physical GPIO lanes without changing the logical FIFO cursor. */
+    /* Select physical board lanes without changing the logical FIFO cursor. */
     address &= ~(width - 1u);
     struct CupidCartridge *cart = &gba->cartridge;
     cart->opcodeValid = false;
     if (width != 4 || gba->memory.prefetchUnit.fetchKind != CUPID_PREFETCH_START ||
-        !cupid_cartridge_gpio_address(gba, address))
+        (!cupid_cartridge_gpio_address(gba, address) &&
+         !cupid_cartridge_card_address(gba, address)))
         return false;
     const unsigned highCycles =
         (unsigned)gba->memory.waitstatesSeq16[address >> GBA_BASE_OFFSET] + 1;
     if (cycles <= highCycles)
         return false;
-    /* GPIO sampling splits board time, not the CPU's ready signal. */
+    /* Port sampling splits board time, not the CPU's ready signal. */
     cupid_bus_begin_transfer(&gba->cpu, cycles, true);
     cupid_bus_advance_part(&gba->cpu, cycles - highCycles);
     const uint32_t low = cupid_memory_loadU16(&gba->cpu, address, NULL);

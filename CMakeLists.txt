@@ -69,6 +69,7 @@ add_library(cupid_core STATIC
     src/gba/cartridge/rtc.c src/gba/cartridge/gpio.c src/gba/cartridge/battery.c src/gba/cartridge/solar.c
     src/gba/cartridge/gyro.c
     src/gba/cartridge/tilt.c
+    src/gba/cartridge/card-reader/cards.c src/gba/cartridge/card-reader/camera.c
     src/gba/render/fetch.c src/gba/render/scanout.c src/gba/render/object-fetch.c)
 target_include_directories(cupid_core PUBLIC include)
 target_link_libraries(cupid_core PUBLIC cupid_build_options)
@@ -282,6 +283,33 @@ if(BUILD_TESTING)
     target_link_libraries(test_tilt PRIVATE cupid_core)
     add_test(NAME gba.tilt COMMAND test_tilt)
     set_tests_properties(gba.tilt PROPERTIES TIMEOUT 10)
+    add_executable(test_card_reader tests/gba/cartridge/test_card_reader.c)
+    target_link_libraries(test_card_reader PRIVATE cupid_core)
+    foreach(group serial ports scan dma lifecycle calibration strobes prefetch thresholds opcodes registers)
+        add_test(NAME gba.card-reader-${group} COMMAND test_card_reader ${group})
+        set_tests_properties(gba.card-reader-${group} PROPERTIES TIMEOUT 30)
+    endforeach()
+    add_executable(test_card_formats tests/gba/cartridge/test_card_formats.c)
+    target_link_libraries(test_card_formats PRIVATE cupid_core)
+    foreach(group raw fragments bitmap malformed)
+        add_test(NAME gba.card-formats-${group} COMMAND test_card_formats ${group})
+        set_tests_properties(gba.card-formats-${group} PROPERTIES TIMEOUT 30)
+    endforeach()
+    if(TARGET cupidgba)
+        add_test(NAME runner.card-input COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_card_input.py
+            --runner $<TARGET_FILE:cupidgba-headless> --frontend $<TARGET_FILE:cupidgba>)
+    else()
+        add_test(NAME runner.card-input COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_card_input.py
+            --runner $<TARGET_FILE:cupidgba-headless>)
+    endif()
+    set_tests_properties(runner.card-input PROPERTIES TIMEOUT 30)
+    add_executable(test_card_files tests/platform/test_card_files.c src/platform/peripherals.c)
+    target_link_libraries(test_card_files PRIVATE cupid_core)
+    file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/card-files)
+    add_test(NAME platform.card-files COMMAND test_card_files ${CMAKE_CURRENT_BINARY_DIR}/card-files)
+    set_tests_properties(platform.card-files PROPERTIES TIMEOUT 30)
     add_executable(test_rtc tests/gba/cartridge/test_rtc.c)
     target_link_libraries(test_rtc PRIVATE cupid_core)
     add_test(NAME gba.rtc-calendar COMMAND test_rtc)

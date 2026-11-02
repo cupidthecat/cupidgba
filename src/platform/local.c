@@ -104,6 +104,13 @@ int cupid_platform_run_local(const char *const paths[], unsigned count, const ch
         .rtcPresence = -1, .peripherals = CUPID_PLATFORM_PERIPHERALS_DEFAULT};
     if (!devices)
         devices = &defaults;
+    struct CupidCardReader cardInput;
+    cupid_card_reader_init(&cardInput);
+    if (!cupid_platform_cards_read(&cardInput, devices->cardPaths, devices->cardCount)) {
+        fprintf(stderr, "Error: Cannot read card input: %s\n", strerror(errno));
+        cupid_card_reader_deinit(&cardInput);
+        return 1;
+    }
     struct CupidGBA *cores[4] = {0};
     struct CupidPlatform platforms[4] = {0};
     struct CupidPlatformAudioMix mix;
@@ -143,6 +150,10 @@ int cupid_platform_run_local(const char *const paths[], unsigned count, const ch
         if (bios && !cupid_load_bios(cores[i], bios))
             goto cleanup;
         cupid_gba_reset(cores[i]);
+        if (i == 0 && !cupid_platform_cards_attach(cores[i], &cardInput)) {
+            fprintf(stderr, "Error: Card input requires an enabled reader on the first console\n");
+            goto cleanup;
+        }
         if (!cupid_savedata_load_file(&cores[i]->memory.savedata, saves[i]) && errno != ENOENT) {
             fprintf(stderr, "Error: Cannot load save %s: %s\n", saves[i], strerror(errno));
             goto cleanup;
@@ -258,5 +269,6 @@ cleanup:
     }
     for (unsigned i = 0; i < count; ++i)
         free(published.pixels[i]);
+    cupid_card_reader_deinit(&cardInput);
     return result;
 }

@@ -53,6 +53,11 @@ see [gyroscope behavior and limits](../hardware/cartridge/gyroscope.md).
 lower/raise X, F3/F4 lower/raise Y and F10 restores both nominal values.
 See [tilt snapshots and timing limits](../hardware/cartridge/tilt.md).
 
+`--card-reader auto|on|off` selects the card-reader board. Add `--card FILE`
+for each queued strip, up to sixteen. Both frontends accept raw/data strips,
+packed dot images and canonical monochrome BMP files. Linked sessions feed
+the first console. See [card-reader inputs and limits](../hardware/cartridge/card-reader.md).
+
 Keyboard controls are Z for A, X for B, Enter for Start, Backspace for Select,
 the arrow keys for the D-pad, A for L, S for R, and Escape to quit. SDL2
 controllers use A/B, Back, Start, the D-pad, and the shoulder buttons. The left
