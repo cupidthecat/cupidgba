@@ -331,6 +331,7 @@ struct CupidMemory {
 void cupid_memory_capture_opcode(struct CupidARM *cpu, uint32_t address, unsigned width,
                                  uint32_t value);
 void cupid_memory_capture_halfword(struct CupidGBA *gba, uint32_t address, uint16_t value);
+void cupid_memory_capture_word(struct CupidGBA *gba, uint32_t address, uint32_t value);
 void cupid_memory_init(struct CupidGBA *gba);
 void cupid_memory_reset(struct CupidGBA *gba);
 void cupid_memory_deinit(struct CupidGBA *gba);

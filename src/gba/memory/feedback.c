@@ -1,6 +1,28 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "cupid/gba.h"
 
+/* A word read from a 32-bit device drives every input lane. The caller
+ * supplies the decoded address and publishes before CPU alignment rotation
+ * and bus release. Narrow external ports keep their existing feedback path. */
+void cupid_memory_capture_word(struct CupidGBA *gba, uint32_t address, uint32_t value) {
+    struct CupidMemory *memory = &gba->memory;
+    switch (address >> GBA_BASE_OFFSET) {
+        case GBA_REGION_BIOS:
+            if (address >= GBA_SIZE_BIOS)
+                return;
+            break;
+        case GBA_REGION_IWRAM:
+            memory->iwramBus = value;
+            break;
+        case GBA_REGION_OAM:
+            break;
+        default:
+            return;
+    }
+    memory->openBus = value;
+    memory->inputBusValid = true;
+}
+
 /* Capture input pins before CPU alignment rotation or sign extension. The
  * returned halfword alone loses OAM's other lane and the retained IWRAM bank.
  * Publish before releasing the CPU bus so a waiting DMA sees this read. */

@@ -7,6 +7,10 @@
 CPU read feedback and its pinned DMA handover probes are described in
 [read feedback](../../hardware/memory/read-feedback.md). The native groups are
 `gba.memory-feedback-*`; optional cartridge groups are `rom.bus-feedback-*`.
+The `word-handover` group checks 768 CPU/DMA transfers from the 32-bit internal
+ports, including remapping, protection, rotation, mirrors and clock wrap.
+The `word-ownership` group checks observer isolation, unmapped reads and reset
+with both timed and legacy cycle-counted CPU accesses.
 
 ## Prefetch boundaries
 

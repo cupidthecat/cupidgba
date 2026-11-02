@@ -94,6 +94,57 @@ static void handover(void) {
     printf("halfword CPU/DMA handovers=%u\n", scenes);
 }
 
+/* A word on a 32-bit device drives the unrotated input before DMA owns it.
+ * Exercise the decoder as well as the public address and CPU return lanes. */
+static void word_handover(void) {
+    const uint64_t clocks[] = {0, INT32_MAX - 2u, UINT32_MAX - 2u, UINT64_C(0x300000000)};
+    const unsigned controls[] = {0x20, 0, 0x21, 1};
+    unsigned scenes = 0;
+    for (unsigned epoch = 0; epoch < 4; epoch++)
+        for (unsigned map = 0; map < 4; map++)
+            for (unsigned device = 0; device < 3; device++)
+                for (unsigned lane = 0; lane < 4; lane++)
+                    for (unsigned channel = 0; channel < 4; channel++) {
+                        struct CupidGBA *g = machine(clocks[epoch]);
+                        const uint32_t raw = UINT32_C(0x8172E3A4);
+                        const uint32_t protected = UINT32_C(0x59BC26D8);
+                        const bool active = (lane & 1) != 0;
+                        uint32_t address = device == 0   ? 0x100
+                                           : device == 1 ? 0x03008100
+                                                         : 0x07000500;
+                        if (device < 2 && (controls[map] & 1))
+                            address ^= 0x02000000;
+                        if (device == 1 && !(controls[map] & 0x20))
+                            address ^= 0x01000000;
+                        memcpy((uint8_t *)g->memory.bios + 0x100, &raw, 4);
+                        memcpy(g->memory.iwram + 0x100, &raw, 4);
+                        memcpy((uint8_t *)g->video.oam.raw + 0x100, &raw, 4);
+                        cupid_memory_store16(&g->cpu, 0x04000800, (int16_t)controls[map], NULL);
+                        g->memory.activeRegion = active ? GBA_REGION_BIOS : GBA_REGION_ROM0;
+                        g->memory.biosPrefetch = protected;
+                        const uint32_t expected = device == 0 && !active ? protected : raw;
+                        start(g, channel, 0x04001000, 0x05000200);
+                        cupid_timing_tick(&g->timing, 1);
+                        CHECK(!g->memory.dmaRunning);
+                        g->cpu.memory.timed = true;
+                        int cycles = 0;
+                        const uint32_t result =
+                            cupid_memory_load32(&g->cpu, address + lane, &cycles);
+                        CHECK(result == ROR(expected, lane * 8));
+                        CHECK(g->memory.inputBusValid && g->memory.openBus == expected);
+                        CHECK(g->memory.dmaRunning);
+                        cupid_bus_wait(&g->cpu);
+                        CHECK(g->memory.dma[channel].latch == expected);
+                        CHECK(cupid_memory_load32(&g->cpu, 0x05000200, NULL) == expected);
+                        CHECK(!g->memory.dmaRunning && !g->cpuBlocked);
+                        CHECK(g->memory.biosPrefetch == protected);
+                        destroy(g);
+                        scenes++;
+                    }
+    CHECK(scenes == 768);
+    printf("word CPU/DMA handovers=%u\n", scenes);
+}
+
 static void ownership(void) {
     struct CupidGBA *first = machine(0);
     struct CupidGBA *second = machine(0);
@@ -122,6 +173,35 @@ static void ownership(void) {
           first->memory.iwramBus == 0);
     destroy(first);
     destroy(second);
+}
+
+static void word_ownership(void) {
+    const uint32_t addresses[] = {0x100, 0x03000100, 0x07000100};
+    for (unsigned timed = 0; timed < 2; timed++)
+        for (unsigned device = 0; device < 3; device++) {
+            struct CupidGBA *g = machine(0);
+            const uint32_t word = UINT32_C(0x8172E3A4);
+            memcpy((uint8_t *)g->memory.bios + 0x100, &word, 4);
+            seed(g, 0x03000100, word);
+            seed(g, 0x07000100, word);
+            g->memory.activeRegion = GBA_REGION_BIOS;
+            g->cpu.memory.timed = timed != 0;
+            int cycles = 0;
+            CHECK(cupid_memory_load32(&g->cpu, addresses[device] + 1, &cycles) ==
+                  UINT32_C(0xA48172E3));
+            CHECK(g->memory.inputBusValid && cupid_memory_open_bus(&g->cpu) == word);
+            const uint32_t banks = g->memory.iwramBus;
+            /* Neither debugger peeks nor an undriven low window replaces input. */
+            for (unsigned region = 0; region < 3; region++)
+                cupid_memory_load32(&g->cpu, addresses[region] + 3, NULL);
+            CHECK(g->memory.iwramBus == banks && cupid_memory_open_bus(&g->cpu) == word);
+            cupid_memory_load32(&g->cpu, 0x01000001, &cycles);
+            cupid_memory_load32(&g->cpu, 0x00004003, &cycles);
+            CHECK(g->memory.iwramBus == banks && cupid_memory_open_bus(&g->cpu) == word);
+            cupid_gba_reset(g);
+            CHECK(!g->memory.inputBusValid && !g->memory.iwramBus);
+            destroy(g);
+        }
 }
 
 static void bios(void) {
@@ -369,6 +449,10 @@ int main(int argc, char **argv) {
     CHECK(argc == 2);
     if (!strcmp(argv[1], "handover"))
         RUN(handover);
+    else if (!strcmp(argv[1], "word-handover"))
+        RUN(word_handover);
+    else if (!strcmp(argv[1], "word-ownership"))
+        RUN(word_ownership);
     else if (!strcmp(argv[1], "ownership"))
         RUN(ownership);
     else if (!strcmp(argv[1], "bios"))

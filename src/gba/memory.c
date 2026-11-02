@@ -629,6 +629,8 @@ uint32_t cupid_memory_load32(struct CupidARM *cpu, uint32_t address, int *cycleC
         if (cupid_cartridge_gpio_read(gba, aligned + 2, &high))
             value = (value & 0xFFFF) | (uint32_t)high << 16;
     }
+    if (timedCounter || cycleCounter)
+        cupid_memory_capture_word(gba, address, value);
     end_data_access(cpu, timedCounter, true);
     int rotate = (address & 3) << 3;
     return ROR(value, rotate);
