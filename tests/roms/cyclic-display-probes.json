@@ -1,0 +1,32 @@
+{
+  "revision": "66f5f1d60cd7030b600606886c76f5c821ecaf9d",
+  "license_sha256": "b59a9ed235d76752c977f04116bc72155a14af48176bdbf50d7e5c29fca35aa7",
+  "cases": [
+    {
+      "name": "object-enable-loop",
+      "path": "ppu/Sprite_Disable_Midline.gba",
+      "sha256": "d8710ac180ee86ca8b3fea6ca3595370f75ac0693c9c78e2e3a0d973ed4c519e",
+      "frames": 600,
+      "steps": 150000000,
+      "minimum_cycles": 300,
+      "observations": [
+        {
+          "address": "0x08000322",
+          "instruction": "0x801a",
+          "register": 2,
+          "value": "0x1404",
+          "base_register": 3,
+          "base_value": "0x04000000"
+        },
+        {
+          "address": "0x0800035e",
+          "instruction": "0x801c",
+          "register": 4,
+          "value": "0x0404",
+          "base_register": 3,
+          "base_value": "0x04000000"
+        }
+      ]
+    }
+  ]
+}

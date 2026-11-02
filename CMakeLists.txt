@@ -503,6 +503,10 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_runner_observations.py
         --runner $<TARGET_FILE:cupidgba-headless>)
     set_tests_properties(runner.observations PROPERTIES TIMEOUT 10)
+    add_test(NAME runner.observation-cycles COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_runner_cycles.py
+        --runner $<TARGET_FILE:cupidgba-headless>)
+    set_tests_properties(runner.observation-cycles PROPERTIES TIMEOUT 10)
     add_test(NAME runner.frame-boundaries COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_runner_frames.py
         --runner $<TARGET_FILE:cupidgba-headless>)
@@ -742,6 +746,10 @@ if(BUILD_TESTING)
     add_test(NAME runner.display-probe-inputs COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_display_inputs.py)
     set_tests_properties(runner.display-probe-inputs PROPERTIES TIMEOUT 10)
+
+    add_test(NAME runner.cyclic-display-protocol COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_cyclic_display.py)
+    set_tests_properties(runner.cyclic-display-protocol PROPERTIES TIMEOUT 10)
 
     add_test(NAME runner.immediate-comparison-protocol COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_immediate_comparisons.py)
@@ -1156,6 +1164,17 @@ if(BUILD_TESTING)
     endforeach()
 
     if(CUPID_DISPLAY_PROBE_DIR)
+        add_test(NAME rom.display-control-cycles COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_cyclic_display.py
+            --directory ${CUPID_DISPLAY_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless>)
+        set_tests_properties(rom.display-control-cycles PROPERTIES TIMEOUT 100)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME rom.display-control-cycles-external COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_cyclic_display.py
+                --directory ${CUPID_DISPLAY_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless>
+                --bios ${CUPID_TEST_BIOS})
+            set_tests_properties(rom.display-control-cycles-external PROPERTIES TIMEOUT 100)
+        endif()
         foreach(case startup-line startup-vblank startup-irq startup-halt object-tail-normal)
             add_test(NAME rom.display-${case} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_display_probe.py

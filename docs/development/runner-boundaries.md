@@ -57,3 +57,19 @@ Owned controls cover every NZCV combination, selected flag and control masks,
 wrong values with zero guest results, mixed register/status ordering, absent
 visits and invalid argument bounds. The CP14 cartridge uses this observation
 to check its original negative-flag guard after a register transfer to r15.
+
+## Repeated observation sequences
+
+`--repeat-observations MIN` repeats the complete registered sequence and requires
+at least `MIN` complete cycles. The runner continues checking every watched
+instruction through the selected execution boundary, including visits after the
+minimum. Wrong values or order fail the run permanently. A correct partial
+prefix at the frame boundary is reported separately and does not count as a
+complete cycle. This mode requires observations and a positive unsigned 64-bit
+minimum; repeated minimum options are rejected before loading the cartridge.
+Ordinary observations retain their exact, nonrepeating sequence contract.
+
+`runner.observation-cycles` covers complete, missing, reordered and late-failing
+sequences, one-site sequences and invalid arguments. A zero guest result cannot
+conceal an observation failure. See [cyclic display controls](../hardware/render/cyclic-controls.md)
+for the original display loop and the limits of this evidence.

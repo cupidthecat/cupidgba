@@ -9,6 +9,13 @@ branches, including IRQ-discarded prefetch and retained HALT fetches. See
 [runner result boundaries](../runner-boundaries.md) for the protocol, negative
 controls and unchanged cartridge execution guards.
 
+`runner.observation-cycles` checks repeated instruction sequences without
+accepting later failures after a minimum count. `runner.cyclic-display-protocol`
+rejects changed store operands, fabricated counts and incomplete output. The
+[original cyclic display check](../../hardware/render/cyclic-controls.md)
+exercises these observations through HALT and display interrupts; its pixels
+remain unqualified.
+
 ## Frontend input
 
 The `platform.input-*` groups run real SDL2 virtual-controller state through

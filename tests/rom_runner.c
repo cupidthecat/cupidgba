@@ -129,6 +129,7 @@ struct InstructionObservation {
 struct InstructionObservations {
     struct InstructionObservation entries[MAX_INSTRUCTION_OBSERVATIONS];
     unsigned count, next;
+    uint64_t cycles, minimumCycles;
     bool failed, orderFailed;
     struct RunState *run;
 };
@@ -193,6 +194,12 @@ static void observe_instruction(const struct CupidARM *cpu, void *context) {
     if (!passed)
         observations->failed = true;
     observations->next++;
+    /* Cyclic probes keep validating after the minimum is reached. Default
+     * probes still reject any extra visit after their final observation. */
+    if (observations->minimumCycles && observations->next == observations->count) {
+        ++observations->cycles;
+        observations->next = 0;
+    }
 }
 
 static void audio_sample(void *context, uint64_t clock, int16_t left, int16_t right) {
@@ -335,6 +342,10 @@ int main(int argc, char **argv) {
                                                 .secondExpected = (uint32_t)secondExpected,
                                                 .secondReg = (unsigned)secondReg,
                                                 .pair = true};
+        } else if (!strcmp(argv[i], "--repeat-observations") && i + 1 < argc) {
+            if (observations.minimumCycles || !number(argv[++i], &observations.minimumCycles) ||
+                !observations.minimumCycles)
+                return 2;
         } else if (!strcmp(argv[i], "--start-address") && i + 1 < argc) {
             if (!number(argv[++i], &startAddress) || startAddress < GBA_BASE_ROM0 ||
                 startAddress >= GBA_BASE_SRAM || (startAddress & 3))
@@ -376,7 +387,8 @@ int main(int argc, char **argv) {
                 "FILE] [--dump-rumble FILE] [--solar auto|on|off] [--sunlight 0..255] [--rumble "
                 "auto|on|off] [--gyro auto|on|off] [--gyro-sample 0..4095] [--tilt auto|on|off] "
                 "[--tilt-x 0..4095] [--tilt-y 0..4095] [--start-address ADDRESS] "
-                "[--expect-loop-register N] [--terminal-address ADDRESS] [--checkpoint-address "
+                "[--repeat-observations MIN] [--expect-loop-register N] [--terminal-address "
+                "ADDRESS] [--checkpoint-address "
                 "ADDRESS] [--expect-status-at ADDRESS MASK VALUE] [--expect-register-at ADDRESS "
                 "REGISTER VALUE] [--expect-register-pair-at "
                 "ADDRESS REGISTER VALUE REGISTER VALUE]\n",
@@ -394,6 +406,8 @@ int main(int argc, char **argv) {
         saveSelection = (struct CupidPlatformSave){SAVE_FLASH512, FLASH_PROFILE_SST39VF512};
     }
     if (checkpointAddress && expectedRegister < 0)
+        return 2;
+    if (observations.minimumCycles && !observations.count)
         return 2;
     struct CupidKeyEvent *scriptEvents = NULL;
     if (keyScript &&
@@ -535,11 +549,23 @@ int main(int argc, char **argv) {
         result = completed == frames ? 0 : 1;
     if (observations.count) {
         const bool failed = observations.failed || observations.orderFailed;
-        printf("observations=%u/%u result=%s\n", observations.next, observations.count,
-               failed                                    ? "FAIL"
-               : observations.next != observations.count ? "MISSING"
-                                                         : "PASS");
-        if (failed || observations.next != observations.count)
+        bool complete;
+        if (observations.minimumCycles) {
+            complete = observations.cycles >= observations.minimumCycles;
+            printf("observation-cycles=%" PRIu64 " minimum=%" PRIu64 " partial=%u/%u result=%s\n",
+                   observations.cycles, observations.minimumCycles, observations.next,
+                   observations.count,
+                   failed     ? "FAIL"
+                   : complete ? "PASS"
+                              : "MISSING");
+        } else {
+            complete = observations.next == observations.count;
+            printf("observations=%u/%u result=%s\n", observations.next, observations.count,
+                   failed     ? "FAIL"
+                   : complete ? "PASS"
+                              : "MISSING");
+        }
+        if (failed || !complete)
             result = 1;
     }
     if (output && !screenshot(pixels, output)) {
