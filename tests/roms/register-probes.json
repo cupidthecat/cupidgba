@@ -391,6 +391,53 @@
       "result_register": 12,
       "path": "thumb/Push_no_regs.gba",
       "boot": "either"
+    },
+    {
+      "name": "bios-protected-input",
+      "sha256": "9d7b369fa1aa661ff03692b3d79c6f644b623d72983d0fc890e6d87a0409a3c9",
+      "result_register": 12,
+      "checkpoint": "0x8000248",
+      "terminal": "0x80003c0",
+      "observations": [
+        {
+          "address": "0x8000110",
+          "instruction": "0xe1520001",
+          "mode": "arm",
+          "register": 2,
+          "value": "0xe129f000",
+          "second_register": 1,
+          "constant_setup": "0x80000fc"
+        },
+        {
+          "address": "0x8000140",
+          "instruction": "0xe1530002",
+          "mode": "arm",
+          "register": 3,
+          "value": "0xe3a02004",
+          "second_register": 2,
+          "constant_setup": "0x8000128"
+        },
+        {
+          "address": "0x80001e0",
+          "instruction": "0xe1520000",
+          "mode": "arm",
+          "register": 2,
+          "value": "0xe25ef004",
+          "second_register": 0,
+          "constant_setup": "0x80001c8"
+        },
+        {
+          "address": "0x8000234",
+          "instruction": "0xe1520001",
+          "mode": "arm",
+          "register": 2,
+          "value": "0xe55ec002",
+          "second_register": 1,
+          "constant_setup": "0x8000220"
+        }
+      ],
+      "path": "bios/bios.gba",
+      "boot": "either"
     }
   ]
 }

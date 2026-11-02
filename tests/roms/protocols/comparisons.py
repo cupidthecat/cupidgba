@@ -119,8 +119,32 @@ def verify_input(data, case):
         ):
             raise ValueError("Comparison opcode or order mismatch")
         if "second_register" in observation:
-            literal = int(observation["literal"], 16) - 0x08000000
             second = observation["second_register"]
+            if "constant_setup" in observation:
+                setup = int(observation["constant_setup"], 16) - 0x08000000
+                if (
+                    any(key in observation for key in ("literal", "literal_load", "literal_shift"))
+                    or setup < 0
+                    or setup % 4
+                    or setup + 16 > offset
+                ):
+                    raise ValueError("Register comparison changes its original constant setup")
+                # The original macro constructs one byte at a time with an
+                # unconditional MOV followed by three ORRs in the same register.
+                for index in range(4):
+                    opcode = int.from_bytes(data[setup + index * 4 : setup + index * 4 + 4], "little")
+                    prefix = 0xE3A00000 if index == 0 else 0xE3800000 | second << 16
+                    immediate = opcode & 255
+                    rotate = (opcode >> 8 & 15) * 2
+                    decoded = ((immediate >> rotate) | (immediate << (32 - rotate))) & 0xFFFFFFFF
+                    if (
+                        opcode & 0xFFFFF000 != prefix | second << 12
+                        or decoded != value & (255 << (index * 8))
+                    ):
+                        raise ValueError("Register comparison changes its original constant word")
+                previous = offset
+                continue
+            literal = int(observation["literal"], 16) - 0x08000000
             if "literal_load" in observation:
                 setup = int(observation["literal_load"], 16) - 0x08000000
                 displacement = literal - setup - 8

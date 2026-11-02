@@ -17,6 +17,21 @@ byte `0x1F`, the System, IRQ and Supervisor stacks, and the selected initial
 display phase and POST flag. Those settings belong to the explicit BIOS skip
 path. A skip request with PC away from the reset vector leaves the CPU alone.
 
+Fast entry retains `0xE129F000` as the protected BIOS input left by the reset
+routine. The initializer installs this word after the entry pipeline refill,
+so leaving the reset region cannot replace it with an unexecuted reset-vector
+prefetch. Protected byte, halfword and word reads select and rotate its lanes
+through the normal memory callbacks. An ordinary external BIOS boot continues
+to populate the latch from executed firmware fetches.
+
+The original protected-read cartridge checks the startup word and the words
+retained after a software interrupt, inside an interrupt handler and after its
+return. Both BIOS paths must execute all four comparisons and complete both
+result boundaries. The fast-entry regressions also cover repeated reset,
+cartridge and RAM entry, all protected addresses at three widths, and a skip
+request outside the reset vector. These checks add no elapsed boot clocks or
+timer-divider calibration.
+
 The four `arm.reset-entry-*` groups use owned instructions to read the first
 guest-visible CPSR, cover all seven prior privilege modes, both instruction
 states, all interrupt-mask combinations and both sampled IRQ masks, and check

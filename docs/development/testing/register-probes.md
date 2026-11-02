@@ -1,6 +1,6 @@
 # Original register and timing probes
 
-`tests/roms/register-probes.json` pins ten unchanged cartridges at revision
+`tests/roms/register-probes.json` pins eleven unchanged cartridges at revision
 `66f5f1d60cd7030b600606886c76f5c821ecaf9d`. The fetch command verifies each
 SHA-256 and retains the pinned permission notice beside the inputs. It preserves
 existing inputs and rejects conflicting cached data.
@@ -25,6 +25,7 @@ checks. BIOS images are local inputs and are not fetched or redistributed.
 | DMA started from BIOS | 4 | Replacement and external BIOS |
 | Long DMA timing | 1 | Replacement and external BIOS |
 | Empty-list Thumb PUSH | 2 | Replacement and external BIOS |
+| Protected BIOS input at startup, SWI and IRQ boundaries | 4 | Replacement and external BIOS |
 | Timer value retained from BIOS boot | 3 | External BIOS |
 | Power-on divider phase | 10 | Manual diagnostic; phase remains unresolved |
 
@@ -36,6 +37,12 @@ comparison. Register comparisons observe both live operands. Literal operands
 also require their original address construction, load instructions and ROM
 value. Original image hashes, comparison opcodes, result routines and execution
 budgets remain enforced.
+
+The protected-BIOS probe constructs its expected words with an unconditional
+MOV and three ORRs. The checker validates every byte, destination and source
+register, condition and flag setting in that original sequence. Both live
+comparison operands must still match the expected word. A matching but
+incorrect pair cannot turn a failed BIOS read into a pass.
 
 Owned negative controls execute wrong measurements, corrupted expected operands,
 equal but incorrect operands and skipped comparisons. Each can produce a zero
@@ -65,9 +72,9 @@ boot starts with zero and fails that precondition; the checker therefore
 requires an external BIOS for this specific cartridge. This does not qualify
 the replacement boot's power-on timer residue or divider phase.
 
-The registered selection passes 17 runs when an external BIOS is configured.
-The broader exploratory selection recorded 17/20 when it also executed the two
-power-on phase cases and the unsupported replacement-boot retention case.
+The registered selection contains 19 runs when an external BIOS is configured.
+The preceding ten-cartridge exploratory selection recorded 17/20 when it also
+executed the two power-on phase cases and the unsupported replacement-boot retention case.
 These results do not replace the separate 71/76 CPU/bus/FIFO/IRQ selection or
 resolve its five existing failures. Full timer, firmware and whole-system
 accuracy remain open.
