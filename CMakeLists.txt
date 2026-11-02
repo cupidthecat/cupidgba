@@ -29,6 +29,7 @@ set(CUPID_HALT_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified f
 set(CUPID_PREFETCH_PROBE_DIR "" CACHE PATH "Root containing checksum-verified prefetcher and timing cartridge probes")
 set(CUPID_CPU_CORPUS_DIR "" CACHE PATH "Directory containing the checksum-verified generated CPU corpus")
 set(CUPID_BUS_PAGE_PROBE_ROM "" CACHE FILEPATH "Local checksum-verified CPU/DMA page-boundary cartridge")
+set(CUPID_REGISTER_PROBE_DIR "" CACHE PATH "Root containing verified bank, memory, timer and firmware cartridges")
 set(CUPID_CPU_INTERACTION_PROBE_DIR "" CACHE PATH "Root containing checksum-verified CPU/DMA/IRQ cartridges")
 set(CUPID_USER_BANK_PROBE_DIR "" CACHE PATH "Directory containing checksum-verified user-bank cartridge probes")
 set(CUPID_SAVED_STATUS_PROBE_DIR "" CACHE PATH "Directory containing the checksum-verified saved-status cartridge")
@@ -1093,6 +1094,38 @@ if(BUILD_TESTING)
                 set_tests_properties(rom.dma-probe-${case}-external PROPERTIES TIMEOUT 100)
             endif()
         endforeach()
+    endif()
+
+    add_test(NAME runner.register-comparison-protocol COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_register_comparisons.py)
+    add_test(NAME runner.register-comparison-execution COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/test_register_execution.py
+        --runner $<TARGET_FILE:cupidgba-headless>)
+    set_tests_properties(runner.register-comparison-protocol runner.register-comparison-execution
+        PROPERTIES TIMEOUT 10)
+
+    if(CUPID_REGISTER_PROBE_DIR)
+        foreach(case banked-stm-alu palette-byte-writes vram-byte-writes timer-disable-edge
+                bios-copy-timing bios-dma-timing long-dma-timing thumb-empty-push)
+            add_test(NAME rom.register-${case} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_register_probe.py
+                --directory ${CUPID_REGISTER_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless> --test ${case})
+            set_tests_properties(rom.register-${case} PROPERTIES TIMEOUT 100)
+            if(CUPID_TEST_BIOS)
+                add_test(NAME rom.register-${case}-external COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_register_probe.py
+                    --directory ${CUPID_REGISTER_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless>
+                    --test ${case} --bios ${CUPID_TEST_BIOS})
+                set_tests_properties(rom.register-${case}-external PROPERTIES TIMEOUT 100)
+            endif()
+        endforeach()
+        if(CUPID_TEST_BIOS)
+            add_test(NAME rom.register-timer-boot-retention-external COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/roms/check_register_probe.py
+                --directory ${CUPID_REGISTER_PROBE_DIR} --runner $<TARGET_FILE:cupidgba-headless>
+                --test timer-boot-retention --bios ${CUPID_TEST_BIOS})
+            set_tests_properties(rom.register-timer-boot-retention-external PROPERTIES TIMEOUT 100)
+        endif()
     endif()
 
     if(CUPID_CPU_INTERACTION_PROBE_DIR)

@@ -1,0 +1,396 @@
+{
+  "format": 1,
+  "revision": "66f5f1d60cd7030b600606886c76f5c821ecaf9d",
+  "license_sha256": "b59a9ed235d76752c977f04116bc72155a14af48176bdbf50d7e5c29fca35aa7",
+  "cases": [
+    {
+      "name": "banked-stm-alu",
+      "sha256": "0ca4e5f69448a181d888db787ef5216a5e84ee28550bef89687163ee0af359b3",
+      "checkpoint": "0x8000220",
+      "terminal": "0x8000398",
+      "result_register": 0,
+      "observations": [
+        {
+          "address": "0x800016c",
+          "instruction": "0xe3520011",
+          "mode": "arm",
+          "register": 2,
+          "value": "0x11"
+        },
+        {
+          "address": "0x8000198",
+          "instruction": "0xe3550000",
+          "mode": "arm",
+          "register": 5,
+          "value": "0x0"
+        },
+        {
+          "address": "0x80001b8",
+          "instruction": "0xe3500001",
+          "mode": "arm",
+          "register": 0,
+          "value": "0x1"
+        },
+        {
+          "address": "0x80001c0",
+          "instruction": "0xe3580002",
+          "mode": "arm",
+          "register": 8,
+          "value": "0x2"
+        },
+        {
+          "address": "0x80001d8",
+          "instruction": "0xe3510000",
+          "mode": "arm",
+          "register": 1,
+          "value": "0x0"
+        }
+      ],
+      "path": "STM_ALU_IMM.gba",
+      "boot": "either"
+    },
+    {
+      "name": "power-on-divider",
+      "sha256": "b74df69f502ac542ad1ace52384d36f5848c71504b8371fd502f65096d2fe717",
+      "checkpoint": "0x8000300",
+      "terminal": "0x8000478",
+      "result_register": 12,
+      "observations": [
+        {
+          "address": "0x800024c",
+          "instruction": "0xe3500000",
+          "mode": "arm",
+          "register": 0,
+          "value": "0x0"
+        },
+        {
+          "address": "0x8000254",
+          "instruction": "0xe3510000",
+          "mode": "arm",
+          "register": 1,
+          "value": "0x0"
+        },
+        {
+          "address": "0x800025c",
+          "instruction": "0xe3520001",
+          "mode": "arm",
+          "register": 2,
+          "value": "0x1"
+        },
+        {
+          "address": "0x8000264",
+          "instruction": "0xe3540001",
+          "mode": "arm",
+          "register": 4,
+          "value": "0x1"
+        },
+        {
+          "address": "0x800026c",
+          "instruction": "0xe3550001",
+          "mode": "arm",
+          "register": 5,
+          "value": "0x1"
+        },
+        {
+          "address": "0x8000274",
+          "instruction": "0xe3560002",
+          "mode": "arm",
+          "register": 6,
+          "value": "0x2"
+        },
+        {
+          "address": "0x800027c",
+          "instruction": "0xe3570002",
+          "mode": "arm",
+          "register": 7,
+          "value": "0x2"
+        },
+        {
+          "address": "0x8000284",
+          "instruction": "0xe3580002",
+          "mode": "arm",
+          "register": 8,
+          "value": "0x2"
+        },
+        {
+          "address": "0x800028c",
+          "instruction": "0xe3590002",
+          "mode": "arm",
+          "register": 9,
+          "value": "0x2"
+        },
+        {
+          "address": "0x8000294",
+          "instruction": "0xe35a0003",
+          "mode": "arm",
+          "register": 10,
+          "value": "0x3"
+        }
+      ],
+      "path": "timer/timer.gba",
+      "boot": "phase-sensitive"
+    },
+    {
+      "name": "timer-disable-edge",
+      "sha256": "42eaed0969de41a6614705069800a8084d4bb2d5868c183ea4b8167ba54080b6",
+      "checkpoint": "0x8000200",
+      "terminal": "0x8000378",
+      "result_register": 12,
+      "observations": [
+        {
+          "address": "0x80001a4",
+          "instruction": "0xe35000ff",
+          "mode": "arm",
+          "register": 0,
+          "value": "0xff"
+        },
+        {
+          "address": "0x80001d4",
+          "instruction": "0xe3500008",
+          "mode": "arm",
+          "register": 0,
+          "value": "0x8"
+        }
+      ],
+      "path": "timer/timer_disable.gba",
+      "boot": "either"
+    },
+    {
+      "name": "timer-boot-retention",
+      "sha256": "1176dbebd99386ba66b6f8c755728c59743a69c07b90756588b878f4b96d27ee",
+      "checkpoint": "0x8000204",
+      "terminal": "0x800037c",
+      "result_register": 12,
+      "observations": [
+        {
+          "address": "0x80001c6",
+          "instruction": "0x288b",
+          "mode": "thumb",
+          "register": 0,
+          "value": "0x8b"
+        },
+        {
+          "address": "0x80001d8",
+          "instruction": "0x288b",
+          "mode": "thumb",
+          "register": 0,
+          "value": "0x8b"
+        },
+        {
+          "address": "0x80001e0",
+          "instruction": "0x28f3",
+          "mode": "thumb",
+          "register": 0,
+          "value": "0xf3"
+        }
+      ],
+      "path": "timer/timer_reset.gba",
+      "boot": "external"
+    },
+    {
+      "name": "bios-copy-timing",
+      "sha256": "9615be81fbb7f1e8900dd370443bcd96e61e67e2609d302922a49eb66adf341f",
+      "checkpoint": "0x800017c",
+      "terminal": "0x80002f4",
+      "result_register": 12,
+      "observations": [
+        {
+          "address": "0x8000164",
+          "instruction": "0xe35000a5",
+          "mode": "arm",
+          "register": 0,
+          "value": "0xa5"
+        }
+      ],
+      "path": "timing/cpy_data_bios.gba",
+      "boot": "either"
+    },
+    {
+      "name": "bios-dma-timing",
+      "sha256": "b312bd639cada73b9ced3e148d10370d4bfe43086e211b8416ff83e0319112b9",
+      "checkpoint": "0x800026c",
+      "terminal": "0x80003e4",
+      "result_register": 12,
+      "observations": [
+        {
+          "address": "0x8000194",
+          "instruction": "0xe350000b",
+          "mode": "arm",
+          "register": 0,
+          "value": "0xb"
+        },
+        {
+          "address": "0x80001d0",
+          "instruction": "0xe350000b",
+          "mode": "arm",
+          "register": 0,
+          "value": "0xb"
+        },
+        {
+          "address": "0x8000234",
+          "instruction": "0xe3500092",
+          "mode": "arm",
+          "register": 0,
+          "value": "0x92"
+        },
+        {
+          "address": "0x800023c",
+          "instruction": "0xe351003a",
+          "mode": "arm",
+          "register": 1,
+          "value": "0x3a"
+        }
+      ],
+      "path": "timing/dma_from_bios.gba",
+      "boot": "either"
+    },
+    {
+      "name": "long-dma-timing",
+      "sha256": "fcb20b140c0e8edbc78c0f4e06376d0fa8cdf36b5bd78adb48098493d880a278",
+      "checkpoint": "0x8000190",
+      "terminal": "0x8000308",
+      "result_register": 12,
+      "observations": [
+        {
+          "address": "0x8000178",
+          "instruction": "0xe1500001",
+          "mode": "arm",
+          "register": 0,
+          "value": "0x8301c0",
+          "second_register": 1,
+          "literal": "0x8000184",
+          "literal_load": "0x8000170"
+        }
+      ],
+      "path": "timing/dma_long.gba",
+      "boot": "either"
+    },
+    {
+      "name": "palette-byte-writes",
+      "sha256": "5d82546bde6657014176d13ae35523064f714452c400bff3844b5ee8cac51932",
+      "checkpoint": "0x8000204",
+      "terminal": "0x800037c",
+      "result_register": 12,
+      "observations": [
+        {
+          "address": "0x8000168",
+          "instruction": "0xe1510004",
+          "mode": "arm",
+          "register": 1,
+          "value": "0x5555",
+          "second_register": 4,
+          "literal": "0x8000144",
+          "literal_load": "0x8000120"
+        },
+        {
+          "address": "0x8000188",
+          "instruction": "0xe1510004",
+          "mode": "arm",
+          "register": 1,
+          "value": "0x5555",
+          "second_register": 4,
+          "literal": "0x8000144",
+          "literal_load": "0x8000120"
+        },
+        {
+          "address": "0x80001a8",
+          "instruction": "0xe1510005",
+          "mode": "arm",
+          "register": 1,
+          "value": "0x55550000",
+          "second_register": 5,
+          "literal": "0x8000148",
+          "literal_load": "0x800012c"
+        },
+        {
+          "address": "0x80001c8",
+          "instruction": "0xe1510005",
+          "mode": "arm",
+          "register": 1,
+          "value": "0x55550000",
+          "second_register": 5,
+          "literal": "0x8000148",
+          "literal_load": "0x800012c"
+        }
+      ],
+      "path": "memory/PAL_8_bit_writes.gba",
+      "boot": "either"
+    },
+    {
+      "name": "vram-byte-writes",
+      "sha256": "d6ab08cfc64ef9a5b6dee93f72b90af5f78bf332ef2ab09479669090836cae5c",
+      "checkpoint": "0x8000204",
+      "terminal": "0x800037c",
+      "result_register": 12,
+      "observations": [
+        {
+          "address": "0x8000168",
+          "instruction": "0xe1510004",
+          "mode": "arm",
+          "register": 1,
+          "value": "0x5555",
+          "second_register": 4,
+          "literal": "0x8000144",
+          "literal_load": "0x8000120"
+        },
+        {
+          "address": "0x8000188",
+          "instruction": "0xe1510004",
+          "mode": "arm",
+          "register": 1,
+          "value": "0x5555",
+          "second_register": 4,
+          "literal": "0x8000144",
+          "literal_load": "0x8000120"
+        },
+        {
+          "address": "0x80001a8",
+          "instruction": "0xe1510005",
+          "mode": "arm",
+          "register": 1,
+          "value": "0x55550000",
+          "second_register": 5,
+          "literal": "0x8000148",
+          "literal_load": "0x800012c"
+        },
+        {
+          "address": "0x80001c8",
+          "instruction": "0xe1510005",
+          "mode": "arm",
+          "register": 1,
+          "value": "0x55550000",
+          "second_register": 5,
+          "literal": "0x8000148",
+          "literal_load": "0x800012c"
+        }
+      ],
+      "path": "memory/VRAM_8_bit_writes.gba",
+      "boot": "either"
+    },
+    {
+      "sha256": "2004d65dff2036c8d6ce0f2dcb97e472a7f6ead8c5af8e53a613e9ae809ab214",
+      "checkpoint": "0x08000188",
+      "terminal": "0x08000300",
+      "observations": [
+        {
+          "address": "0x08000160",
+          "instruction": "0x2806",
+          "mode": "thumb",
+          "register": 0,
+          "value": "0x6"
+        },
+        {
+          "address": "0x08000168",
+          "instruction": "0x285c",
+          "mode": "thumb",
+          "register": 0,
+          "value": "0x5c"
+        }
+      ],
+      "name": "thumb-empty-push",
+      "result_register": 12,
+      "path": "thumb/Push_no_regs.gba",
+      "boot": "either"
+    }
+  ]
+}

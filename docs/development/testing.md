@@ -47,6 +47,7 @@ Transport retries do not change input digests or test expectations.
 ## Find a subsystem
 
 - [CPU and interrupt checks](testing/cpu.md).
+- [Original register, timer and firmware probes](testing/register-probes.md).
 - [Memory and bus checks](testing/memory.md).
 - [BIOS checks](testing/bios.md).
 - [Video checks](testing/video.md).

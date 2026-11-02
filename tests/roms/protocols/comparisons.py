@@ -120,8 +120,33 @@ def verify_input(data, case):
             raise ValueError("Comparison opcode or order mismatch")
         if "second_register" in observation:
             literal = int(observation["literal"], 16) - 0x08000000
-            shift = observation["literal_shift"]
             second = observation["second_register"]
+            if "literal_load" in observation:
+                setup = int(observation["literal_load"], 16) - 0x08000000
+                displacement = literal - setup - 8
+                # These probes form a ROM literal address with ADD Rd, PC,
+                # #imm8, then load that same register without writeback.
+                if (
+                    "literal_shift" in observation
+                    or setup < 0
+                    or setup % 4
+                    or setup + 8 > offset
+                    or literal < 0
+                    or literal % 4
+                    or literal + 4 > checkpoint
+                    or not 0 <= displacement <= 255
+                    or data[setup : setup + 8]
+                    != struct.pack(
+                        "<2I",
+                        0xE28F0000 | second << 12 | displacement,
+                        0xE5900000 | second << 16 | second << 12,
+                    )
+                    or int.from_bytes(data[literal : literal + 4], "little") != value
+                ):
+                    raise ValueError("Register comparison changes its original literal load")
+                previous = offset
+                continue
+            shift = observation["literal_shift"]
             if (
                 type(shift) is not int
                 or not 1 <= shift <= 31
