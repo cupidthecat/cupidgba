@@ -27,7 +27,7 @@ SRC_GBA      = src/gba/gba.c src/gba/memory.c src/gba/memory/feedback.c src/gba/
                src/gba/cartridge/rtc.c src/gba/cartridge/gpio.c src/gba/cartridge/battery.c src/gba/cartridge/solar.c \
                src/gba/cartridge/gyro.c src/gba/cartridge/tilt.c \
                src/gba/cartridge/card-reader/cards.c src/gba/cartridge/card-reader/camera.c
-SRC_CORE     = src/core/timing.c src/core/file.c src/platform/context.c
+SRC_CORE     = src/core/timing.c src/core/file.c src/platform/context.c src/platform/key-script.c
 SRC_RENDER   = src/gba/render/fetch.c src/gba/render/scanout.c src/gba/render/object-fetch.c
 SRC_PLATFORM = src/platform/main.c src/platform/local.c src/platform/window.c src/platform/audio.c src/platform/input.c \
                src/platform/rtc.c src/platform/peripherals.c src/platform/save.c src/platform/rumble.c

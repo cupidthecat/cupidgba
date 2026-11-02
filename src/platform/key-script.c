@@ -3,7 +3,9 @@
  * @file key-script.c
  * @brief Validate bounded input scripts and retain ordered frame/button pairs.
  */
-#include "key-script.h"
+#include "cupid/platform/key-script.h"
+#include "cupid/file.h"
+#include "cupid/gba.h"
 #include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
@@ -62,9 +64,12 @@ static bool line_events(char *line, struct CupidKeyEvent **events, unsigned *cou
     return true;
 }
 
-bool cupid_runner_read_keys(const char *path, struct CupidKeyEvent **events, unsigned *count) {
+bool cupid_platform_read_key_script(const char *path, struct CupidKeyEvent **events,
+                                    unsigned *count) {
     *events = NULL;
     *count = 0;
+    if (!cupid_file_is_regular(path))
+        return false;
     FILE *file = fopen(path, "rb");
     if (!file) {
         perror(path);
@@ -109,4 +114,17 @@ bool cupid_runner_read_keys(const char *path, struct CupidKeyEvent **events, uns
     *events = loaded;
     *count = total;
     return true;
+}
+
+void cupid_platform_key_replay_apply(struct CupidGBA *gba, struct CupidKeyReplay *replay) {
+    while (replay->next < replay->count && replay->events[replay->next].frame <= replay->frame) {
+        gba->keysActive = replay->events[replay->next++].keys;
+        cupid_gba_test_keypad_irq(gba);
+    }
+}
+
+void cupid_platform_key_replay_advance(struct CupidGBA *gba, struct CupidKeyReplay *replay) {
+    if (replay->frame != UINT64_MAX)
+        ++replay->frame;
+    cupid_platform_key_replay_apply(gba, replay);
 }

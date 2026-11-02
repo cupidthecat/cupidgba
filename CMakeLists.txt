@@ -60,7 +60,7 @@ endif()
 
 add_library(cupid_core STATIC
     src/arm/arm.c src/arm/isa-arm.c src/arm/isa-thumb.c
-    src/core/timing.c src/core/file.c src/platform/context.c
+    src/core/timing.c src/core/file.c src/platform/context.c src/platform/key-script.c
     src/gba/gba.c src/gba/memory.c src/gba/memory/feedback.c src/gba/memory/control.c src/gba/cartridge/image.c src/gba/cartridge/paged-rom.c src/gba/save/detection.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
     src/gba/audio.c src/gba/audio/wave.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c
     src/gba/hle-bios.c src/gba/bios/file.c src/gba/savedata.c src/gba/save/file.c
@@ -107,7 +107,7 @@ if(CUPID_BUILD_FRONTEND)
     target_link_libraries(cupidgba PRIVATE cupid_link SDL2::SDL2)
 endif()
 
-add_executable(cupidgba-headless tests/rom_runner.c tests/runner/key-script.c
+add_executable(cupidgba-headless tests/rom_runner.c
     src/platform/peripherals.c src/platform/save.c)
 target_link_libraries(cupidgba-headless PRIVATE cupid_core)
 
@@ -562,14 +562,20 @@ if(BUILD_TESTING)
         add_test(NAME runner.probe-boundary-${group} COMMAND test_probe_run ${group})
         set_tests_properties(runner.probe-boundary-${group} PROPERTIES TIMEOUT 30)
     endforeach()
-    add_executable(test_runner_terminal tests/platform/test_runner_terminal.c tests/runner/key-script.c
+    add_executable(test_key_replay tests/platform/test_key_replay.c)
+    target_link_libraries(test_key_replay PRIVATE cupid_core)
+    foreach(group order stop bounds)
+        add_test(NAME platform.key-replay-${group} COMMAND test_key_replay ${group})
+        set_tests_properties(platform.key-replay-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+    add_executable(test_runner_terminal tests/platform/test_runner_terminal.c
         src/platform/peripherals.c src/platform/save.c)
     target_link_libraries(test_runner_terminal PRIVATE cupid_core)
     foreach(group issued arbitration suspended)
         add_test(NAME runner.terminal-${group} COMMAND test_runner_terminal ${group})
         set_tests_properties(runner.terminal-${group} PROPERTIES TIMEOUT 30)
     endforeach()
-    add_executable(test_runner_arguments tests/platform/test_runner_arguments.c tests/runner/key-script.c
+    add_executable(test_runner_arguments tests/platform/test_runner_arguments.c
         src/platform/peripherals.c src/platform/save.c)
     target_link_libraries(test_runner_arguments PRIVATE cupid_core)
     add_test(NAME runner.arguments-unit COMMAND test_runner_arguments)
@@ -939,7 +945,7 @@ if(BUILD_TESTING)
         set_tests_properties(platform.bios-startup PROPERTIES TIMEOUT 10)
         add_executable(test_input tests/platform/test_input.c src/platform/input.c src/platform/rumble.c)
         target_link_libraries(test_input PRIVATE cupid_core SDL2::SDL2)
-        foreach(group bindings mixed axes lifecycle irq)
+        foreach(group bindings mixed axes lifecycle irq replay)
             add_test(NAME platform.input-${group} COMMAND test_input ${group})
             set_tests_properties(platform.input-${group} PROPERTIES TIMEOUT 10)
         endforeach()
@@ -974,6 +980,10 @@ if(BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_frontend_frames.py
             --frontend $<TARGET_FILE:cupidgba> --observer $<TARGET_FILE:test_frontend_frames>)
         set_tests_properties(platform.frontend-frames PROPERTIES TIMEOUT 30)
+        add_test(NAME platform.frontend-replay COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_frontend_replay.py
+            --frontend $<TARGET_FILE:cupidgba> --runner $<TARGET_FILE:cupidgba-headless>)
+        set_tests_properties(platform.frontend-replay PROPERTIES TIMEOUT 30)
     endif()
 
     add_executable(test_timer tests/gba/test_timer.c)

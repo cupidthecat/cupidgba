@@ -117,7 +117,23 @@ events and both common line endings.
 cases. Every case must fail before ROM loading, preserve the input bytes and
 leave all seven requested output files unchanged. Both groups have ten-second
 CTest deadlines and three-second process guards. See
-[input replay format](../../usage/running.md#headless-input-replays).
+[input replay format](../../usage/running.md#input-replays).
+
+`platform.frontend-replay` runs owned ARM and Thumb guests through the shipped
+SDL2 executable. Their complete 32 KiB SRAM images must match the headless
+runner, including three button samples and a transient keypad IRQ from two
+changes on the same frame. Removing the intermediate press removes that IRQ
+observation. Fresh and seeded batteries, process reboots, first-console input
+ownership across two, three and four linked consoles, empty scripts, and changes
+while DMA holds the CPU are covered.
+Malformed scripts must fail before ROM loading and preserve existing batteries
+and RTC files; nonregular inputs are rejected without opening a blocking stream.
+The group has a thirty-second deadline and ten-second process guards.
+
+`platform.key-replay-*` checks ordered application, held state, frame bounds and
+the ordinary keypad wake path. `platform.input-replay` and local input controls
+check that physical buttons cannot overwrite scripted buttons or create an
+unwanted keypad IRQ. Escape and ordinary inputs on other consoles still work.
 
 To run another authorized input for a fixed number of frames:
 

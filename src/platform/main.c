@@ -4,6 +4,7 @@
  */
 #include "cupid/gba.h"
 #include "cupid/platform.h"
+#include "cupid/platform/key-script.h"
 #include "cupid/platform/peripherals.h"
 #include "cupid/platform/rtc.h"
 #include "cupid/platform/save.h"
@@ -27,9 +28,18 @@ static bool flush_rtc(struct CupidGBA *gba, struct CupidPlatformRTC *config) {
     return cupid_platform_rtc_save(gba, config, stamp);
 }
 
+struct FrontendFrames {
+    uint32_t *pixels;
+    struct CupidGBA *gba;
+    struct CupidKeyReplay *replay;
+};
+
 static void capture_completed_frame(void *context, const uint32_t *pixels, uint64_t clock) {
     (void)clock;
-    memcpy(context, pixels, GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT * sizeof(*pixels));
+    struct FrontendFrames *frames = context;
+    memcpy(frames->pixels, pixels, GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT * sizeof(*pixels));
+    if (frames->replay)
+        cupid_platform_key_replay_advance(frames->gba, frames->replay);
 }
 
 /**
@@ -76,6 +86,7 @@ static void printUsage(const char *progname) {
     fprintf(
         stderr,
         "             --tilt auto|on|off  --tilt-x 0..4095  --tilt-y 0..4095 (defaults: 928)\n");
+    fprintf(stderr, "\nInput replay: --key-script FILE (first console in local play)\n");
     fprintf(stderr, "\nControls:\n");
     fprintf(stderr, "  Z=A  X=B  Enter=Start  Backspace=Select\n");
     fprintf(stderr, "  Arrow keys=D-Pad  A=L  S=R  Esc=Quit\n");
@@ -85,12 +96,17 @@ static void printUsage(const char *progname) {
             "  F1/F2=Lower/higher tilt X  F3/F4=Lower/higher tilt Y  F10=Nominal neutral\n");
 }
 
+static int run_console(const char *romPath, const char *biosPath, const char *saveTypeStr,
+                       struct CupidPlatformSave saveSelection, int scale, unsigned frames,
+                       const struct CupidLocalDevices *devices);
+
 /**
  * @brief Program entry point.
  */
 int main(int argc, char *argv[]) {
     const char *romPath = NULL;
     const char *biosPath = NULL;
+    const char *keyScript = NULL;
     const char *saveTypeStr = NULL;
     struct CupidPlatformSave saveSelection = {SAVE_AUTODETECT, FLASH_PROFILE_DEFAULT};
     int scale = CUPID_DEFAULT_SCALE;
@@ -107,6 +123,12 @@ int main(int argc, char *argv[]) {
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--link") == 0 && i + 1 < argc && peerCount < 3) {
             linked[++peerCount] = argv[++i];
+        } else if (strcmp(argv[i], "--key-script") == 0 && i + 1 < argc) {
+            if (keyScript) {
+                fprintf(stderr, "Error: Only one input script may be selected\n");
+                return 1;
+            }
+            keyScript = argv[++i];
         } else if (strcmp(argv[i], "--frames") == 0 && i + 1 < argc) {
             char *end;
             errno = 0;
@@ -216,17 +238,40 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    struct CupidKeyEvent *events = NULL;
+    unsigned eventCount = 0;
+    if (keyScript && !cupid_platform_read_key_script(keyScript, &events, &eventCount)) {
+        fprintf(stderr, "Error: Cannot read input script\n");
+        return 1;
+    }
+    struct CupidKeyReplay replay = {.events = events, .count = eventCount};
+    const struct CupidLocalDevices devices = {.rtcPresence = rtcPresence,
+                                              .rtc = rtcConfig,
+                                              .peripherals = peripherals,
+                                              .cardPaths = cards,
+                                              .cardCount = cardCount,
+                                              .keyReplay = keyScript ? &replay : NULL};
+    int result;
     if (peerCount) {
         linked[0] = romPath;
-        const struct CupidLocalDevices devices = {.rtcPresence = rtcPresence,
-                                                  .rtc = rtcConfig,
-                                                  .peripherals = peripherals,
-                                                  .cardPaths = cards,
-                                                  .cardCount = cardCount};
-        return cupid_platform_run_local(linked, peerCount + 1, biosPath, saveTypeStr, scale, frames,
-                                        &devices);
+        result = cupid_platform_run_local(linked, peerCount + 1, biosPath, saveTypeStr, scale,
+                                          frames, &devices);
+    } else {
+        result =
+            run_console(romPath, biosPath, saveTypeStr, saveSelection, scale, frames, &devices);
     }
+    free(events);
+    return result;
+}
 
+static int run_console(const char *romPath, const char *biosPath, const char *saveTypeStr,
+                       struct CupidPlatformSave saveSelection, int scale, unsigned frames,
+                       const struct CupidLocalDevices *devices) {
+    const int rtcPresence = devices->rtcPresence;
+    struct CupidPlatformRTC rtcConfig = devices->rtc;
+    const struct CupidPlatformPeripherals peripherals = devices->peripherals;
+    const char *const *cards = devices->cardPaths;
+    const unsigned cardCount = devices->cardCount;
     /** GBA path. */
     /** Derive save-file path (.sav alongside the ROM). */
     char savePath[512];
@@ -288,6 +333,8 @@ int main(int argc, char *argv[]) {
 
     /** Reset system. */
     cupid_gba_reset(&gba);
+    if (devices->keyReplay)
+        cupid_platform_key_replay_apply(&gba, devices->keyReplay);
 
     /** Load persisted save data (no-op when .sav does not exist). */
     if (!cupid_savedata_load_file(&gba.memory.savedata, savePath) && errno != ENOENT) {
@@ -332,7 +379,9 @@ int main(int argc, char *argv[]) {
         cupid_gba_destroy(&gba);
         return 1;
     }
-    cupid_video_set_frame_callback(&gba.video, capture_completed_frame, completedFrame);
+    struct FrontendFrames published = {completedFrame, &gba, devices->keyReplay};
+    plat.scriptedKeys = devices->keyReplay != NULL;
+    cupid_video_set_frame_callback(&gba.video, capture_completed_frame, &published);
     cupid_cartridge_set_rumble_output(&gba, cupid_platform_rumble_changed, &plat);
 
     /** Initialize audio. */

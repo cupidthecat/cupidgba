@@ -36,6 +36,8 @@ void cupid_platform_capture_local_frame(void *context, unsigned player, const ui
     (void)timestamp;
     struct CupidLocalFrames *frames = context;
     memcpy(frames->pixels[player], pixels, GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT * sizeof(*pixels));
+    if (player == 0 && frames->keyReplay)
+        cupid_platform_key_replay_advance(frames->replayCore, frames->keyReplay);
 }
 
 bool cupid_platform_render_local(struct CupidPlatform *platform, SDL_Texture *const textures[],
@@ -177,6 +179,11 @@ int cupid_platform_run_local(const char *const paths[], unsigned count, const ch
     initialized = true;
     if (!cupid_platform_init(&platforms[0], scale))
         goto cleanup;
+    platforms[0].scriptedKeys = devices->keyReplay != NULL;
+    published.replayCore = cores[0];
+    published.keyReplay = devices->keyReplay;
+    if (devices->keyReplay)
+        cupid_platform_key_replay_apply(cores[0], devices->keyReplay);
     SDL_SetWindowSize(platforms[0].window, GBA_SCREEN_WIDTH * 2 * scale,
                       GBA_SCREEN_HEIGHT * (count > 2 ? 2 : 1) * scale);
     textures[0] = platforms[0].texture;
