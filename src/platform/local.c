@@ -8,6 +8,7 @@
  */
 #include "local.h"
 #include "cupid/cable.h"
+#include "cupid/platform/paths.h"
 #include "cupid/platform/save.h"
 #include <errno.h>
 #include <stdio.h>
@@ -128,16 +129,29 @@ int cupid_platform_run_local(const char *const paths[], unsigned count, const ch
     unsigned created = 0;
     int result = 1;
     bool initialized = false, started = false;
+    struct CupidPlatformPath filePaths[14 + CUPID_CARD_QUEUE] = {
+        {bios, CUPID_PATH_INPUT}, {devices->keyScriptPath, CUPID_PATH_INPUT}};
+    size_t filePathCount = 2;
+    for (unsigned i = 0; i < devices->cardCount; ++i)
+        filePaths[filePathCount++] =
+            (struct CupidPlatformPath){devices->cardPaths[i], CUPID_PATH_INPUT};
+    for (unsigned i = 0; i < count; ++i) {
+        if (!cupid_platform_local_save_path(paths[i], i, saves[i], sizeof(saves[i]))) {
+            fprintf(stderr, "Error: Save path is too long: %s\n", paths[i]);
+            goto cleanup;
+        }
+        memcpy(rtcPaths[i], saves[i], strlen(saves[i]) + 1);
+        memcpy(rtcPaths[i] + strlen(rtcPaths[i]) - 4, ".rtc", 5);
+        filePaths[filePathCount++] = (struct CupidPlatformPath){paths[i], CUPID_PATH_INPUT};
+        filePaths[filePathCount++] = (struct CupidPlatformPath){
+            saveSelection.type == SAVE_NONE ? NULL : saves[i], CUPID_PATH_SAVE_OUTPUT};
+    }
     /* Validate every path and save before SDL starts or any console runs. */
     for (unsigned i = 0; i < count; ++i) {
         published.pixels[i] = calloc(GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT, sizeof(uint32_t));
         if (!published.pixels[i])
             goto cleanup;
         framesReady[i] = published.pixels[i];
-        if (!cupid_platform_local_save_path(paths[i], i, saves[i], sizeof(saves[i]))) {
-            fprintf(stderr, "Error: Save path is too long: %s\n", paths[i]);
-            goto cleanup;
-        }
         cores[i] = calloc(1, sizeof(*cores[i]));
         if (!cores[i])
             goto cleanup;
@@ -156,12 +170,17 @@ int cupid_platform_run_local(const char *const paths[], unsigned count, const ch
             fprintf(stderr, "Error: Card input requires an enabled reader on the first console\n");
             goto cleanup;
         }
+        filePaths[filePathCount++] = (struct CupidPlatformPath){
+            cores[i]->cartridge.rtcPresent ? rtcPaths[i] : NULL, CUPID_PATH_RTC_OUTPUT};
+    }
+    if (!cupid_platform_paths_validate(filePaths, filePathCount))
+        goto cleanup;
+    /* Load mutable battery state after validating every immutable input and output. */
+    for (unsigned i = 0; i < count; ++i) {
         if (!cupid_savedata_load_file(&cores[i]->memory.savedata, saves[i]) && errno != ENOENT) {
             fprintf(stderr, "Error: Cannot load save %s: %s\n", saves[i], strerror(errno));
             goto cleanup;
         }
-        memcpy(rtcPaths[i], saves[i], strlen(saves[i]) + 1);
-        memcpy(rtcPaths[i] + strlen(rtcPaths[i]) - 4, ".rtc", 5);
         rtc[i] = devices->rtc;
         rtc[i].path = rtcPaths[i];
         if (cores[i]->cartridge.rtcPresent && rtc[i].offlineWall && !hostRead) {
