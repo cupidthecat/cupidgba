@@ -86,13 +86,51 @@ static void guard(void) {
 }
 
 static void firmware(void) {
+    static const struct {
+        uint32_t opcode, value;
+    } loads[] = {
+        {0xE59F0004, 0x89ABCDEF}, /* LDR r0,[pc,#4] */
+        {0xE5DF0004, 0xEF},       /* LDRB */
+        {0xE1DF00B4, 0xCDEF},     /* LDRH */
+        {0xE1DF00D4, 0xFFFFFFEF}, /* LDRSB */
+        {0xE1DF00F4, 0xFFFFCDEF}, /* LDRSH */
+        {0xE59F0005, 0xEF89ABCD}, /* Unaligned LDR */
+        {0xE1DF00B5, 0xEF0000CD}, /* Unaligned LDRH */
+        {0xE1DF00F5, 0xFFFFFFCD}, /* Odd LDRSH reads a signed byte. */
+    };
+
+    static const uint16_t controls[] = {0, 1, 0x20, 0x21};
+    for (unsigned map = 0; map < sizeof(controls) / sizeof(*controls); ++map) {
+        for (unsigned load = 0; load < sizeof(loads) / sizeof(*loads); ++load) {
+            struct CupidGBA *first = machine(true);
+            const uint32_t code[] = {loads[load].opcode, 0xEAFFFFFE, 0xE1A00000, 0x89ABCDEF};
+            memcpy(first->memory.bios, code, sizeof(code));
+            /* The previous low-memory decoder must not supply stale RAM
+             * instructions to the new firmware's reset pipeline. */
+            const uint32_t stale[] = {0xE3A00077, 0xEAFFFFFE};
+            memcpy(first->memory.ewram, stale, sizeof(stale));
+            memcpy(first->memory.iwram, stale, sizeof(stale));
+            first->memory.internalMemoryControl = controls[map];
+            first->memory.fullBios = true;
+            cupid_gba_reset(first);
+            CHECK(!first->biosHLE);
+            CHECK(cupid_timing_global_time(&first->timing) == 0);
+            CHECK(cupid_arm_instruction_address(&first->cpu) == 0);
+            CHECK(first->cpu.prefetch[0] == loads[load].opcode);
+            cupid_gba_step(first);
+            CHECK((uint32_t)first->cpu.gprs[0] == loads[load].value);
+            CHECK(cupid_arm_instruction_address(&first->cpu) == 4);
+            CHECK((first->cpu.cpsr.packed & 255) == 0xD3);
+            destroy(first);
+        }
+    }
     struct CupidGBA *g = machine(true);
     g->memory.fullBios = true;
     cupid_gba_reset(g);
     CHECK(!g->biosHLE);
     CHECK(cupid_arm_instruction_address(&g->cpu) == 0);
     CHECK(g->memory.biosPrefetch == 0);
-    g->cpu.memory.setActiveRegion(&g->cpu, 0);
+    CHECK(g->memory.activeRegion == GBA_REGION_BIOS);
     g->cpu.prefetch[1] = 0x10293847;
     g->cpu.memory.setActiveRegion(&g->cpu, GBA_BASE_ROM0);
     CHECK(g->memory.biosPrefetch == 0x10293847);

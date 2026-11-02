@@ -286,8 +286,8 @@ static void _cupidGBAReset(struct CupidARM *cpu) {
     gba->keysLast = 0x0400;
 
     /**
-     * PC and pipeline are already set by cupid_arm_reset (CupidARMWritePC)
-     * before this callback is invoked. PC = BASE_RESET + WORD_SIZE_ARM.
+     * The CPU primes its reset-vector pipeline after this callback prepares
+     * the memory decoder, firmware and device state.
      */
 }
 

@@ -7,6 +7,12 @@ skip guard, and ordinary firmware latch updates. The read group checks all
 routes: 98,304 callback results, including unaligned lane rotations. Each group
 retains a ten-second deadline.
 
+The firmware group executes eight signed, unsigned and unaligned first-load
+instructions through four preceding low-memory mappings. The 32 owned cases
+require the correct first opcode, loaded value, ARM Supervisor control and
+next instruction address. A previous remapping supplies deliberately different
+RAM code so stale reset prefetch cannot pass as valid firmware execution.
+
 The [original register probes](register-probes.md) also require the four
 protected-read comparisons at startup and SWI/IRQ boundaries. Both operands,
 their original constant construction, the pre-display result and a completed

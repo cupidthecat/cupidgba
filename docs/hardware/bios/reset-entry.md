@@ -6,6 +6,12 @@ state is clear. The active privilege bank and sampled IRQ mask agree with
 that control state before the first firmware instruction executes. Firmware
 can change the masks and initialize its own stacks during boot.
 
+The platform reset callback prepares memory and firmware before the CPU fills
+the reset-vector pipeline. This clears a previous low-memory remapping before
+any new opcode is sampled and establishes BIOS data-read permission before
+the first instruction. Firmware can begin with a sequential data load; it
+does not need an initial branch to repair the cached region.
+
 This follows the reset control defined in the
 [ARM7TDMI Technical Reference Manual](https://documentation-service.arm.com/static/5e8e1323fd977155116a3129).
 Other register values after hardware reset are indeterminate. CupidGBA clears
