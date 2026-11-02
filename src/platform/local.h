@@ -16,6 +16,8 @@ struct CupidLocalDevices {
     int rtcPresence;
     struct CupidPlatformRTC rtc;
     struct CupidPlatformPeripherals peripherals;
+    const char *const *cardPaths;
+    unsigned cardCount;
 };
 
 int cupid_platform_run_local(const char *const paths[], unsigned count, const char *bios,

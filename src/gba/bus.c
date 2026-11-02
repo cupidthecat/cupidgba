@@ -148,7 +148,7 @@ void cupid_bus_fetch(struct CupidARM *cpu, uint32_t address, unsigned width, boo
         for (unsigned i = 0; i < beats; i++) {
             cupid_bus_display_beat(cpu, address + i * 2, i + 1 == beats);
         }
-    } else if (!gba->cartridge.readable ||
+    } else if ((!gba->cartridge.readable && !gba->cartridge.cardReaderPresent) ||
                !cupid_cartridge_fetch_bus(gba, address, width, cycles)) {
         cupid_bus_advance(cpu, cycles, true);
     }

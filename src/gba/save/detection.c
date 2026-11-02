@@ -20,6 +20,16 @@ static enum CupidSaveType identify(const uint8_t *rom, size_t size, size_t *offs
 
     if (!rom || size < 0xC0)
         return SAVE_AUTODETECT;
+    /* These scanner boards contain their calibration and saved applications
+     * in flash; an unrelated library signature must not select EEPROM/SRAM. */
+    if (!memcmp(rom + 0xAC, "PEAJ", 4)) {
+        *offset = 0xAC;
+        return SAVE_FLASH512;
+    }
+    if (!memcmp(rom + 0xAC, "PSAJ", 4) || !memcmp(rom + 0xAC, "PSAE", 4)) {
+        *offset = 0xAC;
+        return SAVE_FLASH1M;
+    }
     for (size_t i = 0; i < size; i += 4) {
         if (rom[i] != 'E' && rom[i] != 'S' && rom[i] != 'F')
             continue;

@@ -32,7 +32,7 @@ static void configuration_and_strict_input_parsing(void) {
     CHECK(gba);
     cupid_gba_create(gba);
     cupid_cartridge_enable_rtc(gba, true);
-    const struct CupidPlatformPeripherals config = {1, 1, 73, 1, 0xABC, 1, 0x123, 0xDEF};
+    const struct CupidPlatformPeripherals config = {1, 1, 73, 1, 0xABC, 1, 0x123, 0xDEF, 1};
     cupid_platform_peripherals_configure(gba, &config);
     cupid_gba_reset(gba);
     CHECK(gba->cartridge.solarPresent && gba->cartridge.rumblePresent && gba->cartridge.rtcPresent);
@@ -40,21 +40,24 @@ static void configuration_and_strict_input_parsing(void) {
     CHECK(gba->cartridge.gyroPresent && gba->cartridge.gyro.sample == 0xABC);
     CHECK(gba->cartridge.tiltPresent && gba->cartridge.tilt.inputX == 0x123 &&
           gba->cartridge.tilt.inputY == 0xDEF);
+    CHECK(gba->cartridge.cardReaderPresent);
     const struct CupidPlatformPeripherals automatic = {
-        -1, -1, 255, -1, CUPID_GYRO_NEUTRAL, -1, CUPID_TILT_NEUTRAL, CUPID_TILT_NEUTRAL};
+        -1, -1, 255, -1, CUPID_GYRO_NEUTRAL, -1, CUPID_TILT_NEUTRAL, CUPID_TILT_NEUTRAL, -1};
     cupid_platform_peripherals_configure(gba, &automatic);
     CHECK(gba->cartridge.solarPresent && gba->cartridge.rumblePresent &&
           !gba->cartridge.solar.threshold);
     CHECK(gba->cartridge.gyroPresent && gba->cartridge.gyro.sample == CUPID_GYRO_NEUTRAL);
     CHECK(gba->cartridge.tiltPresent && gba->cartridge.tilt.inputX == CUPID_TILT_NEUTRAL &&
           gba->cartridge.tilt.inputY == CUPID_TILT_NEUTRAL);
-    const struct CupidPlatformPeripherals disabled = {0, 0, 0, 0, 0, 0, 0, 0};
+    CHECK(gba->cartridge.cardReaderPresent);
+    const struct CupidPlatformPeripherals disabled = {0, 0, 0, 0, 0, 0, 0, 0, 0};
     cupid_platform_peripherals_configure(gba, &disabled);
     CHECK(!gba->cartridge.solarPresent && !gba->cartridge.rumblePresent &&
           gba->cartridge.rtcPresent);
     CHECK(!gba->cartridge.gyroPresent && !gba->cartridge.gyro.sample);
     CHECK(!gba->cartridge.tiltPresent && !gba->cartridge.tilt.inputX &&
           !gba->cartridge.tilt.inputY);
+    CHECK(!gba->cartridge.cardReaderPresent);
     cupid_gba_destroy(gba);
     free(gba);
 }

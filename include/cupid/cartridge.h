@@ -1,14 +1,15 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /**
  * @file cartridge.h
- * @brief Cartridge GPIO devices, board selection and battery ownership.
+ * @brief Cartridge devices, board selection and battery ownership.
  *
- * - Group RTC, solar, gyro, tilt and rumble state per cartridge.
+ * - Group RTC, solar, gyro, tilt, rumble and card-reader state per cartridge.
  * - Declare pin routing, lifecycle and battery persistence interfaces.
  */
 #ifndef CUPID_CARTRIDGE_H
 #define CUPID_CARTRIDGE_H
 
+#include "cupid/card-reader.h"
 #include "cupid/gyro.h"
 #include "cupid/rtc.h"
 #include "cupid/solar.h"
@@ -23,6 +24,7 @@ struct CupidCartridge {
     struct CupidSolar solar;
     struct CupidGyro gyro;
     struct CupidTilt tilt;
+    struct CupidCardReader cardReader;
     uint64_t identity;
     uint32_t opcodeAddress, opcodeValue;
     struct CupidTimingEvent prefetchEvent;
@@ -30,11 +32,15 @@ struct CupidCartridge {
     uint32_t prefetchBase, prefetchAddress;
     uint16_t prefetchPorts[3];
     uint8_t prefetchMask;
+    uint32_t cardPrefetchAddress[8];
+    uint16_t cardPrefetchValue[8];
+    uint8_t cardPrefetchMask;
     uint8_t output, direction;
     bool rtcPresent, readable, opcodeValid;
     bool solarPresent, rumblePresent, rumbleActive;
     bool gyroPresent;
     bool tiltPresent;
+    bool cardReaderPresent;
     bool prefetchScheduled;
     uint8_t (*inputPins)(void *context);
     void *inputContext;
@@ -52,6 +58,13 @@ void cupid_cartridge_enable_gyro(struct CupidGBA *gba, bool enabled);
 bool cupid_cartridge_set_gyro_sample(struct CupidGBA *gba, uint16_t sample);
 void cupid_cartridge_enable_tilt(struct CupidGBA *gba, bool enabled);
 bool cupid_cartridge_set_tilt_sample(struct CupidGBA *gba, uint16_t x, uint16_t y);
+void cupid_cartridge_enable_card_reader(struct CupidGBA *gba, bool enabled);
+bool cupid_cartridge_queue_card(struct CupidGBA *gba, const void *data, size_t size);
+bool cupid_cartridge_card_address(const struct CupidGBA *gba, uint32_t address);
+bool cupid_cartridge_card_read(struct CupidGBA *gba, uint32_t address, uint16_t *value);
+bool cupid_cartridge_card_write(struct CupidGBA *gba, uint32_t address, uint16_t value);
+bool cupid_cartridge_card_read_port(struct CupidGBA *gba, uint32_t address, uint8_t *value);
+bool cupid_cartridge_card_write_port(struct CupidGBA *gba, uint32_t address, uint8_t value);
 bool cupid_cartridge_tilt_read(struct CupidGBA *gba, uint32_t address, uint8_t *value);
 bool cupid_cartridge_tilt_write(struct CupidGBA *gba, uint32_t address, uint8_t value);
 void cupid_cartridge_enable_rumble(struct CupidGBA *gba, bool enabled);

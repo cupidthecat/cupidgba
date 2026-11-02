@@ -67,6 +67,8 @@ static void printUsage(const char *progname) {
             "eeprom512, none\n");
     fprintf(stderr, "\nRTC: --rtc auto|on|off  --rtc-time YYYY-MM-DDTHH:MM:SS\n");
     fprintf(stderr,
+            "\nCard reader: --card-reader auto|on|off  --card FILE (up to 16 queued strips)\n");
+    fprintf(stderr,
             "     --rtc-offline pause|wall (default: pause; wall includes powered-off time)\n");
     fprintf(stderr, "\nPeripherals: --solar auto|on|off  --sunlight 0..255 (default: 128)\n");
     fprintf(stderr, "             --rumble auto|on|off\n");
@@ -96,6 +98,8 @@ int main(int argc, char *argv[]) {
     struct CupidRTCDateTime rtcSeed;
     struct CupidPlatformRTC rtcConfig = {0};
     struct CupidPlatformPeripherals peripherals = CUPID_PLATFORM_PERIPHERALS_DEFAULT;
+    const char *cards[CUPID_CARD_QUEUE];
+    unsigned cardCount = 0;
     const char *linked[4] = {0};
     unsigned peerCount = 0, frames = 0;
 
@@ -125,6 +129,13 @@ int main(int argc, char *argv[]) {
             saveTypeStr = argv[++i];
             if (!cupid_platform_save_parse(saveTypeStr, &saveSelection)) {
                 fprintf(stderr, "Error: Unknown save type '%s'\n", saveTypeStr);
+                return 1;
+            }
+        } else if (!strcmp(argv[i], "--card") && i + 1 < argc && cardCount < CUPID_CARD_QUEUE) {
+            cards[cardCount++] = argv[++i];
+        } else if (!strcmp(argv[i], "--card-reader") && i + 1 < argc) {
+            if (!cupid_platform_peripheral_mode(argv[++i], &peripherals.cardReaderPresence)) {
+                fprintf(stderr, "Error: Card-reader mode must be auto, on or off\n");
                 return 1;
             }
         } else if ((!strcmp(argv[i], "--solar") || !strcmp(argv[i], "--rumble") ||
@@ -200,10 +211,18 @@ int main(int argc, char *argv[]) {
         printUsage(argv[0]);
         return 1;
     }
+    if (cardCount && peripherals.cardReaderPresence == 0) {
+        fprintf(stderr, "Error: Card input conflicts with --card-reader off\n");
+        return 1;
+    }
 
     if (peerCount) {
         linked[0] = romPath;
-        const struct CupidLocalDevices devices = {rtcPresence, rtcConfig, peripherals};
+        const struct CupidLocalDevices devices = {.rtcPresence = rtcPresence,
+                                                  .rtc = rtcConfig,
+                                                  .peripherals = peripherals,
+                                                  .cardPaths = cards,
+                                                  .cardCount = cardCount};
         return cupid_platform_run_local(linked, peerCount + 1, biosPath, saveTypeStr, scale, frames,
                                         &devices);
     }
@@ -217,12 +236,20 @@ int main(int argc, char *argv[]) {
     }
 
     /** Create GBA instance. */
+    struct CupidCardReader cardInput;
+    cupid_card_reader_init(&cardInput);
+    if (!cupid_platform_cards_read(&cardInput, cards, cardCount)) {
+        fprintf(stderr, "Error: Cannot read card input: %s\n", strerror(errno));
+        cupid_card_reader_deinit(&cardInput);
+        return 1;
+    }
     struct CupidGBA gba;
     cupid_gba_create(&gba);
 
     /** Load ROM. */
     if (!cupid_load_rom(&gba, romPath)) {
         fprintf(stderr, "Error: Failed to load ROM: %s\n", romPath);
+        cupid_card_reader_deinit(&cardInput);
         cupid_gba_destroy(&gba);
         return 1;
     }
@@ -230,6 +257,13 @@ int main(int argc, char *argv[]) {
     if (rtcPresence >= 0)
         cupid_cartridge_enable_rtc(&gba, rtcPresence != 0);
     cupid_platform_peripherals_configure(&gba, &peripherals);
+    if (!cupid_platform_cards_attach(&gba, &cardInput)) {
+        fprintf(stderr, "Error: Card input requires an enabled reader; use --card-reader on\n");
+        cupid_card_reader_deinit(&cardInput);
+        cupid_gba_destroy(&gba);
+        return 1;
+    }
+    cupid_card_reader_deinit(&cardInput);
 
     /* Select the same backup hardware for single-console and linked runs. */
     if (!cupid_platform_save_configure(&gba.memory.savedata, &saveSelection)) {

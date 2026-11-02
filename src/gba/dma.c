@@ -77,7 +77,8 @@ static unsigned access_cycles(struct CupidMemory *memory, struct CupidDMA *dma, 
                                                     : memory->waitstatesNonseq32[region])
                                       : (sequential ? memory->waitstatesSeq16[region]
                                                     : memory->waitstatesNonseq16[region]));
-    if (word && cupid_cartridge_gpio_address(dma->gba, dma->accessAddress)) {
+    if (word && (cupid_cartridge_gpio_address(dma->gba, dma->accessAddress) ||
+                 cupid_cartridge_card_address(dma->gba, dma->accessAddress))) {
         dma->gpioHalfCycles = (unsigned)memory->waitstatesSeq16[region] + 1;
         cycles -= dma->gpioHalfCycles;
     }

@@ -542,6 +542,8 @@ void cupid_io_write(struct CupidGBA *gba, uint32_t addr, uint16_t value) {
 
     /** Store the possibly modified value into the IO array. */
     gba->memory.io[addr >> 1] = value;
+    if (addr == REG_WAITCNT && gba->cartridge.cardReaderPresent)
+        cupid_card_reader_update_clock(gba);
 }
 
 /**

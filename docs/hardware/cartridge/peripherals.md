@@ -1,5 +1,8 @@
 # Cartridge solar, gyroscope and rumble devices
 
+The separate [card-reader board](card-reader.md) uses camera registers and
+scanline memory rather than these GPIO pins.
+
 CupidGBA connects these devices to the cartridge GPIO data, direction and
 read-control registers. GPIO remains visible in the three lower ROM windows;
 the underlying cartridge bytes remain unchanged. Disabling register reads

@@ -245,6 +245,8 @@ int main(int argc, char **argv) {
     bool rtcSeedSet = false;
     struct CupidRTCDateTime rtcSeed = {0};
     struct CupidPlatformPeripherals peripherals = CUPID_PLATFORM_PERIPHERALS_DEFAULT;
+    const char *cards[CUPID_CARD_QUEUE];
+    unsigned cardCount = 0;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--bios") && i + 1 < argc)
             bios = argv[++i];
@@ -266,9 +268,14 @@ int main(int argc, char **argv) {
             rtcInput = argv[++i];
         else if (!strcmp(argv[i], "--dump-rtc") && i + 1 < argc)
             rtcOutput = argv[++i];
-        else if ((!strcmp(argv[i], "--solar") || !strcmp(argv[i], "--rumble") ||
-                  !strcmp(argv[i], "--gyro") || !strcmp(argv[i], "--tilt")) &&
-                 i + 1 < argc) {
+        else if (!strcmp(argv[i], "--card") && i + 1 < argc && cardCount < CUPID_CARD_QUEUE)
+            cards[cardCount++] = argv[++i];
+        else if (!strcmp(argv[i], "--card-reader") && i + 1 < argc) {
+            if (!cupid_platform_peripheral_mode(argv[++i], &peripherals.cardReaderPresence))
+                return 2;
+        } else if ((!strcmp(argv[i], "--solar") || !strcmp(argv[i], "--rumble") ||
+                    !strcmp(argv[i], "--gyro") || !strcmp(argv[i], "--tilt")) &&
+                   i + 1 < argc) {
             int *presence = !strcmp(argv[i], "--solar")    ? &peripherals.solarPresence
                             : !strcmp(argv[i], "--rumble") ? &peripherals.rumblePresence
                             : !strcmp(argv[i], "--gyro")   ? &peripherals.gyroPresence
@@ -387,7 +394,8 @@ int main(int argc, char **argv) {
                 "FILE] [--dump-rumble FILE] [--solar auto|on|off] [--sunlight 0..255] [--rumble "
                 "auto|on|off] [--gyro auto|on|off] [--gyro-sample 0..4095] [--tilt auto|on|off] "
                 "[--tilt-x 0..4095] [--tilt-y 0..4095] [--start-address ADDRESS] "
-                "[--repeat-observations MIN] [--expect-loop-register N] [--terminal-address "
+                "[--card-reader auto|on|off] [--card FILE] [--repeat-observations MIN] "
+                "[--expect-loop-register N] [--terminal-address "
                 "ADDRESS] [--checkpoint-address "
                 "ADDRESS] [--expect-status-at ADDRESS MASK VALUE] [--expect-register-at ADDRESS "
                 "REGISTER VALUE] [--expect-register-pair-at "
@@ -409,12 +417,21 @@ int main(int argc, char **argv) {
         return 2;
     if (observations.minimumCycles && !observations.count)
         return 2;
+    if (cardCount && peripherals.cardReaderPresence == 0)
+        return 2;
     struct CupidKeyEvent *scriptEvents = NULL;
     if (keyScript &&
         (keyEventCount || !cupid_runner_read_keys(keyScript, &scriptEvents, &keyEventCount)))
         return 2;
+    struct CupidCardReader cardInput;
+    cupid_card_reader_init(&cardInput);
+    if (!cupid_platform_cards_read(&cardInput, cards, cardCount)) {
+        free(scriptEvents);
+        return 2;
+    }
     struct CupidGBA *gba = calloc(1, sizeof(*gba));
     if (!gba) {
+        cupid_card_reader_deinit(&cardInput);
         free(scriptEvents);
         return 2;
     }
@@ -426,6 +443,10 @@ int main(int argc, char **argv) {
     if (!cupid_platform_save_configure(&gba->memory.savedata, &saveSelection))
         goto cleanup;
     cupid_platform_peripherals_configure(gba, &peripherals);
+    if (!cupid_platform_cards_attach(gba, &cardInput)) {
+        fprintf(stderr, "Card input requires an enabled card reader; use --card-reader on\n");
+        goto cleanup;
+    }
     if (rtcPresence >= 0)
         cupid_cartridge_enable_rtc(gba, rtcPresence != 0);
     cupid_gba_reset(gba);
@@ -612,5 +633,6 @@ cleanup:
     free(pixels);
     free(gba);
     free(scriptEvents);
+    cupid_card_reader_deinit(&cardInput);
     return result;
 }

@@ -83,7 +83,7 @@ static void end_data_access(struct CupidARM *cpu, int *cycles, bool load) {
     cupid_bus_release(cpu);
 }
 
-static void begin_gpio_word(struct CupidARM *cpu, uint32_t address, int *cycles) {
+static void begin_cartridge_word(struct CupidARM *cpu, uint32_t address, int *cycles) {
     struct CupidGBA *gba = cpu->master;
     struct CupidMemory *memory = &gba->memory;
     cpu->cycles += *cycles;
@@ -105,7 +105,7 @@ static void begin_gpio_word(struct CupidARM *cpu, uint32_t address, int *cycles)
     cupid_bus_advance_part(cpu, low);
 }
 
-static void next_gpio_halfword(struct CupidARM *cpu, uint32_t address) {
+static void next_cartridge_halfword(struct CupidARM *cpu, uint32_t address) {
     struct CupidGBA *gba = cpu->master;
     cupid_bus_advance_part(cpu,
                            (unsigned)gba->memory.waitstatesSeq16[address >> GBA_BASE_OFFSET] + 1);
@@ -480,6 +480,13 @@ void cupid_memory_set_active_region(struct CupidARM *cpu, uint32_t address) {
             if ((address & (GBA_SIZE_ROM - 1)) < memory->romSize) {
                 break;
             }
+            if (cupid_cartridge_card_address(gba, address)) {
+                /* The dynamic opcode callback supplies this decoded board
+                 * window. Keep a bounded fallback for unsupported addresses. */
+                cpu->memory.activeRegion = (const uint32_t *)_deadbeef;
+                cpu->memory.activeMask = 0;
+                break;
+            }
             /* fall through */
         default:
             cpu->memory.accessSource = CUPID_ACCESS_UNKNOWN;
@@ -517,11 +524,13 @@ uint32_t cupid_memory_load32(struct CupidARM *cpu, uint32_t address, int *cycleC
         end_data_access(cpu, cycleCounter, true);
         return ROR(value, (address & 3) * 8);
     }
-    if (cycleCounter && cpu->memory.timed && cupid_cartridge_gpio_address(gba, address & ~3u)) {
+    if (cycleCounter && cpu->memory.timed &&
+        (cupid_cartridge_gpio_address(gba, address & ~3u) ||
+         cupid_cartridge_card_address(gba, address & ~3u))) {
         const uint32_t aligned = address & ~3u;
-        begin_gpio_word(cpu, aligned, cycleCounter);
+        begin_cartridge_word(cpu, aligned, cycleCounter);
         const uint32_t low = cupid_memory_loadU16(cpu, aligned, NULL);
-        next_gpio_halfword(cpu, aligned + 2);
+        next_cartridge_halfword(cpu, aligned + 2);
         const uint32_t high = cupid_memory_loadU16(cpu, aligned + 2, NULL);
         cupid_prefetch_after_data(gba);
         end_data_access(cpu, cycleCounter, true);
@@ -597,10 +606,15 @@ uint32_t cupid_memory_load32(struct CupidARM *cpu, uint32_t address, int *cycleC
                 value |= (((address & ~3) + 2) >> 1) << 16;
             }
             break;
-        case GBA_REGION_ROM2_EX:
+        case GBA_REGION_ROM2_EX: {
             wait += waitstatesRegion[address >> GBA_BASE_OFFSET];
-            if (cupid_memory_is_eeprom_address(memory, address) &&
-                (memory->savedata.type == SAVE_EEPROM || memory->savedata.type == SAVE_EEPROM512)) {
+            uint16_t low, high = 0;
+            if (cupid_cartridge_card_read(gba, address & ~3u, &low)) {
+                cupid_cartridge_card_read(gba, (address & ~3u) + 2, &high);
+                value = low | (uint32_t)high << 16;
+            } else if (cupid_memory_is_eeprom_address(memory, address) &&
+                       (memory->savedata.type == SAVE_EEPROM ||
+                        memory->savedata.type == SAVE_EEPROM512)) {
                 value = cupid_savedata_read_eeprom(&memory->savedata);
             } else if ((address & (GBA_SIZE_ROM - 4)) < memory->romSize) {
                 LOAD_32(value, address & (GBA_SIZE_ROM - 4), memory->rom);
@@ -609,6 +623,7 @@ uint32_t cupid_memory_load32(struct CupidARM *cpu, uint32_t address, int *cycleC
                 value |= (((address & ~3) + 2) >> 1) << 16;
             }
             break;
+        }
         case GBA_REGION_SRAM:
         case GBA_REGION_SRAM_MIRROR:
             wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
@@ -714,6 +729,13 @@ uint32_t cupid_memory_load16(struct CupidARM *cpu, uint32_t address, int *cycleC
             break;
         case GBA_REGION_ROM2_EX:
             wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
+            {
+                uint16_t card;
+                if (cupid_cartridge_card_read(gba, address & ~1u, &card)) {
+                    value = card;
+                    break;
+                }
+            }
             if (cupid_memory_is_eeprom_address(memory, address) &&
                 (memory->savedata.type == SAVE_EEPROM || memory->savedata.type == SAVE_EEPROM512)) {
                 value = cupid_savedata_read_eeprom(&memory->savedata);
@@ -821,6 +843,13 @@ uint32_t cupid_memory_load8(struct CupidARM *cpu, uint32_t address, int *cycleCo
         case GBA_REGION_ROM2:
         case GBA_REGION_ROM2_EX:
             wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
+            {
+                uint16_t card;
+                if (cupid_cartridge_card_read(gba, address & ~1u, &card)) {
+                    value = (card >> ((address & 1) * 8)) & 255;
+                    break;
+                }
+            }
             if ((address & (GBA_SIZE_ROM - 1)) < memory->romSize) {
                 value = ((uint8_t *)memory->rom)[address & (GBA_SIZE_ROM - 1)];
             } else {
@@ -832,11 +861,14 @@ uint32_t cupid_memory_load8(struct CupidARM *cpu, uint32_t address, int *cycleCo
             wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
             {
                 uint8_t sample;
-                if (cupid_cartridge_tilt_read(gba, address, &sample)) {
+                if (cupid_cartridge_card_read_port(gba, address, &sample) ||
+                    cupid_cartridge_tilt_read(gba, address, &sample)) {
                     value = sample;
                     break;
                 }
             }
+            if (gba->cartridge.cardReaderPresent)
+                cupid_card_reader_calibrate(gba);
             if (memory->savedata.type == SAVE_AUTODETECT) {
                 cupid_savedata_init_sram(&memory->savedata);
             }
@@ -910,11 +942,13 @@ void cupid_memory_store32(struct CupidARM *cpu, uint32_t address, int32_t value,
         end_data_access(cpu, cycleCounter, false);
         return;
     }
-    if (cycleCounter && cpu->memory.timed && cupid_cartridge_gpio_address(gba, address & ~3u)) {
+    if (cycleCounter && cpu->memory.timed &&
+        (cupid_cartridge_gpio_address(gba, address & ~3u) ||
+         cupid_cartridge_card_address(gba, address & ~3u))) {
         const uint32_t aligned = address & ~3u;
-        begin_gpio_word(cpu, aligned, cycleCounter);
+        begin_cartridge_word(cpu, aligned, cycleCounter);
         cupid_memory_store16(cpu, aligned, (int16_t)value, NULL);
-        next_gpio_halfword(cpu, aligned + 2);
+        next_cartridge_halfword(cpu, aligned + 2);
         cupid_memory_store16(cpu, aligned + 2, (int16_t)((uint32_t)value >> 16), NULL);
         cupid_prefetch_after_data(gba);
         end_data_access(cpu, cycleCounter, false);
@@ -975,6 +1009,11 @@ void cupid_memory_store32(struct CupidARM *cpu, uint32_t address, int32_t value,
             wait += waitstatesRegion[address >> GBA_BASE_OFFSET];
             if (cupid_paged_rom_write(gba, address, (uint32_t)value, 4))
                 break;
+            if (cupid_cartridge_card_write(gba, address & ~3u, (uint16_t)value)) {
+                cupid_cartridge_card_write(gba, (address & ~3u) + 2,
+                                           (uint16_t)((uint32_t)value >> 16));
+                break;
+            }
             cupid_cartridge_gpio_write(gba, address & ~3u, (uint16_t)value);
             cupid_cartridge_gpio_write(gba, (address & ~3u) + 2, (uint16_t)((uint32_t)value >> 16));
             break;
@@ -1038,6 +1077,10 @@ void cupid_memory_store16(struct CupidARM *cpu, uint32_t address, int16_t value,
             break;
         case GBA_REGION_ROM2_EX:
             /** EEPROM writes. */
+            if (cupid_cartridge_card_write(gba, address & ~1u, (uint16_t)value)) {
+                wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
+                break;
+            }
             if (!cupid_memory_is_eeprom_address(memory, address))
                 break;
             if (memory->savedata.type == SAVE_AUTODETECT) {
@@ -1128,13 +1171,17 @@ void cupid_memory_store8(struct CupidARM *cpu, uint32_t address, int8_t value, i
             /* The 16-bit cartridge bus repeats a byte on both lanes. GPIO sees
              * the aligned halfword strobe after the ordinary bus wait. */
             cupid_cartridge_gpio_write(gba, address & ~1u, (uint16_t)((uint8_t)value * 0x0101u));
+            cupid_cartridge_card_write(gba, address & ~1u, (uint16_t)((uint8_t)value * 0x0101u));
             wait = memory->waitstatesNonseq16[address >> GBA_BASE_OFFSET];
             break;
         case GBA_REGION_SRAM:
         case GBA_REGION_SRAM_MIRROR:
             wait = memory->waitstatesNonseq16[GBA_REGION_SRAM];
-            if (cupid_cartridge_tilt_write(gba, address, (uint8_t)value))
+            if (cupid_cartridge_card_write_port(gba, address, (uint8_t)value) ||
+                cupid_cartridge_tilt_write(gba, address, (uint8_t)value))
                 break;
+            if (gba->cartridge.cardReaderPresent)
+                cupid_card_reader_calibrate(gba);
             if (memory->savedata.type == SAVE_AUTODETECT) {
                 if ((address & 0xFFFF) == FLASH_BASE_HI && (uint8_t)value == FLASH_COMMAND_START) {
                     memory->savedata.type = SAVE_FLASH512;
