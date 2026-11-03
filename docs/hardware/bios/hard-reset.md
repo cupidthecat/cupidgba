@@ -37,14 +37,23 @@ bounded runs do not establish full gameplay compatibility. Multiboot,
 debugger startup paths, physical reset pulses and complete startup electrical
 behavior remain outside this qualification.
 
-## POSTFLG byte ownership
+## POSTFLG and power-port widths
 
 A BIOS byte write to `04000300h` can set POSTFLG bit zero. Further byte writes
 retain that bit, ignore unused input bits, and do not access HALTCNT at
 `04000301h`. Writes originating outside BIOS are ignored. A repeated startup
 flag write therefore continues executing without entering HALT or STOP.
-Combined halfword and word power-register behavior retains separate
-qualification limits.
+A halfword or word write at `04000300h` selects both byte ports. The low
+byte retains POSTFLG bit zero; the high byte selects HALT or STOP through
+HALTCNT, even when POSTFLG was previously zero. Other input bits do not
+become readable boot-flag state. The same BIOS-origin restriction applies
+to all three access widths. A timed HALT request retains the existing
+one-clock acceptance event and the following CPU phase; see
+[CPU/DMA/IRQ interactions](../cpu/dma-irq-interactions.md).
+
+These width rules follow the separate byte-port semantics. Their native
+and guest regressions establish the implemented policy; physical sampling
+at simultaneous control, interrupt and display edges remains unmeasured.
 
 ## Regression scope
 
@@ -55,6 +64,14 @@ ARM/Thumb POSTFLG byte strobes.
 Every group has a ten-second deadline. The existing MMIO group adds 1,536
 byte cases across both initial flag states, every byte value and BIOS/RAM/ROM
 write origins.
+
+Six `gba.system-control-*` groups add 786,432 exhaustive halfword/word
+byte-pair cases, 1,024 ARM/Thumb guest stores, 48 HALT/IRQ acceptance scenes
+and 12 STOP/keypad-wake scenes. They cover both initial boot-flag states,
+unaligned stores and BIOS/RAM/cartridge origins. The five power-control
+groups reject the preceding implementation. A further 384 CPU-read/DMA
+handover cases preserve driven-zero reads of IME's unused upper bytes,
+including four channels, three access widths and four clock epochs.
 
 The prefix matrix covers all seven caller privilege modes, both instruction
 states, every IRQ/FIQ mask combination, IWRAM/EWRAM/cartridge callers and clock
