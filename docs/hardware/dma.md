@@ -89,6 +89,15 @@ therefore retain a RAM destination or an address whose writes are ignored.
 Such a burst does not fill the FIFO; later timer overflows can request another
 burst. FIFO A always drives DMA1 and FIFO B always drives DMA2, including
 crossed FIFO-port destinations and repeated channel reconfiguration.
+
+FIFO overrides follow the selected start mode when control is rewritten with
+enable still set. Leaving special timing restores the programmed transfer
+width and destination mode. Selecting FIFO timing on an already enabled
+channel makes each newly accepted refill request transfer four words to a fixed
+destination, independently of the programmed count. A request that is already
+queued or running cannot have its remaining count restarted by another refill
+request. Existing pointer and ordinary count latches retain their ownership.
+
 Source/count progress, bus ownership and completion signals still run. Repeated
 requests during a pending or active burst are coalesced. Disabling a channel
 cancels its pending request and removes it from arbitration. The final destination
@@ -123,6 +132,15 @@ RAM and protected addresses, with per-word progress, priority, overflow,
 playback and completion IF checks. See [FIFO coverage](audio/fifo-power.md).
 Physical request propagation and control writes coincident with activation
 remain outside this qualification.
+
+Four `gba.dma-live-mode-*` groups cover 4,032 scenes: 384 FIFO cancellations,
+2,304 selections with varied programmed counts, 1,152 completed-burst mode
+changes and duplicate-request controls, and 192 mapped ARM/Thumb byte,
+halfword and word control writes. Complete EWRAM images use an independent
+byte-pattern oracle, with source guards, address progression, CPU release,
+completion IF and four clock epochs. All four groups reject the preceding
+core. Cancellation cases retain the recommended four-unit count; they do not
+establish every count-latch or control-write edge during a mode change.
 
 HBlank requests run on visible lines and VBlank requests run on entry to line
 160. The current display-request model latches channel 3's enabled custom mode
