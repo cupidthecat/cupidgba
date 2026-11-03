@@ -5,6 +5,7 @@
  *
  * - Shift camera commands MSB first, with separate data and acknowledgement clocks.
  * - Preserve queued optical input across camera reset and free it on board removal.
+ * - Publish black as zero and white as one after the per-block intensity threshold.
  * - Bound every sensor read and schedule the selected LED/IRQ delay on console time.
  * - Retain exposure progress across PHI rate changes and clock gating.
  */
@@ -313,7 +314,8 @@ static void read_line(struct CupidGBA *gba) {
             reader->sensor[20 + block] = (uint16_t)brightness;
         if (reader->sensor[68] > brightness)
             reader->sensor[68] = (uint16_t)brightness;
-        if (brightness <= reader->intensity[block]) {
+        /* A threshold-equal sample is black; only brighter samples drive one. */
+        if (brightness > reader->intensity[block]) {
             const unsigned bit = pixel % 16;
             reader->sensor[19 - pixel / 16] |= (uint16_t)(1u << (bit < 8 ? bit + 8 : bit - 8));
         }
