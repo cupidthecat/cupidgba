@@ -1459,6 +1459,18 @@ if(BUILD_TESTING)
         endif()
     endforeach()
 
+    add_executable(test_bios_dispatch tests/bios/test_dispatch.c)
+    target_link_libraries(test_bios_dispatch PRIVATE cupid_core)
+    foreach(group abi nested dma timer)
+        add_test(NAME gba.bios-dispatch-${group} COMMAND test_bios_dispatch ${group})
+        set_tests_properties(gba.bios-dispatch-${group} PROPERTIES TIMEOUT 10)
+        if(CUPID_TEST_BIOS)
+            add_test(NAME gba.bios-dispatch-${group}-external
+                COMMAND test_bios_dispatch ${group} --external-bios ${CUPID_TEST_BIOS})
+            set_tests_properties(gba.bios-dispatch-${group}-external PROPERTIES TIMEOUT 10)
+        endif()
+    endforeach()
+
     add_executable(test_bios_irq tests/bios/test_irq.c tests/arm/irq_probe.c)
     target_link_libraries(test_bios_irq PRIVATE cupid_core)
     foreach(group arm thumb events)

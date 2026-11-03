@@ -46,6 +46,10 @@ jobs:
           python3 tests/bios/generate_music_table.py --check
           python3 tests/bios/generate_checksum_identity.py .local-research/hle-rebuilt.bin --check
           clang --target=arm-none-eabi -march=armv4t -fuse-ld=lld -nostdlib \
+            '-Wl,-Ttext=0,--image-base=0,--oformat=binary,-e,0' \
+            tests/bios/dispatch-callbacks.s -o .local-research/dispatch-callbacks.bin
+          python3 tests/bios/generate_dispatch_callbacks.py .local-research/dispatch-callbacks.bin --check
+          clang --target=arm-none-eabi -march=armv4t -fuse-ld=lld -nostdlib \
             '-Wl,-Ttext=0x02018000,--image-base=0x02018000,--oformat=binary,-e,0' \
             tests/bios/music-callbacks.s -o .local-research/music-callbacks.bin
           python3 tests/bios/generate_music_callbacks.py .local-research/music-callbacks.bin
