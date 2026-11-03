@@ -78,21 +78,23 @@ Hosted Linux qualification uses the explicit Ubuntu 24.04 release for GCC
 Release and Clang Debug with address/undefined-behavior sanitizers. The complete
 Clang profile uses `-O1 -g`, matching local cartridge qualification and
 [AddressSanitizer's build guidance](https://clang.llvm.org/docs/AddressSanitizer.html#usage).
-A second default Debug sanitizer build runs every configured native ARM, core,
-GBA, platform and runner check without optimization. The complete profile
-retains all available cartridge cases, their original frame counts and process
-deadlines. Unoptimized full-cartridge runs timed out on
+A separate Ubuntu 24.04 job runs the default Debug sanitizer build without
+optimization. It starts independently of the complete optimized profile
+and retains every configured native ARM, core, GBA, platform and runner
+check. All Linux profiles fetch the pinned inputs through a shared action.
+The complete profile retains all available cartridge cases, their original
+frame counts and process deadlines. Unoptimized full-cartridge runs timed out on
 slower hosted workers; those failures remain recorded rather than increasing
-their limits. Both compiler flag sets appear in the job log. The exported
-compiler commands also verify effective optimization for every translation
-unit, including flags inherited through linked targets. This keeps
-an automatic `ubuntu-latest` release migration from changing the compiler,
+their limits. The optimized and unoptimized Clang profiles print their flags
+in separate job logs. Exported compiler commands verify effective optimization
+for every translation unit, including flags inherited through linked targets.
+This keeps an automatic `ubuntu-latest` release migration from changing the compiler,
 sanitizer and firmware-assembler baseline. Windows checks use GCC and SDL2.
 The Windows configure step selects the same Python interpreter used to fetch
 the inputs. This keeps CTest from switching to a separate host installation
 when both provide the same Python version. The input-download regression
 retains its ten-second limit and eight-second diagnostic traceback.
-Both checkout steps pin a verified Node.js 24 action revision. An OS release
+All checkout steps pin a verified Node.js 24 action revision. An OS release
 upgrade needs the same complete test, firmware regeneration, Make and live
 ThreadSanitizer qualification as the current workflow.
 

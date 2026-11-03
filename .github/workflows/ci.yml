@@ -65,23 +65,7 @@ jobs:
             tests/gba/serial/cable-driver.s -o .local-research/cable-driver.bin
           python3 tests/gba/serial/generate_cable_driver.py .local-research/cable-driver.bin
       - name: Fetch verified test inputs
-        run: |
-          python3 tests/roms/check_rom.py --fetch --directory .local-research/test-roms
-          python3 tests/roms/check_console.py --fetch --directory .local-research/test-roms
-          python3 tests/roms/check_ppu.py --fetch --directory .local-research/test-roms
-          python3 tests/roms/check_ppu_access.py --fetch --directory .local-research/test-roms
-          python3 tests/roms/check_raster.py --fetch --directory .local-research/test-roms
-          python3 tests/roms/check_prefetch_probe.py --fetch --directory .local-research/test-roms
-          python3 tests/roms/check_cpu_corpus.py --fetch --directory .local-research/test-roms/cpu-corpus
-          python3 tests/roms/check_thumb_exchange.py --fetch --directory .local-research/test-roms
-          python3 tests/roms/check_thumb_stack.py --fetch --directory .local-research/test-roms
-          python3 tests/roms/check_bus_feedback.py --fetch --directory .local-research/test-roms
-          python3 tests/roms/check_cp14_probe.py --fetch --directory .local-research/test-roms
-          python3 tests/roms/check_object_tail_probe.py --fetch --directory .local-research/test-roms
-          python3 tests/roms/check_display_probe.py --fetch --directory .local-research/test-roms
-          python3 tests/roms/check_cyclic_display.py --fetch --directory .local-research/test-roms
-          python3 tests/roms/check_register_probe.py --fetch --directory .local-research/test-roms
-          python3 tests/roms/check_serial_probe.py --fetch --directory .local-research/test-roms/serial
+        uses: ./.github/actions/fetch-linux-test-inputs
       - name: Configure
         run: |
           sanitizer_flags=()
@@ -105,24 +89,11 @@ jobs:
         run: cmake --build build --parallel 2
       - name: Verify sanitized compiler optimization
         if: matrix.compiler == 'clang'
-        run: python3 tests/platform/check_build_flags.py --compile-commands build/compile_commands.json --optimization O1
+        run: |
+          cat build/CMakeFiles/cupid_core.dir/flags.make
+          python3 tests/platform/check_build_flags.py --compile-commands build/compile_commands.json --optimization O1
       - name: Test
         run: ctest --test-dir build --output-on-failure
-      - name: Check unoptimized native core
-        if: matrix.compiler == 'clang'
-        run: |
-          # Keep default Debug coverage alongside the full sanitized -O1 run.
-          # Cartridge frame counts, assertions and process limits stay intact.
-          cat build/CMakeFiles/cupid_core.dir/flags.make
-          cmake -S . -B build-debug -DCMAKE_C_COMPILER=clang \
-            -DCMAKE_BUILD_TYPE=Debug -DCUPID_SANITIZERS=ON \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DCUPID_TEST_JOBS=2 \
-            -DCUPID_TEST_ROM_DIR=${{ github.workspace }}/.local-research/test-roms
-          cmake --build build-debug --parallel 2
-          cat build-debug/CMakeFiles/cupid_core.dir/flags.make
-          python3 tests/platform/check_build_flags.py --compile-commands build-debug/compile_commands.json --optimization none
-          ctest --test-dir build-debug -R '^(arm|core|gba|platform|runner)\.' --output-on-failure
       - name: Check live audio threading
         if: matrix.compiler == 'clang'
         run: |
@@ -141,6 +112,33 @@ jobs:
       - name: Verify Makefile build
         if: matrix.compiler == 'gcc'
         run: make --jobs=2
+
+  native:
+    name: Linux (clang, Debug, unoptimized)
+    # This profile is independent of the complete optimized cartridge run.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - name: Install SDL2
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev lld libboost-context-dev
+      - name: Fetch verified test inputs
+        uses: ./.github/actions/fetch-linux-test-inputs
+      - name: Configure unoptimized native core
+        run: |
+          cmake -S . -B build-debug -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_BUILD_TYPE=Debug -DCUPID_SANITIZERS=ON \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DCUPID_TEST_JOBS=2 \
+            -DCUPID_TEST_ROM_DIR=${{ github.workspace }}/.local-research/test-roms
+      - name: Build unoptimized native core
+        run: cmake --build build-debug --parallel 2
+      - name: Verify unoptimized compiler commands
+        run: |
+          cat build-debug/CMakeFiles/cupid_core.dir/flags.make
+          python3 tests/platform/check_build_flags.py --compile-commands build-debug/compile_commands.json --optimization none
+      - name: Test unoptimized native core
+        # Retain every configured native group and its original deadlines.
+        run: ctest --test-dir build-debug -R '^(arm|core|gba|platform|runner)\.' --output-on-failure
 
   windows:
     name: Windows (GCC, SDL2)
