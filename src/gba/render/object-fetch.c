@@ -167,6 +167,11 @@ static void fetch_texture(struct CupidVideo *v, uint64_t time) {
     if (!f->drawing)
         return;
     struct CupidObjectDraw *d = &f->draw[f->read];
+    /* The final texture request still owns the bus after the output
+     * deadline. Keep its fetch and draw progress without submitting pixels. */
+    const unsigned textureLimit =
+        f->limit == OBJECT_HBLANK_LIMIT ? OBJECT_HBLANK_TEXTURE_LIMIT : VIDEO_HORIZONTAL_LENGTH;
+    const bool publish = f->cycle + 2 < textureLimit;
     int x = d->affine ? d->tx >> 8 : d->tx ^ (d->flip ? d->width - 1 : 0);
     int y = d->affine ? d->ty >> 8 : d->ty;
     if (d->affine) {
@@ -178,7 +183,8 @@ static void fetch_texture(struct CupidVideo *v, uint64_t time) {
             unsigned index = d->fullPalette ? data : (data >> ((x & 1) * 4)) & 15;
             if (index && !d->fullPalette)
                 index |= d->palette << 4;
-            plot(v, d, d->x, index);
+            if (publish)
+                plot(v, d, d->x, index);
         }
         ++d->x;
         d->tx += d->matrix[0];
@@ -196,7 +202,9 @@ static void fetch_texture(struct CupidVideo *v, uint64_t time) {
                 (data >> (position * (d->fullPalette ? 8 : 4))) & (d->fullPalette ? 255 : 15);
             if (index && !d->fullPalette)
                 index |= d->palette << 4;
-            plot(v, d, d->x++, index);
+            if (publish)
+                plot(v, d, d->x, index);
+            ++d->x;
         }
         d->tx += 2;
         d->remaining -= 2;
