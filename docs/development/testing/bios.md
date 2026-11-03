@@ -23,6 +23,13 @@ physical power-on history and divider phase remain outside this scope.
 
 ## Caller return boundaries
 
+The four `gba.bios-dispatch-*` groups execute the unchecked `D4h` callback and
+return through the ordinary firmware path. Their 1,024 scenes per BIOS cover
+caller flags/masks, stack frames, protected reads, nested division, DMA3 and
+timer IRQs. See [SWI dispatch scope](../../hardware/bios/swi-entry.md#unchecked-callback-dispatch).
+An optional `CUPID_TEST_BIOS` adds the same groups for a local external image.
+These component fixtures retain ten-second deadlines and do not execute boot.
+
 The affine, data-service and register-reset BIOS fixtures use the bounded-step
 runner to test their return address after every ordinary guest step. They keep
 the original 100,000-step limit and ten-second CTest deadlines. Checking the

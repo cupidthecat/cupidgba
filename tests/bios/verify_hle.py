@@ -15,7 +15,7 @@ actual = Path(sys.argv[1]).read_bytes()
 if actual != expected:
     raise SystemExit("HLE assembly output does not match the embedded image")
 assembly = source.with_name("bios").joinpath("hle-bios.s").read_text()
-offsets = dict(re.findall(r"\.equ\s+(IRQ_ENTRY_OFFSET|IRQ_RETURN_OFFSET|SWI_TABLE_OFFSET|STALL_CALL_OFFSET|UTILITY_SOURCE_OFFSET),\s*(0x[0-9A-Fa-f]+)", assembly))
+offsets = dict(re.findall(r"\.equ\s+(IRQ_ENTRY_OFFSET|IRQ_RETURN_OFFSET|SWI_TABLE_OFFSET|STALL_CALL_OFFSET|UTILITY_SOURCE_OFFSET|SWI_CALLBACK_WORD_OFFSET),\s*(0x[0-9A-Fa-f]+)", assembly))
 
 entry = int(offsets["IRQ_ENTRY_OFFSET"], 16)
 irq_return = int(offsets["IRQ_RETURN_OFFSET"], 16)
@@ -28,6 +28,12 @@ if entry != 0x128 or irq_return != 0x138 or vector >> 24 != 0xEA or 0x20 + displ
 if actual[entry:irq_return + 8] != struct.pack("<6I", 0xE92D500F, 0xE3A00301, 0xE28FE000, 0xE510F004, 0xE8BD500F, 0xE25EF004):
     raise SystemExit("HLE IRQ frame or exception return is invalid")
 table = int(offsets["SWI_TABLE_OFFSET"], 16)
+callback = int(offsets["SWI_CALLBACK_WORD_OFFSET"], 16)
+if table != 0x198 or callback != table + 0xD4 * 4 or struct.unpack_from("<I", actual, callback)[0] != 0x02002040:
+    raise SystemExit("HLE unchecked callback alias is invalid")
+sqrt = struct.unpack_from("<I", actual, table + 8 * 4)[0]
+if sqrt % 4 or sqrt < 0x3A00 or sqrt + 0x74 > 0x3FFC or actual[sqrt + 0x6C:sqrt + 0x74] != actual[0x510:0x518]:
+    raise SystemExit("HLE square-root relocation or trailing fetch words are invalid")
 stall = int(offsets["STALL_CALL_OFFSET"], 16)
 guard = int(offsets["UTILITY_SOURCE_OFFSET"], 16)
 if guard != 0xBA4 or struct.unpack_from("<I", actual, guard)[0] != 0xE35C0000:

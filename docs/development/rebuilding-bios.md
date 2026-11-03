@@ -23,6 +23,12 @@ after the service table retains every later entry address. See
 The included `src/gba/bios/data-services.s` contains the timed data utilities and
 bias ramp. The verifier checks the internal stall entry, the ARM/Thumb service
 targets, and the utility source guard's observable address at `0x0BA4`.
+The unchecked `D4h` table lookup aliases the word at `0x4E8`, containing the
+callback address `0x02002040`. `square-root.s` occupies unused image space so
+this word can be data while the following service addresses remain fixed.
+The square-root instruction stream and its two trailing fetch words are
+retained; the verifier checks the aliased word, relocated target and trailing
+words against the original angle-service location in the owned image.
 `src/gba/bios/affine-services.s` contains the timed affine routines and includes
 `affine-sine.inc`. Its 256 signed 1.14 sine values are reproduced with decimal
 arithmetic by `tests/bios/generate_affine_table.py`; `--write` regenerates the
@@ -77,3 +83,15 @@ python3 tests/bios/generate_music_callbacks.py .local-research/music-callbacks.b
 
 `--write` regenerates `music-callbacks.inc`. The callbacks run from owned RAM,
 record actual arguments/ownership and supply deterministic library responses.
+
+The owned dispatch callbacks and timer handler are also reproducible:
+
+```sh
+clang --target=arm-none-eabi -march=armv4t -fuse-ld=lld -nostdlib \
+  '-Wl,-Ttext=0,--image-base=0,--oformat=binary,-e,0' \
+  tests/bios/dispatch-callbacks.s -o .local-research/dispatch-callbacks.bin
+python3 tests/bios/generate_dispatch_callbacks.py .local-research/dispatch-callbacks.bin --check
+```
+
+`--write` regenerates `dispatch-callbacks.inc`. Clang CI checks all five
+instruction streams against this source.
