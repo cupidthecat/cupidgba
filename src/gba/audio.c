@@ -7,6 +7,7 @@
  *   - @c timingFactor = 4 so PSG periods are scaled to the GBA CPU clock
  *   - Two Direct Sound FIFO channels (A and B) backed by ring buffers
  *   - A mixer event captures PSG and FIFO values on the same sample clock
+ *   - Clipped ten-bit levels use the selected 9/8/7/6-bit PWM precision
  *   - Captures retain their elapsed clocks across sampling-rate changes
  *   - FIFO bytes latch on timer overflow and hold between overflows
  *   - A 512 Hz frame sequencer updates length, envelope, and sweep state
@@ -615,7 +616,7 @@ void cupid_audio_timer_overflow(struct CupidAudio *audio, int timer, uint64_t ti
     }
 }
 
-/** @section audio_apply_bias Apply SOUNDBIAS and master volume scaling */
+/** @section audio_apply_bias Apply SOUNDBIAS, PWM precision and host gain */
 static int16_t _applyBias(struct CupidAudio *audio, int32_t sample) {
     int32_t bias = audio->soundbias & 0x3FF;
     sample += bias;
@@ -624,6 +625,11 @@ static int16_t _applyBias(struct CupidAudio *audio, int32_t sample) {
     } else if (sample < 0) {
         sample = 0;
     }
+    /* A PWM period holds 512, 256, 128 or 64 console clocks. Only whole
+     * pulse counts reach output: discard 1, 2, 3 or 4 low bits after clipping
+     * the combined unsigned level, before signed conversion and host gain. */
+    unsigned discarded = 1 + (audio->soundbias >> 14);
+    sample &= ~((1 << discarded) - 1);
     /* The DAC midpoint is fixed. Removing the programmed bias here would
      * erase its output shift and could wrap valid levels in signed PCM. */
     return (int16_t)(((sample - 0x200) * audio->masterVolume * 3) >> 4);
@@ -632,8 +638,8 @@ static int16_t _applyBias(struct CupidAudio *audio, int32_t sample) {
 /**
  * @brief Capture every pending mixer deadline up to @p timestamp.
  *
- * Advances the PSG state, mixes PSG and FIFO channels, applies bias and master
- * volume, and appends stereo frames with their elapsed clocks to the ring.
+ * Advances the PSG state, mixes PSG and FIFO channels, applies bias, PWM
+ * precision and host gain, then appends stereo frames with their elapsed clocks.
  *
  * @param audio     Audio subsystem state.
  * @param timestamp Target timestamp in CPU cycles.

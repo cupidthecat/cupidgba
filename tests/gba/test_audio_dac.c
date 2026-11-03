@@ -44,9 +44,12 @@ static void destroy(struct CupidGBA *g) {
     free(g);
 }
 
-/* Compute signed DAC position from its clipping thresholds. Use division
- * with explicit floor rounding, independently of the mixer's signed shift. */
+/* Compute signed DAC position from its clipping thresholds and PWM period.
+ * Use division with explicit floor rounding, independently of the mixer's
+ * discarded-bit mask and signed shift. */
 static int expected(int input, unsigned bias, int gain) {
+    unsigned period = 512 >> (bias >> 14);
+    bias &= 0x3FE;
     int position;
     if (input < -(int)bias)
         position = -512;
@@ -54,6 +57,7 @@ static int expected(int input, unsigned bias, int gain) {
         position = 511;
     else
         position = input + (int)bias - 512;
+    position = (position + 512) * (int)period / 1024 * 1024 / (int)period - 512;
     int64_t scaled = (int64_t)position * gain * 3;
     return (int)(scaled < 0 ? -((-scaled + 15) / 16) : scaled / 16);
 }
@@ -105,7 +109,7 @@ static void levels(void) {
             fifo_samples(g, input, input, 0x330C);
             int value = expected(input * 8, bias, 256);
             sample_one(g, &c, value, value);
-            CHECK(c.left[0] >= previous && c.left[0] >= -24576 && c.left[0] <= 24528);
+            CHECK(c.left[0] >= previous && c.left[0] >= -24576 && c.left[0] <= 24480);
             previous = c.left[0];
             count++;
         }
@@ -147,11 +151,11 @@ static void routing(void) {
                         }
     CHECK(count == 51840);
     /* Fixed numerical anchors include both former polarity reversals and
-     * unchanged default-bias saturation, cancellation and silence. */
+     * quantized default-bias saturation, cancellation and silence. */
     const unsigned bias[] = {0, 0x3FE, 0, 0x3FE, 0x200, 0x200, 0x200, 0x200};
     const int a[] = {127, -128, 0, 0, 127, -128, 0, 127};
     const int b[] = {127, -128, 0, 0, 127, -128, 0, -128};
-    const int pcm[] = {24192, -24576, -24576, 24480, 24528, -24576, 0, -192};
+    const int pcm[] = {24192, -24576, -24576, 24480, 24480, -24576, 0, -192};
     g->audio.masterVolume = 256;
     for (unsigned i = 0; i < 8; i++) {
         write_bias(g, 2, (uint16_t)bias[i]);
@@ -198,7 +202,7 @@ static void chronology(void) {
                          clock = clock == 512 && phase >= 512 ? 1024 : clock + interval) {
                         CHECK(index < c[punctual].count);
                         CHECK(c[punctual].clock[index] == origins[origin] + clock);
-                        int value = clock <= phase ? -24576 : 24480;
+                        int value = clock <= phase ? -24576 : expected(0, mode << 14 | 0x3FE, 256);
                         CHECK(c[punctual].left[index] == value &&
                               c[punctual].right[index] == value);
                         index++;
@@ -230,7 +234,7 @@ static void firmware_capture(void *context, uint64_t clock, int16_t left, int16_
     int level = cupid_io_read(c->g, REG_SOUNDBIAS) & 0x3FF;
     CHECK(clock > c->lastClock);
     CHECK((clock - c->g->audio.sampleOrigin) % (unsigned)c->g->audio.sampleInterval == 0);
-    CHECK(left == (level - 512) * 48 && right == left);
+    CHECK(left == expected(0, cupid_io_read(c->g, REG_SOUNDBIAS), 256) && right == left);
     CHECK(c->increasing ? level >= c->lastLevel : level <= c->lastLevel);
     c->lastClock = clock;
     c->lastLevel = level;
