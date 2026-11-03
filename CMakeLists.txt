@@ -930,6 +930,13 @@ if(BUILD_TESTING)
         set_tests_properties(gba.bias-control-${group} PROPERTIES TIMEOUT 30)
     endforeach()
 
+    add_executable(test_pwm_precision tests/gba/audio/test_pwm_precision.c)
+    target_link_libraries(test_pwm_precision PRIVATE cupid_core)
+    foreach(group 0 1 2 3 routing chronology guest dma)
+        add_test(NAME gba.pwm-precision-${group} COMMAND test_pwm_precision ${group})
+        set_tests_properties(gba.pwm-precision-${group} PROPERTIES TIMEOUT 30)
+    endforeach()
+
     add_executable(test_serial tests/gba/serial/test_serial.c)
     target_link_libraries(test_serial PRIVATE cupid_core)
 
