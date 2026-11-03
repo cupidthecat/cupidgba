@@ -233,6 +233,10 @@ void cupid_savedata_write_flash(struct CupidSavedata *savedata, uint16_t address
         savedata->flashState = FLASH_STATE_RAW;
         return;
     }
+    /* This device decodes A14..A0 during command cycles. Keep the original
+     * address for program data and sector selection, where A15 selects storage. */
+    const uint16_t commandAddress =
+        savedata->flashProfile == FLASH_PROFILE_SST39VF512 ? address & 0x7FFF : address;
     switch (savedata->flashState) {
         case FLASH_STATE_RAW:
             switch (savedata->command) {
@@ -249,7 +253,7 @@ void cupid_savedata_write_flash(struct CupidSavedata *savedata, uint16_t address
                     savedata->command = FLASH_COMMAND_NONE;
                     break;
                 default:
-                    if (address == FLASH_BASE_HI && value == FLASH_COMMAND_START) {
+                    if (commandAddress == FLASH_BASE_HI && value == FLASH_COMMAND_START) {
                         savedata->flashState = FLASH_STATE_START;
                     }
                     break;
@@ -257,7 +261,7 @@ void cupid_savedata_write_flash(struct CupidSavedata *savedata, uint16_t address
             break;
 
         case FLASH_STATE_START:
-            if (address == FLASH_BASE_LO && value == FLASH_COMMAND_CONTINUE) {
+            if (commandAddress == FLASH_BASE_LO && value == FLASH_COMMAND_CONTINUE) {
                 savedata->flashState = FLASH_STATE_CONTINUE;
             } else {
                 savedata->flashState = FLASH_STATE_RAW;
@@ -272,7 +276,7 @@ void cupid_savedata_write_flash(struct CupidSavedata *savedata, uint16_t address
                 savedata->command = FLASH_COMMAND_NONE;
                 break;
             }
-            if (address == FLASH_BASE_HI) {
+            if (commandAddress == FLASH_BASE_HI) {
                 switch (savedata->command) {
                     case FLASH_COMMAND_NONE:
                         switch (value) {

@@ -70,6 +70,15 @@ the three-write unlock/exit sequence. After a byte-program command, `F0` is
 payload data. The device has no bank-switch command. A sector erase accepts
 any address within the selected sector, including `5555`.
 
+Command cycles decode address bits A14 through A0; A15 may be high or low in
+each unlock or command write. Program-byte addresses and sector selection keep
+the complete address, including A15. This distinction permits `D555`/`AAAA`
+command aliases without moving a program or erase operation into the lower half
+of the chip. Other Flash profiles retain their existing address decoders.
+ID reads still use the qualified `0000`/`0001` addresses; command aliases do not
+establish ID-read mirrors. Table 4 of the device data sheet specifies these
+separate command, byte and sector address roles.
+
 Selection fixes the 64-KiB capacity, so an oversized save file fails before
 replacing data or cancelling an operation. Console reset, same-type selection
 and compatible save replacement retain the profile. Changing the save-device
@@ -138,6 +147,17 @@ DMA value through the following write, complete storage images at four bus
 phases, timer/DMA IRQs, destination guards and CPU release. This qualifies the
 save operation's interaction with the existing bus model; broader DMA timing
 qualification remains separate.
+
+The five `gba.flash-addresses-*` groups add 9,240 command-address scenes:
+24 identity/profile controls, 2,560 byte programs, 6,144 sector erases, 256 chip
+erases and 256 mapped ARM/Thumb/DMA cases. They cover every combination of the
+ignored command bit, complete saved images, both target-address halves,
+command-valued payload bytes, busy-command suppression, nominal ready edges
+and four clock epochs. Actual byte stores issue the mapped command sequences;
+DMA reads observe busy and completed data through both cartridge save windows.
+The preceding decoder rejects all five groups. These checks retain the selected
+timing profile and do not calibrate physical chip timing or qualify undefined
+ID-read aliases.
 
 The `rom.flash-driver-*` groups execute complete ARM and Thumb polling drivers
 with each supported timing profile. They program full 4-KiB patterns, preserve
