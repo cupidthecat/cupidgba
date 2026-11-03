@@ -923,6 +923,13 @@ if(BUILD_TESTING)
         set_tests_properties(gba.audio-dac-${group} PROPERTIES TIMEOUT 30)
     endforeach()
 
+    add_executable(test_bias_control tests/gba/audio/test_bias_control.c)
+    target_link_libraries(test_bias_control PRIVATE cupid_core)
+    foreach(group registers guest dma input pcm chronology)
+        add_test(NAME gba.bias-control-${group} COMMAND test_bias_control ${group})
+        set_tests_properties(gba.bias-control-${group} PROPERTIES TIMEOUT 30)
+    endforeach()
+
     add_executable(test_serial tests/gba/serial/test_serial.c)
     target_link_libraries(test_serial PRIVATE cupid_core)
 
