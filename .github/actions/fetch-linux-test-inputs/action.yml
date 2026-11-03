@@ -1,0 +1,24 @@
+name: Fetch Linux test inputs
+description: Fetch pinned cartridge inputs for the Linux qualification profiles.
+runs:
+  using: composite
+  steps:
+    - name: Fetch verified test inputs
+      shell: bash
+      run: |
+        python3 tests/roms/check_rom.py --fetch --directory .local-research/test-roms
+        python3 tests/roms/check_console.py --fetch --directory .local-research/test-roms
+        python3 tests/roms/check_ppu.py --fetch --directory .local-research/test-roms
+        python3 tests/roms/check_ppu_access.py --fetch --directory .local-research/test-roms
+        python3 tests/roms/check_raster.py --fetch --directory .local-research/test-roms
+        python3 tests/roms/check_prefetch_probe.py --fetch --directory .local-research/test-roms
+        python3 tests/roms/check_cpu_corpus.py --fetch --directory .local-research/test-roms/cpu-corpus
+        python3 tests/roms/check_thumb_exchange.py --fetch --directory .local-research/test-roms
+        python3 tests/roms/check_thumb_stack.py --fetch --directory .local-research/test-roms
+        python3 tests/roms/check_bus_feedback.py --fetch --directory .local-research/test-roms
+        python3 tests/roms/check_cp14_probe.py --fetch --directory .local-research/test-roms
+        python3 tests/roms/check_object_tail_probe.py --fetch --directory .local-research/test-roms
+        python3 tests/roms/check_display_probe.py --fetch --directory .local-research/test-roms
+        python3 tests/roms/check_cyclic_display.py --fetch --directory .local-research/test-roms
+        python3 tests/roms/check_register_probe.py --fetch --directory .local-research/test-roms
+        python3 tests/roms/check_serial_probe.py --fetch --directory .local-research/test-roms/serial
