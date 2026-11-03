@@ -1100,6 +1100,13 @@ if(BUILD_TESTING)
     add_test(NAME gba.dma COMMAND test_dma)
     set_tests_properties(gba.dma PROPERTIES TIMEOUT 10)
 
+    add_executable(test_dma_live_modes tests/gba/dma/test_live_modes.c)
+    target_link_libraries(test_dma_live_modes PRIVATE cupid_core)
+    foreach(group leave enter repeat guest)
+        add_test(NAME gba.dma-live-mode-${group} COMMAND test_dma_live_modes ${group})
+        set_tests_properties(gba.dma-live-mode-${group} PROPERTIES TIMEOUT 30)
+    endforeach()
+
     add_executable(test_dma_completion tests/gba/dma/test_completion.c)
     target_link_libraries(test_dma_completion PRIVATE cupid_core)
     add_test(NAME gba.dma-completion COMMAND test_dma_completion)

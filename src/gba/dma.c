@@ -161,12 +161,13 @@ static void completion_callback(struct CupidTiming *timing, void *context, uint3
     cupid_raise_irq_at(dma->gba, IRQ_DMA0 << dma->id, timing->globalCycles - late);
 }
 
-static void request_at(struct CupidGBA *gba, int ch, uint64_t timestamp, unsigned delay) {
+static bool request_at(struct CupidGBA *gba, int ch, uint64_t timestamp, unsigned delay) {
     struct CupidDMA *dma = &gba->memory.dma[ch];
     if (!dma->enable || dma->ready || cupid_timing_is_scheduled(&gba->timing, &dma->requestEvent))
-        return;
+        return false;
     cupid_timing_schedule_absolute(&gba->timing, &dma->requestEvent,
                                    (int32_t)(uint32_t)(timestamp + delay));
+    return true;
 }
 
 static void complete_channel(struct CupidGBA *gba, struct CupidDMA *dma, uint64_t when) {
@@ -383,12 +384,14 @@ void cupid_dma_write_cnt(struct CupidGBA *gba, int ch, uint16_t value) {
     dma->timing = DMA_REG_TIMING(value);
     dma->doIrq = DMA_REG_IRQ(value);
     dma->enable = DMA_REG_ENABLE(value);
+    /* FIFO overrides follow the selected start mode, including writes that
+     * leave enable set. Pointer/count latches retain their existing ownership. */
+    dma->fifo = ch >= 1 && ch <= 2 && dma->timing == DMA_TIMING_CUSTOM;
     if (!dma->enable) {
         cupid_timing_deschedule(&gba->timing, &dma->requestEvent);
         dma->ready = false;
         dma->nextCount = 0;
     } else if (!wasEnabled) {
-        dma->fifo = ch >= 1 && ch <= 2 && dma->timing == DMA_TIMING_CUSTOM;
         dma->transferWord = dma->wordTransfer || dma->fifo;
         unsigned width = dma->transferWord ? 4 : 2;
         dma->nextSource = dma->source & ~(width - 1);
@@ -412,8 +415,11 @@ void cupid_dma_transfer(struct CupidGBA *gba, int ch) {
 void cupid_dma_request_fifo(struct CupidGBA *gba, int ch, uint64_t timestamp) {
     if (ch >= 1 && ch <= 2 && gba->memory.dma[ch].timing == DMA_TIMING_CUSTOM) {
         /* The audio request reaches DMA one clock after the ordinary trigger
-         * path. Bus ownership still waits for the current CPU transfer. */
-        request_at(gba, ch, timestamp, 3);
+         * path. Bus ownership still waits for the current CPU transfer.
+         * Only a new request establishes the four-word burst; coalesced
+         * requests must not restart a pending or active transfer's count. */
+        if (request_at(gba, ch, timestamp, 3))
+            gba->memory.dma[ch].nextCount = 4;
     }
 }
 
