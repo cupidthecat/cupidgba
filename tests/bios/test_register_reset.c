@@ -84,7 +84,9 @@ static struct CupidGBA *machine(const char *bios) {
     cupid_test_bios_caller(gba);
     /* Both paths start at the same display phase rather than booting an input. */
     cupid_video_reset(&gba->video);
-    cupid_io_write(gba, REG_POSTFLG, 1);
+    /* Set only the boot flag; the adjacent byte belongs to HALTCNT. */
+    cupid_io_write8(gba, REG_POSTFLG, 1);
+    CHECK(cupid_io_read(gba, REG_POSTFLG) == 1 && !gba->cpu.halted && !gba->stopped);
     return gba;
 }
 

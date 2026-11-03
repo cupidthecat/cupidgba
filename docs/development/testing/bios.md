@@ -51,7 +51,9 @@ reset-prefix state, complete built-in startup, timer/DMA/IRQ chronology,
 repeated reboots, temporary startup IRQs and ARM/Thumb POSTFLG byte strobes. `CUPID_TEST_BIOS` adds 352
 paired prefix/chronology observations. Each group retains a ten-second
 deadline. The existing MMIO group adds all byte patterns and both initial
-POSTFLG states for BIOS/RAM/ROM origins. See
+POSTFLG states for BIOS/RAM/ROM origins. Six system-control groups also
+cover wider power-port writes, HALT/IRQ and STOP/keypad wake, and zero-input
+publication through unused IME bytes. See
 [HardReset](../../hardware/bios/hard-reset.md) for complete counts and startup
 qualification limits.
 

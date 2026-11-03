@@ -509,25 +509,12 @@ void cupid_io_write(struct CupidGBA *gba, uint32_t addr, uint16_t value) {
             break;
 
         case REG_POSTFLG:
-            /**
-             * Only writable from the BIOS region on a real GBA.
-             * HALTCNT (0x301) is handled separately in cupid_io_write8.
-             */
-            if (gba->memory.activeRegion == 0x00) { /** BIOS region */
-                if (gba->memory.io[addr >> 1]) {
-                    if (value & 0x8000) {
-                        /** Stop (deep halt). */
-                        cupid_gba_stop(gba);
-                    } else {
-                        cupid_gba_halt(gba);
-                    }
-                }
-                value &= ~0x8000;
-            } else {
-                /** Writes from outside BIOS are ignored. */
-                return;
-            }
-            break;
+            /* A wide access selects both byte ports. Preserve POSTFLG's
+             * sticky bit and HALTCNT's own origin/acceptance rules, including
+             * the first power strobe before the boot flag has been set. */
+            cupid_io_write8(gba, REG_POSTFLG, (uint8_t)value);
+            cupid_io_write8(gba, REG_HALTCNT, (uint8_t)(value >> 8));
+            return;
 
         default:
             /**
@@ -551,7 +538,7 @@ void cupid_io_write(struct CupidGBA *gba, uint32_t addr, uint16_t value) {
  *
  * Sound, serial, timers and IRQ registers have byte dispatch so untouched fields do
  * not repeat side effects. Other writes merge into their register halfword.
- * HALTCNT at 0x301 is byte-only.
+ * A word at POSTFLG also selects the adjacent HALTCNT byte port.
  */
 void cupid_io_write32(struct CupidGBA *gba, uint32_t addr, uint32_t value) {
     if (addr < 0x01000000 && (addr & 0xFFFCu) == REG_MEMCNT_LO) {
