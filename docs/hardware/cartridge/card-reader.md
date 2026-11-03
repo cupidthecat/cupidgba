@@ -39,6 +39,12 @@ the console's WAITCNT PHI output gate that sequence. An unpowered camera ignores
 serial commands; the electrical response of its input pins is not modeled.
 Per-block thresholds operate on monochrome brightness endpoints; the extrema
 registers retain the brightest block samples and darkest image sample.
+Scanline data publishes black as zero and white as one. A sample at or below
+its block threshold is black, so threshold `7F` makes the entire block black.
+The first pixel occupies bit zero of the last byte in the 40-byte scanline.
+Normalized strip dots remain ink markers internally; their representation does
+not change the bus-visible brightness convention. Empty optical input is white
+before thresholding, and extrema retain pre-threshold brightness.
 
 The scanline flag publishes with the logical line. The selected interrupt delay
 is twice the LED-duration count, capped at `0x4000` console clocks at the nominal
@@ -74,6 +80,15 @@ separate word strobes and mutable prefetched input across four clock epochs.
 Clock controls cover all PHI settings, fractional progress across rate changes,
 both clock gates, paused deadlines and unpowered serial writes. The preceding
 model fails the disabled-clock and unpowered-write controls.
+Four polarity groups check 1,536 endpoint/empty-input scenes, 3,840 single-dot
+position scenes, 6,144 block-threshold scenes and 64 complete DMA copies. Their
+byte oracle sets bits for white pixels independently of the sensor's halfword
+packing. Both endpoints, all 128 thresholds, every pixel position, each of the
+48 blocks, address mirrors, extrema, scan flags and four clock epochs are
+covered. These groups reject the preceding polarity. The owned ARM/Thumb
+scanning guests retain their instructions, DMA counts, complete payload checks,
+save results, negative-card controls and deadlines with the documented white
+pixel values in their expected payload.
 Format controls independently reconstruct raw bytes, verify error-information
 syndromes and checksums, and reject malformed images without touching output.
 Unused fragment padding is deterministic; reduced short strips retain their

@@ -226,9 +226,9 @@ static void start_scan(struct CupidGBA *gba) {
         cupid_memory_store8(&gba->cpu, control1, 0, NULL);
     CHECK(gba->cartridge.cardReader.scanX == 396 && gba->cartridge.cardReader.scanY == 10);
     for (unsigned word = 0; word < 20; word++)
-        CHECK(gba->cartridge.cardReader.sensor[word] == (word < 10    ? 0xFFFF
-                                                         : word == 10 ? 0x00F0
-                                                                      : 0));
+        CHECK(gba->cartridge.cardReader.sensor[word] == (word < 10    ? 0
+                                                         : word == 10 ? 0xFF0F
+                                                                      : 0xFFFF));
 }
 
 static void scan(void) {
@@ -531,7 +531,7 @@ static void thresholds(void) {
     cupid_memory_store8(&gba->cpu, control1, 0, NULL);
     const struct CupidCardReader *reader = &gba->cartridge.cardReader;
     for (unsigned word = 0; word < 20; word++)
-        CHECK(reader->sensor[word] == (word < 2 ? 0xFFFF : word == 2 ? 0x00FF : 0));
+        CHECK(reader->sensor[word] == (word < 2 ? 0 : word == 2 ? 0xFF00 : 0xFFFF));
     for (unsigned block = 0; block < 48; block++)
         CHECK(reader->sensor[20 + block] == (block < 8 ? 127 : 0));
     CHECK(reader->sensor[68] == 127);

@@ -161,7 +161,8 @@ class Program:
         if len(self.code) % 4:
             self.code += bytes(2)
         self.label("payload")
-        self.code += struct.pack("<20H", *([0xFFFF] * 10 + [0xF0] + [0] * 9))
+        # The scanline publishes white as one, with the first pixel in the last byte.
+        self.code += struct.pack("<20H", *([0] * 10 + [0xFF0F] + [0xFFFF] * 9))
         for position, value in self.values:
             struct.pack_into("<I", self.code, position,
                              self.base + self.labels[value] if isinstance(value, str) else value)
@@ -201,7 +202,7 @@ def main():
             assert "frames=2 " in result.stdout
             expected_ram = bytearray(256 * 1024)
             struct.pack_into("<6I", expected_ram, 0, 5, 0x82, 4, 0x2000, ord("C"), 0x5A)
-            struct.pack_into("<20H", expected_ram, 0x100, *([0xFFFF] * 10 + [0xF0] + [0] * 9))
+            struct.pack_into("<20H", expected_ram, 0x100, *([0] * 10 + [0xFF0F] + [0xFFFF] * 9))
             assert ram.read_bytes() == expected_ram, (thumb, ram.read_bytes()[:24].hex())
             battery = save.read_bytes()
             assert len(battery) == 128 * 1024 and battery[0] == 0x5A
@@ -232,7 +233,7 @@ def main():
             assert failed_guest.returncode == 0, failed_guest.stdout + failed_guest.stderr
             wrong_ram = bytearray(expected_ram)
             struct.pack_into("<I", wrong_ram, 20, 0xE1)
-            wrong_ram[0x100:0x128] = bytes(40)
+            wrong_ram[0x100:0x128] = bytes([255]) * 40
             assert ram.read_bytes() == wrong_ram and save.read_bytes()[0] == 0xE1
             if args.frontend:
                 frontend = subprocess.run([str(args.frontend.resolve()), str(rom), "--frames", "2",
