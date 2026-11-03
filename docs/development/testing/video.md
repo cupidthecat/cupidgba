@@ -1,5 +1,14 @@
 # Video checks
 
+The `gba.object-output-ports` and `gba.object-output-frames` groups separate
+texture-port ownership from pixel submission. The first requires 6,144 complete
+final request cases, including unchanged pixel metadata on the closing request.
+The second executes sixteen owned guest scenes and checks 614,400 final-image
+pixels after their completion marker. Both retain ten-second deadlines.
+Existing object-tail CPU, DMA and port checks keep their original data and
+timing assertions. See [object texture-tail ownership](../../hardware/render/object-tail.md)
+for the selected output model and hardware qualification limits.
+
 [Testing overview](../testing.md). Run commands from the repository root.
 
 ## Display startup

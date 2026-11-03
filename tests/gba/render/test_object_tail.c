@@ -86,7 +86,7 @@ static void ports_and_pixels(void) {
                                 }
                             }
                             const struct CupidObjectFetch *f = &g->video.pipeline.objects;
-                            unsigned pixels = shortTail ? 72 : (freeHblank ? 124 : 128);
+                            unsigned pixels = shortTail ? 72 : (freeHblank ? 122 : 128);
                             for (unsigned x = 0; x < GBA_SCREEN_WIDTH; x++)
                                 CHECK(f->pixels[f->buffer ^ 1][x].index ==
                                       (x < pixels ? (color ? 0x11 : 1) : 0));
@@ -133,7 +133,9 @@ static void affine_tail(void) {
                         advance(g, 976);
                         CHECK((memcmp(before, f->pixels[f->buffer ^ 1], sizeof(before)) == 0) ==
                               (freeHblank != 0));
-                        CHECK(f->pixels[f->buffer ^ 1][122].index == (color ? 0x11 : 1));
+                        CHECK(f->pixels[f->buffer ^ 1][121].index == (color ? 0x11 : 1));
+                        CHECK(f->pixels[f->buffer ^ 1][122].index ==
+                              (freeHblank ? 0 : (color ? 0x11 : 1)));
                         CHECK(f->pixels[f->buffer ^ 1][127].index ==
                               (freeHblank ? 0 : (color ? 0x11 : 1)));
                         destroy(g);
