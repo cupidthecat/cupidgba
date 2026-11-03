@@ -136,7 +136,8 @@ static void mode_fields_and_all_channel_headers(void) {
             call(gba, 0x1B, argument, (value & 1) != 0, value & 2 ? MODE_IRQ : MODE_SYS);
             CHECK(!memcmp(expected, area(gba), sizeof(expected)));
             const unsigned resolution = kind == 3 && (value & 11) ? (value & 3) << 14 : 0;
-            CHECK(gba->memory.io[REG_SOUNDBIAS >> 1] == (0x03FF | resolution));
+            /* The odd write stimulus retains only writable bias bits. */
+            CHECK(gba->memory.io[REG_SOUNDBIAS >> 1] == (0x03FE | resolution));
             destroy(gba);
         }
 }

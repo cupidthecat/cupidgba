@@ -1577,6 +1577,9 @@ void cupid_audio_write_register(struct CupidAudio *audio, uint32_t addr, uint16_
 
         /** SOUNDBIAS. */
         case REG_SOUNDBIAS: {
+            /* Only the even bias level and divider fields reach storage or
+             * the mixer. All access widths share this register dispatch. */
+            val &= 0xC3FE;
             audio->soundbias = val;
             int resolution = (val >> 14) & 3;
             int32_t newInterval = 0x200 >> resolution;
