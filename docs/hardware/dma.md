@@ -148,6 +148,30 @@ when line 162 advances to line 163. It requests transfers three clocks into
 lines 2–161 of the following frame and disables the channel on entry to line
 162. This selected window model does not establish every physical latch edge.
 
+## Game Pak requests
+
+DMA3 retains the Game Pak data-request flag in control-register bit 11. Setting
+enable with this flag and immediate timing latches the addresses and count,
+but leaves the channel waiting for a cartridge request. Enabling the channel
+alone does not queue a copy, take the CPU bus or raise a completion interrupt.
+The other three channels mask this bit and retain their ordinary start behavior.
+Disabling a waiting channel clears its pending state; a later enable with the
+flag clear uses the ordinary immediate-transfer path.
+
+The [AGB programming manual, DMA3 control](https://www.manualslib.com/manual/3342081/Nintendo-Game-Boy-Advance.html?page=123)
+requires a cartridge that supplies the request. CupidGBA has no Game Pak DMA
+request provider. The positive request handshake, its transfer granularity,
+acknowledgement and physical timing remain unimplemented. Combinations with
+blanking/display start modes, repeat and control changes during activation
+remain unqualified.
+
+The `gba.dma-gamepak-request-*` groups check the absent-request condition,
+ordinary transfers and channel masks, ARM/Thumb stores, DMA-written control
+registers, disable/re-enable recovery, reset and other-channel priority. Both
+transfer widths, zero and nonzero counts, and clock wrap retain destination
+guards, register readback and the waiting channel's latched progress. These
+checks qualify the no-request state through the existing bus model.
+
 ## Evidence and remaining limits
 
 `CUPID_DMA_PROBE_DIR` registers nine unchanged local DMA cartridges and repeats

@@ -420,7 +420,9 @@ void cupid_dma_write_cnt(struct CupidGBA *gba, int ch, uint16_t value) {
             dma->fifo
                 ? 0
                 : (dma->destControl == 3 ? (int)width : offsets[dma->destControl] * (int)width);
-        if (dma->timing == DMA_TIMING_NOW)
+        /* Game Pak request mode waits for the cartridge; enabling the channel
+         * alone must not create an immediate transfer request. */
+        if (dma->timing == DMA_TIMING_NOW && !DMA_REG_DRQ(value))
             cupid_dma_transfer(gba, ch);
     }
 }
