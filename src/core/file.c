@@ -1,10 +1,29 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /**
- * @file file.c
- * @brief Regular-file reads and staged persistent-file replacement.
+ * @file      file.c
+ * @author    cupidthecat
+ * @brief     Regular-file reads and staged persistent-file replacement.
+ * @date      2026-11-16
  *
  * - Reject incomplete or oversized payloads in exact reads.
  * - Flush an exclusively created stage before replacing the destination.
+ *
+ * @copyright Copyright (c) 2026 cupidthecat
+ *
+ * This file is part of CupidGBA.
+ *
+ * CupidGBA is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * CupidGBA is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with CupidGBA.  If not, see <https://gnu.org>.
  */
 #ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L

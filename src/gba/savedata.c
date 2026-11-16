@@ -1,6 +1,25 @@
 /**
- * @file savedata.c
- * @brief Save data types: SRAM, SRAM512, Flash 512/1M, EEPROM 512B/8K.
+ * @file      savedata.c
+ * @author    cupidthecat
+ * @brief     Save data types: SRAM, SRAM512, Flash 512/1M, EEPROM 512B/8K.
+ * @date      2026-11-16
+ *
+ * @copyright Copyright (c) 2026 cupidthecat
+ *
+ * This file is part of CupidGBA.
+ *
+ * CupidGBA is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * CupidGBA is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with CupidGBA.  If not, see <https://gnu.org>.
  */
 #include "cupid/gba.h"
 #include <errno.h>
@@ -255,6 +274,10 @@ void cupid_savedata_write_flash(struct CupidSavedata *savedata, uint16_t address
                 default:
                     if (commandAddress == FLASH_BASE_HI && value == FLASH_COMMAND_START) {
                         savedata->flashState = FLASH_STATE_START;
+                    } else if (savedata->flashProfile == FLASH_PROFILE_SST39VF512 &&
+                               savedata->command == FLASH_COMMAND_ERASE) {
+                        /* An invalid continuation cancels the whole pending erase sequence. */
+                        savedata->command = FLASH_COMMAND_NONE;
                     }
                     break;
             }
@@ -265,14 +288,20 @@ void cupid_savedata_write_flash(struct CupidSavedata *savedata, uint16_t address
                 savedata->flashState = FLASH_STATE_CONTINUE;
             } else {
                 savedata->flashState = FLASH_STATE_RAW;
+                if (savedata->flashProfile == FLASH_PROFILE_SST39VF512 &&
+                    savedata->command == FLASH_COMMAND_ERASE)
+                    savedata->command = FLASH_COMMAND_NONE;
             }
             break;
 
         case FLASH_STATE_CONTINUE:
             savedata->flashState = FLASH_STATE_RAW;
             if (savedata->flashProfile == FLASH_PROFILE_SST39VF512 &&
-                savedata->command == FLASH_COMMAND_ERASE && value == FLASH_COMMAND_ERASE_SECTOR) {
-                _flashEraseSector(savedata, address);
+                savedata->command == FLASH_COMMAND_ERASE) {
+                if (value == FLASH_COMMAND_ERASE_SECTOR)
+                    _flashEraseSector(savedata, address);
+                else if (commandAddress == FLASH_BASE_HI && value == FLASH_COMMAND_ERASE_CHIP)
+                    _flashErase(savedata);
                 savedata->command = FLASH_COMMAND_NONE;
                 break;
             }

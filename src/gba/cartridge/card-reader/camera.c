@@ -1,13 +1,32 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /**
- * @file camera.c
- * @brief Card-reader serial camera, acknowledged scanlines and cartridge registers.
+ * @file      camera.c
+ * @author    cupidthecat
+ * @brief     Card-reader serial camera, acknowledged scanlines and cartridge registers.
+ * @date      2026-11-16
  *
  * - Shift camera commands MSB first, with separate data and acknowledgement clocks.
  * - Preserve queued optical input across camera reset and free it on board removal.
  * - Publish black as zero and white as one after the per-block intensity threshold.
  * - Bound every sensor read and schedule the selected LED/IRQ delay on console time.
  * - Retain exposure progress across PHI rate changes and clock gating.
+ *
+ * @copyright Copyright (c) 2026 cupidthecat
+ *
+ * This file is part of CupidGBA.
+ *
+ * CupidGBA is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * CupidGBA is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with CupidGBA.  If not, see <https://gnu.org>.
  */
 #include "cupid/gba.h"
 #include "internal.h"

@@ -1,6 +1,25 @@
 #!/usr/bin/env python3
-# @file generate_dispatch_callbacks.py
-# @brief Reproduce owned callback fixture words from their assembled ARM image.
+# @file      generate_dispatch_callbacks.py
+# @author    cupidthecat
+# @brief     Reproduce owned callback fixture words from their assembled ARM image.
+# @date      2026-11-16
+#
+# @copyright Copyright (c) 2026 cupidthecat
+#
+# This file is part of CupidGBA.
+#
+# CupidGBA is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# CupidGBA is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with CupidGBA.  If not, see <https://gnu.org>.
 """Reproduce owned callback fixture words from their assembled ARM image."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse
@@ -18,10 +37,32 @@ def main():
     data = args.image.read_bytes()
     if len(data) != 0x438:
         raise SystemExit('Callback image span changed')
-    text = ('/* SPDX-License-Identifier: GPL-3.0-or-later */\n'
-            '/** @file dispatch-callbacks.inc\n'
-            ' * @brief Generated owned ARM callback and interrupt-handler words.\n'
-            ' */\n')
+    text = (
+        '/* SPDX-License-Identifier: GPL-3.0-or-later */\n'
+        '/**\n'
+        ' * @file      dispatch-callbacks.inc\n'
+        ' * @author    cupidthecat\n'
+        ' * @brief     Generated owned ARM callback and interrupt-handler words.\n'
+        ' * @date      2026-11-16\n'
+        ' *\n'
+        ' * @copyright Copyright (c) 2026 cupidthecat\n'
+        ' *\n'
+        ' * This file is part of CupidGBA.\n'
+        ' *\n'
+        ' * CupidGBA is free software: you can redistribute it and/or modify\n'
+        ' * it under the terms of the GNU General Public License as published by\n'
+        ' * the Free Software Foundation, either version 3 of the License, or\n'
+        ' * (at your option) any later version.\n'
+        ' *\n'
+        ' * CupidGBA is distributed in the hope that it will be useful,\n'
+        ' * but WITHOUT ANY WARRANTY; without even the implied warranty of\n'
+        ' * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n'
+        ' * GNU General Public License for more details.\n'
+        ' *\n'
+        ' * You should have received a copy of the GNU General Public License\n'
+        ' * along with CupidGBA.  If not, see <https://gnu.org>.\n'
+        ' */\n'
+    )
     for name, start, size in [('plain', 0, 52), ('nested', 0x100, 72),
                               ('dma', 0x200, 96), ('timer', 0x300, 84),
                               ('handler', 0x400, 56)]:

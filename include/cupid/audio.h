@@ -1,7 +1,8 @@
 /**
- * @file audio.h
- * @brief GBA audio: 4 PSG channels + 2 DMA FIFO channels.
- *
+ * @file      audio.h
+ * @author    cupidthecat
+ * @brief     GBA audio: 4 PSG channels + 2 DMA FIFO channels.
+ * @date      2026-11-16
  *
  * Architecture:
  *   - PSG engine: ch1 (square+sweep), ch2 (square),
@@ -14,6 +15,23 @@
  *   - FIFO bytes latch on timer overflow and are held until the next overflow
  *   - Each output frame retains its elapsed clocks for host resampling
  *   - Frame sequencer at 512 Hz updates length, envelope, sweep
+ *
+ * @copyright Copyright (c) 2026 cupidthecat
+ *
+ * This file is part of CupidGBA.
+ *
+ * CupidGBA is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * CupidGBA is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with CupidGBA.  If not, see <https://gnu.org>.
  */
 #ifndef CUPID_AUDIO_H
 #define CUPID_AUDIO_H

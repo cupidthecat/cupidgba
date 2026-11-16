@@ -1,6 +1,25 @@
 #!/usr/bin/env python3
-# @file generate_affine_table.py
-# @brief Reproduce the signed 1.14 sine values used by the affine firmware.
+# @file      generate_affine_table.py
+# @author    cupidthecat
+# @brief     Reproduce the signed 1.14 sine values used by the affine firmware.
+# @date      2026-11-16
+#
+# @copyright Copyright (c) 2026 cupidthecat
+#
+# This file is part of CupidGBA.
+#
+# CupidGBA is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# CupidGBA is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with CupidGBA.  If not, see <https://gnu.org>.
 """Reproduce the signed 1.14 sine values used by the affine firmware."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 from decimal import Decimal, localcontext
@@ -9,8 +28,27 @@ import argparse
 
 
 FILE_HEADER = (
-    '@ @file affine-sine.inc\n'
-    '@ @brief Generated signed 1.14 sine table for firmware affine transforms.\n'
+    '@ @file      affine-sine.inc\n'
+    '@ @author    cupidthecat\n'
+    '@ @brief     Generated signed 1.14 sine table for firmware affine transforms.\n'
+    '@ @date      2026-11-16\n'
+    '@\n'
+    '@ @copyright Copyright (c) 2026 cupidthecat\n'
+    '@\n'
+    '@ This file is part of CupidGBA.\n'
+    '@\n'
+    '@ CupidGBA is free software: you can redistribute it and/or modify\n'
+    '@ it under the terms of the GNU General Public License as published by\n'
+    '@ the Free Software Foundation, either version 3 of the License, or\n'
+    '@ (at your option) any later version.\n'
+    '@\n'
+    '@ CupidGBA is distributed in the hope that it will be useful,\n'
+    '@ but WITHOUT ANY WARRANTY; without even the implied warranty of\n'
+    '@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n'
+    '@ GNU General Public License for more details.\n'
+    '@\n'
+    '@ You should have received a copy of the GNU General Public License\n'
+    '@ along with CupidGBA.  If not, see <https://gnu.org>.\n'
 )
 
 

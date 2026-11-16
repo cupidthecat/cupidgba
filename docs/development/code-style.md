@@ -5,16 +5,47 @@ includes. [Building](building.md#c-formatting) explains the pinned formatter
 and the check used by CI. Assembly includes keep their assembler syntax.
 
 Give each C source/header, Python script, assembly source and source include
-a file header near the top. Use `@file` with the actual filename and `@brief`
-with a concrete description of its role. Add short bullets when timing,
-ownership or several responsibilities need explanation. Keep the description
-consistent with the current code and its verification limits.
+a file header at the top, after a required shebang or an existing SPDX notice.
+Use `@file` with the actual filename, `@author` with `cupidthecat`, `@brief`
+with a concrete description of its role, `@date` in `YYYY-MM-DD` form and the
+CupidGBA copyright and license notice below. Keep descriptions consistent with
+the current code and its verification limits. Preserve useful bullets about
+timing, ownership and other responsibilities between the metadata and license.
 
-C files and C includes use a `/** ... */` block. Python uses `# @file` and
-`# @brief` comments, preserving its shebang and module docstring. Assembly
-uses its accepted comment syntax. Keep existing license notices intact.
-Generated includes emit their headers from the generator too; retain exact
-fixture reconstruction checks and verify that assembled bytes stay unchanged.
+```c
+/**
+ * @file      module.h
+ * @author    cupidthecat
+ * @brief     Describe this file's interface or implementation.
+ * @date      2026-11-16
+ *
+ * @copyright Copyright (c) 2026 cupidthecat
+ *
+ * This file is part of CupidGBA.
+ *
+ * CupidGBA is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * CupidGBA is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with CupidGBA.  If not, see <https://gnu.org>.
+ */
+```
+
+C files and C includes use a `/** ... */` block. Python uses `#` comments for
+the same fields and notice, preserving its shebang and module docstring. ARM
+assembly and assembly includes use `@` comments. Keep existing SPDX identifiers
+and license notices intact, including the source notices collected in `LICENSE`.
+Generated includes emit their complete headers from the generator too. Keep
+their dates fixed in the templates so rebuilding does not change the output
+with the host clock. Retain exact fixture reconstruction checks and verify
+that assembled bytes stay unchanged.
 
 Use block comments consistently:
 

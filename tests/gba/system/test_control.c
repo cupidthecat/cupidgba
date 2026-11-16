@@ -1,12 +1,31 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /**
- * @file test_control.c
- * @brief System-control access widths, sleep strobes and driven interrupt input.
+ * @file      test_control.c
+ * @author    cupidthecat
+ * @brief     System-control access widths, sleep strobes and driven interrupt input.
+ * @date      2026-11-16
  *
  * - Exhaust every wide power-port byte pair with both boot-flag states.
  * - Execute ARM/Thumb stores across BIOS, RAM and cartridge origins.
  * - Retain HALT acceptance, interrupt wake and STOP wake across store widths.
  * - Observe zero IME upper input through CPU reads and waiting DMA channels.
+ *
+ * @copyright Copyright (c) 2026 cupidthecat
+ *
+ * This file is part of CupidGBA.
+ *
+ * CupidGBA is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * CupidGBA is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with CupidGBA.  If not, see <https://gnu.org>.
  */
 #include "../../test.h"
 #include "cupid/gba.h"

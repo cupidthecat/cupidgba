@@ -1,6 +1,25 @@
 #!/usr/bin/env python3
-# @file generate_checksum_identity.py
-# @brief Reproduce the final additive identity word from the owned firmware image.
+# @file      generate_checksum_identity.py
+# @author    cupidthecat
+# @brief     Reproduce the final additive identity word from the owned firmware image.
+# @date      2026-11-16
+#
+# @copyright Copyright (c) 2026 cupidthecat
+#
+# This file is part of CupidGBA.
+#
+# CupidGBA is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# CupidGBA is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with CupidGBA.  If not, see <https://gnu.org>.
 """Reproduce the final additive identity word from the owned firmware image."""
 # SPDX-License-Identifier: GPL-3.0-or-later
 import argparse
@@ -10,8 +29,27 @@ import struct
 
 
 FILE_HEADER = (
-    '@ @file checksum-identity.inc\n'
-    '@ @brief Generated additive identity word for the complete replacement BIOS.\n'
+    '@ @file      checksum-identity.inc\n'
+    '@ @author    cupidthecat\n'
+    '@ @brief     Generated additive identity word for the complete replacement BIOS.\n'
+    '@ @date      2026-11-16\n'
+    '@\n'
+    '@ @copyright Copyright (c) 2026 cupidthecat\n'
+    '@\n'
+    '@ This file is part of CupidGBA.\n'
+    '@\n'
+    '@ CupidGBA is free software: you can redistribute it and/or modify\n'
+    '@ it under the terms of the GNU General Public License as published by\n'
+    '@ the Free Software Foundation, either version 3 of the License, or\n'
+    '@ (at your option) any later version.\n'
+    '@\n'
+    '@ CupidGBA is distributed in the hope that it will be useful,\n'
+    '@ but WITHOUT ANY WARRANTY; without even the implied warranty of\n'
+    '@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n'
+    '@ GNU General Public License for more details.\n'
+    '@\n'
+    '@ You should have received a copy of the GNU General Public License\n'
+    '@ along with CupidGBA.  If not, see <https://gnu.org>.\n'
 )
 
 
