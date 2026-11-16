@@ -78,6 +78,10 @@ unsigned cupid_prefetch_fetch(struct CupidGBA *gba, uint32_t address, unsigned w
     memory->prefetchUnit.fetchKind = CUPID_PREFETCH_NONE;
     memory->prefetchUnit.address = address;
     unsigned region = address >> GBA_BASE_OFFSET;
+    /* Save-memory instruction requests take the cartridge bus from the ROM
+     * stream, including any pending mutable-port sample. */
+    if (region >= GBA_REGION_SRAM && region <= GBA_REGION_SRAM_MIRROR)
+        return cycles + stop(gba);
     if (region < GBA_REGION_ROM0 || region > GBA_REGION_ROM2_EX)
         return cycles;
     memory->prefetchUnit.width = width;

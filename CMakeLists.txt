@@ -855,6 +855,12 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/test_comment_spacing.py)
     set_tests_properties(runner.comment-spacing runner.comment-spacing-parser PROPERTIES TIMEOUT 10)
 
+    add_test(NAME runner.file-headers COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_file_headers.py)
+    add_test(NAME runner.file-headers-parser COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/test_file_headers.py)
+    set_tests_properties(runner.file-headers runner.file-headers-parser PROPERTIES TIMEOUT 10)
+
     add_test(NAME runner.generated-fixtures COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/test_generated_fixtures.py)
     set_tests_properties(runner.generated-fixtures PROPERTIES TIMEOUT 10)
@@ -1267,6 +1273,13 @@ if(BUILD_TESTING)
     foreach(group RANGE 0 3)
         add_test(NAME gba.prefetch-restart-${group} COMMAND test_prefetch_restart ${group})
         set_tests_properties(gba.prefetch-restart-${group} PROPERTIES TIMEOUT 30)
+    endforeach()
+
+    add_executable(test_prefetch_save tests/gba/test_prefetch_save.c)
+    target_link_libraries(test_prefetch_save PRIVATE cupid_core)
+    foreach(group branches bus ports)
+        add_test(NAME gba.prefetch-save-${group} COMMAND test_prefetch_save ${group})
+        set_tests_properties(gba.prefetch-save-${group} PROPERTIES TIMEOUT 10)
     endforeach()
 
     add_executable(test_fast_boot tests/gba/test_fast_boot.c)

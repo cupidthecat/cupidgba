@@ -47,6 +47,16 @@ their dates fixed in the templates so rebuilding does not change the output
 with the host clock. Retain exact fixture reconstruction checks and verify
 that assembled bytes stay unchanged.
 
+Build scripts, workflow files and `.clang-format` use the same fields in `#`
+comments. JSON fixture manifests retain their valid JSON syntax without comments.
+
+Run `python3 tests/platform/check_file_headers.py` to check leading metadata and
+the complete license notice. The check covers tracked project source, fixtures
+and build configuration, with support for source archives. It reports missing
+or malformed headers without rewriting files. CI runs it before the Linux GCC
+and Windows builds and through the registered CTest suite. Review descriptions
+when changing behavior; the check cannot determine whether prose matches code.
+
 Use block comments consistently:
 
 - `/* ... */` explains implementation choices, invariants and test intent.
