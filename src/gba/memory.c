@@ -153,12 +153,13 @@ extern const uint8_t cupid_hle_bios[];
 
 /**
  * @brief Default wait-state tables per region, indexed by address >> 24.
+ * WAITCNT resets to zero; both backup windows use the same SRAM wait field.
  */
-static const char GBA_BASE_WAITSTATES[16] = {0, 0, 2, 0, 0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 0};
-static const char GBA_BASE_WAITSTATES_32[16] = {0, 0, 5, 0, 0, 1, 1, 0, 7, 7, 9, 9, 13, 13, 9, 0};
-static const char GBA_BASE_WAITSTATES_SEQ[16] = {0, 0, 2, 0, 0, 0, 0, 0, 2, 2, 4, 4, 8, 8, 4, 0};
+static const char GBA_BASE_WAITSTATES[16] = {0, 0, 2, 0, 0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 4};
+static const char GBA_BASE_WAITSTATES_32[16] = {0, 0, 5, 0, 0, 1, 1, 0, 7, 7, 9, 9, 13, 13, 9, 9};
+static const char GBA_BASE_WAITSTATES_SEQ[16] = {0, 0, 2, 0, 0, 0, 0, 0, 2, 2, 4, 4, 8, 8, 4, 4};
 static const char GBA_BASE_WAITSTATES_SEQ_32[16] = {0, 0, 5, 0, 0,  1,  1, 0,
-                                                    5, 5, 9, 9, 17, 17, 9, 0};
+                                                    5, 5, 9, 9, 17, 17, 9, 9};
 
 /**
  * @brief ROM wait-state lookup from WAITCNT register fields.
@@ -204,6 +205,8 @@ void cupid_memory_init(struct CupidGBA *gba) {
     cpu->memory.storeMultiple = cupid_memory_store_multiple;
     cpu->memory.setActiveRegion = cupid_memory_set_active_region;
     cpu->memory.fetch = cupid_bus_fetch;
+    cpu->memory.readOpcodeFallback = NULL;
+    cpu->memory.directOpcodeBase = cpu->memory.directOpcodeSize = 0;
     cpu->memory.captureOpcode = cupid_memory_capture_opcode;
     cpu->memory.finish = cupid_bus_finish;
     cpu->memory.lock = cupid_bus_lock;
@@ -421,6 +424,33 @@ uint32_t cupid_memory_open_bus(struct CupidARM *cpu) {
     return value;
 }
 
+/* Ordinary opcode fetches retain the mapped image's padding and mirrors.
+ * Beyond that view the undriven cartridge pins contain halfword addresses.
+ * Mutable board ports have already had their separate opcode callback; this
+ * path reads no save-device serial state and advances no additional clocks. */
+static bool read_rom_opcode(struct CupidARM *cpu, uint32_t address, unsigned width,
+                            uint32_t *value) {
+    const unsigned region = address >> GBA_BASE_OFFSET;
+    if (region < GBA_REGION_ROM0 || region > GBA_REGION_ROM2_EX)
+        return false;
+    const struct CupidMemory *memory = &cpu->master->memory;
+    address &= ~(width - 1u);
+    const uint32_t offset = address & (GBA_SIZE_ROM - 1);
+    if (memory->rom && offset < memory->romSize) {
+        /* Tiny images can end inside an opcode. The loader zero-pads their
+         * storage; assemble those trailing bytes without reading past a view
+         * that a core client may have allocated to its exact mapped size. */
+        *value = 0;
+        for (unsigned i = 0; i < width && offset + i < memory->romSize; ++i)
+            *value |= (uint32_t)memory->rom[offset + i] << (i * 8);
+    } else {
+        *value = (address >> 1) & UINT32_C(0xFFFF);
+        if (width == WORD_SIZE_ARM)
+            *value |= (uint32_t)(uint16_t)((address >> 1) + 1u) << 16;
+    }
+    return true;
+}
+
 /**
  * @brief Set the active execution region after a branch.
  *
@@ -457,6 +487,7 @@ void cupid_memory_set_active_region(struct CupidARM *cpu, uint32_t address) {
     }
 
     memory->activeRegion = newRegion;
+    cpu->memory.readOpcodeFallback = NULL;
     switch (newRegion) {
         case GBA_REGION_BIOS:
             cpu->memory.accessSource = CUPID_ACCESS_SYSTEM;
@@ -494,19 +525,12 @@ void cupid_memory_set_active_region(struct CupidARM *cpu, uint32_t address) {
         case GBA_REGION_ROM2:
         case GBA_REGION_ROM2_EX:
             cpu->memory.accessSource = CUPID_ACCESS_PROGRAM;
-            cpu->memory.activeRegion = (const uint32_t *)memory->rom;
-            cpu->memory.activeMask = memory->romMask;
-            if ((address & (GBA_SIZE_ROM - 1)) < memory->romSize) {
-                break;
-            }
-            if (cupid_cartridge_card_address(gba, address)) {
-                /* The dynamic opcode callback supplies this decoded board
-                 * window. Keep a bounded fallback for unsupported addresses. */
-                cpu->memory.activeRegion = (const uint32_t *)_deadbeef;
-                cpu->memory.activeMask = 0;
-                break;
-            }
-            /* fall through */
+            cpu->memory.activeRegion = (const uint32_t *)(memory->rom ? memory->rom : _deadbeef);
+            cpu->memory.activeMask = memory->rom ? memory->romMask : 0;
+            cpu->memory.directOpcodeBase = address & ~(uint32_t)(GBA_SIZE_ROM - 1);
+            cpu->memory.directOpcodeSize = memory->rom ? (uint32_t)memory->romSize : 0;
+            cpu->memory.readOpcodeFallback = read_rom_opcode;
+            break;
         default:
             cpu->memory.accessSource = CUPID_ACCESS_UNKNOWN;
             memory->activeRegion = -1;

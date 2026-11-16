@@ -45,6 +45,23 @@ state and byte preservation, unchanged ready deadlines and successful retries. T
 host recovery guarantees; see [save files](../hardware/cartridge/save-files.md)
 and [cartridge tests](testing/cartridge.md) for their scope.
 
+### Game Pak opcode bounds and backup waits
+
+Instruction fetches outside the mapped ROM image now sample address-derived
+halfwords. This covers branches beyond the image and sequential fetches past
+its end. Crossing a 32 MiB window selects the next window's image bytes and
+wait states. Device opcode callbacks retain priority, and image replacement
+refreshes the direct view before another instruction fetch.
+
+Both backup windows start with the same SRAM wait setting after reset. CPU
+accesses and DMA transfers through the `0x0F000000` mirror therefore retain
+the same timing as `0x0E000000`, including before the first `WAITCNT` write.
+Nine regression groups cover opcode values and execution, mapped-image
+lifetime, reset defaults, all SRAM selectors and DMA completion/IRQ edges.
+See [the Game Pak bus](../hardware/rom-bus.md) and [memory tests](testing/memory.md).
+These checks preserve the selected digital model; EEPROM instruction-fetch
+signaling and physical cartridge bus transitions remain unqualified.
+
 ### GBA display-control mask
 
 DISPCNT writes retain the GBA control fields and keep the protected legacy-mode
