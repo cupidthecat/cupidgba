@@ -155,9 +155,10 @@ struct CupidARMMemory {
     bool dataSequential;
     bool (*readOpcode)(struct CupidARM *cpu, uint32_t address, unsigned width, uint32_t *value);
     /* A bounded opcode view retains direct reads inside its byte span. Outside
-     * that span, this optional callback resolves the actual fetch address.
-     * readOpcode still has priority for values sampled by a device. The view
-     * base must be aligned to both supported instruction widths. */
+     * that span, this optional callback resolves the actual fetch address and
+     * can rebind the view without branching. It runs before readOpcode, whose
+     * device sample has priority. The fallback must not sample mutable ports
+     * or advance bus clocks. The base is aligned to both instruction widths. */
     uint32_t directOpcodeBase, directOpcodeSize;
     bool (*readOpcodeFallback)(struct CupidARM *cpu, uint32_t address, unsigned width,
                                uint32_t *value);

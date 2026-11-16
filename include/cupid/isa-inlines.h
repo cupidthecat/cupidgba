@@ -86,13 +86,19 @@
 /** @name PC Write Helpers */
 static inline uint32_t CupidReadOpcode(struct CupidARM *cpu, uint32_t address, unsigned width) {
     uint32_t value;
-    bool supplied = cpu->memory.readOpcode && cpu->memory.readOpcode(cpu, address, width, &value);
+    bool supplied = false;
     /* Test the last byte of the aligned fetch without rotating logical ARM A1.
      * A zero-sized view always uses the fallback; ordinary mapped fetches keep
-     * their direct pointer read and need no additional function call. */
-    if (!supplied && cpu->memory.readOpcodeFallback &&
+     * their direct pointer read and need no additional function call. Resolve
+     * a crossed view before a device supplies its higher-priority sample. */
+    if (cpu->memory.readOpcodeFallback &&
         ((address - cpu->memory.directOpcodeBase) | (width - 1u)) >= cpu->memory.directOpcodeSize)
         supplied = cpu->memory.readOpcodeFallback(cpu, address, width, &value);
+    uint32_t deviceValue;
+    if (cpu->memory.readOpcode && cpu->memory.readOpcode(cpu, address, width, &deviceValue)) {
+        value = deviceValue;
+        supplied = true;
+    }
     if (!supplied) {
         if (width == WORD_SIZE_ARM)
             LOAD_32(value, address & cpu->memory.activeMask, cpu->memory.activeRegion);
@@ -115,6 +121,7 @@ static inline int32_t CupidARMWritePC(struct CupidARM *cpu) {
     cpu->prefetch[0] = CupidReadOpcode(cpu, pc, WORD_SIZE_ARM);
     if (cpu->memory.timed)
         cpu->memory.finish(cpu);
+    const int firstWait = (int)cpu->memory.activeNonseqCycles32;
     pc += WORD_SIZE_ARM;
     if (cpu->memory.timed)
         cpu->memory.fetch(cpu, pc, WORD_SIZE_ARM, true);
@@ -123,9 +130,7 @@ static inline int32_t CupidARMWritePC(struct CupidARM *cpu) {
         cpu->memory.finish(cpu);
     cpu->gprs[ARM_PC] = pc;
     cpu->irqDisableLatch = cpu->cpsr.i;
-    return cpu->memory.timed
-               ? 0
-               : 2 + (int)cpu->memory.activeNonseqCycles32 + (int)cpu->memory.activeSeqCycles32;
+    return cpu->memory.timed ? 0 : 2 + firstWait + (int)cpu->memory.activeSeqCycles32;
 }
 
 static inline int32_t CupidThumbWritePC(struct CupidARM *cpu) {
@@ -137,6 +142,7 @@ static inline int32_t CupidThumbWritePC(struct CupidARM *cpu) {
     cpu->prefetch[0] = CupidReadOpcode(cpu, pc, WORD_SIZE_THUMB);
     if (cpu->memory.timed)
         cpu->memory.finish(cpu);
+    const int firstWait = (int)cpu->memory.activeNonseqCycles16;
     pc += WORD_SIZE_THUMB;
     if (cpu->memory.timed)
         cpu->memory.fetch(cpu, pc, WORD_SIZE_THUMB, true);
@@ -145,9 +151,7 @@ static inline int32_t CupidThumbWritePC(struct CupidARM *cpu) {
         cpu->memory.finish(cpu);
     cpu->gprs[ARM_PC] = pc;
     cpu->irqDisableLatch = cpu->cpsr.i;
-    return cpu->memory.timed
-               ? 0
-               : 2 + (int)cpu->memory.activeNonseqCycles16 + (int)cpu->memory.activeSeqCycles16;
+    return cpu->memory.timed ? 0 : 2 + firstWait + (int)cpu->memory.activeSeqCycles16;
 }
 
 /* Complete a load's internal cycle before refilling a branch target. */

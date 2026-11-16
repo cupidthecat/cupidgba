@@ -426,7 +426,7 @@ uint32_t cupid_memory_open_bus(struct CupidARM *cpu) {
 
 /* Ordinary opcode fetches retain the mapped image's padding and mirrors.
  * Beyond that view the undriven cartridge pins contain halfword addresses.
- * Mutable board ports have already had their separate opcode callback; this
+ * Mutable board ports use a separate, higher-priority opcode callback. This
  * path reads no save-device serial state and advances no additional clocks. */
 static bool read_rom_opcode(struct CupidARM *cpu, uint32_t address, unsigned width,
                             uint32_t *value) {
@@ -451,22 +451,18 @@ static bool read_rom_opcode(struct CupidARM *cpu, uint32_t address, unsigned wid
     return true;
 }
 
-/**
- * @brief Set the active execution region after a branch.
- *
- * Records lastJump, resets prefetch state, handles fast-path updates when the
- * region is unchanged, saves BIOS prefetch when leaving BIOS, updates
- * accessSource and region pointers, and updates cycle cost tables.
- */
-void cupid_memory_set_active_region(struct CupidARM *cpu, uint32_t address) {
+static bool read_mapped_opcode(struct CupidARM *cpu, uint32_t address, unsigned width,
+                               uint32_t *value);
+
+/* Bind storage and waits without changing branch history or sampled pipeline
+ * words. A refill's second fetch and ordinary sequential fetches can each
+ * select a different device from the first requested address. */
+static void bind_opcode_region(struct CupidARM *cpu, uint32_t address) {
     struct CupidGBA *gba = cpu->master;
     struct CupidMemory *memory = &gba->memory;
     const uint32_t virtualAddress = address;
     address = cupid_memory_decode_address(memory, address);
     int newRegion = address >> GBA_BASE_OFFSET;
-
-    gba->lastJump = virtualAddress;
-    memory->lastPrefetchedPc = 0;
 
     /** Fast path: same region, only adjust mask alignment. */
     if (newRegion == memory->activeRegion) {
@@ -477,6 +473,9 @@ void cupid_memory_set_active_region(struct CupidARM *cpu, uint32_t address) {
         }
         if (newRegion != GBA_REGION_VRAM &&
             (newRegion < GBA_REGION_ROM0 || (address & (GBA_SIZE_ROM - 1)) < memory->romSize)) {
+            /* Two virtual RAM windows can select the same physical buffer. */
+            if (newRegion < GBA_REGION_ROM0)
+                cpu->memory.directOpcodeBase = virtualAddress & ~(uint32_t)GBA_OFFSET_MASK;
             return;
         }
     }
@@ -487,7 +486,9 @@ void cupid_memory_set_active_region(struct CupidARM *cpu, uint32_t address) {
     }
 
     memory->activeRegion = newRegion;
-    cpu->memory.readOpcodeFallback = NULL;
+    cpu->memory.readOpcodeFallback = read_mapped_opcode;
+    cpu->memory.directOpcodeBase = virtualAddress & ~(uint32_t)GBA_OFFSET_MASK;
+    cpu->memory.directOpcodeSize = UINT32_C(1) << GBA_BASE_OFFSET;
     switch (newRegion) {
         case GBA_REGION_BIOS:
             cpu->memory.accessSource = CUPID_ACCESS_SYSTEM;
@@ -512,6 +513,9 @@ void cupid_memory_set_active_region(struct CupidARM *cpu, uint32_t address) {
         case GBA_REGION_VRAM:
             cpu->memory.accessSource = CUPID_ACCESS_PROGRAM;
             cupid_memory_refresh_vram_fetch(cpu, address);
+            /* VRAM banking and bitmap reservations are sampled after display
+             * waits. Resolve every fetch here, including untimed refills. */
+            cpu->memory.directOpcodeSize = 0;
             break;
         case GBA_REGION_OAM:
             cpu->memory.accessSource = CUPID_ACCESS_PROGRAM;
@@ -529,19 +533,40 @@ void cupid_memory_set_active_region(struct CupidARM *cpu, uint32_t address) {
             cpu->memory.activeMask = memory->rom ? memory->romMask : 0;
             cpu->memory.directOpcodeBase = address & ~(uint32_t)(GBA_SIZE_ROM - 1);
             cpu->memory.directOpcodeSize = memory->rom ? (uint32_t)memory->romSize : 0;
-            cpu->memory.readOpcodeFallback = read_rom_opcode;
             break;
         default:
             cpu->memory.accessSource = CUPID_ACCESS_UNKNOWN;
             memory->activeRegion = -1;
             cpu->memory.activeRegion = (const uint32_t *)_deadbeef;
             cpu->memory.activeMask = 0;
+            cpu->memory.directOpcodeSize = 0;
             fprintf(stderr, "CUPID: Jumped to invalid address: 0x%08X\n", address);
             return;
     }
 
     refresh_active_waitstates(gba);
     cpu->memory.activeMask &= -(cpu->cpsr.t ? WORD_SIZE_THUMB : WORD_SIZE_ARM);
+}
+
+/* Unsupported opcode regions retain their existing value and wait policy.
+ * Only established mapped devices can replace a stale direct pointer. ROM
+ * image bounds still use their address-derived input and padded-byte rules. */
+static bool read_mapped_opcode(struct CupidARM *cpu, uint32_t address, unsigned width,
+                               uint32_t *value) {
+    const unsigned region =
+        cupid_memory_decode_address(&cpu->master->memory, address) >> GBA_BASE_OFFSET;
+    if (region != GBA_REGION_BIOS && region != GBA_REGION_EWRAM && region != GBA_REGION_IWRAM &&
+        (region < GBA_REGION_PALETTE || region > GBA_REGION_ROM2_EX))
+        return false;
+    bind_opcode_region(cpu, address);
+    return read_rom_opcode(cpu, address, width, value);
+}
+
+/** @brief Record a branch and bind its first opcode address. */
+void cupid_memory_set_active_region(struct CupidARM *cpu, uint32_t address) {
+    cpu->master->lastJump = address;
+    cpu->master->memory.lastPrefetchedPc = 0;
+    bind_opcode_region(cpu, address);
 }
 
 /**

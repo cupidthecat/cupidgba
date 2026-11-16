@@ -140,16 +140,18 @@ void cupid_bus_fetch(struct CupidARM *cpu, uint32_t address, unsigned width, boo
      * access was made nonsequential by an internal cycle or a page edge. */
     bool refill = !sequential;
     sequential = sequential && !gba->memory.fetchNonseq;
-    unsigned region = address >> GBA_BASE_OFFSET;
+    unsigned region = cupid_memory_decode_address(&gba->memory, address) >> GBA_BASE_OFFSET;
     /* The page decoder uses the physical opcode address. Retain the logical
      * stream address, including ARM A1, for the FIFO lookup below. */
     if (region >= GBA_REGION_ROM0 && region <= GBA_REGION_ROM2_EX &&
         !((address & ~(uint32_t)(width - 1)) & 0x1FFFF))
         sequential = false;
-    /* ROM mirrors have independently configured waits. The actual fetch
-     * address selects the bank even when execution crosses a cached region. */
+    /* A sequential request can leave the cached opcode view. Select mapped
+     * waits from this address, including internal-memory decoder aliases;
+     * the value sample will rebind the view after the bus phase completes. */
     unsigned wait;
-    if (region >= GBA_REGION_ROM0 && region <= GBA_REGION_ROM2_EX) {
+    if (region == GBA_REGION_BIOS || region == GBA_REGION_EWRAM || region == GBA_REGION_IWRAM ||
+        (region >= GBA_REGION_PALETTE && region <= GBA_REGION_ROM2_EX)) {
         wait = width == 4 ? (sequential ? gba->memory.waitstatesSeq32[region]
                                         : gba->memory.waitstatesNonseq32[region])
                           : (sequential ? gba->memory.waitstatesSeq16[region]
@@ -172,8 +174,6 @@ void cupid_bus_fetch(struct CupidARM *cpu, uint32_t address, unsigned width, boo
         cupid_bus_advance(cpu, cycles, true);
     }
     cupid_prefetch_finish_fetch(gba);
-    if (region == GBA_REGION_VRAM)
-        cupid_memory_refresh_vram_fetch(cpu, address);
     /* The caller reads the opcode before releasing ownership of the bus. */
     gba->memory.lastWasDMA = false;
     /* The caller publishes the sampled opcode before releasing ownership. */

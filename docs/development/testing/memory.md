@@ -109,6 +109,30 @@ All nine groups keep ten-second deadlines.
 ctest --test-dir build -R '^gba\.(rom-fetch|backup-waits)-' --output-on-failure
 ```
 
+## Mapped opcode transitions
+
+The four `gba.opcode-regions-*` groups cover refills, sequential instruction
+execution, internal-memory aliases and destination waits. They place different
+instructions in adjacent devices and the old pointer's wrapped location, then
+check the pipeline and issued register effects. ARM logical bit 1, Thumb
+alignment, timed and untimed setup, RAM/display mirrors and branch-history
+preservation remain explicit controls.
+
+Timed waits use the existing decoded-device costs and display/ROM bus rules.
+Untimed refills check the static first-nonsequential plus second-sequential
+return separately. The tests do not define new save-memory opcode values or
+physical timing. See [opcode mapping](../../hardware/memory/opcode-fetch.md).
+
+Three `gba.opcode-ownership-*` groups check that a device sample supersedes the
+ordinary mapped value, IRQ entry samples its crossed fetch without executing
+it, and a waiting DMA receives the completed target opcode input. They retain
+the other IWRAM halfword lane and the original bus-release rules. All seven
+new groups keep ten-second deadlines.
+
+```sh
+ctest --test-dir build -R '^gba\.opcode-(regions|ownership)-' --output-on-failure
+```
+
 ## Original prefetch cartridges
 
 `CUPID_PREFETCH_PROBE_DIR` points to the root containing the `prefetcher` and
