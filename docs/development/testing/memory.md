@@ -91,6 +91,24 @@ ARM/Thumb loads, DMA rollover and save-device selection. They retain mapped
 ROM boundaries and EEPROM output checks. Each group has a ten-second deadline;
 see [Game Pak ROM reads](../../hardware/rom-bus.md) for the scope.
 
+Six `gba.rom-fetch-*` groups extend the checks to instruction fetches. They
+exercise direct ARM/Thumb refills, executed branches, sequential image ends,
+ROM wait-window transitions, small and padded image views, and replacement
+ownership. Address-derived opcodes have independently decoded register effects;
+matching a data-read callback alone is insufficient. Existing GPIO, reader and
+paged-ROM tests retain their sampled-device and cached-opcode expectations.
+
+Three `gba.backup-waits-*` groups require identical reset-time waits in both
+backup windows, then check the four SRAM selectors through CPU and DMA paths.
+They distinguish external bus duration from instruction and load-internal
+clocks, and retain data and completion behavior. These tests
+qualify the selected software timing model without new hardware measurements.
+All nine groups keep ten-second deadlines.
+
+```sh
+ctest --test-dir build -R '^gba\.(rom-fetch|backup-waits)-' --output-on-failure
+```
+
 ## Original prefetch cartridges
 
 `CUPID_PREFETCH_PROBE_DIR` points to the root containing the `prefetcher` and

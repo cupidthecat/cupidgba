@@ -86,7 +86,14 @@
 /** @name PC Write Helpers */
 static inline uint32_t CupidReadOpcode(struct CupidARM *cpu, uint32_t address, unsigned width) {
     uint32_t value;
-    if (!(cpu->memory.readOpcode && cpu->memory.readOpcode(cpu, address, width, &value))) {
+    bool supplied = cpu->memory.readOpcode && cpu->memory.readOpcode(cpu, address, width, &value);
+    /* Test the last byte of the aligned fetch without rotating logical ARM A1.
+     * A zero-sized view always uses the fallback; ordinary mapped fetches keep
+     * their direct pointer read and need no additional function call. */
+    if (!supplied && cpu->memory.readOpcodeFallback &&
+        ((address - cpu->memory.directOpcodeBase) | (width - 1u)) >= cpu->memory.directOpcodeSize)
+        supplied = cpu->memory.readOpcodeFallback(cpu, address, width, &value);
+    if (!supplied) {
         if (width == WORD_SIZE_ARM)
             LOAD_32(value, address & cpu->memory.activeMask, cpu->memory.activeRegion);
         else
