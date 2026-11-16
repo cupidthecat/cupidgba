@@ -855,6 +855,12 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/test_comment_spacing.py)
     set_tests_properties(runner.comment-spacing runner.comment-spacing-parser PROPERTIES TIMEOUT 10)
 
+    add_test(NAME runner.file-headers COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_file_headers.py)
+    add_test(NAME runner.file-headers-parser COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/test_file_headers.py)
+    set_tests_properties(runner.file-headers runner.file-headers-parser PROPERTIES TIMEOUT 10)
+
     add_test(NAME runner.generated-fixtures COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/test_generated_fixtures.py)
     set_tests_properties(runner.generated-fixtures PROPERTIES TIMEOUT 10)
