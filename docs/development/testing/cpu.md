@@ -16,6 +16,18 @@ CP14 register-transfer timing and original cartridge comparisons are covered in
 `runner.cp14-probe-protocol`, `runner.status-observations` and `rom.cp14-transfer*`
 for the native timing matrix and the original comparison guards.
 
+## Multiply flags
+
+The six `arm.multiply-*` groups require 15,705 multiply instruction executions.
+The hardware group repeats 72 recorded carry observations with all incoming
+NZCV values and both prior shifter carries. Separate groups check all six ARM
+forms and Thumb MUL, arithmetic results, preserved V and non-S flags, register
+overlap, predicates, following carry consumers and skipped PC encodings.
+Paired S/non-S scenes retain exact internal clocks and DMA completion across
+counter wraps. Each group has a ten-second deadline. See
+[multiply flags](../../hardware/cpu/multiply.md) for the fixed software-model
+vectors, before-change controls and qualification limits.
+
 ## Instruction observers
 
 The `runner.observations` and three `arm.observer-*` groups require actual

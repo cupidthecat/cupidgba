@@ -1,12 +1,31 @@
 /**
- * @file io.c
- * @brief GBA IO register read and write dispatch.
+ * @file      io.c
+ * @author    cupidthecat
+ * @brief     GBA IO register read and write dispatch.
+ * @date      2026-11-16
  *
  * The IO array (gba->memory.io) is a flat uint16_t[0x400/2] addressed as
  * io[byte_offset >> 1]. Subsystem structs shadow the registers they care
  * about; writes dispatch through the switch into the appropriate subsystem,
  * then the (possibly modified) value is stored into the IO array. The internal
  * memory timing port has a separate high-halfword latch outside this array.
+ *
+ * @copyright Copyright (c) 2026 cupidthecat
+ *
+ * This file is part of CupidGBA.
+ *
+ * CupidGBA is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * CupidGBA is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with CupidGBA.  If not, see <https://gnu.org>.
  */
 #include "cupid/gba.h"
 

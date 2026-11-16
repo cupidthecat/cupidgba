@@ -1,10 +1,29 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /**
- * @file file.c
- * @brief Validated external BIOS loading and live firmware installation.
+ * @file      file.c
+ * @author    cupidthecat
+ * @brief     Validated external BIOS loading and live firmware installation.
+ * @date      2026-11-16
  *
  * - Read a complete regular BIOS file before changing core ownership.
  * - Rebind an active BIOS opcode view after successful installation.
+ *
+ * @copyright Copyright (c) 2026 cupidthecat
+ *
+ * This file is part of CupidGBA.
+ *
+ * CupidGBA is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * CupidGBA is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with CupidGBA.  If not, see <https://gnu.org>.
  */
 #include "cupid/gba.h"
 #include <errno.h>

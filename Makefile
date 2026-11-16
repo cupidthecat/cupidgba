@@ -1,5 +1,24 @@
-# CupidGBA — Makefile
-# GBA emulator in C with SDL2
+# @file      Makefile
+# @author    cupidthecat
+# @brief     Build the C11 SDL2 frontend and invoke the CMake regression suite.
+# @date      2026-11-16
+#
+# @copyright Copyright (c) 2026 cupidthecat
+#
+# This file is part of CupidGBA.
+#
+# CupidGBA is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# CupidGBA is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with CupidGBA.  If not, see <https://gnu.org>.
 
 CC      = gcc
 CFLAGS  = -std=c11 -Wall -Wextra -Werror -O2 -g -Iinclude -MMD -MP
@@ -19,7 +38,7 @@ endif
 endif
 
 # Source files
-SRC_ARM      = src/arm/arm.c src/arm/isa-arm.c src/arm/isa-thumb.c
+SRC_ARM      = src/arm/arm.c src/arm/isa-arm.c src/arm/isa-thumb.c src/arm/multiply.c
 SRC_GBA      = src/gba/gba.c src/gba/memory.c src/gba/memory/feedback.c src/gba/memory/control.c src/gba/cartridge/image.c src/gba/cartridge/paged-rom.c src/gba/save/detection.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c \
                src/gba/audio.c src/gba/audio/wave.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c \
                src/gba/hle-bios.c src/gba/bios/file.c src/gba/savedata.c src/gba/save/file.c src/gba/save/programming.c \

@@ -1,6 +1,25 @@
 #!/usr/bin/env python3
-# @file generate_joybus_driver.py
-# @brief Generate or verify the embedded image of the owned JOY driver.
+# @file      generate_joybus_driver.py
+# @author    cupidthecat
+# @brief     Generate or verify the embedded image of the owned JOY driver.
+# @date      2026-11-16
+#
+# @copyright Copyright (c) 2026 cupidthecat
+#
+# This file is part of CupidGBA.
+#
+# CupidGBA is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# CupidGBA is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with CupidGBA.  If not, see <https://gnu.org>.
 """Generate or verify the embedded image of the owned JOY driver."""
 from pathlib import Path
 import argparse
@@ -8,8 +27,27 @@ import argparse
 
 FILE_HEADER = (
     '/**\n'
-    ' * @file joybus-driver.inc\n'
-    ' * @brief Owned guest JOY bus command and register-transfer driver.\n'
+    ' * @file      joybus-driver.inc\n'
+    ' * @author    cupidthecat\n'
+    ' * @brief     Owned guest JOY bus command and register-transfer driver.\n'
+    ' * @date      2026-11-16\n'
+    ' *\n'
+    ' * @copyright Copyright (c) 2026 cupidthecat\n'
+    ' *\n'
+    ' * This file is part of CupidGBA.\n'
+    ' *\n'
+    ' * CupidGBA is free software: you can redistribute it and/or modify\n'
+    ' * it under the terms of the GNU General Public License as published by\n'
+    ' * the Free Software Foundation, either version 3 of the License, or\n'
+    ' * (at your option) any later version.\n'
+    ' *\n'
+    ' * CupidGBA is distributed in the hope that it will be useful,\n'
+    ' * but WITHOUT ANY WARRANTY; without even the implied warranty of\n'
+    ' * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n'
+    ' * GNU General Public License for more details.\n'
+    ' *\n'
+    ' * You should have received a copy of the GNU General Public License\n'
+    ' * along with CupidGBA.  If not, see <https://gnu.org>.\n'
     ' */\n'
 )
 

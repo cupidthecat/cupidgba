@@ -1,12 +1,31 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /**
- * @file test_feedback.c
- * @brief CPU data and opcode input regressions at memory and DMA boundaries.
+ * @file      test_feedback.c
+ * @author    cupidthecat
+ * @brief     CPU data and opcode input regressions at memory and DMA boundaries.
+ * @date      2026-11-16
  *
  * - Check mapped read handover through every DMA channel and clock wrap.
  * - Separate aligned input from rotated or sign-extended register values.
  * - Exercise BIOS protection, remapping, mirrors and observer isolation.
  * - Retain IWRAM bank history across opcode fetches, DMA writes and IRQ entry.
+ *
+ * @copyright Copyright (c) 2026 cupidthecat
+ *
+ * This file is part of CupidGBA.
+ *
+ * CupidGBA is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * CupidGBA is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with CupidGBA.  If not, see <https://gnu.org>.
  */
 #include "../../test.h"
 #include "cupid/gba.h"

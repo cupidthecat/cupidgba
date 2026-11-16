@@ -1,9 +1,28 @@
 /**
- * @file emitter-arm.h
- * @brief ARM instruction table layout macros.
+ * @file      emitter-arm.h
+ * @author    cupidthecat
+ * @brief     ARM instruction table layout macros.
+ * @date      2026-11-16
  *
  * Generates the 4096-entry decode table indexed by
  *   ((opcode >> 16) & 0xFF0) | ((opcode >> 4) & 0x00F)
+ *
+ * @copyright Copyright (c) 2026 cupidthecat
+ *
+ * This file is part of CupidGBA.
+ *
+ * CupidGBA is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * CupidGBA is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with CupidGBA.  If not, see <https://gnu.org>.
  */
 #ifndef CUPID_EMITTER_ARM_H
 #define CUPID_EMITTER_ARM_H

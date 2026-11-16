@@ -1,3 +1,24 @@
+# @file      CMakeLists.txt
+# @author    cupidthecat
+# @brief     Build the C11 emulator, platform frontends and registered regression suites.
+# @date      2026-11-16
+#
+# @copyright Copyright (c) 2026 cupidthecat
+#
+# This file is part of CupidGBA.
+#
+# CupidGBA is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# CupidGBA is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with CupidGBA.  If not, see <https://gnu.org>.
 cmake_minimum_required(VERSION 3.16)
 project(CupidGBA VERSION 0.1.0 LANGUAGES C)
 
@@ -60,7 +81,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 add_library(cupid_core STATIC
-    src/arm/arm.c src/arm/isa-arm.c src/arm/isa-thumb.c
+    src/arm/arm.c src/arm/isa-arm.c src/arm/isa-thumb.c src/arm/multiply.c
     src/core/timing.c src/core/file.c src/core/file-path.c src/platform/context.c src/platform/key-script.c src/platform/paths.c
     src/gba/gba.c src/gba/memory.c src/gba/memory/feedback.c src/gba/memory/control.c src/gba/cartridge/image.c src/gba/cartridge/paged-rom.c src/gba/save/detection.c src/gba/bus.c src/gba/io.c src/gba/irq.c src/gba/video.c
     src/gba/audio.c src/gba/audio/wave.c src/gba/dma.c src/gba/prefetch.c src/gba/timer.c src/gba/bios.c
@@ -735,6 +756,13 @@ if(BUILD_TESTING)
     add_test(NAME gba.flash-profile-lifecycle COMMAND test_flash_profile lifecycle ${CMAKE_CURRENT_BINARY_DIR})
     set_tests_properties(gba.flash-profile-lifecycle PROPERTIES TIMEOUT 10)
 
+    add_executable(test_flash_commands tests/gba/save/test_flash_commands.c)
+    target_link_libraries(test_flash_commands PRIVATE cupid_core)
+    foreach(group fourth fifth sixth recovery guest)
+        add_test(NAME gba.flash-commands-${group} COMMAND test_flash_commands ${group})
+        set_tests_properties(gba.flash-commands-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
     add_executable(test_audio tests/gba/test_audio.c)
     target_link_libraries(test_audio PRIVATE cupid_core)
     add_test(NAME gba.audio COMMAND test_audio)
@@ -1383,6 +1411,13 @@ if(BUILD_TESTING)
     add_executable(test_cpu tests/arm/test_cpu.c)
     target_link_libraries(test_cpu PRIVATE cupid_core)
     add_test(NAME arm.cpu COMMAND test_cpu)
+
+    add_executable(test_multiply tests/arm/test_multiply.c)
+    target_link_libraries(test_multiply PRIVATE cupid_core)
+    foreach(group hardware arithmetic short aliases conditions chronology)
+        add_test(NAME arm.multiply-${group} COMMAND test_multiply ${group})
+        set_tests_properties(arm.multiply-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
 
     add_executable(test_msr_pipeline tests/arm/test_msr_pipeline.c)
     target_link_libraries(test_msr_pipeline PRIVATE cupid_core)

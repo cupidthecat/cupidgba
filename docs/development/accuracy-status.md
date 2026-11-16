@@ -12,6 +12,24 @@ The integrated pipeline reached main in
 Linux GCC, Linux Clang sanitizers and Windows checks. Historical issue updates
 that describe those branches as separate drafts refer to earlier revisions.
 
+### Multiply carry
+
+ARM and Thumb multiplication now derive C from the multiplier's internal
+carry-save state, using operands sampled before destination writes. The six
+regression groups cover 15,705 instruction executions, including 72 recorded
+hardware carry observations, arithmetic and flag preservation, register
+overlap, following conditions and DMA chronology. See
+[multiply flags](../hardware/cpu/multiply.md) for the model and its limits.
+
+### SST Flash command recovery
+
+The SST device cancels pending erase setup after an invalid fourth, fifth or
+sixth command write, allowing a fresh unlock sequence to start another command.
+Five regression groups cover 396,026 rejected writes and recovery scenes,
+including ARM/Thumb stores, DMA readback, clock wrap and nominal ready edges.
+See [Flash programming](../hardware/cartridge/programming.md). These checks
+qualify the digital command model without measuring physical abort timing.
+
 ### Timed rendering and display-memory access
 
 The renderer advances text, affine and bitmap fetches, next-line object work,
@@ -89,10 +107,15 @@ expected value changed.
   same-edge interaction coverage. Reserved source mode 3 uses a fixed source.
 - Ordinary cartridge images support up to 32 MiB; the documented
   [paged controller](../hardware/cartridge/paged-rom.md) supports up to 64 MiB.
-  Card-reader hardware is absent. EEPROM framing, chip-specific programming behavior and
-  peripheral signal timing remain incompletely qualified. Image replacement
+  EEPROM framing, chip-specific programming behavior and peripheral signal
+  timing remain incompletely qualified. Image replacement
   now owns fresh backup storage and cancels the old device's events; see
   [image ownership](../hardware/cartridge/image-mapping.md).
+- The [card-reader model](../hardware/cartridge/card-reader.md) supports queued
+  strip input, serial camera control, scanline/DMA transfers and selected IRQ
+  timing. Continuous acquisition, overrun behavior and retail workflows remain
+  unqualified; camera type 2 and unused serial-register combination mirrors are
+  not implemented.
 - PSG, FIFO and digital mixer tests do not calibrate PWM or physical audio
   output. Link/JOY peer models likewise do not establish electrical behavior.
 - Bounded game boots, scripted scenes and generated-battery replays are useful

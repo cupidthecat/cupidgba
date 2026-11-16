@@ -1,7 +1,27 @@
-@ @file music-player.s
-@ @brief Firmware music-player entry points and track-array ownership.
+@ @file      music-player.s
+@ @author    cupidthecat
+@ @brief     Firmware music-player entry points and track-array ownership.
+@ @date      2026-11-16
+@
 @ SPDX-License-Identifier: GPL-3.0-or-later
 @ Players attach a frame callback and own an array of 80-byte tracks.
+@
+@ @copyright Copyright (c) 2026 cupidthecat
+@
+@ This file is part of CupidGBA.
+@
+@ CupidGBA is free software: you can redistribute it and/or modify
+@ it under the terms of the GNU General Public License as published by
+@ the Free Software Foundation, either version 3 of the License, or
+@ (at your option) any later version.
+@
+@ CupidGBA is distributed in the hope that it will be useful,
+@ but WITHOUT ANY WARRANTY; without even the implied warranty of
+@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+@ GNU General Public License for more details.
+@
+@ You should have received a copy of the GNU General Public License
+@ along with CupidGBA.  If not, see <https://gnu.org>.
 .org 0x194C
 .thumb
 .thumb_func

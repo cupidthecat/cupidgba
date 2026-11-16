@@ -1,6 +1,8 @@
 /**
- * @file audio.c
- * @brief GBA audio mixing: PSG channels plus Direct Sound FIFO channels.
+ * @file      audio.c
+ * @author    cupidthecat
+ * @brief     GBA audio mixing: PSG channels plus Direct Sound FIFO channels.
+ * @date      2026-11-16
  *
  * Architecture:
  *   - PSG engine: ch1 (square+sweep), ch2 (square), ch3 (wave), ch4 (noise)
@@ -11,6 +13,23 @@
  *   - Captures retain their elapsed clocks across sampling-rate changes
  *   - FIFO bytes latch on timer overflow and hold between overflows
  *   - A 512 Hz frame sequencer updates length, envelope, and sweep state
+ *
+ * @copyright Copyright (c) 2026 cupidthecat
+ *
+ * This file is part of CupidGBA.
+ *
+ * CupidGBA is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * CupidGBA is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with CupidGBA.  If not, see <https://gnu.org>.
  */
 #include "audio/wave.h"
 #include "cupid/gba.h"

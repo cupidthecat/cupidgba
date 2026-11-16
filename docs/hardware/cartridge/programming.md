@@ -79,6 +79,13 @@ ID reads still use the qualified `0000`/`0001` addresses; command aliases do not
 establish ID-read mirrors. Table 4 of the device data sheet specifies these
 separate command, byte and sector address roles.
 
+An erase request needs six consecutive valid writes. A wrong address or data
+byte in the fourth, fifth or sixth write cancels its pending setup and returns
+the SST device to array reads. The next unlock sequence starts a fresh command.
+Rejected setup cannot change saved bytes, mark the image dirty or start a ready
+deadline. This follows the software-data-protection rule on page 3 of the data
+sheet. It does not cancel a program or erase operation that has already started.
+
 Selection fixes the 64-KiB capacity, so an oversized save file fails before
 replacing data or cancelling an operation. Console reset, same-type selection
 and compatible save replacement retain the profile. Changing the save-device
@@ -89,7 +96,7 @@ synthetic durations for future operations without changing the device identity.
 
 The data sheet requires an erased target sector before byte programming. Tests
 use valid erased targets; programming an unerased target, physical failures,
-ID aliases and malformed command behavior remain unqualified. The model
+ID aliases and other malformed command behavior remain unqualified. The model
 publishes all data at the ready edge. It does not simulate the asynchronous
 output transition or the specified subsequent whole-byte settling interval of
 up to one microsecond.
@@ -158,6 +165,21 @@ DMA reads observe busy and completed data through both cartridge save windows.
 The preceding decoder rejects all five groups. These checks retain the selected
 timing profile and do not calibrate physical chip timing or qualify undefined
 ID-read aliases.
+
+The five `gba.flash-commands-*` groups check rejected erase setup and fresh
+command recovery. Fourth- and fifth-write groups each cover 131,006 rejected
+writes; the sixth-write group covers 130,750. Each checks every address and all
+data bytes at eight representative locations, including both command aliases
+and every A15 combination in the preceding five writes. A full array comparison
+and subsequent reads require all saved bytes to remain intact.
+
+Recovery coverage adds 3,072 ID, byte-program, sector-erase and chip-erase scenes
+across four clock epochs. Valid operations retain their nominal ready edges,
+busy-command suppression and complete saved images. Another 192 scenes issue
+the malformed and fresh sequences through ARM/Thumb byte stores in both save
+windows, then verify ID, array fallback, polling and completed data with mapped
+reads and DMA. All five groups reject the preceding decoder. These checks cover
+the selected digital command model without measuring physical abort timing.
 
 The `rom.flash-driver-*` groups execute complete ARM and Thumb polling drivers
 with each supported timing profile. They program full 4-KiB patterns, preserve

@@ -57,6 +57,13 @@ to check complete independent saves and both startup paths' capacity rejection.
 These probes qualify the documented nominal model, without physical timing
 calibration. All original source-ROM inputs, assertions and budgets remain.
 
+The five `gba.flash-commands-*` groups check invalid fourth, fifth and sixth
+erase writes and recovery through fresh commands. They cover every command
+address, all data bytes at representative locations, A15 command aliases,
+complete saved-image preservation, nominal ready edges and busy rejection.
+The guest group issues actual ARM/Thumb stores in both cartridge save windows
+and verifies mapped and DMA readback. Each retains a ten-second deadline.
+
 The Flash DMA group checks 216 full scenes: all three profiles, every operation,
 before/at/after reads, four clock epochs and bulk/partitioned dispatch. Each
 scene checks complete storage at four bus phases, captured read data, guarded
