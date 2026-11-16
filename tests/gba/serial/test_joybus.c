@@ -195,7 +195,7 @@ static void invalid_frames_are_atomic(void) {
 
 static void cpu_register_widths_and_acknowledgements(void) {
     /* Actual ARM/Thumb STR[B/H]/LDR[B/H] strobes exercise every transmit lane,
-     * retained zero reads, receive acknowledgement and control/status merge. */
+     * retained data reads, receive acknowledgement and control/status merge. */
     for (unsigned thumb = 0; thumb < 2; thumb++)
         for (unsigned width = 0; width < 3; width++) {
             struct CupidGBA *gba = machine(0);
@@ -226,7 +226,7 @@ static void cpu_register_widths_and_acknowledgements(void) {
                 const uint32_t expected = width == 0 ? 0xEF : width == 1 ? 0xCDEF : 0x89ABCDEF;
                 const uint32_t mask = width == 0 ? 0xFF : width == 1 ? 0xFFFF : UINT32_MAX;
                 expectedWord = (expectedWord & ~(mask << (lane * 8))) | expected << (lane * 8);
-                CHECK(!gba->cpu.gprs[0] && (reg(gba, REG_JOYSTAT) & 8));
+                CHECK((uint32_t)gba->cpu.gprs[0] == expected && (reg(gba, REG_JOYSTAT) & 8));
                 uint8_t outgoing[5];
                 CHECK(command(gba, SERIAL_JOY_READ, outgoing) == 5 &&
                       unpack(outgoing) == expectedWord && outgoing[4] == 8);
@@ -387,7 +387,7 @@ static void mode_stop_reset_and_other_transfers_stay_isolated(void) {
     CHECK(command(gba, SERIAL_JOY_RESET, reply) == 3);
     CHECK(command(gba, SERIAL_JOY_READ, reply) == 5 && unpack(reply) == 0x89ABCDEF &&
           reply[4] == 10);
-    CHECK(!word(gba, REG_JOY_TRANS_LO) && word(gba, REG_JOY_RECV_LO) == 0x12345678);
+    CHECK(word(gba, REG_JOY_TRANS_LO) == 0x89ABCDEF && word(gba, REG_JOY_RECV_LO) == 0x12345678);
     cupid_serial_reset(&gba->serial);
     CHECK(!command(gba, SERIAL_JOY_STATUS, reply));
     cupid_io_write(gba, REG_RCNT, 0xC000);

@@ -25,9 +25,10 @@ and response buffers may overlap.
 JOY_RECV retains the last complete incoming word, including when another
 word arrives before software consumes it. A guest read acknowledges the
 receive-ready flag in JOYSTAT bit 1. Writes to JOY_TRANS stage outgoing data
-and set send-ready bit 3. Guest reads of the send registers retain zero,
-as required by the unchanged source register suite. The peer's read command
-replies with the retained word even when ready is clear.
+and set send-ready bit 3. In JOY mode, guest reads return that retained data
+through the ordinary byte, halfword and word I/O lanes. Reading the transmit
+registers does not acknowledge send-ready or change JOYCNT. The peer's read
+command replies with the retained word even when ready is clear.
 Its response captures status before acknowledging the send buffer. The
 general-purpose status bits 4 and 5 survive commands and acknowledgements.
 Reset commands set the reset event flag without erasing data or status;
@@ -46,6 +47,11 @@ version 1.35, sections
 [13.5.2 through 13.5.4](https://www.manualslib.com/manual/3342081/Nintendo-Game-Boy-Advance.html?page=149)
 and
 [13.5.5 through 13.5.9](https://www.manualslib.com/manual/3342081/Nintendo-Game-Boy-Advance.html?page=150).
+Section 13.5.3, Figure 119 defines both transmit halfwords at `04000154h` and
+`04000156h` as read/write registers. Their reset value of zero does not describe
+readback after a guest write. Reads outside JOY mode retain the existing zero
+policy; switching modes does not erase the staged transmit word.
+
 The command interface and existing guest access-width model are software
 behavior. Subword electrical acknowledgement, status sampling within a read
 response, partial wire packets, clock recovery, cable waveforms and physical
@@ -62,6 +68,12 @@ HALT, STOP, console reset and mode isolation. Timed incoming frames share the
 real scheduler with DMA receive reads and timer interrupts; single-clock and
 late dispatch must produce the same complete data and interrupt results
 through both clock-counter wraps.
+
+Five additional readback groups check each transmit byte and halfword, decoded
+ARM/Thumb stores and loads, data retention across peer commands and mode
+changes, CPU input publication, DMA reads and writes, and console reset.
+These checks preserve the ordinary I/O lane model and scheduler; they do not
+measure physical partial-access timing or acknowledgement behavior.
 
 The owned ARM and Thumb drivers each complete 32 receive/send rounds at four
 clock origins. Each checks incoming data, records all words and round counts,

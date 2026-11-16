@@ -75,6 +75,15 @@ mapped transitions, guest register effects, IRQ sampling and DMA handover. See
 This does not qualify opcode values or physical fetch timing in unmapped,
 I/O or save-memory regions, and it does not resolve the timing conflicts below.
 
+### JOY transmit register readback
+
+Guest reads of the JOY transmit registers now return their staged data in JOY
+mode, including after a peer has consumed the word. Reads preserve send-ready,
+command flags and the retained receive word. CPU and DMA reads use the existing
+I/O lane and input-bus paths. Console reset clears the registers; a peer reset
+command only sets its event flag. See [JOY commands](../hardware/serial/joybus.md)
+for the documented register contract and the limits of the command interface.
+
 ### GBA display-control mask
 
 DISPCNT writes retain the GBA control fields and keep the protected legacy-mode
