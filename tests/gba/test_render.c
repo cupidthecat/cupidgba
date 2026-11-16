@@ -27,6 +27,7 @@
  */
 #include "../test.h"
 #include "cupid/gba.h"
+#include "cupid/isa-inlines.h"
 
 static struct CupidGBA *machine(void) {
     struct CupidGBA *gba = calloc(1, sizeof(*gba));
@@ -488,13 +489,11 @@ static void bitmap_vram_mirrors_reserve_the_background_bank(void) {
             CHECK(cupid_memory_load32(&gba->cpu, GBA_BASE_VRAM + 0x10000, NULL) == expected);
             cupid_memory_set_active_region(&gba->cpu, GBA_BASE_VRAM + 0x18000);
             cupid_bus_fetch(&gba->cpu, GBA_BASE_VRAM + 0x18000, 4, false);
-            uint32_t opcode;
-            LOAD_32(opcode, 0, gba->cpu.memory.activeRegion);
+            uint32_t opcode = CupidReadOpcode(&gba->cpu, GBA_BASE_VRAM + 0x18000, 4);
             CHECK(opcode == 0);
             cupid_bus_release(&gba->cpu);
             cupid_bus_fetch(&gba->cpu, GBA_BASE_VRAM + 0x1C000, 4, true);
-            LOAD_32(opcode, (GBA_BASE_VRAM + 0x1C000) & gba->cpu.memory.activeMask,
-                    gba->cpu.memory.activeRegion);
+            opcode = CupidReadOpcode(&gba->cpu, GBA_BASE_VRAM + 0x1C000, 4);
             CHECK((opcode & 0xFFFF) == 0x1234);
             cupid_bus_release(&gba->cpu);
         }

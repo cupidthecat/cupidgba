@@ -62,6 +62,19 @@ See [the Game Pak bus](../hardware/rom-bus.md) and [memory tests](testing/memory
 These checks preserve the selected digital model; EEPROM instruction-fetch
 signaling and physical cartridge bus transitions remain unqualified.
 
+### Mapped instruction-region transitions
+
+Sequential execution and the second fetch of a branch refill now select the
+addressed mapped device when they cross a region boundary. This corrects stale
+RAM/display pointers and destination waits, including internal-memory aliases
+and VRAM banks. Branch history and already sampled pipeline words are retained;
+device opcode samples still take priority. Seven regression groups cover the
+mapped transitions, guest register effects, IRQ sampling and DMA handover. See
+[instruction fetch mapping](../hardware/memory/opcode-fetch.md).
+
+This does not qualify opcode values or physical fetch timing in unmapped,
+I/O or save-memory regions, and it does not resolve the timing conflicts below.
+
 ### GBA display-control mask
 
 DISPCNT writes retain the GBA control fields and keep the protected legacy-mode
