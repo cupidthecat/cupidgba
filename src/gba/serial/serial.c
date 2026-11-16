@@ -365,7 +365,10 @@ uint16_t cupid_serial_read(struct CupidSerial *serial, uint32_t address) {
                 return 0;
             gba->memory.io[REG_JOYSTAT >> 1] &= ~2u;
             return gba->memory.io[address >> 1];
+        case REG_JOY_TRANS_LO:
+        case REG_JOY_TRANS_HI:
         case REG_JOYSTAT:
+            /* Transmit reads retain data and do not acknowledge send-ready. */
             return mode == SERIAL_JOY ? gba->memory.io[address >> 1] : 0;
         default:
             return 0;

@@ -1064,6 +1064,13 @@ if(BUILD_TESTING)
         set_tests_properties(gba.joybus-guest-external PROPERTIES TIMEOUT 10)
     endif()
 
+    add_executable(test_joybus_readback tests/gba/serial/test_joybus_readback.c)
+    target_link_libraries(test_joybus_readback PRIVATE cupid_core)
+    foreach(group registers guest lifecycle input dma)
+        add_test(NAME gba.joybus-readback-${group} COMMAND test_joybus_readback ${group})
+        set_tests_properties(gba.joybus-readback-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
     if(CUPID_BUILD_FRONTEND)
         add_test(NAME platform.bios-startup COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/platform/check_bios_startup.py

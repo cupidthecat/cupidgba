@@ -54,6 +54,22 @@ external-image run. All retain ten-second deadlines. Hosted Clang also rebuilds
 the owned assembly fixture. See [JOY commands](../../hardware/serial/joybus.md)
 for the peer synchronization contract and unmeasured electrical behavior.
 
+Five `gba.joybus-readback-*` groups exercise the documented readable transmit
+registers. They cover stored bytes and halfwords, decoded ARM/Thumb loads,
+retained data after peer commands, mode changes, console reset, CPU input
+publication and DMA transfers. The CPU and DMA checks use the existing bus
+schedule and compare complete data and flag state. Run them with:
+
+```sh
+ctest --test-dir build -R '^gba[.]joybus-readback-' --output-on-failure
+```
+
+All five retain ten-second deadlines. The two owned protocol assertions that
+previously required zero after a transmit write now require the staged value,
+as specified by the programming manual's read/write register definition.
+Original external serial and I/O suite inputs, comparisons and limits are
+unchanged; reset-state results do not qualify readback after a JOY-mode write.
+
 ## Original serial suite
 
 The optional local serial suite retains four counted normal timing results,
