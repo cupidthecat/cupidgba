@@ -255,7 +255,7 @@ static void arm_exception_return_retains_thumb_halfwords(void) {
             memcpy(gba->memory.rom + 0x104, program, sizeof(program));
             CHECK(fetch(gba, GBA_BASE_ROM0 + 0x100, 4, false) == 8);
             idle(gba, 6);
-            /* Fetches outside ROM retain the FIFO. This owned exception
+            /* BIOS and internal RAM fetches retain the FIFO. This owned exception
              * epilogue restores Thumb execution at the first buffered halfword. */
             const uint32_t handler = ram ? GBA_BASE_IWRAM + 0x100 : 0x100;
             memcpy((ram ? gba->memory.iwram : gba->memory.bios) + 0x108, &nop, sizeof(nop));

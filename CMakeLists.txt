@@ -1275,6 +1275,13 @@ if(BUILD_TESTING)
         set_tests_properties(gba.prefetch-restart-${group} PROPERTIES TIMEOUT 30)
     endforeach()
 
+    add_executable(test_prefetch_save tests/gba/test_prefetch_save.c)
+    target_link_libraries(test_prefetch_save PRIVATE cupid_core)
+    foreach(group branches bus ports)
+        add_test(NAME gba.prefetch-save-${group} COMMAND test_prefetch_save ${group})
+        set_tests_properties(gba.prefetch-save-${group} PROPERTIES TIMEOUT 10)
+    endforeach()
+
     add_executable(test_fast_boot tests/gba/test_fast_boot.c)
     target_link_libraries(test_fast_boot PRIVATE cupid_core)
     add_executable(test_boot_feedback tests/gba/memory/test_boot_feedback.c)

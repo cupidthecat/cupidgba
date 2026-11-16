@@ -22,10 +22,21 @@ halfword adds the measured arbitration clock. DMA uses the same fill and
 cancellation paths; it does not replace the CPU's buffered stream with a
 separate cycle estimate. See [DMA and bus ownership](dma.md).
 
+CPU instruction requests in the `0x0E` and `0x0F` save-memory windows also
+end the old ROM stream. Cancellation discards its buffered halfwords and
+captured peripheral values, and removes any pending cartridge-port sample.
+The current model starts another stream only for a later ROM request. Fetches
+from BIOS or internal RAM retain the buffered ROM stream while the cartridge
+bus is free. The
+[programming manual, sections 3.3 and 3.3.2](https://mutantstargoat.com/~nuclear/tmp/gba_prog_manual.pdf#page=22)
+describes ROM prefetch and the shared Game Pak bus. That ownership constraint
+supports ending conflicting ROM activity; the physical stream state after a
+save-memory opcode fetch remains unqualified.
+
 CPU fetch callbacks carry the logical fetch address, including branch pipeline
 refills and the discarded IRQ fetch. A matching FIFO entry survives an ARM/Thumb
 width change, including an exception return from BIOS or RAM. An unrelated
-target starts a new stream. A fetch at a physical 128 KiB ROM
+ROM target starts a new stream. A fetch at a physical 128 KiB ROM
 boundary uses nonsequential timing, including a cached or pending FIFO hit.
 It takes the ordinary stream-stop path, retaining the existing completing
 halfword's cancellation clock. WAITCNT changes update access costs and
@@ -66,6 +77,12 @@ BIOS/RAM exception returns, disable/restart behavior, configured
 wait states, idle-bus engagement, oldest-entry branch joining, buffered page
 boundaries and DMA/timer/IRQ equivalence between
 late dispatch and advancing one clock at a time.
+
+The `gba.prefetch-save-*` groups cover ordinary ARM/Thumb branch refills into
+both save-memory windows, direct opcode-bus requests, subsequent ROM-stream
+restart and mutable GPIO sampling. Internal-memory controls preserve the ROM
+stream. These regressions check stream ownership and cancellation; save-memory
+instruction values and exact fetch timing remain unqualified.
 
 An owned ARM kernel fills the queue with nine RAM loads, performs a ROM data
 load and reads a real timer after three ordinary instructions. It requires
