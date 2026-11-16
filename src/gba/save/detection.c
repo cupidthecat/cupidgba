@@ -94,31 +94,31 @@ bool cupid_savedata_prepare_image(struct CupidSavedata *save, const uint8_t *rom
     return true;
 }
 
-void cupid_savedata_detect_type(struct CupidSavedata *save, const uint8_t *rom, size_t size) {
-    if (save->type != SAVE_AUTODETECT)
-        return;
+bool cupid_savedata_detect_type(struct CupidSavedata *save, const uint8_t *rom, size_t size) {
+    if (save->type != SAVE_AUTODETECT || save->flashState == FLASH_STATE_ALLOCATION)
+        return true;
     size_t offset = 0;
-    switch (identify(rom, size, &offset)) {
+    const enum CupidSaveType type = identify(rom, size, &offset);
+    if (type == SAVE_AUTODETECT)
+        return true;
+    if (!cupid_savedata_force_type(save, type))
+        return false;
+    save->typeForced = false;
+    switch (type) {
         case SAVE_EEPROM512:
             fprintf(stderr, "CUPID: ROM string detected: EEPROM\n");
-            save->type = SAVE_EEPROM512;
-            cupid_savedata_init_eeprom(save);
             break;
         case SAVE_SRAM:
             fprintf(stderr, "CUPID: ROM string detected: SRAM\n");
-            cupid_savedata_init_sram(save);
             break;
         case SAVE_FLASH1M:
             fprintf(stderr, "CUPID: ROM string detected: Flash 1M (at 0x%zX)\n", offset);
-            save->type = SAVE_FLASH1M;
-            cupid_savedata_init_flash(save);
             break;
         case SAVE_FLASH512:
             fprintf(stderr, "CUPID: ROM string detected: Flash 512\n");
-            save->type = SAVE_FLASH512;
-            cupid_savedata_init_flash(save);
             break;
         default:
             break;
     }
+    return true;
 }

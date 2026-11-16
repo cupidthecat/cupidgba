@@ -1,18 +1,34 @@
 # I/O register reads
 
-CupidGBA applies writable masks before storing BG0/BG1 control, window layer
-controls and blending controls. The same masked values reach rendering state
-and later CPU reads. Sound-control readback retains routing and volume fields;
-FIFO reset bits act as strobes and do not remain in the register shadow.
+CupidGBA applies writable masks before storing display control, BG0/BG1 control,
+window layer controls and blending controls. The same masked values reach
+rendering state and later CPU reads. Sound-control readback retains routing and
+volume fields; FIFO reset bits act as strobes and do not remain in the register shadow.
 
 | Register | Stored mask |
 | --- | --- |
+| DISPCNT | `0xFFF7` |
 | BG0CNT, BG1CNT | `0xDFFF` |
 | WININ, WINOUT | `0x3F3F` |
 | BLDCNT | `0x3FFF` |
 | BLDALPHA | `0x1F1F` |
 | SOUNDCNT_L | `0xFF77` |
 | SOUNDCNT_H | `0x770F` |
+
+DISPCNT bit 3 is the protected legacy-mode request. The
+[display-control documentation](https://problemkaputt.de/gbatek.htm#lcdiodisplaycontrol)
+restricts setting it to BIOS instructions. CupidGBA keeps this bit zero for every
+write, including BIOS and DMA accesses, because its supported machine remains
+in GBA mode. The mask applies before both register readback and renderer
+publication. Byte writes preserve
+the other byte; word writes also update the adjacent GREENSWAP register.
+
+BIOS activation of the legacy processor is unsupported. The uniform mask is a
+GBA-only compatibility policy, not a qualification of physical BIOS or DMA
+privileges. The display-control regressions cover register lanes, issued ARM
+and Thumb stores, DMA payload retention and readback, CPU input publication,
+and paired pixel/timing checks around display phases and clock wrap. These
+checks preserve the current bus timing and do not add a hardware measurement.
 
 Reads from write-only video registers, sound FIFOs, DMA source/destination
 registers and unmapped I/O expose the existing bus value. Halfword and byte

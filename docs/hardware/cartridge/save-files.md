@@ -66,6 +66,38 @@ and block selection before data reaches the saved image.
 [Save programming](programming.md) describes pending operations, ready polling
 and the committed bytes available to file persistence.
 
+## Allocation failures
+
+Backup initialization and explicit type changes allocate replacement storage
+before releasing the attached device. A failed allocation preserves its bytes,
+capacity, selected profile, dirty flag, command decoder and pending programming
+event. The allocating APIs return `false` with `errno=ENOMEM`; invalid forced
+types return `false` with `errno=EINVAL`. Startup configuration propagates failure
+to its caller. Rejected profile changes also preserve the previous selection.
+
+Flash bank expansion preserves the complete smaller device if allocation fails.
+If the first Flash unlock write cannot allocate storage, the save bus remembers
+the observed family while the public type remains undetected and storage remains
+absent. Later save-bus reads or writes retry Flash allocation. They process only
+the new access; the rejected unlock write is never replayed, so a continued
+unlock sequence must be restarted before it can program data. EEPROM traffic and
+ROM signature inference cannot take ownership while Flash allocation is pending.
+Reset, deinitialization and an explicit type change clear this host recovery
+state; a failed type change preserves it. The frontend's `auto` selection retains
+the pending family, just as it retains an already allocated device.
+
+An attempted EEPROM capacity expansion rejects the current serial frame on
+failure, retaining the existing bytes and capacity. Its remaining bits are
+discarded through the original transfer's stop boundary. The same rule applies
+when initial EEPROM detection cannot allocate storage, so later payload bits
+cannot become a new command. A fresh complete transfer can retry after memory
+becomes available. Reset also clears the discarded-frame state.
+
+These are host allocation recovery rules. They do not add chip failure timing or
+change the normal programming deadlines. Fault-injection checks use the
+production save, memory and DMA paths, including pending events and successful
+retries; the original hardware and file-persistence expectations remain required.
+
 ## Consistent startup selection
 
 The frontend and headless runner share the backup-name parser and startup

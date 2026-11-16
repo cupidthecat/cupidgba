@@ -66,7 +66,18 @@ bool cupid_platform_save_configure(struct CupidSavedata *save,
     }
     if (selection->type == SAVE_AUTODETECT)
         return true;
-    cupid_savedata_force_type(save, selection->type);
+    /* Same-type selection retains storage and programming state. Validate its
+     * profile before force_type can mark an inferred device as explicit. */
+    if ((selection->type == SAVE_FLASH512 || selection->type == SAVE_FLASH1M) &&
+        save->type == selection->type && save->data) {
+        if (!cupid_savedata_set_flash_profile(save, selection->profile)) {
+            errno = EBUSY;
+            return false;
+        }
+        return cupid_savedata_force_type(save, selection->type);
+    }
+    if (!cupid_savedata_force_type(save, selection->type))
+        return false;
     if (selection->type == SAVE_FLASH512 || selection->type == SAVE_FLASH1M)
         return cupid_savedata_set_flash_profile(save, selection->profile);
     return true;

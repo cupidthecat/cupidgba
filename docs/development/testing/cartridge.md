@@ -78,6 +78,27 @@ An external BIOS adds the same six cases at an explicit cartridge entry.
 Each process retains a 120-frame, 50-million-step and ten-second bound; each
 CTest entry has thirty seconds for its positive and negative cases.
 
+## Backup allocation failures
+
+The seven `gba.save-allocation-*` groups cover 740 scenes of initial allocation,
+device replacement, startup configuration, Flash growth, EEPROM capacity selection
+and mapped CPU/DMA recovery. The fixture compiles the production save and
+configuration sources with only the host allocator replaced. Other core paths
+remain linked normally.
+
+Each failed replacement must retain the entire device, stored bytes and timing
+queue, including accepted programming. Retries must preserve the nominal ready
+edge across four clock epochs. Flash checks retain the active bank and pending
+command, and require continued detection to keep the recognized family without
+replaying a rejected unlock byte. EEPROM checks discard the failed transfer
+through its original boundary, then compare a fresh complete read or write,
+including all 68 response bits. Actual mapped CPU accesses and DMA3 transfers
+exercise the same failure paths. Every group has a ten-second deadline.
+
+These checks qualify host allocation recovery. They do not inject physical
+chip failures or change the original protocol, programming or file-persistence
+expectations. See [allocation behavior](../../hardware/cartridge/save-files.md#allocation-failures).
+
 ## GPIO byte transactions
 
 The two `gba.gpio-byte-*` groups cover 1,536 complete port frames and 576

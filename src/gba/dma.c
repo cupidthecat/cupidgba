@@ -241,12 +241,10 @@ static void write_value(struct CupidGBA *gba, struct CupidDMA *dma) {
         value >>= (dma->nextDest & 2) * 8;
         if (cupid_memory_is_eeprom_address(&gba->memory, dma->nextDest)) {
             struct CupidSavedata *save = &gba->memory.savedata;
-            if (save->type == SAVE_AUTODETECT) {
-                save->type = SAVE_EEPROM512;
-                cupid_savedata_init_eeprom(save);
-            }
-            if (save->type == SAVE_EEPROM || save->type == SAVE_EEPROM512) {
-                cupid_savedata_write_eeprom(save, (uint16_t)value, (uint32_t)dma->nextCount);
+            if (save->type == SAVE_AUTODETECT || save->type == SAVE_EEPROM ||
+                save->type == SAVE_EEPROM512) {
+                if (!cupid_savedata_write_eeprom(save, (uint16_t)value, (uint32_t)dma->nextCount))
+                    fprintf(stderr, "CUPID: Cannot allocate EEPROM backup storage\n");
             } else {
                 cupid_memory_store16(&gba->cpu, dma->accessAddress, (int16_t)value, NULL);
             }
