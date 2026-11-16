@@ -11,6 +11,20 @@ for the selected output model and hardware qualification limits.
 
 [Testing overview](../testing.md). Run commands from the repository root.
 
+## Display control
+
+The five `gba.display-control-*` groups check the GBA-mode DISPCNT write mask
+through register lanes, issued ARM/Thumb stores, DMA transfers, CPU input
+publication and timed rendering. Word stores also check the adjacent
+GREEN_SWAP register. DMA retains its raw source payload while subsequent
+reads observe the accepted register fields.
+
+The display checks compare complete pixel and pipeline state with and without
+the ignored bit around fetch and blanking boundaries, including clock wrap.
+Each group has a ten-second deadline. BIOS and DMA cases qualify the selected
+GBA-only policy; they do not establish physical legacy-mode access privileges.
+See [I/O register behavior](../../hardware/io-registers.md).
+
 ## Display startup
 
 The [display startup checks](../../hardware/render/display-startup.md) require the

@@ -910,7 +910,14 @@ uint32_t cupid_memory_load8(struct CupidARM *cpu, uint32_t address, int *cycleCo
             if (gba->cartridge.cardReaderPresent)
                 cupid_card_reader_calibrate(gba);
             if (memory->savedata.type == SAVE_AUTODETECT) {
-                cupid_savedata_init_sram(&memory->savedata);
+                const bool flash = memory->savedata.flashState == FLASH_STATE_ALLOCATION;
+                if (!(flash ? cupid_savedata_init_flash(&memory->savedata)
+                            : cupid_savedata_init_sram(&memory->savedata))) {
+                    fprintf(stderr, "CUPID: Cannot allocate %s backup storage\n",
+                            flash ? "Flash" : "SRAM");
+                    value = 0xFF;
+                    break;
+                }
             }
             if (memory->savedata.type == SAVE_FLASH512 || memory->savedata.type == SAVE_FLASH1M) {
                 value = cupid_savedata_read_flash(&memory->savedata, address & 0xFFFF);
@@ -1129,12 +1136,10 @@ void cupid_memory_store16(struct CupidARM *cpu, uint32_t address, int16_t value,
             }
             if (!cupid_memory_is_eeprom_address(memory, address))
                 break;
-            if (memory->savedata.type == SAVE_AUTODETECT) {
-                memory->savedata.type = SAVE_EEPROM512;
-                cupid_savedata_init_eeprom(&memory->savedata);
-            }
-            if (memory->savedata.type == SAVE_EEPROM || memory->savedata.type == SAVE_EEPROM512) {
-                cupid_savedata_write_eeprom(&memory->savedata, value & 1, 1);
+            if (memory->savedata.type == SAVE_AUTODETECT || memory->savedata.type == SAVE_EEPROM ||
+                memory->savedata.type == SAVE_EEPROM512) {
+                if (!cupid_savedata_write_eeprom(&memory->savedata, value & 1, 1))
+                    fprintf(stderr, "CUPID: Cannot allocate EEPROM backup storage\n");
             }
             break;
         case GBA_REGION_SRAM:
@@ -1231,15 +1236,27 @@ void cupid_memory_store8(struct CupidARM *cpu, uint32_t address, int8_t value, i
             if (gba->cartridge.cardReaderPresent)
                 cupid_card_reader_calibrate(gba);
             if (memory->savedata.type == SAVE_AUTODETECT) {
-                if ((address & 0xFFFF) == FLASH_BASE_HI && (uint8_t)value == FLASH_COMMAND_START) {
-                    memory->savedata.type = SAVE_FLASH512;
-                    cupid_savedata_init_flash(&memory->savedata);
+                if (memory->savedata.flashState == FLASH_STATE_ALLOCATION ||
+                    ((address & 0xFFFF) == FLASH_BASE_HI &&
+                     (uint8_t)value == FLASH_COMMAND_START)) {
+                    if (!cupid_savedata_init_flash(&memory->savedata)) {
+                        /* Remember the detected family without accepting or replaying
+                         * the rejected access when host memory becomes available. */
+                        memory->savedata.flashState = FLASH_STATE_ALLOCATION;
+                        fprintf(stderr, "CUPID: Cannot allocate Flash backup storage\n");
+                        break;
+                    }
                 } else {
-                    cupid_savedata_init_sram(&memory->savedata);
+                    if (!cupid_savedata_init_sram(&memory->savedata)) {
+                        fprintf(stderr, "CUPID: Cannot allocate SRAM backup storage\n");
+                        break;
+                    }
                 }
             }
             if (memory->savedata.type == SAVE_FLASH512 || memory->savedata.type == SAVE_FLASH1M) {
-                cupid_savedata_write_flash(&memory->savedata, address & 0xFFFF, (uint8_t)value);
+                if (!cupid_savedata_write_flash(&memory->savedata, address & 0xFFFF,
+                                                (uint8_t)value))
+                    fprintf(stderr, "CUPID: Cannot grow Flash backup storage\n");
             } else if (memory->savedata.type == SAVE_SRAM) {
                 if (memory->savedata.data) {
                     memory->savedata.data[address & (GBA_SIZE_SRAM - 1)] = value;

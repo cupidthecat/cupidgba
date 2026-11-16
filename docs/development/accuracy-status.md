@@ -30,6 +30,30 @@ including ARM/Thumb stores, DMA readback, clock wrap and nominal ready edges.
 See [Flash programming](../hardware/cartridge/programming.md). These checks
 qualify the digital command model without measuring physical abort timing.
 
+### Backup allocation recovery
+
+Backup initialization and type changes stage new storage before releasing the
+attached device. Allocation failure preserves its bytes, decoder, profile and
+pending programming event. Flash growth can retry without losing its bank or
+command; a failed EEPROM transfer discards its remaining bits so they cannot
+be interpreted with the wrong address width. Runtime Flash detection retains
+its recognized family while storage is unavailable.
+
+Seven fault-injection groups cover 740 scenes through production allocation,
+configuration, CPU memory and DMA paths across clock wrap. They require complete
+state and byte preservation, unchanged ready deadlines and successful retries. These are
+host recovery guarantees; see [save files](../hardware/cartridge/save-files.md)
+and [cartridge tests](testing/cartridge.md) for their scope.
+
+### GBA display-control mask
+
+DISPCNT writes retain the GBA control fields and keep the protected legacy-mode
+bit clear. Five regression groups cover 3,704 register, ARM/Thumb, DMA, input
+and display scenes, including 48 paired rendering comparisons. They preserve
+raw DMA payloads, neighboring registers and the existing bus timeline. BIOS
+activation of the legacy processor remains outside the supported machine;
+see [I/O register behavior](../hardware/io-registers.md) for that policy.
+
 ### Timed rendering and display-memory access
 
 The renderer advances text, affine and bitmap fetches, next-line object work,

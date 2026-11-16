@@ -121,6 +121,8 @@ void cupid_io_write(struct CupidGBA *gba, uint32_t addr, uint16_t value) {
     switch (addr) {
         /** VIDEO 0x000-0x056. */
         case REG_DISPCNT:
+            /* GBA-only display state excludes the BIOS legacy-mode request. */
+            value &= 0xFFF7;
             gba->video.dispcnt = value;
             break;
 

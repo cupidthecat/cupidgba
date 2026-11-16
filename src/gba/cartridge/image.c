@@ -205,8 +205,5 @@ bool cupid_load_rom(struct CupidGBA *gba, const char *path) {
         gba->cpu.memory.setActiveRegion(&gba->cpu, gba->cpu.gprs[15]);
     }
 
-    /** Detect save type from ROM strings. */
-    cupid_savedata_detect_type(&gba->memory.savedata, image, pristineSize);
-
     return true;
 }

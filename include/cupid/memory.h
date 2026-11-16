@@ -204,6 +204,7 @@ enum CupidSavedataCommand {
     EEPROM_COMMAND_WRITE = 2,
     EEPROM_COMMAND_READ_PENDING = 3,
     EEPROM_COMMAND_READ = 4,
+    EEPROM_COMMAND_ABORTED = 5, /**< Discard a transfer after host allocation failure. */
 
     FLASH_COMMAND_START = 0xAA,
     FLASH_COMMAND_CONTINUE = 0x55,
@@ -220,7 +221,13 @@ enum CupidSavedataCommand {
 };
 
 /* Flash state machine states */
-enum CupidFlashState { FLASH_STATE_RAW = 0, FLASH_STATE_START = 1, FLASH_STATE_CONTINUE = 2 };
+enum CupidFlashState {
+    FLASH_STATE_RAW = 0,
+    FLASH_STATE_START = 1,
+    FLASH_STATE_CONTINUE = 2,
+    /* Host recovery: an observed Flash access is awaiting storage allocation. */
+    FLASH_STATE_ALLOCATION = 3
+};
 
 /* Flash chip identification */
 enum CupidFlashId {
@@ -438,15 +445,20 @@ bool cupid_load_bios(struct CupidGBA *gba, const char *path);
 void cupid_savedata_init(struct CupidSavedata *savedata);
 void cupid_savedata_reset(struct CupidSavedata *savedata);
 void cupid_savedata_deinit(struct CupidSavedata *savedata);
-void cupid_savedata_force_type(struct CupidSavedata *savedata, enum CupidSaveType type);
-void cupid_savedata_init_sram(struct CupidSavedata *savedata);
-void cupid_savedata_init_sram512(struct CupidSavedata *savedata);
-void cupid_savedata_init_flash(struct CupidSavedata *savedata);
-void cupid_savedata_init_eeprom(struct CupidSavedata *savedata);
+/* Allocation failure returns false with errno=ENOMEM without changing attached
+ * bytes, decoder, profile or pending programming. Invalid forced types return
+ * false with errno=EINVAL and also preserve the complete device. */
+bool cupid_savedata_force_type(struct CupidSavedata *savedata, enum CupidSaveType type);
+bool cupid_savedata_init_sram(struct CupidSavedata *savedata);
+bool cupid_savedata_init_sram512(struct CupidSavedata *savedata);
+bool cupid_savedata_init_flash(struct CupidSavedata *savedata);
+bool cupid_savedata_init_eeprom(struct CupidSavedata *savedata);
 uint8_t cupid_savedata_read_flash(struct CupidSavedata *savedata, uint16_t address);
-void cupid_savedata_write_flash(struct CupidSavedata *savedata, uint16_t address, uint8_t value);
+/* False reports a host allocation failure; accepted chip operations retain
+ * their existing timing. A failed EEPROM frame is discarded through its stop. */
+bool cupid_savedata_write_flash(struct CupidSavedata *savedata, uint16_t address, uint8_t value);
 uint16_t cupid_savedata_read_eeprom(struct CupidSavedata *savedata);
-void cupid_savedata_write_eeprom(struct CupidSavedata *savedata, uint16_t value,
+bool cupid_savedata_write_eeprom(struct CupidSavedata *savedata, uint16_t value,
                                  uint32_t writeSize);
 
 void cupid_savedata_programming_init(struct CupidSavedata *savedata);
@@ -462,7 +474,7 @@ bool cupid_savedata_set_programming_clocks(struct CupidSavedata *savedata, uint3
  * Selection fails without mutation during programming or a command sequence. */
 bool cupid_savedata_set_flash_profile(struct CupidSavedata *savedata,
                                       enum CupidFlashProfile profile);
-void cupid_savedata_detect_type(struct CupidSavedata *savedata, const uint8_t *rom, size_t romSize);
+bool cupid_savedata_detect_type(struct CupidSavedata *savedata, const uint8_t *rom, size_t romSize);
 
 /**
  * Load save data from a .sav file into savedata->data.

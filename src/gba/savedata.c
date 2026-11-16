@@ -64,133 +64,156 @@ void cupid_savedata_deinit(struct CupidSavedata *savedata) {
     savedata->size = 0;
     savedata->typeForced = false;
     savedata->flashProfile = FLASH_PROFILE_DEFAULT;
+    cupid_savedata_reset(savedata);
 }
 
 /**
  * @brief Force a concrete savedata type.
  */
-void cupid_savedata_force_type(struct CupidSavedata *savedata, enum CupidSaveType type) {
-    if (savedata->type == type) {
+bool cupid_savedata_force_type(struct CupidSavedata *savedata, enum CupidSaveType type) {
+    if (type < SAVE_AUTODETECT || type > SAVE_EEPROM512) {
+        errno = EINVAL;
+        return false;
+    }
+    if (savedata->type == type &&
+        (savedata->data || type == SAVE_AUTODETECT || type == SAVE_NONE)) {
+        if (type == SAVE_AUTODETECT)
+            cupid_savedata_reset(savedata);
         savedata->typeForced = type != SAVE_AUTODETECT;
-        return;
+        return true;
     }
-    if (savedata->type != SAVE_AUTODETECT) {
-        struct CupidTiming *timing = savedata->timing;
-        cupid_savedata_deinit(savedata);
-        cupid_savedata_init(savedata);
-        cupid_savedata_bind_timing(savedata, timing);
+
+    /* Allocate the complete replacement before releasing an attached device or
+     * its accepted programming event. The candidate is never scheduled. */
+    struct CupidSavedata replacement;
+    cupid_savedata_init(&replacement);
+    if (savedata->type == SAVE_AUTODETECT) {
+        replacement.localClock = savedata->localClock;
+        replacement.eepromProgramClocks = savedata->eepromProgramClocks;
+        replacement.flashProgramClocks = savedata->flashProgramClocks;
+        replacement.flashSectorEraseClocks = savedata->flashSectorEraseClocks;
+        replacement.flashChipEraseClocks = savedata->flashChipEraseClocks;
     }
-    savedata->typeForced = type != SAVE_AUTODETECT;
+    replacement.type = type;
+    replacement.typeForced = type != SAVE_AUTODETECT;
     switch (type) {
         case SAVE_FLASH512:
         case SAVE_FLASH1M:
-            savedata->type = type;
-            cupid_savedata_init_flash(savedata);
-            return;
+            if (!cupid_savedata_init_flash(&replacement))
+                return false;
+            break;
         case SAVE_EEPROM:
         case SAVE_EEPROM512:
-            savedata->type = type;
-            cupid_savedata_init_eeprom(savedata);
-            return;
-        case SAVE_SRAM:
-            cupid_savedata_init_sram(savedata);
-            return;
-        case SAVE_SRAM512:
-            cupid_savedata_init_sram512(savedata);
-            return;
-        case SAVE_NONE:
-            savedata->type = SAVE_NONE;
+            if (!cupid_savedata_init_eeprom(&replacement))
+                return false;
             break;
+        case SAVE_SRAM:
+            if (!cupid_savedata_init_sram(&replacement))
+                return false;
+            break;
+        case SAVE_SRAM512:
+            if (!cupid_savedata_init_sram512(&replacement))
+                return false;
+            break;
+        case SAVE_NONE:
         case SAVE_AUTODETECT:
         default:
             break;
     }
+    struct CupidTiming *timing = savedata->timing;
+    cupid_savedata_deinit(savedata);
+    *savedata = replacement;
+    savedata->readyEvent.context = savedata;
+    cupid_savedata_bind_timing(savedata, timing);
+    return true;
 }
 
 /**
  * @brief Type-specific savedata initialization helpers.
  */
-void cupid_savedata_init_sram(struct CupidSavedata *savedata) {
-    if (savedata->data && savedata->type == SAVE_SRAM)
-        return;
-    savedata->type = SAVE_SRAM;
-    savedata->size = GBA_SIZE_SRAM;
-    if (!savedata->data) {
-        savedata->data = malloc(GBA_SIZE_SRAM);
+static bool initialize_storage(struct CupidSavedata *savedata, enum CupidSaveType type,
+                               size_t size) {
+    uint8_t *data = malloc(size);
+    if (!data) {
+        errno = ENOMEM;
+        return false;
     }
-    memset(savedata->data, 0xFF, GBA_SIZE_SRAM);
-    savedata->currentBank = savedata->data;
-    printf("CUPID: Savedata initialized as SRAM (32 KiB)\n");
-}
-
-void cupid_savedata_init_sram512(struct CupidSavedata *savedata) {
-    if (savedata->data && savedata->type == SAVE_SRAM512)
-        return;
-    savedata->type = SAVE_SRAM512;
-    savedata->size = GBA_SIZE_FLASH512; /** 64 KiB */
-    if (!savedata->data) {
-        savedata->data = malloc(GBA_SIZE_FLASH512);
-    }
-    memset(savedata->data, 0xFF, GBA_SIZE_FLASH512);
-    savedata->currentBank = savedata->data;
-    printf("CUPID: Savedata initialized as SRAM512 (64 KiB)\n");
-}
-
-void cupid_savedata_init_flash(struct CupidSavedata *savedata) {
-    size_t size = (savedata->type == SAVE_FLASH1M) ? GBA_SIZE_FLASH1M : GBA_SIZE_FLASH512;
-    if (savedata->data && savedata->size == size) {
-        /** Already initialized at the right size. */
-        savedata->currentBank = savedata->data;
-        return;
-    }
-    if (savedata->type != SAVE_FLASH512 && savedata->type != SAVE_FLASH1M) {
-        savedata->type = SAVE_FLASH512;
-        size = GBA_SIZE_FLASH512;
-    }
-    savedata->size = size;
+    memset(data, 0xFF, size);
+    cupid_savedata_cancel_programming(savedata);
     free(savedata->data);
-    savedata->data = malloc(size);
-    memset(savedata->data, 0xFF, size);
+    savedata->data = data;
+    savedata->type = type;
+    savedata->size = size;
+    savedata->currentBank = type == SAVE_EEPROM || type == SAVE_EEPROM512 ? NULL : data;
     savedata->flashBank = 0;
-    savedata->currentBank = savedata->data;
-    savedata->command = FLASH_COMMAND_NONE;
-    savedata->flashState = FLASH_STATE_RAW;
+    cupid_savedata_reset(savedata);
+    return true;
+}
+
+bool cupid_savedata_init_sram(struct CupidSavedata *savedata) {
+    if (savedata->data && savedata->type == SAVE_SRAM && savedata->size == GBA_SIZE_SRAM)
+        return true;
+    if (!initialize_storage(savedata, SAVE_SRAM, GBA_SIZE_SRAM))
+        return false;
+    printf("CUPID: Savedata initialized as SRAM (32 KiB)\n");
+    return true;
+}
+
+bool cupid_savedata_init_sram512(struct CupidSavedata *savedata) {
+    if (savedata->data && savedata->type == SAVE_SRAM512 && savedata->size == GBA_SIZE_FLASH512)
+        return true;
+    if (!initialize_storage(savedata, SAVE_SRAM512, GBA_SIZE_FLASH512))
+        return false;
+    printf("CUPID: Savedata initialized as SRAM512 (64 KiB)\n");
+    return true;
+}
+
+bool cupid_savedata_init_flash(struct CupidSavedata *savedata) {
+    const enum CupidSaveType type = savedata->type == SAVE_FLASH1M ? SAVE_FLASH1M : SAVE_FLASH512;
+    const size_t size = type == SAVE_FLASH1M ? GBA_SIZE_FLASH1M : GBA_SIZE_FLASH512;
+    if (savedata->data && savedata->type == type && savedata->size == size)
+        return true;
+    if (!initialize_storage(savedata, type, size))
+        return false;
     printf("CUPID: Savedata initialized as Flash %s (%zu KiB)\n",
            savedata->type == SAVE_FLASH1M ? "1M" : "512", size / 1024);
+    return true;
 }
 
-void cupid_savedata_init_eeprom(struct CupidSavedata *savedata) {
-    size_t size = (savedata->type == SAVE_EEPROM) ? GBA_SIZE_EEPROM : GBA_SIZE_EEPROM512;
-    if (savedata->data && savedata->size == size)
-        return;
-    savedata->size = size;
-    free(savedata->data);
-    savedata->data = malloc(size);
-    memset(savedata->data, 0xFF, size);
-    savedata->command = EEPROM_COMMAND_NULL;
-    savedata->readBitsRemaining = 0;
-    savedata->eepromAddressBits = 0;
+bool cupid_savedata_init_eeprom(struct CupidSavedata *savedata) {
+    const enum CupidSaveType type = savedata->type == SAVE_EEPROM ? SAVE_EEPROM : SAVE_EEPROM512;
+    const size_t size = type == SAVE_EEPROM ? GBA_SIZE_EEPROM : GBA_SIZE_EEPROM512;
+    if (savedata->data && savedata->type == type && savedata->size == size)
+        return true;
+    if (!initialize_storage(savedata, type, size))
+        return false;
     printf("CUPID: Savedata initialized as EEPROM %s\n",
            savedata->type == SAVE_EEPROM ? "8K" : "512B");
+    return true;
 }
 
 /**
  * @brief Flash helpers.
  */
-static void _flashSwitchBank(struct CupidSavedata *savedata, int bank) {
+static bool _flashSwitchBank(struct CupidSavedata *savedata, int bank) {
     if (bank > 0 && savedata->type == SAVE_FLASH512) {
         /** Auto-upgrade 512K to 1M on bank switch. */
-        printf("CUPID: Upgrading flash from 512K to 1M\n");
-        savedata->type = SAVE_FLASH1M;
         uint8_t *newdata = malloc(GBA_SIZE_FLASH1M);
+        if (!newdata) {
+            errno = ENOMEM;
+            return false;
+        }
         memcpy(newdata, savedata->data, GBA_SIZE_FLASH512);
         memset(newdata + GBA_SIZE_FLASH512, 0xFF, GBA_SIZE_FLASH512);
         free(savedata->data);
         savedata->data = newdata;
+        savedata->type = SAVE_FLASH1M;
         savedata->size = GBA_SIZE_FLASH1M;
+        printf("CUPID: Upgrading flash from 512K to 1M\n");
     }
     savedata->flashBank = bank;
     savedata->currentBank = &savedata->data[bank << 16];
+    return true;
 }
 
 static void _flashErase(struct CupidSavedata *savedata) {
@@ -240,23 +263,26 @@ uint8_t cupid_savedata_read_flash(struct CupidSavedata *savedata, uint16_t addre
 /**
  * @brief Flash write state machine.
  */
-void cupid_savedata_write_flash(struct CupidSavedata *savedata, uint16_t address, uint8_t value) {
+bool cupid_savedata_write_flash(struct CupidSavedata *savedata, uint16_t address, uint8_t value) {
     /* Accepted self-timed operations own the chip until their ready edge. */
     if (savedata->programming)
-        return;
+        return true;
     /* This device accepts either ID-exit sequence. F0 remains valid payload
      * after a byte-program command and cannot abort an accepted operation. */
     if (savedata->flashProfile == FLASH_PROFILE_SST39VF512 && value == FLASH_COMMAND_TERMINATE &&
         savedata->command != FLASH_COMMAND_PROGRAM) {
         savedata->command = FLASH_COMMAND_NONE;
         savedata->flashState = FLASH_STATE_RAW;
-        return;
+        return true;
     }
     /* This device decodes A14..A0 during command cycles. Keep the original
      * address for program data and sector selection, where A15 selects storage. */
     const uint16_t commandAddress =
         savedata->flashProfile == FLASH_PROFILE_SST39VF512 ? address & 0x7FFF : address;
     switch (savedata->flashState) {
+        case FLASH_STATE_ALLOCATION:
+            /* The save bus must obtain storage before forwarding a new access. */
+            break;
         case FLASH_STATE_RAW:
             switch (savedata->command) {
                 case FLASH_COMMAND_PROGRAM:
@@ -267,7 +293,8 @@ void cupid_savedata_write_flash(struct CupidSavedata *savedata, uint16_t address
                     break;
                 case FLASH_COMMAND_SWITCH_BANK:
                     if (address == 0 && value < 2) {
-                        _flashSwitchBank(savedata, value);
+                        if (!_flashSwitchBank(savedata, value))
+                            return false;
                     }
                     savedata->command = FLASH_COMMAND_NONE;
                     break;
@@ -344,6 +371,7 @@ void cupid_savedata_write_flash(struct CupidSavedata *savedata, uint16_t address
             }
             break;
     }
+    return true;
 }
 
 /**
@@ -352,21 +380,25 @@ void cupid_savedata_write_flash(struct CupidSavedata *savedata, uint16_t address
 /**
  * @brief Infer an unforced EEPROM capacity from a complete DMA command.
  */
-static void _selectEepromCapacity(struct CupidSavedata *savedata, uint32_t remaining, bool write) {
+static bool _selectEepromCapacity(struct CupidSavedata *savedata, uint32_t remaining, bool write) {
     /* At the second prefix bit, 14-bit commands retain 80 write bits or
      * 16 read-request bits. Capacity does not depend on the requested block. */
     if (savedata->type != SAVE_EEPROM512 || savedata->typeForced ||
         remaining != (write ? 80u : 16u))
-        return;
+        return true;
     uint8_t *newdata = malloc(GBA_SIZE_EEPROM);
-    if (!newdata)
-        return;
+    if (!newdata) {
+        errno = ENOMEM;
+        return false;
+    }
     memcpy(newdata, savedata->data, GBA_SIZE_EEPROM512);
     memset(newdata + GBA_SIZE_EEPROM512, 0xFF, GBA_SIZE_EEPROM - GBA_SIZE_EEPROM512);
     free(savedata->data);
     savedata->data = newdata;
+    savedata->currentBank = NULL;
     savedata->type = SAVE_EEPROM;
     savedata->size = GBA_SIZE_EEPROM;
+    return true;
 }
 
 /**
@@ -374,10 +406,24 @@ static void _selectEepromCapacity(struct CupidSavedata *savedata, uint32_t remai
  *
  * writeSize is the number of bits remaining in the DMA transfer.
  */
-void cupid_savedata_write_eeprom(struct CupidSavedata *savedata, uint16_t value,
+bool cupid_savedata_write_eeprom(struct CupidSavedata *savedata, uint16_t value,
                                  uint32_t writeSize) {
+    if (savedata->type == SAVE_AUTODETECT && savedata->flashState == FLASH_STATE_ALLOCATION)
+        return true;
+    /* A failed host allocation rejects this whole transfer. Keep discarding
+     * through its original stop boundary even before a type was detected. */
+    if (savedata->command == EEPROM_COMMAND_ABORTED) {
+        if (writeSize <= 1)
+            savedata->command = EEPROM_COMMAND_NULL;
+        return true;
+    }
+    if (savedata->type == SAVE_AUTODETECT && !cupid_savedata_init_eeprom(savedata)) {
+        if (writeSize > 1)
+            savedata->command = EEPROM_COMMAND_ABORTED;
+        return false;
+    }
     if (savedata->programming)
-        return;
+        return true;
     switch (savedata->command) {
         /** Read header, bit 0/1 of the 2-bit command prefix. */
         case EEPROM_COMMAND_NULL:
@@ -385,14 +431,18 @@ void cupid_savedata_write_eeprom(struct CupidSavedata *savedata, uint16_t value,
             savedata->command =
                 writeSize > 1 ? (enum CupidSavedataCommand)(value & 0x1) : EEPROM_COMMAND_NULL;
             break;
-        case EEPROM_COMMAND_PENDING:
+        case EEPROM_COMMAND_PENDING: {
             if (writeSize <= 1) {
                 savedata->command = EEPROM_COMMAND_NULL;
                 break;
             }
-            savedata->command =
+            const enum CupidSavedataCommand command =
                 (enum CupidSavedataCommand)(((int)savedata->command << 1) | (value & 0x1));
-            _selectEepromCapacity(savedata, writeSize, savedata->command == EEPROM_COMMAND_WRITE);
+            if (!_selectEepromCapacity(savedata, writeSize, command == EEPROM_COMMAND_WRITE)) {
+                savedata->command = EEPROM_COMMAND_ABORTED;
+                return false;
+            }
+            savedata->command = command;
             savedata->eepromAddressBits = savedata->type == SAVE_EEPROM ? 14 : 6;
             if (savedata->command == EEPROM_COMMAND_WRITE) {
                 savedata->writeAddress = 0;
@@ -402,6 +452,7 @@ void cupid_savedata_write_eeprom(struct CupidSavedata *savedata, uint16_t value,
                 savedata->readAddress = 0;
             }
             break;
+        }
 
         /** Write command: address bits, then 64 data bits, then stop bit. */
         case EEPROM_COMMAND_WRITE:
@@ -456,6 +507,7 @@ void cupid_savedata_write_eeprom(struct CupidSavedata *savedata, uint16_t value,
             /** Should not be writing during read; ignore. */
             break;
     }
+    return true;
 }
 
 /**

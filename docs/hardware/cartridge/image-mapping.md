@@ -65,6 +65,8 @@ All ten groups retain ten-second deadlines.
 
 These tests qualify the described software model, not complete cartridge or
 peripheral accuracy. Ordinary ROM images remain limited to 32 MiB; supported
-[paged boards](paged-rom.md) accept up to 64 MiB. Card-reader hardware is not
-implemented. Physical EEPROM framing and
-programming delays remain separate qualification work.
+[paged boards](paged-rom.md) accept up to 64 MiB. The
+[card-reader model](card-reader.md) supports queued strips, camera registers
+and scanline transfers. Continuous acquisition and retail reader workflows
+remain unqualified. Physical EEPROM framing and programming delays remain
+separate qualification work.
