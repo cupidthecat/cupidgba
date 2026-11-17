@@ -531,7 +531,7 @@ static void prefetch_sample(struct CupidTiming *timing, void *context, uint32_t 
 
 bool cupid_cartridge_fetch_bus(struct CupidGBA *gba, uint32_t address, unsigned width,
                                unsigned cycles) {
-    /* Select physical board lanes without changing the logical FIFO cursor. */
+    /* Select physical board lanes without changing the CPU's logical PC. */
     address &= ~(width - 1u);
     struct CupidCartridge *cart = &gba->cartridge;
     cart->opcodeValid = false;

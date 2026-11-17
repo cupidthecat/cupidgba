@@ -76,7 +76,9 @@ unsigned cupid_prefetch_fetch(struct CupidGBA *gba, uint32_t address, unsigned w
     struct CupidMemory *memory = &gba->memory;
     cupid_prefetch_update(gba, cupid_timing_global_time(&gba->timing));
     memory->prefetchUnit.fetchKind = CUPID_PREFETCH_NONE;
-    memory->prefetchUnit.address = address;
+    /* The CPU can retain ARM A1 in R15. Both lookup and completed-stream
+     * advancement use the physical opcode address; the CPU owns its logical PC. */
+    memory->prefetchUnit.address = address & ~(uint32_t)(width - 1);
     unsigned region = address >> GBA_BASE_OFFSET;
     /* Save-memory instruction requests take the cartridge bus from the ROM
      * stream, including any pending mutable-port sample. */
@@ -85,9 +87,8 @@ unsigned cupid_prefetch_fetch(struct CupidGBA *gba, uint32_t address, unsigned w
     if (region < GBA_REGION_ROM0 || region > GBA_REGION_ROM2_EX)
         return cycles;
     memory->prefetchUnit.width = width;
-    /* Align the CPU's word query, preserving the halfword FIFO cursor. A
-     * Thumb-to-ARM transition can leave A1 set in the logical fetch stream. */
-    uint32_t lookup = address & ~(uint32_t)(width - 1);
+    /* FIFO entries remain halfword addressed across instruction-width changes. */
+    uint32_t lookup = memory->prefetchUnit.address;
     /* A physical 128 KiB page edge restarts the cartridge transfer. The bus
      * has selected N timing; do not bypass it with a cached or pending hit.
      * Keep the ordinary stop path's in-flight halfword cancellation below. */

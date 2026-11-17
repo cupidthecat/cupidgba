@@ -48,10 +48,18 @@ arbitration clock is added after that selection. Cached and pending hits
 continue to drain before consuming the restart flag.
 
 ARM opcode words are read at aligned physical addresses even when interworking
-retains bit 1 in R15. The FIFO compares that aligned CPU word query against its
-halfword cursor, preserving the cursor and the logical stream independently.
-See [CPU instruction addresses](cpu/instruction-addresses.md) for operand and
-observation behavior.
+retains bit 1 in R15. The FIFO uses the aligned request for both lookup and the
+next physical halfword address after a new or pending transfer. Cached entries
+keep their halfword addresses through ARM/Thumb width changes. The CPU retains
+its logical R15 value for operands and branches; see
+[CPU instruction addresses](cpu/instruction-addresses.md).
+
+For example, an ARM request at `0x08000102` reads the word at `0x08000100`.
+Its next queued halfword is at `0x08000104`. With default wait states and six
+idle clocks, the next logical request at `0x08000106` consumes the two queued
+halfwords in one clock. GPIO and card-reader sampling use those same physical
+halfword addresses, so a later pin or sensor change cannot replace a value
+already sampled into the queue.
 
 A sequential CPU request can continue a cartridge burst before background
 filling has received an idle bus clock. A branch refill can join an in-flight
@@ -61,6 +69,27 @@ distinction uses the CPU's refill request before internal cycles and page
 boundaries modify its bus access type.
 
 ## Validation
+
+The six `gba.prefetch-streams-*` groups cover physical queue advancement:
+
+- 1,024 word-stream scenes check each pending phase, cached consumption and
+  full-queue drain/restart across three wait banks, four control profiles,
+  both logical ARM alignments and four clock epochs.
+- 2,048 mixed-width scenes switch between halfword and word requests through
+  cached and pending reads, then consume the following physical word.
+- 288 executed program pairs enter ARM code through Thumb BX, ARM MOV to PC
+  or ARM LDR to PC. They compare every instruction's clock, prefetched words
+  and execution mode while checking the distinct logical PC operands, RAM
+  load/store results, multiplication and Thumb return. Both ordinary addresses
+  and 128 KiB page crossings are covered.
+- 288 scenes retain the stream through RAM reads, RAM DMA and WAITCNT changes.
+- 54 GPIO and 12 card-reader scenes check physical port sampling, held values,
+  word-lane order, pending/cached timing and cancellation by Game Pak data.
+
+Each new group rejects the preceding core. The existing page-boundary groups
+retain their entry-clock expectations and check the following sequential
+request as well. These owned checks qualify the implemented address and
+sampling model; physical hardware edges remain outside this evidence.
 
 The complete locally built timing suite passes 2020/2020 observations with
 both BIOS paths. It exercises ARM and Thumb,

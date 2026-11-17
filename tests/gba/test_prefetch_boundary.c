@@ -150,7 +150,7 @@ int main(int argc, char **argv) {
                                 CHECK(fetch(machines[1], address + 0x100, width, true) == normal);
                                 const struct CupidPrefetch *p = &machines[0]->memory.prefetchUnit;
                                 CHECK(p->active && !p->busy && !p->paused && p->count == 0);
-                                CHECK(p->head == address + width && p->tail == p->head);
+                                CHECK(p->head == boundary + width && p->tail == p->head);
                                 CHECK(p->remaining == duty && p->fetchKind == CUPID_PREFETCH_NONE);
                                 CHECK(machines[0]->timing.masterCycles ==
                                       (uint32_t)(anchors[epoch] + boundaryCycles));
@@ -161,6 +161,11 @@ int main(int argc, char **argv) {
                                 if (epoch >= 2)
                                     CHECK(machines[0]->timing.masterCycles <
                                           (uint32_t)anchors[epoch]);
+                                /* Complete the next physical word before requesting
+                                 * it, so a false miss cannot match a pending wait. */
+                                cupid_bus_advance(&machines[0]->cpu, halfwords * duty, false);
+                                cupid_bus_finish(&machines[0]->cpu);
+                                CHECK(fetch(machines[0], address + width, width, true) == 1);
                                 ++scenes;
                             }
                         }

@@ -141,8 +141,8 @@ void cupid_bus_fetch(struct CupidARM *cpu, uint32_t address, unsigned width, boo
     bool refill = !sequential;
     sequential = sequential && !gba->memory.fetchNonseq;
     unsigned region = cupid_memory_decode_address(&gba->memory, address) >> GBA_BASE_OFFSET;
-    /* The page decoder uses the physical opcode address. Retain the logical
-     * stream address, including ARM A1, for the FIFO lookup below. */
+    /* The page decoder uses the physical opcode address. The prefetch unit
+     * also aligns this CPU request before selecting its halfword FIFO entries. */
     if (region >= GBA_REGION_ROM0 && region <= GBA_REGION_ROM2_EX &&
         !((address & ~(uint32_t)(width - 1)) & 0x1FFFF))
         sequential = false;

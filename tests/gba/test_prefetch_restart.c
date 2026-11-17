@@ -149,7 +149,7 @@ static void disabled_misses_and_retained_hits(unsigned group) {
                                         &machines[i]->memory.prefetchUnit;
                                     CHECK(!p->active && !p->busy && !p->paused && !p->engaged);
                                     CHECK(!p->disabled && p->count == 0 && p->remaining == duty);
-                                    CHECK(p->head == address + i * 0x100 + width &&
+                                    CHECK(p->head == boundary + i * 0x100 + width &&
                                           p->tail == p->head);
                                     CHECK(p->fetchKind == CUPID_PREFETCH_NONE);
                                     CHECK(machines[i]->timing.masterCycles ==

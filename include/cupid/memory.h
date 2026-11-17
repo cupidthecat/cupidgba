@@ -291,8 +291,8 @@ enum CupidPrefetchFetchKind {
 
 struct CupidPrefetch {
     uint64_t epoch;           /**< Last clock accounted for by the fetch unit */
-    uint32_t head, tail;      /**< Oldest cached and next in-flight addresses */
-    uint32_t address;         /**< Current CPU fetch address */
+    uint32_t head, tail;      /**< Physical oldest cached and next in-flight halfword addresses */
+    uint32_t address;         /**< Aligned physical address of the current CPU opcode request */
     unsigned count, width;    /**< Buffered halfwords and current CPU fetch width */
     unsigned duty, remaining; /**< Full and remaining cartridge halfword clocks */
     enum CupidPrefetchFetchKind fetchKind;
