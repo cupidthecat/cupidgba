@@ -127,6 +127,11 @@ Failure injection compiles the production transaction with wrapped host
 operations; it does not substitute an alternate loader. They retain
 the ten-second deadlines; see [cartridge image mapping](../../hardware/cartridge/image-mapping.md).
 
+POSIX named-pipe fixtures use unique native temporary directories, so the checks
+also run when the build tree is on a Windows mount. The cartridge pipe has no
+writer: the loader must reject it before opening it and preserve the attached
+cartridge and pending save operation.
+
 The seven `gba.paged-rom-*` groups cover the larger cartridge controller,
 complete remapped windows, source immutability, register lanes and masks,
 ARM/Thumb execution, DMA publication/release/IRQ edges, reset, loader ownership

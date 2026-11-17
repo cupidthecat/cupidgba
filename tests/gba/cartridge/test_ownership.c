@@ -25,11 +25,15 @@
  * You should have received a copy of the GNU General Public License
  * along with CupidGBA.  If not, see <https://gnu.org>.
  */
+#ifndef _WIN32
+#define _POSIX_C_SOURCE 200809L
+#endif
 #include "../../test.h"
 #include "cupid/gba.h"
 #include <errno.h>
 #ifndef _WIN32
 #include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 static char filename[1024];
@@ -281,10 +285,18 @@ static void busy_or_nonregular_input_preserves_attached_device(void) {
     CHECK(!cupid_load_rom(gba, filename));
     CHECK(!cupid_load_rom(gba, "."));
 #ifndef _WIN32
-    CHECK(mkfifo(filename, 0600) == 0);
+    /* Use the native filesystem, as Windows-mounted build directories do not
+     * provide POSIX named pipes. */
+    char temporary[] = "/tmp/cupidgba-cartridge-input-XXXXXX";
+    CHECK(mkdtemp(temporary));
+    char fifo[128];
+    int length = snprintf(fifo, sizeof(fifo), "%s/image.gba", temporary);
+    CHECK(length > 0 && (size_t)length < sizeof(fifo));
+    CHECK(mkfifo(fifo, 0600) == 0);
     /* No writer exists: opening this FIFO would hang until the test guard. */
-    CHECK(!cupid_load_rom(gba, filename));
-    CHECK(remove(filename) == 0);
+    CHECK(!cupid_load_rom(gba, fifo));
+    CHECK(remove(fifo) == 0);
+    CHECK(rmdir(temporary) == 0);
 #endif
     CHECK(gba->memory.rom == rom);
     CHECK(!memcmp(&before, &gba->memory.savedata, sizeof(before)));
